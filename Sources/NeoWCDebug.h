@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 
 FOUNDATION_EXPORT NSString *const NeoWCDebugFloatingEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCDebugLoggingEnabledKey;
 
 FOUNDATION_EXPORT void NeoWCLog(NSString *format, ...) NS_FORMAT_FUNCTION(1, 2);
 

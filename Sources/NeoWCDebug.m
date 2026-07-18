@@ -4,6 +4,7 @@
 #import <mach-o/dyld.h>
 
 NSString *const NeoWCDebugFloatingEnabledKey = @"com.qiu7c.neowc.debug.floating-enabled";
+NSString *const NeoWCDebugLoggingEnabledKey = @"com.qiu7c.neowc.debug.logging-enabled";
 
 static NSString *const NeoWCDebugLogDidChangeNotification = @"NeoWCDebugLogDidChangeNotification";
 
@@ -54,6 +55,9 @@ static NSString *const NeoWCDebugLogDidChangeNotification = @"NeoWCDebugLogDidCh
 
 void NeoWCLog(NSString *format, ...) {
     if (!format) return;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:NeoWCDebugLoggingEnabledKey] &&
+        ![defaults boolForKey:NeoWCDebugLoggingEnabledKey]) return;
     va_list arguments;
     va_start(arguments, format);
     NSString *message = [[NSString alloc] initWithFormat:format arguments:arguments];
@@ -126,6 +130,16 @@ static UIViewController *NeoWCTopViewController(UIViewController *controller) {
     return controller;
 }
 
+static UIViewController *NeoWCVisibleContainerController(UIViewController *controller) {
+    if ([controller isKindOfClass:[UINavigationController class]]) {
+        return NeoWCVisibleContainerController(((UINavigationController *)controller).visibleViewController);
+    }
+    if ([controller isKindOfClass:[UITabBarController class]]) {
+        return NeoWCVisibleContainerController(((UITabBarController *)controller).selectedViewController);
+    }
+    return controller;
+}
+
 static UIViewController *NeoWCViewControllerForView(UIView *view) {
     UIResponder *responder = view;
     while (responder) {
@@ -133,6 +147,24 @@ static UIViewController *NeoWCViewControllerForView(UIView *view) {
         responder = responder.nextResponder;
     }
     return nil;
+}
+
+static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUInteger depth, NSUInteger *count) {
+    if (!view || !count || *count >= 400 || depth > 30) return;
+    (*count)++;
+    NSMutableString *details = [NSMutableString string];
+    if (view.accessibilityIdentifier.length > 0) [details appendFormat:@" id=%@", view.accessibilityIdentifier];
+    NSString *text = nil;
+    if ([view isKindOfClass:[UILabel class]]) text = ((UILabel *)view).text;
+    else if ([view isKindOfClass:[UIButton class]]) text = ((UIButton *)view).currentTitle;
+    else if ([view isKindOfClass:[UITextField class]]) text = ((UITextField *)view).text;
+    else if ([view isKindOfClass:[UITextView class]]) text = ((UITextView *)view).text;
+    if (text.length > 80) text = [[text substringToIndex:80] stringByAppendingString:@"…"];
+    if (text.length > 0) [details appendFormat:@" text=%@", text];
+    [report appendFormat:@"%@%@ frame=%@ hidden=%@ alpha=%.2f%@\n",
+     [@"" stringByPaddingToLength:depth * 2 withString:@" " startingAtIndex:0],
+     NSStringFromClass(view.class), NSStringFromCGRect(view.frame), view.hidden ? @"YES" : @"NO", view.alpha, details];
+    for (UIView *subview in view.subviews) NeoWCAppendViewTree(report, subview, depth + 1, count);
 }
 
 @interface NeoWCObjectInspectorViewController : UIViewController
@@ -368,7 +400,7 @@ static UIViewController *NeoWCViewControllerForView(UIView *view) {
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 2; }
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return section == 0 ? 3 : 3; }
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return section == 0 ? 4 : 3; }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section { return section == 0 ? @"工具" : @"环境"; }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -379,8 +411,8 @@ static UIViewController *NeoWCViewControllerForView(UIView *view) {
     cell.accessoryType = UITableViewCellAccessoryNone;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     if (indexPath.section == 0) {
-        NSArray *titles = @[@"视图选择器", @"Runtime 类搜索", @"NeoWC 日志"];
-        NSArray *symbols = @[@"viewfinder", @"magnifyingglass", @"doc.text"];
+        NSArray *titles = @[@"当前页面层级", @"视图选择器", @"Runtime 类搜索", @"NeoWC 日志"];
+        NSArray *symbols = @[@"square.3.layers.3d", @"viewfinder", @"magnifyingglass", @"doc.text"];
         cell.textLabel.text = titles[indexPath.row];
         cell.imageView.image = [UIImage systemImageNamed:symbols[indexPath.row]];
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
@@ -397,8 +429,15 @@ static UIViewController *NeoWCViewControllerForView(UIView *view) {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.section != 0) return;
     if (indexPath.row == 0) {
-        [self dismissViewControllerAnimated:YES completion:^{ [[NeoWCDebugManager sharedManager] beginViewPicking]; }];
+        UIViewController *page = self.navigationController.presentingViewController;
+        page = NeoWCVisibleContainerController(page);
+        if (page) {
+            NeoWCObjectInspectorViewController *inspector = [[NeoWCObjectInspectorViewController alloc] initWithObject:page.view inspectedClass:page.class];
+            [self.navigationController pushViewController:inspector animated:YES];
+        }
     } else if (indexPath.row == 1) {
+        [self dismissViewControllerAnimated:YES completion:^{ [[NeoWCDebugManager sharedManager] beginViewPicking]; }];
+    } else if (indexPath.row == 2) {
         [self.navigationController pushViewController:[[NeoWCRuntimeSearchViewController alloc] initWithStyle:UITableViewStylePlain] animated:YES];
     } else {
         [self.navigationController pushViewController:[[NeoWCLogViewController alloc] initWithStyle:UITableViewStylePlain] animated:YES];
@@ -429,7 +468,7 @@ static UIViewController *NeoWCViewControllerForView(UIView *view) {
     self.title = NSStringFromClass(self.inspectedClass);
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(closeTapped)];
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"复制 Hook" style:UIBarButtonItemStylePlain target:self action:@selector(copyHook)];
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"复制报告" style:UIBarButtonItemStylePlain target:self action:@selector(copyReport)];
 
     UITextView *textView = [UITextView new];
     textView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -454,12 +493,10 @@ static UIViewController *NeoWCViewControllerForView(UIView *view) {
     }];
 }
 
-- (void)copyHook {
-    NSString *className = NSStringFromClass(self.inspectedClass);
-    NSString *template = [NSString stringWithFormat:@"%%hook %@\n\n// 在这里添加需要追踪的方法\n\n%%end", className];
-    UIPasteboard.generalPasteboard.string = template;
-    NeoWCLog(@"已复制 %@ 的 Hook 骨架", className);
-    self.navigationItem.prompt = @"Hook 骨架已复制";
+- (void)copyReport {
+    UIPasteboard.generalPasteboard.string = self.textView.text ?: @"";
+    NeoWCLog(@"已复制 %@ 的检查报告", NSStringFromClass(self.inspectedClass));
+    self.navigationItem.prompt = @"检查报告已复制";
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ self.navigationItem.prompt = nil; });
 }
 
@@ -481,6 +518,11 @@ static UIViewController *NeoWCViewControllerForView(UIView *view) {
             parent = parent.superview;
             depth++;
         }
+        [report appendString:@"\n"];
+        [report appendString:@"VIEW TREE\n"];
+        NSUInteger viewCount = 0;
+        NeoWCAppendViewTree(report, view, 0, &viewCount);
+        if (viewCount >= 400) [report appendString:@"… 已达到 400 个视图的显示上限\n"];
         [report appendString:@"\n"];
     }
 

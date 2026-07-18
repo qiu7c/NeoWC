@@ -1,5 +1,7 @@
 #import "NeoWCSettingsViewController.h"
 #import "NeoWCDebug.h"
+#import "NeoWCEnhancements.h"
+#import "NeoWCPluginVisibility.h"
 
 static NSString *const NeoWCVersion = @"0.1.0";
 static NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
@@ -122,6 +124,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCEnabledKey: @YES,
         @"com.qiu7c.neowc.message.anti-revoke": @YES,
         @"com.qiu7c.neowc.privacy.typing": @YES,
+        NeoWCDebugLoggingEnabledKey: @YES,
         NeoWCExpandedCategoriesKey: @[@"messages"],
     }];
     NSArray *savedCategories = [[NSUserDefaults standardUserDefaults] arrayForKey:NeoWCExpandedCategoriesKey];
@@ -129,9 +132,12 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
     self.title = @"NeoWC";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.tableView.rowHeight = UITableViewAutomaticDimension;
-    self.tableView.estimatedRowHeight = 62.0;
+    self.tableView.rowHeight = 58.0;
+    self.tableView.estimatedRowHeight = 58.0;
     self.tableView.backgroundColor = [UIColor systemBackgroundColor];
+    self.tableView.layoutMargins = UIEdgeInsetsMake(0, 14.0, 0, 14.0);
+    self.tableView.directionalLayoutMargins = NSDirectionalEdgeInsetsMake(0, 14.0, 0, 14.0);
+    self.tableView.cellLayoutMarginsFollowReadableWidth = NO;
     self.tableView.tableHeaderView = [self makeHeaderView];
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"NeoWCSettingCell"];
 }
@@ -160,8 +166,16 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             item(@"紧凑会话列表", @"在一屏显示更多会话", @"rectangle.grid.1x2", NeoWCRowKindSwitch, @"com.qiu7c.neowc.appearance.compact-list", nil),
             item(@"气泡样式", @"自定义聊天气泡显示", @"message.fill", NeoWCRowKindDetail, nil, @"规划中"),
         ]],
-        [NeoWCSettingSection sectionWithIdentifier:@"laboratory" title:@"实验工具" subtitle:@"测试功能与运行诊断" symbol:@"flask.fill" footer:@"实验功能可能随版本调整。" collapsible:YES items:@[
+        [NeoWCSettingSection sectionWithIdentifier:@"enhancements" title:@"增强功能" subtitle:@"快捷操作与自动授权" symbol:@"bolt.fill" footer:@"自动登录和授权会跳过手动确认，请只在可信设备和可信游戏中开启。" collapsible:YES items:@[
+            item(@"设备扫码自动登录", @"自动确认电脑、平板等设备登录", @"desktopcomputer", NeoWCRowKindSwitch, NeoWCAutoDeviceLoginKey, nil),
+            item(@"游戏授权自动允许", @"自动点击游戏扫码授权页面的允许按钮", @"gamecontroller", NeoWCRowKindSwitch, NeoWCAutoGameAuthorizeKey, nil),
+            item(@"朋友圈双击点赞", @"双击好友朋友圈内容直接点赞", @"hand.thumbsup", NeoWCRowKindSwitch, NeoWCMomentsDoubleTapLikeKey, nil),
+            item(@"朋友圈操作按钮替换为评论", @"点击后直接进入评论，不再展开操作菜单", @"bubble.middle.bottom", NeoWCRowKindSwitch, NeoWCMomentsQuickCommentKey, nil),
+            item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理"),
+        ]],
+        [NeoWCSettingSection sectionWithIdentifier:@"developer" title:@"开发者功能" subtitle:@"界面检查与运行诊断" symbol:@"hammer.fill" footer:@"开发者功能用于辅助插件开发和问题排查。" collapsible:YES items:@[
             item(@"调试悬浮按钮", @"仅由此开关控制，不监听全局手势", @"wrench.and.screwdriver", NeoWCRowKindSwitch, NeoWCDebugFloatingEnabledKey, nil),
+            item(@"记录调试日志", @"记录 NeoWC 运行事件，关闭后停止新增", @"text.alignleft", NeoWCRowKindSwitch, NeoWCDebugLoggingEnabledKey, nil),
             item(@"调试中心", @"视图检查、Runtime 搜索与日志", @"ladybug", NeoWCRowKindDetail, nil, @"打开"),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"about" title:@"关于" subtitle:nil symbol:nil footer:@"NeoWC · Designed for WeChat" collapsible:NO items:@[
@@ -252,10 +266,15 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     return section.items[itemIndex];
 }
 
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    NeoWCSettingSection *section = self.sections[indexPath.section];
+    return section.isCollapsible && indexPath.row == 0 ? 64.0 : 58.0;
+}
+
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     NeoWCSettingSection *section = self.sections[indexPath.section];
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"NeoWCSettingCell" forIndexPath:indexPath];
-    cell.backgroundColor = [UIColor tertiarySystemFillColor];
+    cell.backgroundColor = [UIColor secondarySystemFillColor];
     cell.layer.shadowOpacity = 0.0;
     cell.accessoryView = nil;
     cell.accessoryType = UITableViewCellAccessoryNone;
@@ -268,7 +287,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         categoryContent.image = NeoWCSymbol(section.symbol);
         categoryContent.textProperties.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
         categoryContent.secondaryTextProperties.color = [UIColor secondaryLabelColor];
-        categoryContent.imageProperties.tintColor = [UIColor colorWithRed:0.06 green:0.68 blue:0.35 alpha:1.0];
+        categoryContent.imageProperties.tintColor = [UIColor labelColor];
         categoryContent.imageProperties.maximumSize = CGSizeMake(25.0, 25.0);
         cell.contentConfiguration = categoryContent;
 
@@ -288,14 +307,14 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     content.textProperties.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     content.secondaryTextProperties.color = [UIColor secondaryLabelColor];
     content.image = NeoWCSymbol(item.symbol);
-    content.imageProperties.tintColor = [UIColor colorWithRed:0.06 green:0.68 blue:0.35 alpha:1.0];
+    content.imageProperties.tintColor = [UIColor labelColor];
     content.imageProperties.maximumSize = CGSizeMake(23.0, 23.0);
     if (section.isCollapsible) content.directionalLayoutMargins = NSDirectionalEdgeInsetsMake(0, 16.0, 0, 0);
     cell.contentConfiguration = content;
 
     if (item.kind == NeoWCRowKindSwitch) {
         UISwitch *toggle = [UISwitch new];
-        toggle.onTintColor = [UIColor colorWithRed:0.06 green:0.72 blue:0.38 alpha:1.0];
+        toggle.onTintColor = [UIColor systemBlueColor];
         toggle.on = [[NSUserDefaults standardUserDefaults] boolForKey:item.defaultsKey];
         toggle.accessibilityLabel = item.title;
         toggle.tag = indexPath.section * 1000 + indexPath.row;
@@ -356,6 +375,10 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     if (item.kind != NeoWCRowKindDetail) return;
     if ([item.title isEqualToString:@"调试中心"]) {
         [[NeoWCDebugManager sharedManager] presentDashboardFromViewController:self];
+        return;
+    }
+    if ([item.title isEqualToString:@"插件显示管理"]) {
+        [self.navigationController pushViewController:[NeoWCPluginVisibilityViewController new] animated:YES];
         return;
     }
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:item.title
