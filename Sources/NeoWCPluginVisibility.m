@@ -132,18 +132,6 @@ void NeoWCFilterPluginListController(id controller) {
         }];
         if (indexes.count == 0) return;
         [dataSource removeObjectsAtIndexes:indexes];
-        UITableView *tableView = nil;
-        @try { tableView = [controller valueForKey:@"tableView"]; } @catch (__unused NSException *exception) {}
-        if (![tableView isKindOfClass:[UITableView class]]) {
-            for (NSString *managerKey in @[@"tableViewManager", @"tableViewMgr"]) {
-                @try {
-                    id manager = [controller valueForKey:managerKey];
-                    id candidate = [manager valueForKey:@"tableView"];
-                    if ([candidate isKindOfClass:[UITableView class]]) { tableView = candidate; break; }
-                } @catch (__unused NSException *exception) {}
-            }
-        }
-        if ([tableView isKindOfClass:[UITableView class]]) [tableView reloadData];
         NeoWCLog(@"插件管理页面已隐藏 %lu 项", (unsigned long)indexes.count);
     } @catch (NSException *exception) {
         NeoWCLog(@"插件列表过滤失败：%@", exception.reason);

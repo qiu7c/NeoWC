@@ -66,6 +66,43 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 }
 @end
 
+@interface NeoWCCardBackgroundView : UIView
+@property (nonatomic, assign) BOOL roundsTop;
+@property (nonatomic, assign) BOOL roundsBottom;
+@property (nonatomic, assign) BOOL drawsDivider;
+@property (nonatomic, strong) UIColor *fillColor;
+@end
+
+@implementation NeoWCCardBackgroundView
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        self.backgroundColor = UIColor.clearColor;
+        self.opaque = NO;
+        _fillColor = [UIColor secondarySystemFillColor];
+    }
+    return self;
+}
+
+- (void)drawRect:(CGRect)rect {
+    CGRect cardRect = CGRectInset(self.bounds, 14.0, 0.0);
+    UIRectCorner corners = 0;
+    if (self.roundsTop) corners |= UIRectCornerTopLeft | UIRectCornerTopRight;
+    if (self.roundsBottom) corners |= UIRectCornerBottomLeft | UIRectCornerBottomRight;
+    UIBezierPath *path = corners ? [UIBezierPath bezierPathWithRoundedRect:cardRect byRoundingCorners:corners cornerRadii:CGSizeMake(20.0, 20.0)] : [UIBezierPath bezierPathWithRect:cardRect];
+    [self.fillColor setFill];
+    [path fill];
+
+    if (self.drawsDivider) {
+        CGFloat pixel = 1.0 / UIScreen.mainScreen.scale;
+        [[UIColor separatorColor] setFill];
+        UIRectFill(CGRectMake(CGRectGetMinX(cardRect) + 14.0, 0.0, CGRectGetWidth(cardRect) - 28.0, pixel));
+    }
+}
+
+@end
+
 @interface NeoWCLogoView : UIView
 @end
 
@@ -109,11 +146,11 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 @implementation NeoWCSettingsViewController
 
 - (instancetype)init {
-    return [self initWithStyle:UITableViewStyleInsetGrouped];
+    return [self initWithStyle:UITableViewStyleGrouped];
 }
 
 - (instancetype)initWithStyle:(UITableViewStyle)style {
-    self = [super initWithStyle:UITableViewStyleInsetGrouped];
+    self = [super initWithStyle:UITableViewStyleGrouped];
     if (self) [self buildSections];
     return self;
 }
@@ -132,11 +169,12 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
     self.title = @"NeoWC";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.tableView.rowHeight = 58.0;
-    self.tableView.estimatedRowHeight = 58.0;
+    self.tableView.rowHeight = 54.0;
+    self.tableView.estimatedRowHeight = 54.0;
     self.tableView.backgroundColor = [UIColor systemBackgroundColor];
-    self.tableView.layoutMargins = UIEdgeInsetsMake(0, 14.0, 0, 14.0);
-    self.tableView.directionalLayoutMargins = NSDirectionalEdgeInsetsMake(0, 14.0, 0, 14.0);
+    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    self.tableView.sectionHeaderHeight = 10.0;
+    self.tableView.sectionFooterHeight = 10.0;
     self.tableView.cellLayoutMarginsFollowReadableWidth = NO;
     self.tableView.tableHeaderView = [self makeHeaderView];
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"NeoWCSettingCell"];
@@ -147,6 +185,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     ^NeoWCSettingItem *(NSString *title, NSString *subtitle, NSString *symbol, NeoWCRowKind kind, NSString *key, NSString *value) {
         return [NeoWCSettingItem itemWithTitle:title subtitle:subtitle symbol:symbol kind:kind key:key value:value];
     };
+    NSInteger configuredStepCount = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCStepCountKey];
+    NSString *stepValue = configuredStepCount > 0 ? [NSString stringWithFormat:@"%ld 步", (long)configuredStepCount] : @"设置";
 
     self.sections = @[
         [NeoWCSettingSection sectionWithIdentifier:@"general" title:@"总开关" subtitle:nil symbol:nil footer:@"关闭后仅保留设置入口，所有增强功能停止生效。" collapsible:NO items:@[
@@ -171,6 +211,10 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             item(@"游戏授权自动允许", @"自动点击游戏扫码授权页面的允许按钮", @"gamecontroller", NeoWCRowKindSwitch, NeoWCAutoGameAuthorizeKey, nil),
             item(@"朋友圈双击点赞", @"双击好友朋友圈内容直接点赞", @"hand.thumbsup", NeoWCRowKindSwitch, NeoWCMomentsDoubleTapLikeKey, nil),
             item(@"朋友圈操作按钮替换为评论", @"点击后直接进入评论，不再展开操作菜单", @"bubble.middle.bottom", NeoWCRowKindSwitch, NeoWCMomentsQuickCommentKey, nil),
+            item(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCRowKindSwitch, NeoWCGameSelectorKey, nil),
+            item(@"自定义微信运动步数", @"使用设置的当天步数", @"figure.walk", NeoWCRowKindSwitch, NeoWCStepOverrideEnabledKey, nil),
+            item(@"设置运动步数", @"自定义数值仅在设置当天生效", @"number", NeoWCRowKindDetail, nil, stepValue),
+            item(@"广告净化", @"隐藏朋友圈广告与小程序启动广告", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil),
             item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理"),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"developer" title:@"开发者功能" subtitle:@"界面检查与运行诊断" symbol:@"hammer.fill" footer:@"开发者功能用于辅助插件开发和问题排查。" collapsible:YES items:@[
@@ -186,7 +230,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
 - (UIView *)makeHeaderView {
     CGFloat width = MAX(CGRectGetWidth(self.view.bounds), CGRectGetWidth([UIScreen mainScreen].bounds));
-    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 144.0)];
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 132.0)];
     container.backgroundColor = [UIColor systemBackgroundColor];
 
     NeoWCLogoView *logo = [NeoWCLogoView new];
@@ -218,16 +262,16 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [container addSubview:tagline];
 
     [NSLayoutConstraint activateConstraints:@[
-        [logo.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:28.0],
-        [logo.topAnchor constraintEqualToAnchor:container.topAnchor constant:16.0],
-        [logo.widthAnchor constraintEqualToConstant:58.0],
-        [logo.heightAnchor constraintEqualToConstant:58.0],
-        [name.leadingAnchor constraintEqualToAnchor:logo.trailingAnchor constant:14.0],
+        [logo.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:24.0],
+        [logo.topAnchor constraintEqualToAnchor:container.topAnchor constant:12.0],
+        [logo.widthAnchor constraintEqualToConstant:62.0],
+        [logo.heightAnchor constraintEqualToConstant:62.0],
+        [name.leadingAnchor constraintEqualToAnchor:logo.trailingAnchor constant:12.0],
         [name.trailingAnchor constraintLessThanOrEqualToAnchor:container.trailingAnchor constant:-24.0],
         [name.topAnchor constraintEqualToAnchor:logo.topAnchor constant:3.0],
         [version.leadingAnchor constraintEqualToAnchor:name.leadingAnchor],
         [version.topAnchor constraintEqualToAnchor:name.bottomAnchor constant:4.0],
-        [tagline.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:28.0],
+        [tagline.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:24.0],
         [tagline.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-24.0],
         [tagline.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-18.0],
     ]];
@@ -250,7 +294,12 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     NeoWCSettingSection *model = self.sections[section];
-    return model.isCollapsible ? nil : model.title;
+    if (!model.isCollapsible) return model.title;
+    return section == 1 ? @"插件分类" : nil;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
+    return [self tableView:tableView titleForHeaderInSection:section].length > 0 ? 30.0 : 10.0;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
@@ -268,17 +317,33 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
     NeoWCSettingSection *section = self.sections[indexPath.section];
-    return section.isCollapsible && indexPath.row == 0 ? 64.0 : 58.0;
+    return section.isCollapsible && indexPath.row == 0 ? 58.0 : 54.0;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     NeoWCSettingSection *section = self.sections[indexPath.section];
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"NeoWCSettingCell" forIndexPath:indexPath];
-    cell.backgroundColor = [UIColor secondarySystemFillColor];
+    cell.backgroundColor = [UIColor clearColor];
+    cell.contentView.backgroundColor = [UIColor clearColor];
     cell.layer.shadowOpacity = 0.0;
     cell.accessoryView = nil;
     cell.accessoryType = UITableViewCellAccessoryNone;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+    NSInteger visibleRows = [tableView numberOfRowsInSection:indexPath.section];
+    BOOL firstRow = indexPath.row == 0;
+    BOOL lastRow = indexPath.row == visibleRows - 1;
+    NeoWCCardBackgroundView *background = [NeoWCCardBackgroundView new];
+    background.roundsTop = firstRow;
+    background.roundsBottom = lastRow;
+    background.drawsDivider = !firstRow;
+    cell.backgroundView = background;
+    NeoWCCardBackgroundView *selectedBackground = [NeoWCCardBackgroundView new];
+    selectedBackground.roundsTop = firstRow;
+    selectedBackground.roundsBottom = lastRow;
+    selectedBackground.drawsDivider = !firstRow;
+    selectedBackground.fillColor = [UIColor tertiarySystemFillColor];
+    cell.selectedBackgroundView = selectedBackground;
+    cell.layoutMargins = UIEdgeInsetsMake(0.0, 26.0, 0.0, 26.0);
 
     if (section.isCollapsible && indexPath.row == 0) {
         UIListContentConfiguration *categoryContent = [UIListContentConfiguration subtitleCellConfiguration];
@@ -289,6 +354,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         categoryContent.secondaryTextProperties.color = [UIColor secondaryLabelColor];
         categoryContent.imageProperties.tintColor = [UIColor labelColor];
         categoryContent.imageProperties.maximumSize = CGSizeMake(25.0, 25.0);
+        categoryContent.directionalLayoutMargins = NSDirectionalEdgeInsetsMake(0.0, 26.0, 0.0, 26.0);
         cell.contentConfiguration = categoryContent;
 
         UIImageView *chevron = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.down"]];
@@ -309,7 +375,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     content.image = NeoWCSymbol(item.symbol);
     content.imageProperties.tintColor = [UIColor labelColor];
     content.imageProperties.maximumSize = CGSizeMake(23.0, 23.0);
-    if (section.isCollapsible) content.directionalLayoutMargins = NSDirectionalEdgeInsetsMake(0, 16.0, 0, 0);
+    content.directionalLayoutMargins = NSDirectionalEdgeInsetsMake(0.0, section.isCollapsible ? 42.0 : 26.0, 0.0, 26.0);
     cell.contentConfiguration = content;
 
     if (item.kind == NeoWCRowKindSwitch) {
@@ -345,6 +411,11 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
     if (item.defaultsKey.length == 0) return;
     [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:item.defaultsKey];
+    if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] ||
+        [item.defaultsKey isEqualToString:NeoWCMomentsDoubleTapLikeKey] ||
+        [item.defaultsKey isEqualToString:NeoWCMomentsQuickCommentKey]) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:NeoWCEnhancementDidChangeNotification object:item.defaultsKey];
+    }
     if ([item.defaultsKey isEqualToString:NeoWCDebugFloatingEnabledKey]) {
         [[NeoWCDebugManager sharedManager] setFloatingEnabled:sender.isOn];
     }
@@ -379,6 +450,29 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     }
     if ([item.title isEqualToString:@"插件显示管理"]) {
         [self.navigationController pushViewController:[NeoWCPluginVisibilityViewController new] animated:YES];
+        return;
+    }
+    if ([item.title isEqualToString:@"设置运动步数"]) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"设置当天微信运动步数" message:@"请输入 1–100000 之间的数值" preferredStyle:UIAlertControllerStyleAlert];
+        [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+            NSInteger value = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCStepCountKey];
+            textField.text = value > 0 ? [NSString stringWithFormat:@"%ld", (long)value] : nil;
+            textField.keyboardType = UIKeyboardTypeNumberPad;
+            textField.placeholder = @"步数";
+        }];
+        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+        __weak typeof(self) weakSelf = self;
+        [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            NSInteger value = [alert.textFields.firstObject.text integerValue];
+            value = MIN(100000, MAX(1, value));
+            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+            [defaults setInteger:value forKey:NeoWCStepCountKey];
+            [defaults setObject:[NSDate date] forKey:NeoWCStepCountDateKey];
+            [defaults setBool:YES forKey:NeoWCStepOverrideEnabledKey];
+            [weakSelf buildSections];
+            [weakSelf.tableView reloadData];
+        }]];
+        [self presentViewController:alert animated:YES completion:nil];
         return;
     }
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:item.title

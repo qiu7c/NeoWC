@@ -5,6 +5,8 @@
 
 NSString *const NeoWCDebugFloatingEnabledKey = @"com.qiu7c.neowc.debug.floating-enabled";
 NSString *const NeoWCDebugLoggingEnabledKey = @"com.qiu7c.neowc.debug.logging-enabled";
+static NSString *const NeoWCDebugFloatingSideKey = @"com.qiu7c.neowc.debug.floating-side";
+static NSString *const NeoWCDebugFloatingVerticalPositionKey = @"com.qiu7c.neowc.debug.floating-vertical-position";
 
 static NSString *const NeoWCDebugLogDidChangeNotification = @"NeoWCDebugLogDidChangeNotification";
 
@@ -199,6 +201,16 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     return manager;
 }
 
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(repositionFloatingButton) name:UIApplicationDidChangeStatusBarOrientationNotification object:nil];
+    }
+    return self;
+}
+
+- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
+
 - (void)applySavedState {
     BOOL enabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCDebugFloatingEnabledKey];
     [self setFloatingEnabled:enabled];
@@ -241,7 +253,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
         window.rootViewController = root;
 
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-        button.translatesAutoresizingMaskIntoConstraints = NO;
+        button.frame = CGRectMake(0.0, 0.0, 48.0, 48.0);
         button.backgroundColor = [UIColor secondarySystemBackgroundColor];
         button.tintColor = [UIColor labelColor];
         button.layer.cornerRadius = 24.0;
@@ -252,19 +264,68 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
         UIImage *image = [UIImage systemImageNamed:@"wrench.and.screwdriver"] ?: [UIImage systemImageNamed:@"wrench"];
         [button setImage:image forState:UIControlStateNormal];
         [button addTarget:self action:@selector(floatingButtonTapped) forControlEvents:UIControlEventTouchUpInside];
+        [button addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(floatingButtonPanned:)]];
         [passthroughView addSubview:button];
-        [NSLayoutConstraint activateConstraints:@[
-            [button.widthAnchor constraintEqualToConstant:48.0],
-            [button.heightAnchor constraintEqualToConstant:48.0],
-            [button.trailingAnchor constraintEqualToAnchor:passthroughView.safeAreaLayoutGuide.trailingAnchor constant:-16.0],
-            [button.bottomAnchor constraintEqualToAnchor:passthroughView.safeAreaLayoutGuide.bottomAnchor constant:-86.0],
-        ]];
 
         self.floatingWindow = window;
         self.floatingButton = button;
         window.hidden = NO;
+        [self repositionFloatingButton];
         NeoWCLog(@"调试悬浮入口已开启（无全局手势）");
     });
+}
+
+- (CGRect)floatingButtonMovementBounds {
+    UIView *container = self.floatingButton.superview;
+    if (!container) return CGRectZero;
+    UIEdgeInsets safeInsets = container.safeAreaInsets;
+    CGFloat radius = CGRectGetWidth(self.floatingButton.bounds) * 0.5;
+    CGFloat edgeSpacing = 12.0;
+    CGFloat minX = safeInsets.left + radius + edgeSpacing;
+    CGFloat maxX = CGRectGetWidth(container.bounds) - safeInsets.right - radius - edgeSpacing;
+    CGFloat minY = safeInsets.top + radius + edgeSpacing;
+    CGFloat maxY = CGRectGetHeight(container.bounds) - safeInsets.bottom - radius - edgeSpacing;
+    return CGRectMake(minX, minY, MAX(0.0, maxX - minX), MAX(0.0, maxY - minY));
+}
+
+- (void)repositionFloatingButton {
+    if (!self.floatingButton.superview) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        CGRect movementBounds = [self floatingButtonMovementBounds];
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        BOOL leftSide = [[defaults objectForKey:NeoWCDebugFloatingSideKey] boolValue];
+        NSNumber *savedVerticalPosition = [defaults objectForKey:NeoWCDebugFloatingVerticalPositionKey];
+        CGFloat verticalPosition = savedVerticalPosition ? MIN(1.0, MAX(0.0, savedVerticalPosition.doubleValue)) : 0.78;
+        self.floatingButton.center = CGPointMake(leftSide ? CGRectGetMinX(movementBounds) : CGRectGetMaxX(movementBounds),
+                                                 CGRectGetMinY(movementBounds) + CGRectGetHeight(movementBounds) * verticalPosition);
+    });
+}
+
+- (void)floatingButtonPanned:(UIPanGestureRecognizer *)recognizer {
+    UIButton *button = self.floatingButton;
+    UIView *container = button.superview;
+    if (!button || !container) return;
+    CGPoint translation = [recognizer translationInView:container];
+    CGRect movementBounds = [self floatingButtonMovementBounds];
+    CGPoint center = CGPointMake(button.center.x + translation.x, button.center.y + translation.y);
+    center.x = MIN(CGRectGetMaxX(movementBounds), MAX(CGRectGetMinX(movementBounds), center.x));
+    center.y = MIN(CGRectGetMaxY(movementBounds), MAX(CGRectGetMinY(movementBounds), center.y));
+    button.center = center;
+    [recognizer setTranslation:CGPointZero inView:container];
+
+    if (recognizer.state == UIGestureRecognizerStateEnded || recognizer.state == UIGestureRecognizerStateCancelled) {
+        BOOL leftSide = center.x < CGRectGetMidX(movementBounds);
+        center.x = leftSide ? CGRectGetMinX(movementBounds) : CGRectGetMaxX(movementBounds);
+        [UIView animateWithDuration:0.24 delay:0.0 usingSpringWithDamping:0.82 initialSpringVelocity:0.2 options:UIViewAnimationOptionBeginFromCurrentState animations:^{
+            button.center = center;
+        } completion:nil];
+        CGFloat height = CGRectGetHeight(movementBounds);
+        CGFloat verticalPosition = height > 0.0 ? (center.y - CGRectGetMinY(movementBounds)) / height : 0.5;
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setBool:leftSide forKey:NeoWCDebugFloatingSideKey];
+        [defaults setDouble:verticalPosition forKey:NeoWCDebugFloatingVerticalPositionKey];
+        NeoWCLog(@"已保存调试悬浮按钮位置");
+    }
 }
 
 - (void)floatingButtonTapped {

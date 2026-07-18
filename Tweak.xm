@@ -22,11 +22,6 @@
 - (void)onTapConfirmButton;
 @end
 
-@interface ExtraDeviceLoginViewController : UIViewController
-@property (nonatomic, strong) UIButton *confirmBtn;
-- (void)onConfirmBtnPress:(id)sender;
-@end
-
 @interface MMAuthorizeUserInfoViewController : UIViewController
 @end
 
@@ -34,16 +29,86 @@
 - (void)onAccessibilityLike;
 - (void)onAccessibilityComment;
 - (id)operateBtnImage:(BOOL)spring isSpringStyle:(BOOL)springStyle;
+- (void)neowc_handleMomentsDoubleTap;
 @end
 
 @interface WCTimeLineOperateButtonView : UIButton
 @end
 
+@interface CMessageWrap : NSObject
+@property (nonatomic, assign) NSUInteger m_uiMessageType;
+@property (nonatomic, assign) NSUInteger m_uiGameType;
+@property (nonatomic, assign) NSUInteger m_uiGameContent;
+@property (nonatomic, copy) NSString *m_nsEmoticonMD5;
+@end
+
+@interface CMessageMgr : NSObject
+- (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap;
+@end
+
+@interface GameController : NSObject
++ (NSString *)getMD5ByGameContent:(NSUInteger)content;
+@end
+
+@interface WCDeviceStepObject : NSObject
+- (unsigned int)m7StepCount;
+@end
+
+@interface WCDataItem : NSObject
+- (BOOL)isAd;
+- (BOOL)isVideoAd;
+@end
+
+@interface WAAppTaskSplashADConfig : NSObject
+- (BOOL)canShowSplashADWindow;
+- (BOOL)launchShow;
+@end
+
 static BOOL NeoWCDidRegister = NO;
 static char NeoWCDeviceCardDidConfirmKey;
-static char NeoWCExtraDeviceDidConfirmKey;
 static char NeoWCGameDidAuthorizeKey;
 static char NeoWCMomentsDoubleTapRecognizerKey;
+static char NeoWCGameSelectorPresentedKey;
+
+static void NeoWCSynchronizeMomentsCell(WCTimeLineCellView *cell) {
+    if (!cell) return;
+    UITapGestureRecognizer *recognizer = objc_getAssociatedObject(cell, &NeoWCMomentsDoubleTapRecognizerKey);
+    BOOL enabled = NeoWCEnhancementEnabled(NeoWCMomentsDoubleTapLikeKey);
+    if (enabled && !recognizer) {
+        recognizer = [[UITapGestureRecognizer alloc] initWithTarget:cell action:@selector(neowc_handleMomentsDoubleTap)];
+        recognizer.numberOfTapsRequired = 2;
+        recognizer.cancelsTouchesInView = NO;
+        [cell addGestureRecognizer:recognizer];
+        objc_setAssociatedObject(cell, &NeoWCMomentsDoubleTapRecognizerKey, recognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    } else if (!enabled && recognizer) {
+        [cell removeGestureRecognizer:recognizer];
+        objc_setAssociatedObject(cell, &NeoWCMomentsDoubleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
+static void NeoWCSynchronizeMomentsCellsInView(UIView *view) {
+    if (!view) return;
+    Class cellClass = NSClassFromString(@"WCTimeLineCellView");
+    if (cellClass && [view isKindOfClass:cellClass]) NeoWCSynchronizeMomentsCell((WCTimeLineCellView *)view);
+    for (UIView *subview in view.subviews) NeoWCSynchronizeMomentsCellsInView(subview);
+}
+
+static void NeoWCSynchronizeVisibleMomentsCells(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (@available(iOS 13.0, *)) {
+            for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+                if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+                for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+                    if (!window.hidden) NeoWCSynchronizeMomentsCellsInView(window);
+                }
+            }
+            return;
+        }
+        for (UIWindow *window in UIApplication.sharedApplication.windows) {
+            if (!window.hidden) NeoWCSynchronizeMomentsCellsInView(window);
+        }
+    });
+}
 
 static BOOL NeoWCFindAndTapButton(NSString *title, UIView *rootView) {
     if (!rootView || title.length == 0) return NO;
@@ -147,6 +212,14 @@ static void NeoWCRegisterPlugin(void) {
                         [[NeoWCDebugManager sharedManager] applySavedState];
                     }];
 
+        [[NSNotificationCenter defaultCenter]
+            addObserverForName:NeoWCEnhancementDidChangeNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(__unused NSNotification *note) {
+                        NeoWCSynchronizeVisibleMomentsCells();
+                    }];
+
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{
             NeoWCRegisterPlugin();
@@ -183,13 +256,13 @@ static void NeoWCRegisterPlugin(void) {
 %hook WCPluginsViewController
 
 - (void)reloadTableData {
-    %orig;
     NeoWCFilterPluginListController(self);
+    %orig;
 }
 
 - (void)viewWillAppear:(BOOL)animated {
-    %orig;
     NeoWCFilterPluginListController(self);
+    %orig;
 }
 
 %end
@@ -198,13 +271,7 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)initView {
     %orig;
-    if (!objc_getAssociatedObject(self, &NeoWCMomentsDoubleTapRecognizerKey)) {
-        UITapGestureRecognizer *recognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(neowc_handleMomentsDoubleTap)];
-        recognizer.numberOfTapsRequired = 2;
-        recognizer.cancelsTouchesInView = NO;
-        [self addGestureRecognizer:recognizer];
-        objc_setAssociatedObject(self, &NeoWCMomentsDoubleTapRecognizerKey, recognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
+    NeoWCSynchronizeMomentsCell(self);
     if (NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey)) {
         @try {
             UIView *operateButton = [self valueForKey:@"m_operateBtn"];
@@ -218,6 +285,11 @@ static void NeoWCRegisterPlugin(void) {
             NeoWCLog(@"当前微信版本无法调整朋友圈操作按钮外观");
         }
     }
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    NeoWCSynchronizeMomentsCell(self);
 }
 
 %new
@@ -257,6 +329,98 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%hook CMessageMgr
+
+- (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap {
+    BOOL isGameMessage = wrap.m_uiMessageType == 47 && (wrap.m_uiGameType == 1 || wrap.m_uiGameType == 2);
+    if (!NeoWCEnhancementEnabled(NeoWCGameSelectorKey) || !isGameMessage) {
+        %orig;
+        return;
+    }
+    if ([objc_getAssociatedObject(wrap, &NeoWCGameSelectorPresentedKey) boolValue]) return;
+
+    UIWindow *window = UIApplication.sharedApplication.keyWindow ?: UIApplication.sharedApplication.windows.firstObject;
+    UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
+    if (!presenter.view.window) {
+        %orig;
+        return;
+    }
+
+    objc_setAssociatedObject(wrap, &NeoWCGameSelectorPresentedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSString *sourceType = wrap.m_uiGameType == 1 ? @"猜拳" : @"骰子";
+    UIAlertController *selector = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"%@结果选择", sourceType]
+                                                                      message:@"彩蛋：可以跨类型选择结果"
+                                                               preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSDictionary *> *choices = @[
+        @{@"title": @"剪刀", @"value": @1}, @{@"title": @"石头", @"value": @2}, @{@"title": @"布", @"value": @3},
+        @{@"title": @"骰子 1", @"value": @4}, @{@"title": @"骰子 2", @"value": @5}, @{@"title": @"骰子 3", @"value": @6},
+        @{@"title": @"骰子 4", @"value": @7}, @{@"title": @"骰子 5", @"value": @8}, @{@"title": @"骰子 6", @"value": @9},
+    ];
+    for (NSDictionary *choice in choices) {
+        [selector addAction:[UIAlertAction actionWithTitle:choice[@"title"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            NSUInteger value = [choice[@"value"] unsignedIntegerValue];
+            wrap.m_nsEmoticonMD5 = [GameController getMD5ByGameContent:value];
+            wrap.m_uiGameContent = value;
+            objc_setAssociatedObject(wrap, &NeoWCGameSelectorPresentedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            NeoWCLog(@"小游戏结果已选择：%@（原始值 %lu）", choice[@"title"], (unsigned long)value);
+            %orig(message, wrap);
+        }]];
+    }
+    [selector addAction:[UIAlertAction actionWithTitle:@"取消发送" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction *action) {
+        objc_setAssociatedObject(wrap, &NeoWCGameSelectorPresentedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }]];
+    UIPopoverPresentationController *popover = selector.popoverPresentationController;
+    if (popover) {
+        popover.sourceView = presenter.view;
+        popover.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds), CGRectGetMaxY(presenter.view.bounds) - 1.0, 1.0, 1.0);
+    }
+    [presenter presentViewController:selector animated:YES completion:nil];
+}
+
+%end
+
+%hook WCDeviceStepObject
+
+- (unsigned int)m7StepCount {
+    unsigned int originalValue = %orig;
+    if (!NeoWCEnhancementEnabled(NeoWCStepOverrideEnabledKey)) return originalValue;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSDate *configuredDate = [defaults objectForKey:NeoWCStepCountDateKey];
+    if (![configuredDate isKindOfClass:[NSDate class]] || ![[NSCalendar currentCalendar] isDateInToday:configuredDate]) return originalValue;
+    NSInteger configuredValue = [defaults integerForKey:NeoWCStepCountKey];
+    return configuredValue > 0 ? (unsigned int)MIN(100000, configuredValue) : originalValue;
+}
+
+%end
+
+%hook WCDataItem
+
+- (BOOL)isAd {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+- (BOOL)isVideoAd {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+%end
+
+%hook WAAppTaskSplashADConfig
+
+- (BOOL)canShowSplashADWindow {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+- (BOOL)launchShow {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+%end
+
 %hook MultiDeviceCardLoginContentView
 
 - (void)layoutSubviews {
@@ -267,24 +431,6 @@ static void NeoWCRegisterPlugin(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self onTapConfirmButton];
         NeoWCLog(@"已自动确认多设备登录");
-        NeoWCShowLoginToast(@"已自动确认设备登录");
-    });
-}
-
-%end
-
-
-%hook ExtraDeviceLoginViewController
-
-- (void)viewDidLoad {
-    %orig;
-    if (!NeoWCEnhancementEnabled(NeoWCAutoDeviceLoginKey)) return;
-    if ([objc_getAssociatedObject(self, &NeoWCExtraDeviceDidConfirmKey) boolValue]) return;
-    objc_setAssociatedObject(self, &NeoWCExtraDeviceDidConfirmKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NSTimeInterval delay = 0.25 + ((double)arc4random_uniform(650) / 1000.0);
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self onConfirmBtnPress:self.confirmBtn];
-        NeoWCLog(@"已自动确认扩展设备登录");
         NeoWCShowLoginToast(@"已自动确认设备登录");
     });
 }
