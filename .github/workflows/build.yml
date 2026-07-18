@@ -34,6 +34,7 @@ jobs:
 
       - name: Set up Theos
         run: |
+          brew install ldid
           git clone --recursive --depth 1 https://github.com/theos/theos.git "$THEOS"
           git clone --depth 1 https://github.com/theos/sdks.git "$RUNNER_TEMP/theos-sdks"
           cp -R "$RUNNER_TEMP"/theos-sdks/*.sdk "$THEOS/sdks/"
