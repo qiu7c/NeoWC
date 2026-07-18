@@ -1,0 +1,7 @@
+.theos/
+packages/
+*.deb
+.DS_Store
+
+# Local third-party projects used only as implementation references.
+参考/
