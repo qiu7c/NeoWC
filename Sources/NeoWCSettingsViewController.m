@@ -1,4 +1,5 @@
 #import "NeoWCSettingsViewController.h"
+#import "NeoWCDebug.h"
 
 static NSString *const NeoWCVersion = @"0.1.0";
 static NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
@@ -160,8 +161,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             item(@"气泡样式", @"自定义聊天气泡显示", @"message.fill", NeoWCRowKindDetail, nil, @"规划中"),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"laboratory" title:@"实验工具" subtitle:@"测试功能与运行诊断" symbol:@"flask.fill" footer:@"实验功能可能随版本调整。" collapsible:YES items:@[
-            item(@"调试日志", @"记录插件运行状态", @"doc.text.magnifyingglass", NeoWCRowKindSwitch, @"com.qiu7c.neowc.labs.logging", nil),
-            item(@"运行诊断", @"查看环境与兼容状态", @"stethoscope", NeoWCRowKindDetail, nil, @"规划中"),
+            item(@"调试悬浮按钮", @"仅由此开关控制，不监听全局手势", @"wrench.and.screwdriver", NeoWCRowKindSwitch, NeoWCDebugFloatingEnabledKey, nil),
+            item(@"调试中心", @"视图检查、Runtime 搜索与日志", @"ladybug", NeoWCRowKindDetail, nil, @"打开"),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"about" title:@"关于" subtitle:nil symbol:nil footer:@"NeoWC · Designed for WeChat" collapsible:NO items:@[
             item(@"版本", @"NeoWC", @"shippingbox", NeoWCRowKindInfo, nil, NeoWCVersion),
@@ -333,6 +334,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
     if (item.defaultsKey.length == 0) return;
     [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:item.defaultsKey];
+    if ([item.defaultsKey isEqualToString:NeoWCDebugFloatingEnabledKey]) {
+        [[NeoWCDebugManager sharedManager] setFloatingEnabled:sender.isOn];
+    }
     if ([item.defaultsKey isEqualToString:NeoWCEnabledKey]) [self.tableView reloadData];
 }
 
@@ -358,6 +362,10 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
     if (item.kind != NeoWCRowKindDetail) return;
+    if ([item.title isEqualToString:@"调试中心"]) {
+        [[NeoWCDebugManager sharedManager] presentDashboardFromViewController:self];
+        return;
+    }
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:item.title
                                                                    message:@"当前为 UI 预览阶段，功能将在界面确认后接入。"
                                                             preferredStyle:UIAlertControllerStyleAlert];

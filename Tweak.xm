@@ -3,6 +3,7 @@
 #import <objc/runtime.h>
 
 #import "Sources/NeoWCSettingsViewController.h"
+#import "Sources/NeoWCDebug.h"
 
 @interface WCPluginsMgr : NSObject
 + (instancetype)sharedInstance;
@@ -27,6 +28,7 @@ static void NeoWCRegisterPlugin(void) {
                                  version:@"0.1.0"
                               controller:NSStringFromClass([NeoWCSettingsViewController class])];
     NeoWCDidRegister = YES;
+    NeoWCLog(@"已注册 WCPluginsMgr 设置入口");
 }
 
 @interface NeoWCEntryLoader : NSObject
@@ -44,11 +46,13 @@ static void NeoWCRegisterPlugin(void) {
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(__unused NSNotification *note) {
                         NeoWCRegisterPlugin();
+                        [[NeoWCDebugManager sharedManager] applySavedState];
                     }];
 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{
             NeoWCRegisterPlugin();
+            [[NeoWCDebugManager sharedManager] applySavedState];
         });
     });
 }
