@@ -131,7 +131,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 62.0;
-    self.tableView.backgroundColor = [UIColor systemGroupedBackgroundColor];
+    self.tableView.backgroundColor = [UIColor systemBackgroundColor];
     self.tableView.tableHeaderView = [self makeHeaderView];
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"NeoWCSettingCell"];
 }
@@ -172,34 +172,28 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
 - (UIView *)makeHeaderView {
     CGFloat width = MAX(CGRectGetWidth(self.view.bounds), CGRectGetWidth([UIScreen mainScreen].bounds));
-    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 156.0)];
-    UIView *card = [UIView new];
-    card.translatesAutoresizingMaskIntoConstraints = NO;
-    card.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
-    card.layer.cornerRadius = 18.0;
-    card.layer.cornerCurve = kCACornerCurveContinuous;
-    card.layer.shadowOpacity = 0.0;
-    [container addSubview:card];
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 144.0)];
+    container.backgroundColor = [UIColor systemBackgroundColor];
 
     NeoWCLogoView *logo = [NeoWCLogoView new];
     logo.translatesAutoresizingMaskIntoConstraints = NO;
     logo.layer.shadowOpacity = 0.0;
-    [card addSubview:logo];
+    [container addSubview:logo];
 
     UILabel *name = [UILabel new];
     name.translatesAutoresizingMaskIntoConstraints = NO;
     name.text = @"NeoWC";
     name.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle2];
     name.adjustsFontForContentSizeCategory = YES;
-    [card addSubview:name];
+    [container addSubview:name];
 
     UILabel *version = [UILabel new];
     version.translatesAutoresizingMaskIntoConstraints = NO;
-    version.text = [NSString stringWithFormat:@"v%@ · UI PREVIEW", NeoWCVersion];
+    version.text = [NSString stringWithFormat:@"v%@ · DEVELOPMENT", NeoWCVersion];
     version.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
     version.adjustsFontForContentSizeCategory = YES;
     version.textColor = [UIColor secondaryLabelColor];
-    [card addSubview:version];
+    [container addSubview:version];
 
     UILabel *tagline = [UILabel new];
     tagline.translatesAutoresizingMaskIntoConstraints = NO;
@@ -207,25 +201,21 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     tagline.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
     tagline.adjustsFontForContentSizeCategory = YES;
     tagline.textColor = [UIColor secondaryLabelColor];
-    [card addSubview:tagline];
+    [container addSubview:tagline];
 
     [NSLayoutConstraint activateConstraints:@[
-        [card.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:20.0],
-        [card.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-20.0],
-        [card.topAnchor constraintEqualToAnchor:container.topAnchor constant:12.0],
-        [card.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-12.0],
-        [logo.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18.0],
-        [logo.topAnchor constraintEqualToAnchor:card.topAnchor constant:18.0],
+        [logo.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:28.0],
+        [logo.topAnchor constraintEqualToAnchor:container.topAnchor constant:16.0],
         [logo.widthAnchor constraintEqualToConstant:58.0],
         [logo.heightAnchor constraintEqualToConstant:58.0],
         [name.leadingAnchor constraintEqualToAnchor:logo.trailingAnchor constant:14.0],
-        [name.trailingAnchor constraintLessThanOrEqualToAnchor:card.trailingAnchor constant:-16.0],
+        [name.trailingAnchor constraintLessThanOrEqualToAnchor:container.trailingAnchor constant:-24.0],
         [name.topAnchor constraintEqualToAnchor:logo.topAnchor constant:3.0],
         [version.leadingAnchor constraintEqualToAnchor:name.leadingAnchor],
         [version.topAnchor constraintEqualToAnchor:name.bottomAnchor constant:4.0],
-        [tagline.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18.0],
-        [tagline.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18.0],
-        [tagline.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-17.0],
+        [tagline.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:28.0],
+        [tagline.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-24.0],
+        [tagline.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-18.0],
     ]];
     return container;
 }
@@ -265,6 +255,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     NeoWCSettingSection *section = self.sections[indexPath.section];
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"NeoWCSettingCell" forIndexPath:indexPath];
+    cell.backgroundColor = [UIColor tertiarySystemFillColor];
+    cell.layer.shadowOpacity = 0.0;
     cell.accessoryView = nil;
     cell.accessoryType = UITableViewCellAccessoryNone;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;

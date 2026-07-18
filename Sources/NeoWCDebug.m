@@ -62,8 +62,17 @@ void NeoWCLog(NSString *format, ...) {
 }
 
 @interface NeoWCDebugWindow : UIWindow
+@property (nonatomic, assign) BOOL passesThroughBackgroundTouches;
 @end
 @implementation NeoWCDebugWindow
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *hitView = [super hitTest:point withEvent:event];
+    if (self.passesThroughBackgroundTouches &&
+        (hitView == self || hitView == self.rootViewController.view)) {
+        return nil;
+    }
+    return hitView;
+}
 @end
 
 @interface NeoWCPassthroughView : UIView
@@ -192,6 +201,7 @@ static UIViewController *NeoWCViewControllerForView(UIView *view) {
         }
 
         NeoWCDebugWindow *window = [self newDebugWindowAtLevel:UIWindowLevelAlert + 8.0];
+        window.passesThroughBackgroundTouches = YES;
         UIViewController *root = [UIViewController new];
         NeoWCPassthroughView *passthroughView = [[NeoWCPassthroughView alloc] initWithFrame:window.bounds];
         passthroughView.backgroundColor = UIColor.clearColor;
