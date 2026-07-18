@@ -17,6 +17,8 @@ jobs:
   build:
     name: Build (${{ matrix.scheme }})
     runs-on: macos-15
+    env:
+      THEOS: ${{ runner.temp }}/theos
     strategy:
       fail-fast: false
       matrix:
@@ -31,7 +33,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Theos
-        uses: waruhachi/theos-action@v2.3.6
+        run: |
+          git clone --recursive --depth 1 https://github.com/theos/theos.git "$THEOS"
+          git clone --depth 1 https://github.com/theos/sdks.git "$RUNNER_TEMP/theos-sdks"
+          cp -R "$RUNNER_TEMP"/theos-sdks/*.sdk "$THEOS/sdks/"
 
       - name: Build package
         run: make clean package FINALPACKAGE=1 ${{ matrix.make_args }}
