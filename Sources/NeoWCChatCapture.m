@@ -5,6 +5,7 @@
 #import <CoreImage/CoreImage.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <math.h>
 
 static NSString *const NeoWCChatCaptureAction = @"com.qiu7c.neowc.chat-capture.action";
 static char NeoWCActiveChatCaptureKey;
@@ -37,7 +38,7 @@ static UIImage *NeoWCSnapshotView(UIView *view, CGSize size) {
     if (!view || size.width <= 0.0 || size.height <= 0.0) return nil;
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
     format.opaque = NO;
-    format.scale = 1.0;
+    format.scale = MIN(2.0, UIScreen.mainScreen.scale);
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
     return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
         CGRect rect = (CGRect){CGPointZero, size};
@@ -61,6 +62,24 @@ static NSString *NeoWCFirstLabelText(UIView *view) {
         if (text.length > 0) return text;
     }
     return nil;
+}
+
+static void NeoWCFindBottomToolbar(UIView *view, UIView *host, UIView **bestView, CGFloat *bestScore) {
+    if (!view || view.hidden || view.alpha < 0.01 || CGRectIsEmpty(view.bounds)) return;
+    CGRect rect = [view convertRect:view.bounds toView:host];
+    CGRect visible = CGRectIntersection(rect, host.bounds);
+    CGFloat hostWidth = CGRectGetWidth(host.bounds);
+    CGFloat hostHeight = CGRectGetHeight(host.bounds);
+    CGFloat height = CGRectGetHeight(visible);
+    CGFloat width = CGRectGetWidth(visible);
+    if (height >= 36.0 && height <= 180.0 && width >= hostWidth * 0.65 && CGRectGetMaxY(visible) >= hostHeight - 180.0) {
+        CGFloat score = CGRectGetMaxY(visible) - height * 0.25;
+        if (score > *bestScore) {
+            *bestScore = score;
+            *bestView = view;
+        }
+    }
+    for (UIView *subview in view.subviews) NeoWCFindBottomToolbar(subview, host, bestView, bestScore);
 }
 
 typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
@@ -290,7 +309,10 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     CGRect bounds = CGRectMake(0.0, 0.0, self.image.size.width, self.image.size.height);
     rect = CGRectIntegral(CGRectIntersection(rect, bounds));
     if (CGRectIsEmpty(rect) || !self.image.CGImage) return nil;
-    CGImageRef cropped = CGImageCreateWithImageInRect(self.image.CGImage, rect);
+    CGFloat imageScale = MAX(1.0, self.image.scale);
+    CGRect pixelRect = CGRectMake(rect.origin.x * imageScale, rect.origin.y * imageScale,
+                                  rect.size.width * imageScale, rect.size.height * imageScale);
+    CGImageRef cropped = CGImageCreateWithImageInRect(self.image.CGImage, pixelRect);
     if (!cropped) return nil;
     CIImage *input = [CIImage imageWithCGImage:cropped];
     CIFilter *filter = [CIFilter filterWithName:@"CIGaussianBlur"];
@@ -299,7 +321,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     CGImageRef output = [context createCGImage:filter.outputImage fromRect:input.extent];
     CGImageRelease(cropped);
     if (!output) return nil;
-    UIImage *image = [UIImage imageWithCGImage:output scale:1.0 orientation:UIImageOrientationUp];
+    UIImage *image = [UIImage imageWithCGImage:output scale:imageScale orientation:UIImageOrientationUp];
     CGImageRelease(output);
     return image;
 }
@@ -336,7 +358,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     CIContext *ciContext = [CIContext contextWithOptions:nil];
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
     format.opaque = YES;
-    format.scale = 1.0;
+    format.scale = MAX(1.0, self.image.scale);
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:self.image.size format:format];
     return [renderer imageWithActions:^(UIGraphicsImageRendererContext *rendererContext) {
         [self.image drawAtPoint:CGPointZero];
@@ -501,7 +523,15 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
         self.headerImage = NeoWCSnapshotView(bar, bar.bounds.size);
         UIView *toolView = NeoWCSafeValue(self.controller, @"_inputToolView");
         if (![toolView isKindOfClass:[UIView class]]) toolView = NeoWCSafeValue(self.controller, @"m_inputToolView");
-        if ([toolView isKindOfClass:[UIView class]]) self.footerImage = NeoWCSnapshotView(toolView, toolView.bounds.size);
+        if ([toolView isKindOfClass:[UIView class]]) {
+            UIView *captureView = nil;
+            CGFloat score = -CGFLOAT_MAX;
+            NeoWCFindBottomToolbar(toolView, self.controller.view, &captureView, &score);
+            if (!captureView && CGRectGetHeight(toolView.bounds) <= 180.0) captureView = toolView;
+            if (captureView && CGRectGetHeight(captureView.bounds) <= 180.0) {
+                self.footerImage = NeoWCSnapshotView(captureView, captureView.bounds.size);
+            }
+        }
     }
     if ([defaults boolForKey:NeoWCChatCaptureShowBackgroundKey]) {
         UIView *background = NeoWCSafeValue(self.controller, @"m_backgroundView");
@@ -583,7 +613,9 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
     format.opaque = YES;
-    format.scale = 1.0;
+    CGFloat maximumPixelArea = 28000000.0;
+    CGFloat qualityScale = sqrt(maximumPixelArea / MAX(1.0, width * totalHeight));
+    format.scale = MIN(MIN(2.0, UIScreen.mainScreen.scale), MAX(1.0, qualityScale));
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(width, totalHeight) format:format];
     return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
         [[UIColor systemBackgroundColor] setFill];
