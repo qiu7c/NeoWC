@@ -137,18 +137,27 @@ static UIViewController *NeoWCTopControllerForLoginToast(UIViewController *contr
     return controller;
 }
 
-static void NeoWCShowLoginToast(NSString *message) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *window = nil;
-        if (@available(iOS 13.0, *)) {
-            for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-                if (scene.activationState != UISceneActivationStateForegroundActive || ![scene isKindOfClass:[UIWindowScene class]]) continue;
-                for (UIWindow *candidate in ((UIWindowScene *)scene).windows) {
-                    if (candidate.isKeyWindow) { window = candidate; break; }
-                }
+static UIWindow *NeoWCActiveApplicationWindow(void) {
+    if (@available(iOS 13.0, *)) {
+        UIWindow *fallbackWindow = nil;
+        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if (scene.activationState != UISceneActivationStateForegroundActive || ![scene isKindOfClass:[UIWindowScene class]]) continue;
+            for (UIWindow *candidate in ((UIWindowScene *)scene).windows) {
+                if (candidate.isKeyWindow) return candidate;
+                if (!candidate.hidden && candidate.alpha > 0.0 && !fallbackWindow) fallbackWindow = candidate;
             }
         }
-        if (!window) window = UIApplication.sharedApplication.windows.firstObject;
+        if (fallbackWindow) return fallbackWindow;
+    }
+    for (UIWindow *candidate in UIApplication.sharedApplication.windows) {
+        if (candidate.isKeyWindow) return candidate;
+    }
+    return UIApplication.sharedApplication.windows.firstObject;
+}
+
+static void NeoWCShowLoginToast(NSString *message) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIWindow *window = NeoWCActiveApplicationWindow();
         UIViewController *controller = NeoWCTopControllerForLoginToast(window.rootViewController);
         if (!controller.view.window) return;
 
@@ -339,7 +348,7 @@ static void NeoWCRegisterPlugin(void) {
     }
     if ([objc_getAssociatedObject(wrap, &NeoWCGameSelectorPresentedKey) boolValue]) return;
 
-    UIWindow *window = UIApplication.sharedApplication.keyWindow ?: UIApplication.sharedApplication.windows.firstObject;
+    UIWindow *window = NeoWCActiveApplicationWindow();
     UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
     if (!presenter.view.window) {
         %orig;
