@@ -6,8 +6,51 @@
 #import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
 
+static NSUInteger NeoWCUIntegerValue(id object, NSString *key);
+
 NSString *const NeoWCAntiRevokePromptDidChangeNotification = @"NeoWCAntiRevokePromptDidChangeNotification";
 static NSString *const NeoWCAntiRevokeSidePromptRecordsKey = @"com.qiu7c.neowc.message.anti-revoke.side-records";
+static NSString *const NeoWCAntiRevokeArchiveKey = @"com.qiu7c.neowc.message.anti-revoke.archive";
+
+static NSMutableArray<NSDictionary *> *NeoWCAntiRevokeMemoryRecords(void) {
+    static NSMutableArray<NSDictionary *> *records;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSArray *saved = [[NSUserDefaults standardUserDefaults] arrayForKey:NeoWCAntiRevokeArchiveKey];
+        records = [([saved isKindOfClass:[NSArray class]] ? saved : @[]) mutableCopy];
+    });
+    return records;
+}
+
+void NeoWCAntiRevokeSetPersistenceEnabled(BOOL enabled) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    [defaults setBool:enabled forKey:NeoWCAntiRevokePersistRecordsKey];
+    if (enabled) {
+        @synchronized (NeoWCAntiRevokeMemoryRecords()) { [defaults setObject:NeoWCAntiRevokeMemoryRecords() forKey:NeoWCAntiRevokeArchiveKey]; }
+    } else {
+        [defaults removeObjectForKey:NeoWCAntiRevokeArchiveKey];
+    }
+}
+
+static void NeoWCAntiRevokeAppendRecord(NSString *session, NSString *operatorName, id message, NSString *summary, NSDate *date) {
+    NSUInteger type = NeoWCUIntegerValue(message, @"m_uiMessageType");
+    NSDictionary *record = @{
+        @"session": session ?: @"",
+        @"contact": operatorName ?: @"用户",
+        @"summary": summary ?: @"",
+        @"type": @(type),
+        @"time": @((date ?: [NSDate date]).timeIntervalSince1970),
+    };
+    @synchronized (NeoWCAntiRevokeMemoryRecords()) {
+        [NeoWCAntiRevokeMemoryRecords() insertObject:record atIndex:0];
+        if (NeoWCAntiRevokeMemoryRecords().count > 500) {
+            [NeoWCAntiRevokeMemoryRecords() removeObjectsInRange:NSMakeRange(500, NeoWCAntiRevokeMemoryRecords().count - 500)];
+        }
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCAntiRevokePersistRecordsKey]) {
+            [[NSUserDefaults standardUserDefaults] setObject:NeoWCAntiRevokeMemoryRecords() forKey:NeoWCAntiRevokeArchiveKey];
+        }
+    }
+}
 
 static NSString *const NeoWCDefaultLocalRevokeTemplate =
     @"拦截到一条{用户名}撤回的消息\n发送时间：{yyyy}-{MM}-{dd} {HH}:{mm}:{ss}\n内容：{内容}";
@@ -210,6 +253,7 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
     NSUInteger createTime = NeoWCUIntegerValue(original, @"m_uiCreateTime");
     NSDate *messageDate = [NSDate dateWithTimeIntervalSince1970:createTime];
     NSString *summary = NeoWCContentSummary(original);
+    NeoWCAntiRevokeAppendRecord(session, operatorName, original, summary, messageDate);
 
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSString *localTemplate = [defaults stringForKey:NeoWCAntiRevokeLocalTemplateKey];
@@ -250,3 +294,206 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
     NeoWCLog(@"已向撤回者发送提示（会话：%@）", target);
     return YES;
 }
+
+@interface NeoWCAntiRevokeRecordsViewController () <UISearchResultsUpdating>
+@property (nonatomic, copy) NSArray<NSDictionary *> *visibleRecords;
+@end
+
+@implementation NeoWCAntiRevokeRecordsViewController
+
+- (instancetype)init { return [self initWithStyle:UITableViewStyleInsetGrouped]; }
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"防撤回记录";
+    self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
+    UISearchController *search = [[UISearchController alloc] initWithSearchResultsController:nil];
+    search.searchResultsUpdater = self;
+    search.obscuresBackgroundDuringPresentation = NO;
+    search.searchBar.placeholder = @"搜索联系人或内容";
+    self.navigationItem.searchController = search;
+    self.navigationItem.hidesSearchBarWhenScrolling = NO;
+    [self reloadRecordsWithQuery:nil];
+}
+
+- (void)reloadRecordsWithQuery:(NSString *)query {
+    NSArray *records;
+    @synchronized (NeoWCAntiRevokeMemoryRecords()) { records = [NeoWCAntiRevokeMemoryRecords() copy]; }
+    NSString *needle = [query stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (needle.length > 0) {
+        NSPredicate *predicate = [NSPredicate predicateWithBlock:^BOOL(NSDictionary *record, __unused NSDictionary *bindings) {
+            return [record[@"contact"] localizedCaseInsensitiveContainsString:needle] ||
+                   [record[@"summary"] localizedCaseInsensitiveContainsString:needle] ||
+                   [record[@"session"] localizedCaseInsensitiveContainsString:needle];
+        }];
+        records = [records filteredArrayUsingPredicate:predicate];
+    }
+    self.visibleRecords = records;
+    [self.tableView reloadData];
+}
+
+- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
+    [self reloadRecordsWithQuery:searchController.searchBar.text];
+}
+
+- (NSInteger)tableView:(__unused UITableView *)tableView numberOfRowsInSection:(__unused NSInteger)section { return self.visibleRecords.count; }
+
+- (NSString *)tableView:(__unused UITableView *)tableView titleForFooterInSection:(__unused NSInteger)section {
+    if (self.visibleRecords.count == 0) return @"本次运行尚未拦截撤回消息。默认记录只保存在内存中。";
+    return [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCAntiRevokePersistRecordsKey]
+        ? @"已开启本地保存，仅保存消息摘要和类型，不复制媒体文件。"
+        : @"记录仅在本次微信运行期间保存在内存中。";
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"revoke-record"];
+    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"revoke-record"];
+    NSDictionary *record = self.visibleRecords[indexPath.row];
+    NSUInteger type = [record[@"type"] unsignedIntegerValue];
+    NSString *category = type == 1 ? @"文字" : (type == 3 ? @"图片" : (type == 49 ? @"文件/分享" : NeoWCMessageTypeName(type)));
+    NSDate *date = [NSDate dateWithTimeIntervalSince1970:[record[@"time"] doubleValue]];
+    NSDateFormatter *formatter = [NSDateFormatter new];
+    formatter.dateFormat = @"MM-dd HH:mm:ss";
+    cell.textLabel.text = [NSString stringWithFormat:@"%@ · %@", record[@"contact"], category];
+    cell.detailTextLabel.text = [NSString stringWithFormat:@"%@  %@", [formatter stringFromDate:date], record[@"summary"]];
+    cell.detailTextLabel.numberOfLines = 2;
+    cell.imageView.image = [UIImage systemImageNamed:type == 3 ? @"photo" : (type == 1 ? @"text.bubble" : @"doc")];
+    cell.imageView.tintColor = UIColor.secondaryLabelColor;
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    return cell;
+}
+
+@end
+
+@interface NeoWCAntiRevokeAppearanceViewController () <UITextFieldDelegate>
+@property (nonatomic, strong) UIView *stage;
+@property (nonatomic, strong) UIView *bubble;
+@property (nonatomic, strong) UILabel *promptLabel;
+@property (nonatomic, strong) UITextField *textField;
+@property (nonatomic, strong) UILabel *coordinateLabel;
+@property (nonatomic, assign) CGPoint panStart;
+@end
+
+@implementation NeoWCAntiRevokeAppearanceViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"提示外观预览";
+    self.view.backgroundColor = UIColor.systemGroupedBackgroundColor;
+    UIView *stage = [UIView new];
+    stage.translatesAutoresizingMaskIntoConstraints = NO;
+    stage.backgroundColor = [UIColor colorWithWhite:0.945 alpha:1.0];
+    stage.layer.cornerRadius = 14.0;
+    [self.view addSubview:stage];
+    self.stage = stage;
+
+    UIView *bubble = [UIView new];
+    bubble.backgroundColor = [UIColor colorWithRed:0.58 green:0.91 blue:0.43 alpha:1.0];
+    bubble.layer.cornerRadius = 7.0;
+    [stage addSubview:bubble];
+    self.bubble = bubble;
+    UILabel *message = [[UILabel alloc] initWithFrame:CGRectMake(16.0, 0.0, 150.0, 54.0)];
+    message.text = @"这是一条消息";
+    message.font = [UIFont systemFontOfSize:16.0];
+    [bubble addSubview:message];
+
+    UILabel *prompt = [UILabel new];
+    prompt.font = [UIFont systemFontOfSize:10.0];
+    prompt.textColor = UIColor.secondaryLabelColor;
+    prompt.userInteractionEnabled = YES;
+    prompt.text = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCAntiRevokeSideTextKey] ?: @"已拦截撤回";
+    [prompt addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(promptPanned:)]];
+    [stage addSubview:prompt];
+    self.promptLabel = prompt;
+
+    UITextField *field = [UITextField new];
+    field.translatesAutoresizingMaskIntoConstraints = NO;
+    field.borderStyle = UITextBorderStyleRoundedRect;
+    field.placeholder = @"提示文字";
+    field.text = prompt.text;
+    field.delegate = self;
+    [field addTarget:self action:@selector(promptTextChanged:) forControlEvents:UIControlEventEditingChanged];
+    [self.view addSubview:field];
+    self.textField = field;
+
+    UILabel *coordinates = [UILabel new];
+    coordinates.translatesAutoresizingMaskIntoConstraints = NO;
+    coordinates.font = [UIFont monospacedDigitSystemFontOfSize:13.0 weight:UIFontWeightRegular];
+    coordinates.textColor = UIColor.secondaryLabelColor;
+    [self.view addSubview:coordinates];
+    self.coordinateLabel = coordinates;
+
+    UIButton *reset = [UIButton buttonWithType:UIButtonTypeSystem];
+    reset.translatesAutoresizingMaskIntoConstraints = NO;
+    [reset setTitle:@"恢复推荐位置 X 0 / Y 10" forState:UIControlStateNormal];
+    [reset addTarget:self action:@selector(resetPosition) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:reset];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [stage.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20.0],
+        [stage.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20.0],
+        [stage.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:24.0],
+        [stage.heightAnchor constraintEqualToConstant:220.0],
+        [field.leadingAnchor constraintEqualToAnchor:stage.leadingAnchor],
+        [field.trailingAnchor constraintEqualToAnchor:stage.trailingAnchor],
+        [field.topAnchor constraintEqualToAnchor:stage.bottomAnchor constant:20.0],
+        [field.heightAnchor constraintEqualToConstant:44.0],
+        [coordinates.leadingAnchor constraintEqualToAnchor:field.leadingAnchor],
+        [coordinates.topAnchor constraintEqualToAnchor:field.bottomAnchor constant:14.0],
+        [reset.trailingAnchor constraintEqualToAnchor:field.trailingAnchor],
+        [reset.centerYAnchor constraintEqualToAnchor:coordinates.centerYAnchor],
+    ]];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    self.bubble.frame = CGRectMake(CGRectGetWidth(self.stage.bounds) - 190.0, 72.0, 166.0, 54.0);
+    [self layoutPrompt];
+}
+
+- (void)layoutPrompt {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    CGFloat x = [defaults objectForKey:NeoWCAntiRevokeSideOffsetXKey] ? [defaults doubleForKey:NeoWCAntiRevokeSideOffsetXKey] : 0.0;
+    CGFloat y = [defaults objectForKey:NeoWCAntiRevokeSideOffsetYKey] ? [defaults doubleForKey:NeoWCAntiRevokeSideOffsetYKey] : 10.0;
+    [self.promptLabel sizeToFit];
+    self.promptLabel.center = CGPointMake(CGRectGetMinX(self.bubble.frame) - CGRectGetWidth(self.promptLabel.bounds) * 0.5 - 8.0 + x,
+                                          CGRectGetMidY(self.bubble.frame) + y);
+    self.coordinateLabel.text = [NSString stringWithFormat:@"当前位置  X %.0f  /  Y %.0f", x, y];
+}
+
+- (void)promptPanned:(UIPanGestureRecognizer *)gesture {
+    if (gesture.state == UIGestureRecognizerStateBegan) {
+        NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+        self.panStart = CGPointMake([defaults doubleForKey:NeoWCAntiRevokeSideOffsetXKey], [defaults doubleForKey:NeoWCAntiRevokeSideOffsetYKey]);
+    }
+    CGPoint translation = [gesture translationInView:self.stage];
+    CGFloat x = MIN(80.0, MAX(-80.0, self.panStart.x + translation.x));
+    CGFloat y = MIN(80.0, MAX(-80.0, self.panStart.y + translation.y));
+    [NSUserDefaults.standardUserDefaults setDouble:x forKey:NeoWCAntiRevokeSideOffsetXKey];
+    [NSUserDefaults.standardUserDefaults setDouble:y forKey:NeoWCAntiRevokeSideOffsetYKey];
+    [self layoutPrompt];
+    if (gesture.state == UIGestureRecognizerStateEnded) {
+        [NSNotificationCenter.defaultCenter postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
+    }
+}
+
+- (void)promptTextChanged:(UITextField *)field {
+    NSString *text = field.text.length > 0 ? field.text : @"已拦截撤回";
+    self.promptLabel.text = text;
+    [NSUserDefaults.standardUserDefaults setObject:text forKey:NeoWCAntiRevokeSideTextKey];
+    [self layoutPrompt];
+}
+
+- (void)resetPosition {
+    [NSUserDefaults.standardUserDefaults setDouble:0.0 forKey:NeoWCAntiRevokeSideOffsetXKey];
+    [NSUserDefaults.standardUserDefaults setDouble:10.0 forKey:NeoWCAntiRevokeSideOffsetYKey];
+    [self layoutPrompt];
+    [NSNotificationCenter.defaultCenter postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    [NSNotificationCenter.defaultCenter postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
+}
+
+@end

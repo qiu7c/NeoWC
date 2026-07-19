@@ -3,9 +3,10 @@
 #import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCChatCapture.h"
+#import "NeoWCCompatibility.h"
 #import "NeoWCPluginVisibility.h"
 
-static NSString *const NeoWCVersion = @"0.1.0";
+static NSString *const NeoWCVersion = @"0.1.1";
 static NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 
@@ -168,8 +169,13 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCAntiRevokeSideTextKey: @"已拦截撤回",
         NeoWCAntiRevokeSideOffsetXKey: @0.0,
         NeoWCAntiRevokeSideOffsetYKey: @10.0,
+        NeoWCAntiRevokePersistRecordsKey: @NO,
         NeoWCChatCaptureEnabledKey: @NO,
         NeoWCImageEditQuickSendEnabledKey: @NO,
+        NeoWCImageEditReturnToChatKey: @YES,
+        NeoWCChatCapturePresetKey: @0,
+        NeoWCChatCaptureIncludeStatusBarKey: @NO,
+        NeoWCChatCaptureAutoSplitKey: @YES,
         NeoWCChatCaptureIncludeChromeKey: @YES,
         NeoWCChatCaptureHideMemberNamesKey: @NO,
         NeoWCChatCaptureShowBackgroundKey: @YES,
@@ -184,6 +190,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     }];
     NSArray *savedCategories = [[NSUserDefaults standardUserDefaults] arrayForKey:NeoWCExpandedCategoriesKey];
     self.expandedCategoryIDs = [NSMutableSet setWithArray:savedCategories ?: @[]];
+    [self buildSections];
 
     self.title = @"NeoWC";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
@@ -221,6 +228,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     BOOL notifySenderEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCAntiRevokeNotifySenderKey];
     BOOL stepOverrideEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCStepOverrideEnabledKey];
     BOOL chatCaptureEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatCaptureEnabledKey];
+    BOOL imageEditQuickSendEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCImageEditQuickSendEnabledKey];
     NSString *revokePromptStyle = revokePromptStyleValue == 1 ? @"气泡旁" : @"消息下方";
     NSString *sidePromptText = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCAntiRevokeSideTextKey] ?: @"已拦截撤回";
     id storedSideOffsetX = [[NSUserDefaults standardUserDefaults] objectForKey:NeoWCAntiRevokeSideOffsetXKey];
@@ -233,9 +241,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     if (antiRevokeEnabled) {
         [messageItems addObject:item(@"防撤回提示方案", [NSString stringWithFormat:@"当前方案：%@", revokePromptStyle], @"text.bubble.fill", NeoWCRowKindDetail, nil, revokePromptStyle)];
         if (revokePromptStyleValue == 1) {
-            [messageItems addObject:item(@"气泡旁提示文字", @"自定义气泡旁显示的小字", @"character.cursor.ibeam", NeoWCRowKindDetail, nil, sidePromptText)];
-            [messageItems addObject:item(@"气泡旁横向位置", @"横向偏移，默认 0", @"arrow.left.and.right", NeoWCRowKindDetail, nil, sideOffsetX)];
-            [messageItems addObject:item(@"气泡旁纵向位置", @"正数向下，默认 10", @"arrow.up.and.down", NeoWCRowKindDetail, nil, sideOffsetY)];
+            NSString *appearanceValue = [NSString stringWithFormat:@"%@ · X %@ / Y %@", sidePromptText, sideOffsetX, sideOffsetY];
+            [messageItems addObject:item(@"提示外观预览", @"拖动小字调整位置并实时预览", @"cursorarrow.motionlines", NeoWCRowKindDetail, nil, appearanceValue)];
         } else {
             [messageItems addObject:item(@"本地提示模板", @"设置消息下方显示的完整防撤回提示", @"text.bubble", NeoWCRowKindDetail, nil, @"编辑")];
         }
@@ -244,6 +251,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             [messageItems addObject:item(@"回复时间限制", @"避免响应很久以前的撤回事件", @"timer", NeoWCRowKindDetail, nil, revokeFilterValue)];
             [messageItems addObject:item(@"回复消息模板", @"设置发送给撤回者的提示", @"text.quote", NeoWCRowKindDetail, nil, @"编辑")];
         }
+        [messageItems addObject:item(@"防撤回记录中心", @"搜索本次运行期间拦截的撤回消息", @"tray.full", NeoWCRowKindDetail, nil, @"查看")];
+        [messageItems addObject:item(@"本地保存撤回记录", @"默认关闭；仅保存摘要和分类", @"internaldrive", NeoWCRowKindSwitch, NeoWCAntiRevokePersistRecordsKey, nil)];
     }
 
     NSMutableArray<NeoWCSettingItem *> *enhancementItems = [NSMutableArray arrayWithArray:@[
@@ -257,6 +266,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     if (stepOverrideEnabled) [enhancementItems addObject:item(@"设置运动步数", @"自定义数值仅在设置当天生效", @"number", NeoWCRowKindDetail, nil, stepValue)];
     [enhancementItems addObject:item(@"广告净化", @"隐藏朋友圈广告与小程序启动广告", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil)];
     [enhancementItems addObject:item(@"图片编辑快捷发送", @"在官方图片编辑完成菜单中增加发送到当前会话", @"photo.badge.arrow.down", NeoWCRowKindSwitch, NeoWCImageEditQuickSendEnabledKey, nil)];
+    if (imageEditQuickSendEnabled) [enhancementItems addObject:item(@"发送后返回聊天", @"图片发送成功后退出编辑流程", @"arrow.uturn.backward", NeoWCRowKindSwitch, NeoWCImageEditReturnToChatKey, nil)];
     [enhancementItems addObject:item(@"多选消息长截图", @"在聊天多选的“更多”中加入截图", @"rectangle.dashed", NeoWCRowKindSwitch, NeoWCChatCaptureEnabledKey, nil)];
     if (chatCaptureEnabled) [enhancementItems addObject:item(@"长截图设置", @"顶栏、昵称、背景与裁切选项", @"slider.horizontal.3", NeoWCRowKindDetail, nil, @"设置")];
     [enhancementItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];
@@ -271,6 +281,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             item(@"调试悬浮按钮", @"仅由此开关控制，不监听全局手势", @"wrench.and.screwdriver", NeoWCRowKindSwitch, NeoWCDebugFloatingEnabledKey, nil),
             item(@"记录调试日志", @"记录 NeoWC 运行事件，关闭后停止新增", @"text.alignleft", NeoWCRowKindSwitch, NeoWCDebugLoggingEnabledKey, nil),
             item(@"调试中心", @"视图检查、Runtime 搜索与日志", @"ladybug", NeoWCRowKindDetail, nil, @"打开"),
+            item(@"功能兼容性", @"检查类、Selector 与本次运行触发状态", @"checklist", NeoWCRowKindDetail, nil, @"检查"),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"about" title:@"关于" subtitle:nil symbol:@"info.circle" footer:@"NeoWC · Designed for WeChat" collapsible:NO items:@[
             item(@"版本", @"NeoWC", @"shippingbox", NeoWCRowKindInfo, nil, NeoWCVersion),
@@ -517,6 +528,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
     if (item.defaultsKey.length == 0) return;
     [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:item.defaultsKey];
+    if ([item.defaultsKey isEqualToString:NeoWCAntiRevokePersistRecordsKey]) NeoWCAntiRevokeSetPersistenceEnabled(sender.isOn);
     if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] ||
         [item.defaultsKey isEqualToString:NeoWCMomentsDoubleTapLikeKey] ||
         [item.defaultsKey isEqualToString:NeoWCMomentsQuickCommentKey]) {
@@ -531,7 +543,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     BOOL changesVisibleRows = [item.defaultsKey isEqualToString:NeoWCAntiRevokeKey] ||
                               [item.defaultsKey isEqualToString:NeoWCAntiRevokeNotifySenderKey] ||
                               [item.defaultsKey isEqualToString:NeoWCStepOverrideEnabledKey] ||
-                              [item.defaultsKey isEqualToString:NeoWCChatCaptureEnabledKey];
+                              [item.defaultsKey isEqualToString:NeoWCChatCaptureEnabledKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCImageEditQuickSendEnabledKey];
     if (changesVisibleRows) [self buildSections];
     if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] || changesVisibleRows) [self.tableView reloadData];
 }
@@ -677,6 +690,14 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [self presentRevokePromptStylePicker];
         return;
     }
+    if ([item.title isEqualToString:@"提示外观预览"]) {
+        [self.navigationController pushViewController:[NeoWCAntiRevokeAppearanceViewController new] animated:YES];
+        return;
+    }
+    if ([item.title isEqualToString:@"防撤回记录中心"]) {
+        [self.navigationController pushViewController:[NeoWCAntiRevokeRecordsViewController new] animated:YES];
+        return;
+    }
     if ([item.title isEqualToString:@"气泡旁提示文字"]) {
         [self presentSidePromptTextEditor];
         return;
@@ -707,6 +728,10 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     }
     if ([item.title isEqualToString:@"调试中心"]) {
         [[NeoWCDebugManager sharedManager] presentDashboardFromViewController:self];
+        return;
+    }
+    if ([item.title isEqualToString:@"功能兼容性"]) {
+        [self.navigationController pushViewController:[NeoWCCompatibilityViewController new] animated:YES];
         return;
     }
     if ([item.title isEqualToString:@"插件显示管理"]) {

@@ -1,273 +1,102 @@
-# NeoWC 项目交接文档
+# NeoWC 项目交接与实现记忆
 
 更新时间：2026-07-19
+当前版本：0.1.1
 
-## 1. 项目与仓库
+## 项目约束
 
-- 项目名：NeoWC
-- 类型：注入微信的 Theos / Logos Tweak，Objective-C + Logos
-- GitHub：`qiu7c/NeoWC`
-- 当前分支：`main`
-- 远程地址：`ssh://git@ssh.github.com:443/qiu7c/NeoWC.git`
-- 使用 SSH 443 是因为当前网络无法稳定连接 GitHub SSH 22 端口。
-- 构建目标：`iphone:clang:latest:14.0`
-- 架构：`arm64 arm64e`
-- ARC：已开启
-- GitHub Actions：`.github/workflows/build.yml`，推送后云端 Theos 构建。
-- 用户要求：推送构建即可，不主动查询 Actions 构建结果，节省 token。
+- NeoWC 是注入微信的 Theos / Logos Tweak，Objective-C + ARC，架构 `arm64 arm64e`。
+- 插件入口通过 `WCPluginsMgr` 注册 `NeoWCSettingsViewController`。
+- 私有微信类使用 `NSClassFromString`、`objc_getClass` 和动态 `objc_msgSend`，避免链接期未定义符号。
+- Windows 本地通常没有 Theos；提交前做静态检查，推送 `main` 后由 GitHub Actions 构建。
+- 推送后不主动查询构建结果。
+- UI 偏好：纯白背景、舒展浅灰卡片、黑白灰线性图标、分类展开折叠，不使用绿色强调色。
 
-最近已推送提交：
+## 0.1.1 阶段一：长截图与原生还原
 
-- `e2b66d1 Improve chat capture and anti-revoke prompts`
-- `796e79d Fix long screenshot spacing and quality`
-- `e781404 Add anti-revoke and private long screenshots`
-- `7b3e701 Resolve game controller dynamically`
-- `bdbd1a9 Fix floating window orientation observer`
-- `b2ae27e Fix active window lookup for iOS 13+`
+状态：已完成代码实现。
 
-## 2. 当前工作区状态（重要）
+- 截图前显示范围预览，可逐条排除消息。
+- 显示消息数量、预计高度、设备原生倍率和超长内存风险。
+- 三种预设：原样、简洁、隐私；预设可在设置页保存，也可在每次生成前临时切换。
+- 原样/隐私模式保留顶栏与输入栏；简洁模式隐藏界面装饰。
+- 可选包含系统状态栏。
+- 隐私模式自动隐藏群昵称，并对头像等隐私视图添加系统模糊。
+- 消息截图优先从微信已经完成合成的真实聊天界面裁切，不再近似补画气泡；超高 Cell 使用真实 Cell 快照后备。
+- 文件、引用、语音、表情、小程序等均优先复用微信真实 Cell 渲染。
+- 自动忽略日期/分隔类残片，并裁掉首尾有限范围的纯背景空白。
+- 超长内容按约 8500pt 自动分片，保持原生倍率并降低峰值内存。
+- 多分片预览支持左右滑动；保存、联系人分享和当前会话发送会处理全部分片。
 
-当前准备提交的改动包括长截图顶栏/输入栏修复、输入栏圆角展平、预览过渡与短图居中、当前会话稳定发送，以及防撤回侧边文字/坐标自定义。本次提交完成后以 `git status` 和最新提交记录为准。
+关键文件：`Sources/NeoWCChatCapture.m`。
 
-## 3. 用户长期偏好与操作原则
+## 0.1.1 阶段二：图片编辑快捷发送
 
-- UI 使用纯白页面、浅灰卡片，卡片长度舒展；不要绿色图标或绿色按钮。
-- 图标要简洁、现代、黑白或灰色线条风格；图标周边不要多余背景和阴影。
-- 顶部图标与 NeoWC 名称直接融入白色背景，不使用卡片承载。
-- 设置分类支持展开/折叠。
-- 朋友圈相关、自动登录、小游戏、运动步数、广告屏蔽均归入“增强功能”，不要单独建立朋友圈分类。
-- “实验工具”统一称为“开发者功能”。日志必须支持开启和关闭。
-- 调试悬浮窗只能从设置中开启，不使用全局手势监听；悬浮按钮支持拖动，非按钮区域必须透传触摸，不能卡住微信。
-- 不需要“复制 Hook”。
-- 不要在 UI 中显示项目地址链接。
-- 用户说“修改代码不要提交”时，只编辑，不检查、不构建、不提交；用户说“提交”时再统一检查并直接推送 `main`。
-- 仓库可能存在用户自己的改动；提交前必须先确认 `git status` 和 diff 范围。
-- 不要修改或提交 `参考` 下的逆向分析产物，除非用户明确要求。
+状态：已完成代码实现。
 
-## 4. 项目入口与总体结构
+- 只在具有有效 `c2CUserName` 的聊天图片编辑流程显示“发送到当前会话”。
+- 使用微信官方 `getDisplayImage:` 的编辑结果，禁止回退发送原图。
+- 发送前再次校验编辑会话用户名和联系人用户名，避免群聊/私聊串会话。
+- 创建消息、联系人、Selector 或编辑结果失败时显示具体原因。
+- 点击确认发送后等待微信成功回调；20 秒无成功结果提示网络/接口超时。
+- 成功后显示“图片已发送”。
+- 设置项支持“发送后返回聊天”，仅在快捷发送开启时显示。
+- 使用全局活动集合保持 `ForwardMessageLogicController` 生命周期，确认按钮可正常工作。
 
-### 插件注册
+关键文件：`Tweak.xm`。
 
-入口在 `Tweak.xm` 的 `NeoWCRegisterPlugin()`：
+## 0.1.1 阶段三：防撤回与兼容性
 
-```objc
-[[WCPluginsMgr sharedInstance]
-    registerControllerWithTitle:@"NeoWC"
-                         version:@"0.1.0"
-                      controller:NSStringFromClass([NeoWCSettingsViewController class])];
-```
+状态：已完成代码实现。
 
-`NeoWCEntryLoader +load`、`NewSettingViewController -viewDidLoad` 会尝试注册，使用 `NeoWCDidRegister` 防止重复注册。
+- 防撤回记录中心保存本次微信运行期间的记录，支持联系人、会话和内容搜索。
+- 记录区分文字、图片、文件/分享和其他消息类型。
+- 默认只保存在内存；用户开启后才把摘要持久化。关闭持久化会删除本地归档。
+- 只保存摘要、类型、会话和时间，不复制图片或文件，降低隐私风险。
+- 气泡旁提示改为独立外观预览页，可修改文字并拖动定位。
+- 推荐位置按钮恢复 X=0 / Y=10，修改会通知当前可见聊天 Cell 刷新。
+- 功能兼容性中心显示微信版本，并区分“可用 / 类不存在 / Selector 变化 / 尚未触发”。
+- 兼容性检查只读取 Runtime，不主动执行功能。
 
-### 文件职责
+关键文件：`Sources/NeoWCAntiRevoke.m`、`Sources/NeoWCCompatibility.m`。
 
-- `Tweak.xm`：微信类 Hook、插件入口、朋友圈、小游戏、步数、广告、自动登录、长截图菜单、防撤回 Cell 提示。
-- `Sources/NeoWCSettingsViewController.m`：主设置 UI、分类卡片、所有开关和详情入口。
-- `Sources/NeoWCEnhancements.h/.m`：NSUserDefaults 键和总开关判断 `NeoWCEnhancementEnabled()`。
-- `Sources/NeoWCDebug.h/.m`：开发者功能、悬浮窗、View 选择、对象层级、Runtime 搜索、日志。
-- `Sources/NeoWCPluginVisibility.h/.m`：记录其他插件注册并在插件管理页面隐藏指定入口。
-- `Sources/NeoWCAntiRevoke.h/.m`：撤回 XML 解析、原消息查询、本地提示、气泡旁提示、可选回复撤回者。
-- `Sources/NeoWCChatCapture.h/.m`：聊天多选长截图、生成提示、高清合成、预览编辑、微信内部分享。
+## 0.1.1 阶段四：多选消息扩展
 
-## 5. 当前功能概览
+状态：已完成代码实现；按用户要求不实现批量保存文件。
 
-### 设置 UI
+- 微信多选消息“更多”菜单新增：截图、纯文本、Markdown、保存图片、分享卡片。
+- 纯文本和 Markdown 保留发送者、时间与可识别消息摘要，并生成临时导出文件。
+- 批量保存仅处理已经下载到本地的图片；不处理文件附件。
+- 分享卡片最多展开 8 条重点消息，其余显示数量摘要，使用高倍率渲染。
+- 所有入口复用微信当前 `getSelectedMsgs`，不持续监听聊天页面。
 
-- NeoWC 顶部简洁图标和名称。
-- 白色背景、灰色卡片风格。
-- 分类展开/折叠并持久化。
-- 插件管理入口通过 `WCPluginsMgr` 注册。
+关键文件：`Sources/NeoWCChatExport.m`、`Tweak.xm`。
 
-### 开发者功能
+## 现有其他功能
 
-- 设置开关控制悬浮窗。
-- 悬浮按钮可拖动。
-- 独立调试 Window 只拦截按钮/面板触摸，其余区域透传。
-- 当前 View 选择与层级检查。
-- Objective-C Runtime 类/方法搜索。
-- 对象属性检查和报告复制。
-- 日志查看、复制、清空，日志采集可关闭。
+- 防撤回与两种提示模式、可选回复撤回者。
+- 设备扫码自动登录、游戏扫码自动授权。
+- 朋友圈双击点赞、操作按钮快捷评论。
+- 小游戏结果选择及跨类型彩蛋。
+- 微信运动步数、广告净化。
+- 插件显示管理。
+- 开发者调试中心、可移动悬浮按钮、View 层级和 Runtime 检查、可关闭日志。
 
-关键方法：
+## 真机验证重点
 
-- `-[NeoWCDebugManager setFloatingEnabled:]`
-- `-[NeoWCDebugManager floatingButtonPanned:]`
-- `-[NeoWCDebugManager presentDashboardFromViewController:]`
-- `-[NeoWCDebugManager beginViewPicking]`
-- `NeoWCLog()`
+- 微信私有 UI 只能在真机注入后最终验证；编译通过不代表所有版本的 Selector 行为完全一致。
+- 重点测试文件、引用、语音、表情、小程序卡片的真实屏幕裁切和超高 Cell 后备。
+- 隐私模式的头像识别采用类名和图像尺寸启发式；新版微信特殊头像视图可能需要补充类名。
+- 微信可能不提供明确的发送失败回调，因此已提供准备阶段具体错误和确认发送后的超时提示。
+- 仅本地已下载的图片可批量保存；未下载图片会跳过并提示。
 
-### 插件显示管理
-
-- Hook `WCPluginsMgr` 的 Controller/Switch 注册请求并记录。
-- Hook `WCPluginsViewController` 过滤插件列表。
-- 可隐藏不想显示的插件入口，但不会停止插件本身运行。
-- 本次未注册的历史插件会显示为未加载。
-
-关键方法：
-
-- `recordControllerWithTitle:version:controller:`
-- `recordSwitchWithTitle:key:`
-- `NeoWCFilterPluginListController()`
-
-### 防撤回
-
-Hook：`CMessageMgr -onNewSyncNotAddDBMessage:`。
-
-主入口：
-
-```objc
-BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage);
-```
-
-当前逻辑：
-
-- 识别 `<sysmsg type="revokemsg">`。
-- 解析 session、newmsgid、replacemsg。
-- 查询原消息并保留，不处理自己主动撤回的消息。
-- 支持本地提示模板、回复模板和回复时间限制。
-- 提示位置有两种：
-  - “消息下方”：插入 type 10000 本地灰字，创建时间使用原消息 `createTime + 1`，目的是排在对应消息后面。
-  - “气泡旁”：不插入系统提示，通过 `CommonMessageCellView -layoutSubviews` 在收到的气泡右侧/发出的气泡左侧显示“已拦截撤回”，与气泡垂直居中。
-- 气泡旁提示以服务端消息 ID 存入 NSUserDefaults，最多保留约 400 条。
-
-关键方法：
-
-- `NeoWCHandleRevokeMessage()`
-- `NeoWCAntiRevokeSidePromptForMessage()`
-- `NeoWCRememberSidePrompt()`
-- `%hook CommonMessageCellView -layoutSubviews`
-
-注意：
-
-- 用户此前强调不要随意改防撤回 Debug 逻辑。
-- 旧版本已经写入数据库、位置错误的 type 10000 提示不会被新代码自动迁移；新位置逻辑主要影响之后发生的撤回。
-- 气泡旁布局需要在真机验证图片、语音、视频、超长文字及群聊头像场景，防止可用横向空间不足时覆盖气泡。
-
-### 聊天多选长截图
-
-入口：聊天多选消息后点击“更多”中的“截图”。
-
-Hook：
-
-- `BaseMsgContentViewController -ShowMultiSelectMoreOperation:`
-- `MMScrollActionSheet -showInView:` 注入“截图”按钮。
-- `BaseMsgContentViewController -scrollActionSheet:didSelecteItem:` 启动截图并主动 `dismissAnimated:YES` 收起微信菜单。
-
-生成流程：
-
-1. `NeoWCStartChatCapture()` 创建 `NeoWCChatCaptureSession`。
-2. 读取 `getSelectedMsgs` 并映射消息列表 indexPath。
-3. 显示灰色卡片阴影“截图生成中”。
-4. 调用 `exitMultiSelectMode`。
-5. 等待 1 秒让微信 UI 恢复稳定。
-6. 逐条滚动并按 Cell 实际高度截图。
-7. 合成顶栏、消息内容和输入栏。
-8. 弹出全屏预览。
-
-清晰度：
-
-- Cell 快照使用 `UIScreen.mainScreen.scale`，目标是与原生屏幕截图一致。
-- 最终长图优先保持设备原生倍率。
-- 只有在输出单边可能超过约 32760 像素时才降低倍率，避免 Core Graphics 尺寸上限。
-- 已移除原先 2800 万像素面积降质限制；超长图内存占用会明显增加，需真机关注 WeChat 被 Jetsam 的风险。
-
-编辑功能：
-
-- 矩形模糊，带模糊度滑杆。
-- 矩形涂黑。
-- 红色自由画笔。
-- 撤销。
-- 水印、聊天对象名称、生成时间。
-- 模糊使用 `CIAffineClamp + CIGaussianBlur`，避免裁剪边缘产生黑框；框选预览不再绘制边框。
-
-分享：
-
-- 右上角只保留一个分享按钮。
-- 使用微信 `WCActionSheet`，不再调用 `UIActivityViewController`。
-- 操作项：保存到相册、分享给联系人、发送到当前会话。
-- 联系人分享：`PasteboardMsgProvider + ForwardMessageLogicController`。
-- 当前会话发送：用 `PasteboardMsgProvider` 生成图片消息，再通过 `ForwardMessageLogicController -forwardMsgList:toContacts:` 定向发送。不要再调用 `sendCaptruedImage:`，微信 8.0.71 会在内部触发 `doesNotRecognizeSelector` 崩溃。
-
-关键方法：
-
-- `NeoWCStartChatCapture()`
-- `-[NeoWCChatCaptureSession start]`
-- `selectedIndexPaths`
-- `prepareChrome`
-- `captureNextCell`
-- `composeImage`
-- `-[NeoWCChatCapturePreviewViewController renderedImage]`
-- `shareImage / shareToContact / sendToCurrentConversation`
-
-当前优先验证项：
-
-1. 顶栏/输入框修复及输入工具栏圆角展平是否在最新版微信真机生效。
-2. 3x 高清超长图是否出现内存峰值或生成失败。
-3. 模糊滑杆和画笔在缩放后的长图上坐标是否准确。
-4. 微信内部联系人分享在最新版类名和 delegate 回调下是否正常。
-5. “发送到当前会话”后预览关闭设置是否符合预期。
-
-### 其他增强功能
-
-- 设备扫码自动确认登录：`MultiDeviceCardLoginContentView`。
-- 游戏扫码授权自动允许：`MMAuthorizeUserInfoViewController`。
-- 朋友圈双击点赞：`WCTimeLineCellView`。
-- 朋友圈操作按钮替换为评论：`WCTimeLineOperateButtonView`。
-- 小游戏结果选择：Hook `CMessageMgr -AddEmoticonMsg:MsgWrap:`；支持骰子、石头剪刀布及跨类型彩蛋值。
-- 微信运动步数：Hook `WCDeviceStepObject -m7StepCount`。
-- 广告屏蔽：Hook `WCDataItem isAd/isVideoAd` 和 `WAAppTaskSplashADConfig`。
-- 这些 Hook 大多常驻注册，但每次执行前检查功能开关；关闭功能时仅有很小的分支开销，不执行主要逻辑。
-
-## 6. 参考资料
-
-`参考` 目录包含：
-
-- `wuji-tweak`：用户旧项目，自动登录、小游戏、朋友圈等功能来源。
-- `ddzs`：其他插件参考代码。
-- `WeChatHeaders`：最新版微信类和方法头文件，适配类名/selector 时优先查询。
-- `WeChatEnhance.dylib` 与 `WeChatEnhance-analysis`：防撤回、广告、小游戏等静态分析产物。
-- `ChatCapture.dylib` 与 `ChatCapture-analysis`：长截图插件静态分析，尤其是微信分享链路与截图流程。
-
-只把这些作为参考，不把分析目录加入正式编译，也不要无意义提交逆向脚本。
-
-## 7. 构建与 Git 注意事项
-
-- Windows 本地通常没有 Theos，主要依赖 GitHub Actions 构建。
-- Xcode 16.4 / iOS 18.5 SDK 会把弃用警告当错误；不要使用：
-  - `UIApplication.keyWindow`
-  - `UIApplicationDidChangeStatusBarOrientationNotification`
-- 微信私有类必须尽量使用 `NSClassFromString` / `objc_getClass` 和动态 `objc_msgSend`，避免链接阶段出现 `Undefined symbols`。之前 `GameController` 就因静态类引用导致链接失败。
-- `gh auth status` 最近显示旧 Token 无效，但 Git 通过 SSH 443 推送正常；普通提交推送不依赖 `gh`。
-- 提交前执行：
+## 提交检查
 
 ```powershell
 $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\cmd\git.exe'
 & $git status -sb
 & $git diff --check
-& $git diff
+& $git diff --stat
 ```
 
-- 只暂存本次范围内文件；用户当前习惯是直接提交并推送 `main`。
-- 推送：
-
-```powershell
-& $git push origin main
-```
-
-- 推送后不要主动查询 Actions，除非用户明确要求查看构建结果或提供失败日志。
-
-## 8. 给新窗口的提示词
-
-复制下面整段到新的 Codex 窗口：
-
-```text
-继续维护 D:\Vibe\NeoWC 项目。请先完整阅读 D:\Vibe\NeoWC\HANDOFF.md，再查看 git status 和相关源码，不要从头猜测历史。
-
-这是一个微信 Theos/Logos Tweak，仓库是 qiu7c/NeoWC，既有工作流是直接推送 main 触发 GitHub 云构建。参考代码、最新版微信头文件和 dylib 静态分析都在 D:\Vibe\NeoWC\参考。适配微信私有类时优先查 WeChatHeaders，并尽量用 NSClassFromString/objc_getClass/objc_msgSend，避免私有类静态链接失败。
-
-当前提交状态请以 git log -1 和 git status 为准。开始工作前先确认是否存在用户尚未提交的改动，不要覆盖或丢失。
-
-用户偏好：中文沟通；UI 纯白背景、浅灰舒展卡片、黑白灰现代线条图标，不要绿色；分类支持折叠；调试悬浮窗只能从设置开启且必须触摸透传；不要复制 Hook；不要显示项目链接。除非我明确说“提交”，否则只改代码，不检查、不构建、不提交。等我说“提交”时再统一检查、提交并推送 main；推送后不要主动查询 GitHub Actions 结果。
-
-先简短告诉我你已经读懂当前状态，然后等待我的下一个具体需求；不要擅自修改代码。
-```
+远程：`ssh://git@ssh.github.com:443/qiu7c/NeoWC.git`，当前工作流直接提交并推送 `main`。
