@@ -22,6 +22,14 @@
 @interface WCPluginsViewController : UIViewController
 @end
 
+@interface WCActionSheet : NSObject
+- (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
+- (BOOL)isContainButtonTitle:(NSString *)title;
+@end
+
+@interface EditImageForwardAndEditLogicController : NSObject
+@end
+
 @interface MultiDeviceCardLoginContentView : UIView
 - (void)onTapConfirmButton;
 @end
@@ -75,6 +83,9 @@ static char NeoWCMomentsDoubleTapRecognizerKey;
 static char NeoWCGameSelectorPresentedKey;
 static char NeoWCChatCaptureBuildingMenuKey;
 static char NeoWCAntiRevokeSideLabelKey;
+static char NeoWCEditedImageKey;
+static char NeoWCEditImageForwardLogicKey;
+static __weak id NeoWCCurrentEditImageLogicController;
 
 static id NeoWCTweakSafeValue(id object, NSString *key) {
     if (!object || key.length == 0) return nil;
@@ -91,6 +102,58 @@ static void NeoWCTweakSetValue(id object, NSString *key, id value) {
         [object setValue:value forKey:key];
     } @catch (__unused NSException *exception) {
     }
+}
+
+static BOOL NeoWCMasterEnabled(void) {
+    id value = [[NSUserDefaults standardUserDefaults] objectForKey:@"com.qiu7c.neowc.enabled"];
+    return value ? [value boolValue] : YES;
+}
+
+static id NeoWCContactForUserName(NSString *userName) {
+    if (userName.length == 0) return nil;
+    Class centerClass = objc_getClass("MMServiceCenter");
+    Class contactManagerClass = objc_getClass("CContactMgr");
+    if (!centerClass || !contactManagerClass) return nil;
+    id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, sel_registerName("defaultCenter"));
+    if (!center) return nil;
+    id manager = ((id (*)(id, SEL, Class))objc_msgSend)(center, sel_registerName("getService:"), contactManagerClass);
+    SEL selector = sel_registerName("getContactByName:");
+    if (!manager || ![manager respondsToSelector:selector]) return nil;
+    return ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
+}
+
+static UIImage *NeoWCEditedImageFromLogic(id logic) {
+    UIImage *image = objc_getAssociatedObject(logic, &NeoWCEditedImageKey);
+    if ([image isKindOfClass:[UIImage class]]) return image;
+    NSArray<NSString *> *keys = @[@"editedImage", @"outputImage", @"resultImage", @"originalImage"];
+    for (NSString *key in keys) {
+        id candidate = NeoWCTweakSafeValue(logic, key);
+        if ([candidate isKindOfClass:[UIImage class]]) return candidate;
+    }
+    return nil;
+}
+
+static BOOL NeoWCSendEditedImageToCurrentConversation(id logic) {
+    UIImage *image = NeoWCEditedImageFromLogic(logic);
+    NSString *userName = nil;
+    SEL userNameSelector = sel_registerName("c2CUserName");
+    if ([logic respondsToSelector:userNameSelector]) {
+        userName = ((id (*)(id, SEL))objc_msgSend)(logic, userNameSelector);
+    }
+    if (userName.length == 0) userName = NeoWCTweakSafeValue(logic, @"m_nsChatName");
+    id contact = NeoWCContactForUserName(userName);
+    Class providerClass = objc_getClass("PasteboardMsgProvider");
+    Class forwardClass = objc_getClass("ForwardMessageLogicController");
+    SEL makeMessageSelector = sel_registerName("GetMessageFromImage:contact:");
+    if (!image || !contact || !providerClass || !forwardClass || ![providerClass respondsToSelector:makeMessageSelector]) return NO;
+    id message = ((id (*)(id, SEL, id, id))objc_msgSend)(providerClass, makeMessageSelector, image, contact);
+    if (!message) return NO;
+    id forwardLogic = [forwardClass new];
+    SEL forwardSelector = sel_registerName("forwardMsgList:toContacts:");
+    if (!forwardLogic || ![forwardLogic respondsToSelector:forwardSelector]) return NO;
+    objc_setAssociatedObject(logic, &NeoWCEditImageForwardLogicKey, forwardLogic, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    ((void (*)(id, SEL, id, id))objc_msgSend)(forwardLogic, forwardSelector, @[message], @[contact]);
+    return YES;
 }
 
 static NSString *NeoWCGameMD5ForContent(NSUInteger content) {
@@ -538,6 +601,49 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%hook EditImageForwardAndEditLogicController
+
+- (void)OnClickEditImageDoneBarButton {
+    NeoWCCurrentEditImageLogicController = self;
+    %orig;
+}
+
+- (void)processEditImage:(id)image {
+    NeoWCCurrentEditImageLogicController = self;
+    if ([image isKindOfClass:[UIImage class]]) {
+        objc_setAssociatedObject(self, &NeoWCEditedImageKey, image, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    %orig;
+}
+
+%end
+
+%hook WCActionSheet
+
+- (void)showInView:(UIView *)view {
+    BOOL hasForward = [self isContainButtonTitle:@"转发给朋友"] || [self isContainButtonTitle:@"发送给朋友"];
+    BOOL isEditedImageMenu = hasForward &&
+                             [self isContainButtonTitle:@"收藏"] &&
+                             [self isContainButtonTitle:@"保存图片"];
+    if (NeoWCMasterEnabled() && isEditedImageMenu && ![self isContainButtonTitle:@"发送到当前会话"]) {
+        id logic = NeoWCTweakSafeValue(self, @"delegateEx") ?: NeoWCTweakSafeValue(self, @"delegate");
+        Class logicClass = objc_getClass("EditImageForwardAndEditLogicController");
+        if (!logicClass || ![logic isKindOfClass:logicClass]) logic = NeoWCCurrentEditImageLogicController;
+        if (logic) {
+            __weak id weakLogic = logic;
+            [self addButtonWithTitle:@"发送到当前会话" eventAction:^{
+                id strongLogic = weakLogic;
+                if (!strongLogic || !NeoWCSendEditedImageToCurrentConversation(strongLogic)) {
+                    NeoWCLog(@"编辑图片发送到当前会话失败：未取得编辑结果或聊天联系人");
+                }
+            }];
+        }
+    }
+    %orig;
+}
+
+%end
+
 %hook BaseMsgContentViewController
 
 - (void)ShowMultiSelectMoreOperation:(id)argument {
@@ -768,8 +874,9 @@ static void NeoWCRegisterPlugin(void) {
     BOOL isSender = [NeoWCTweakSafeValue(viewModel, @"isSender") boolValue];
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     id storedOffsetX = [defaults objectForKey:NeoWCAntiRevokeSideOffsetXKey];
-    CGFloat offsetX = storedOffsetX ? [storedOffsetX doubleValue] : 20.0;
-    CGFloat offsetY = [defaults doubleForKey:NeoWCAntiRevokeSideOffsetYKey];
+    id storedOffsetY = [defaults objectForKey:NeoWCAntiRevokeSideOffsetYKey];
+    CGFloat offsetX = storedOffsetX ? [storedOffsetX doubleValue] : 0.0;
+    CGFloat offsetY = storedOffsetY ? [storedOffsetY doubleValue] : 10.0;
     CGFloat x = isSender ? CGRectGetMinX(bubbleFrame) - labelWidth - 7.0 + offsetX : CGRectGetMaxX(bubbleFrame) + 7.0 - offsetX;
     x = MIN(MAX(4.0, x), MAX(4.0, CGRectGetWidth(self.bounds) - labelWidth - 4.0));
     CGFloat y = CGRectGetMidY(bubbleFrame) - labelHeight * 0.5 + offsetY;

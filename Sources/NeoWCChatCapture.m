@@ -47,32 +47,56 @@ static UIImage *NeoWCSnapshotView(UIView *view, CGSize size) {
     }];
 }
 
-static UIImage *NeoWCSnapshotLayerView(UIView *view, CGSize size) {
-    if (!view || size.width <= 0.0 || size.height <= 0.0) return nil;
-    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
-    format.opaque = NO;
-    format.scale = MAX(1.0, UIScreen.mainScreen.scale);
-    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
-    return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
-        [view.layer renderInContext:context.CGContext];
-    }];
-}
-
-static UIImage *NeoWCSnapshotRectInView(UIView *view, CGRect rect) {
-    if (!view || CGRectIsEmpty(rect)) return nil;
-    rect = CGRectIntersection(rect, view.bounds);
-    if (CGRectIsEmpty(rect)) return nil;
+static UIImage *NeoWCSnapshotOpaqueView(UIView *view, UIColor *backgroundColor) {
+    if (!view || CGRectIsEmpty(view.bounds)) return nil;
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
     format.opaque = YES;
     format.scale = MAX(1.0, UIScreen.mainScreen.scale);
-    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:rect.size format:format];
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:view.bounds.size format:format];
     return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
-        [[UIColor secondarySystemBackgroundColor] setFill];
-        UIRectFill((CGRect){CGPointZero, rect.size});
-        CGContextTranslateCTM(context.CGContext, -CGRectGetMinX(rect), -CGRectGetMinY(rect));
-        BOOL drew = [view drawViewHierarchyInRect:view.bounds afterScreenUpdates:YES];
+        [(backgroundColor ?: UIColor.secondarySystemBackgroundColor) setFill];
+        UIRectFill((CGRect){CGPointZero, view.bounds.size});
+        BOOL drew = [view drawViewHierarchyInRect:(CGRect){CGPointZero, view.bounds.size} afterScreenUpdates:YES];
         if (!drew) [view.layer renderInContext:context.CGContext];
     }];
+}
+
+static void NeoWCCollectBubbleBackgroundViews(UIView *view, NSMutableArray<UIView *> *backgroundViews) {
+    if (!view) return;
+    id background = NeoWCCallObject(view, NSSelectorFromString(@"getBgImageView"));
+    if ([background isKindOfClass:[UIView class]] && ![backgroundViews containsObject:background]) {
+        [backgroundViews addObject:background];
+    }
+    for (UIView *subview in view.subviews) NeoWCCollectBubbleBackgroundViews(subview, backgroundViews);
+}
+
+static NSArray<UIView *> *NeoWCInstallBubbleSnapshotFallbacks(UITableViewCell *cell) {
+    NSMutableArray<UIView *> *backgroundViews = [NSMutableArray array];
+    NSMutableArray<UIView *> *fallbacks = [NSMutableArray array];
+    NeoWCCollectBubbleBackgroundViews(cell, backgroundViews);
+    CGFloat cellWidth = CGRectGetWidth(cell.bounds);
+    for (UIView *backgroundView in backgroundViews) {
+        UIView *container = backgroundView.superview;
+        if (!container || backgroundView.hidden || backgroundView.alpha <= 0.01 || CGRectIsEmpty(backgroundView.frame)) continue;
+        CGRect cellRect = [backgroundView convertRect:backgroundView.bounds toView:cell];
+        if (CGRectGetWidth(cellRect) < 18.0 || CGRectGetHeight(cellRect) < 16.0) continue;
+        BOOL outgoing = CGRectGetMidX(cellRect) > cellWidth * 0.5;
+        UIView *fallback = [[UIView alloc] initWithFrame:backgroundView.frame];
+        if (outgoing) {
+            fallback.backgroundColor = [UIColor colorWithRed:0.58 green:0.91 blue:0.43 alpha:1.0];
+            fallback.layer.borderColor = [[UIColor blackColor] colorWithAlphaComponent:0.08].CGColor;
+        } else {
+            fallback.backgroundColor = [UIColor systemBackgroundColor];
+            fallback.layer.borderColor = [[UIColor blackColor] colorWithAlphaComponent:0.12].CGColor;
+        }
+        fallback.layer.cornerRadius = backgroundView.layer.cornerRadius > 0.0 ? backgroundView.layer.cornerRadius : 6.0;
+        fallback.layer.cornerCurve = kCACornerCurveContinuous;
+        fallback.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+        fallback.userInteractionEnabled = NO;
+        [container insertSubview:fallback belowSubview:backgroundView];
+        [fallbacks addObject:fallback];
+    }
+    return fallbacks;
 }
 
 static void NeoWCCollectOuterRoundedViews(UIView *view, NSMutableArray<NSDictionary *> *states) {
@@ -818,10 +842,9 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     if (includeChrome) {
         UINavigationBar *bar = self.controller.navigationController.navigationBar;
         if (bar && !bar.hidden && CGRectGetHeight(bar.bounds) > 0.0) {
-            UIView *navigationView = self.controller.navigationController.view;
-            CGRect barRect = [bar convertRect:bar.bounds toView:navigationView];
-            self.headerImage = NeoWCSnapshotRectInView(navigationView, barRect);
-            if (!self.headerImage) self.headerImage = NeoWCSnapshotView(bar, bar.bounds.size);
+            UIColor *barBackground = bar.standardAppearance.backgroundColor ?: bar.barTintColor ?: bar.backgroundColor;
+            if (!barBackground || CGColorGetAlpha(barBackground.CGColor) < 0.05) barBackground = UIColor.secondarySystemBackgroundColor;
+            self.headerImage = NeoWCSnapshotOpaqueView(bar, barBackground);
         }
         UIView *toolView = NeoWCCallObject(self.controller, NSSelectorFromString(@"getInputToolView"));
         if (![toolView isKindOfClass:[UIView class]]) toolView = NeoWCSafeValue(self.controller, @"_inputToolView");
@@ -910,9 +933,20 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
             label.hidden = YES;
         }
     }
+    CGRect originalFrame = cell.frame;
+    CGRect originalBounds = cell.bounds;
+    BOOL originalClipsToBounds = cell.clipsToBounds;
+    cell.frame = CGRectMake(0.0, 0.0, width, height);
+    cell.bounds = CGRectMake(0.0, 0.0, width, height);
+    cell.clipsToBounds = YES;
+    [cell setNeedsLayout];
     [cell layoutIfNeeded];
-    UIImage *image = NeoWCSnapshotLayerView(cell, CGSizeMake(width, height));
-    if (!image) image = NeoWCSnapshotView(cell, CGSizeMake(width, height));
+    NSArray<UIView *> *bubbleFallbacks = NeoWCInstallBubbleSnapshotFallbacks(cell);
+    UIImage *image = NeoWCSnapshotView(cell, CGSizeMake(width, height));
+    for (UIView *fallback in bubbleFallbacks) [fallback removeFromSuperview];
+    cell.frame = originalFrame;
+    cell.bounds = originalBounds;
+    cell.clipsToBounds = originalClipsToBounds;
     [nameLabels enumerateObjectsUsingBlock:^(UIView *label, NSUInteger index, __unused BOOL *stop) {
         label.hidden = hiddenStates[index].boolValue;
     }];

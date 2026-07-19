@@ -166,8 +166,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCAntiRevokeTimeFilterKey: @300.0,
         NeoWCAntiRevokePromptStyleKey: @0,
         NeoWCAntiRevokeSideTextKey: @"已拦截撤回",
-        NeoWCAntiRevokeSideOffsetXKey: @20.0,
-        NeoWCAntiRevokeSideOffsetYKey: @0.0,
+        NeoWCAntiRevokeSideOffsetXKey: @0.0,
+        NeoWCAntiRevokeSideOffsetYKey: @10.0,
         NeoWCChatCaptureEnabledKey: @NO,
         NeoWCChatCaptureIncludeChromeKey: @YES,
         NeoWCChatCaptureHideMemberNamesKey: @NO,
@@ -215,44 +215,56 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     else if (revokeFilter >= 300.0) revokeFilterValue = @"5 分钟";
     else if (revokeFilter >= 60.0) revokeFilterValue = @"1 分钟";
     NSInteger revokePromptStyleValue = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey];
+    id antiRevokeValue = [[NSUserDefaults standardUserDefaults] objectForKey:NeoWCAntiRevokeKey];
+    BOOL antiRevokeEnabled = antiRevokeValue ? [antiRevokeValue boolValue] : YES;
+    BOOL notifySenderEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCAntiRevokeNotifySenderKey];
+    BOOL stepOverrideEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCStepOverrideEnabledKey];
+    BOOL chatCaptureEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatCaptureEnabledKey];
     NSString *revokePromptStyle = revokePromptStyleValue == 1 ? @"气泡旁" : @"消息下方";
     NSString *sidePromptText = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCAntiRevokeSideTextKey] ?: @"已拦截撤回";
     id storedSideOffsetX = [[NSUserDefaults standardUserDefaults] objectForKey:NeoWCAntiRevokeSideOffsetXKey];
-    NSString *sideOffsetX = [NSString stringWithFormat:@"%.0f", storedSideOffsetX ? [storedSideOffsetX doubleValue] : 20.0];
-    NSString *sideOffsetY = [NSString stringWithFormat:@"%.0f", [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCAntiRevokeSideOffsetYKey]];
+    id storedSideOffsetY = [[NSUserDefaults standardUserDefaults] objectForKey:NeoWCAntiRevokeSideOffsetYKey];
+    NSString *sideOffsetX = [NSString stringWithFormat:@"%.0f", storedSideOffsetX ? [storedSideOffsetX doubleValue] : 0.0];
+    NSString *sideOffsetY = [NSString stringWithFormat:@"%.0f", storedSideOffsetY ? [storedSideOffsetY doubleValue] : 10.0];
 
     NSMutableArray<NeoWCSettingItem *> *messageItems = [NSMutableArray array];
     [messageItems addObject:item(@"防撤回", @"保留好友撤回的消息并显示提示", @"arrow.uturn.backward.circle", NeoWCRowKindSwitch, NeoWCAntiRevokeKey, nil)];
-    [messageItems addObject:item(@"防撤回提示方案", [NSString stringWithFormat:@"当前方案：%@", revokePromptStyle], @"text.bubble.fill", NeoWCRowKindDetail, nil, revokePromptStyle)];
-    if (revokePromptStyleValue == 1) {
-        [messageItems addObject:item(@"气泡旁提示文字", @"自定义气泡旁显示的小字", @"character.cursor.ibeam", NeoWCRowKindDetail, nil, sidePromptText)];
-        [messageItems addObject:item(@"气泡旁横向位置", @"正数向气泡贴近，默认约两个汉字", @"arrow.left.and.right", NeoWCRowKindDetail, nil, sideOffsetX)];
-        [messageItems addObject:item(@"气泡旁纵向位置", @"正数向下、负数向上", @"arrow.up.and.down", NeoWCRowKindDetail, nil, sideOffsetY)];
-    } else {
-        [messageItems addObject:item(@"本地提示模板", @"设置消息下方显示的完整防撤回提示", @"text.bubble", NeoWCRowKindDetail, nil, @"编辑")];
+    if (antiRevokeEnabled) {
+        [messageItems addObject:item(@"防撤回提示方案", [NSString stringWithFormat:@"当前方案：%@", revokePromptStyle], @"text.bubble.fill", NeoWCRowKindDetail, nil, revokePromptStyle)];
+        if (revokePromptStyleValue == 1) {
+            [messageItems addObject:item(@"气泡旁提示文字", @"自定义气泡旁显示的小字", @"character.cursor.ibeam", NeoWCRowKindDetail, nil, sidePromptText)];
+            [messageItems addObject:item(@"气泡旁横向位置", @"横向偏移，默认 0", @"arrow.left.and.right", NeoWCRowKindDetail, nil, sideOffsetX)];
+            [messageItems addObject:item(@"气泡旁纵向位置", @"正数向下，默认 10", @"arrow.up.and.down", NeoWCRowKindDetail, nil, sideOffsetY)];
+        } else {
+            [messageItems addObject:item(@"本地提示模板", @"设置消息下方显示的完整防撤回提示", @"text.bubble", NeoWCRowKindDetail, nil, @"编辑")];
+        }
+        [messageItems addObject:item(@"回复撤回者", @"自动发送提示，默认关闭", @"paperplane", NeoWCRowKindSwitch, NeoWCAntiRevokeNotifySenderKey, nil)];
+        if (notifySenderEnabled) {
+            [messageItems addObject:item(@"回复时间限制", @"避免响应很久以前的撤回事件", @"timer", NeoWCRowKindDetail, nil, revokeFilterValue)];
+            [messageItems addObject:item(@"回复消息模板", @"设置发送给撤回者的提示", @"text.quote", NeoWCRowKindDetail, nil, @"编辑")];
+        }
     }
-    [messageItems addObject:item(@"回复撤回者", @"自动发送提示，默认关闭", @"paperplane", NeoWCRowKindSwitch, NeoWCAntiRevokeNotifySenderKey, nil)];
-    [messageItems addObject:item(@"回复时间限制", @"避免响应很久以前的撤回事件", @"timer", NeoWCRowKindDetail, nil, revokeFilterValue)];
-    [messageItems addObject:item(@"回复消息模板", @"设置发送给撤回者的提示", @"text.quote", NeoWCRowKindDetail, nil, @"编辑")];
+
+    NSMutableArray<NeoWCSettingItem *> *enhancementItems = [NSMutableArray arrayWithArray:@[
+        item(@"设备扫码自动登录", @"自动确认电脑、平板等设备登录", @"desktopcomputer", NeoWCRowKindSwitch, NeoWCAutoDeviceLoginKey, nil),
+        item(@"游戏授权自动允许", @"自动点击游戏扫码授权页面的允许按钮", @"gamecontroller", NeoWCRowKindSwitch, NeoWCAutoGameAuthorizeKey, nil),
+        item(@"朋友圈双击点赞", @"双击好友朋友圈内容直接点赞", @"hand.thumbsup", NeoWCRowKindSwitch, NeoWCMomentsDoubleTapLikeKey, nil),
+        item(@"朋友圈操作按钮替换为评论", @"点击后直接进入评论，不再展开操作菜单", @"bubble.middle.bottom", NeoWCRowKindSwitch, NeoWCMomentsQuickCommentKey, nil),
+        item(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCRowKindSwitch, NeoWCGameSelectorKey, nil),
+        item(@"自定义微信运动步数", @"使用设置的当天步数", @"figure.walk", NeoWCRowKindSwitch, NeoWCStepOverrideEnabledKey, nil),
+    ]];
+    if (stepOverrideEnabled) [enhancementItems addObject:item(@"设置运动步数", @"自定义数值仅在设置当天生效", @"number", NeoWCRowKindDetail, nil, stepValue)];
+    [enhancementItems addObject:item(@"广告净化", @"隐藏朋友圈广告与小程序启动广告", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil)];
+    [enhancementItems addObject:item(@"多选消息长截图", @"在聊天多选的“更多”中加入截图", @"rectangle.dashed", NeoWCRowKindSwitch, NeoWCChatCaptureEnabledKey, nil)];
+    if (chatCaptureEnabled) [enhancementItems addObject:item(@"长截图设置", @"顶栏、昵称、背景与裁切选项", @"slider.horizontal.3", NeoWCRowKindDetail, nil, @"设置")];
+    [enhancementItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];
 
     self.sections = @[
         [NeoWCSettingSection sectionWithIdentifier:@"general" title:@"总开关" subtitle:nil symbol:@"switch.2" footer:@"关闭后仅保留设置入口，所有增强功能停止生效。" collapsible:NO items:@[
             item(@"启用 NeoWC", @"插件功能总开关", @"power", NeoWCRowKindSwitch, NeoWCEnabledKey, nil),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"messages" title:@"消息增强" subtitle:@"撤回拦截与提示" symbol:@"bubble.left.and.bubble.right" footer:@"" collapsible:YES items:messageItems],
-        [NeoWCSettingSection sectionWithIdentifier:@"enhancements" title:@"增强功能" subtitle:@"快捷操作与自动授权" symbol:@"bolt" footer:@"自动登录和授权会跳过手动确认，请只在可信设备和可信游戏中开启。" collapsible:YES items:@[
-            item(@"设备扫码自动登录", @"自动确认电脑、平板等设备登录", @"desktopcomputer", NeoWCRowKindSwitch, NeoWCAutoDeviceLoginKey, nil),
-            item(@"游戏授权自动允许", @"自动点击游戏扫码授权页面的允许按钮", @"gamecontroller", NeoWCRowKindSwitch, NeoWCAutoGameAuthorizeKey, nil),
-            item(@"朋友圈双击点赞", @"双击好友朋友圈内容直接点赞", @"hand.thumbsup", NeoWCRowKindSwitch, NeoWCMomentsDoubleTapLikeKey, nil),
-            item(@"朋友圈操作按钮替换为评论", @"点击后直接进入评论，不再展开操作菜单", @"bubble.middle.bottom", NeoWCRowKindSwitch, NeoWCMomentsQuickCommentKey, nil),
-            item(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCRowKindSwitch, NeoWCGameSelectorKey, nil),
-            item(@"自定义微信运动步数", @"使用设置的当天步数", @"figure.walk", NeoWCRowKindSwitch, NeoWCStepOverrideEnabledKey, nil),
-            item(@"设置运动步数", @"自定义数值仅在设置当天生效", @"number", NeoWCRowKindDetail, nil, stepValue),
-            item(@"广告净化", @"隐藏朋友圈广告与小程序启动广告", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil),
-            item(@"多选消息长截图", @"在聊天多选的“更多”中加入截图", @"rectangle.dashed", NeoWCRowKindSwitch, NeoWCChatCaptureEnabledKey, nil),
-            item(@"长截图设置", @"顶栏、昵称、背景与裁切选项", @"slider.horizontal.3", NeoWCRowKindDetail, nil, @"设置"),
-            item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理"),
-        ]],
+        [NeoWCSettingSection sectionWithIdentifier:@"enhancements" title:@"增强功能" subtitle:@"快捷操作与自动授权" symbol:@"bolt" footer:@"自动登录和授权会跳过手动确认，请只在可信设备和可信游戏中开启。" collapsible:YES items:enhancementItems],
         [NeoWCSettingSection sectionWithIdentifier:@"developer" title:@"开发者功能" subtitle:@"界面检查与运行诊断" symbol:@"hammer" footer:@"开发者功能用于辅助插件开发和问题排查。" collapsible:YES items:@[
             item(@"调试悬浮按钮", @"仅由此开关控制，不监听全局手势", @"wrench.and.screwdriver", NeoWCRowKindSwitch, NeoWCDebugFloatingEnabledKey, nil),
             item(@"记录调试日志", @"记录 NeoWC 运行事件，关闭后停止新增", @"text.alignleft", NeoWCRowKindSwitch, NeoWCDebugLoggingEnabledKey, nil),
@@ -417,6 +429,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    NeoWCSettingSection *section = self.sections[indexPath.section];
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"NeoWCSettingCell" forIndexPath:indexPath];
     cell.backgroundColor = [UIColor clearColor];
     cell.contentView.backgroundColor = [UIColor clearColor];
@@ -427,17 +440,26 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     NSInteger visibleRows = [tableView numberOfRowsInSection:indexPath.section];
     BOOL firstRow = indexPath.row == 0;
     BOOL lastRow = indexPath.row == visibleRows - 1;
-    NeoWCCardBackgroundView *background = [NeoWCCardBackgroundView new];
-    background.roundsTop = firstRow;
-    background.roundsBottom = lastRow;
-    background.drawsDivider = !firstRow;
-    cell.backgroundView = background;
-    NeoWCCardBackgroundView *selectedBackground = [NeoWCCardBackgroundView new];
-    selectedBackground.roundsTop = firstRow;
-    selectedBackground.roundsBottom = lastRow;
-    selectedBackground.drawsDivider = !firstRow;
-    selectedBackground.fillColor = [UIColor tertiarySystemFillColor];
-    cell.selectedBackgroundView = selectedBackground;
+    if (section.isCollapsible) {
+        NeoWCCardBackgroundView *background = [NeoWCCardBackgroundView new];
+        background.roundsTop = firstRow;
+        background.roundsBottom = lastRow;
+        background.drawsDivider = !firstRow;
+        cell.backgroundView = background;
+        NeoWCCardBackgroundView *selectedBackground = [NeoWCCardBackgroundView new];
+        selectedBackground.roundsTop = firstRow;
+        selectedBackground.roundsBottom = lastRow;
+        selectedBackground.drawsDivider = !firstRow;
+        selectedBackground.fillColor = [UIColor tertiarySystemFillColor];
+        cell.selectedBackgroundView = selectedBackground;
+    } else {
+        UIView *plainBackground = [UIView new];
+        plainBackground.backgroundColor = UIColor.clearColor;
+        cell.backgroundView = plainBackground;
+        UIView *plainSelectedBackground = [UIView new];
+        plainSelectedBackground.backgroundColor = [UIColor tertiarySystemFillColor];
+        cell.selectedBackgroundView = plainSelectedBackground;
+    }
     cell.layoutMargins = UIEdgeInsetsMake(0.0, 22.0, 0.0, 22.0);
 
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
@@ -501,7 +523,15 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     if ([item.defaultsKey isEqualToString:NeoWCDebugFloatingEnabledKey]) {
         [[NeoWCDebugManager sharedManager] setFloatingEnabled:sender.isOn];
     }
-    if ([item.defaultsKey isEqualToString:NeoWCEnabledKey]) [self.tableView reloadData];
+    if ([item.defaultsKey isEqualToString:NeoWCAntiRevokeKey]) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
+    }
+    BOOL changesVisibleRows = [item.defaultsKey isEqualToString:NeoWCAntiRevokeKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCAntiRevokeNotifySenderKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCStepOverrideEnabledKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCChatCaptureEnabledKey];
+    if (changesVisibleRows) [self buildSections];
+    if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] || changesVisibleRows) [self.tableView reloadData];
 }
 
 - (void)toggleSection:(NSInteger)sectionIndex {
@@ -650,11 +680,11 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         return;
     }
     if ([item.title isEqualToString:@"气泡旁横向位置"]) {
-        [self presentSidePromptOffsetEditorForKey:NeoWCAntiRevokeSideOffsetXKey title:item.title defaultValue:20.0];
+        [self presentSidePromptOffsetEditorForKey:NeoWCAntiRevokeSideOffsetXKey title:item.title defaultValue:0.0];
         return;
     }
     if ([item.title isEqualToString:@"气泡旁纵向位置"]) {
-        [self presentSidePromptOffsetEditorForKey:NeoWCAntiRevokeSideOffsetYKey title:item.title defaultValue:0.0];
+        [self presentSidePromptOffsetEditorForKey:NeoWCAntiRevokeSideOffsetYKey title:item.title defaultValue:10.0];
         return;
     }
     if ([item.title isEqualToString:@"回复时间限制"]) {
