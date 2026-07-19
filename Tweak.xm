@@ -144,12 +144,22 @@ static NSString *NeoWCConversationUserNameForEditLogic(id logic) {
 static UIImage *NeoWCEditedImageFromLogic(id logic) {
     UIImage *image = objc_getAssociatedObject(logic, &NeoWCEditedImageKey);
     if ([image isKindOfClass:[UIImage class]]) return image;
-    NSArray<NSString *> *keys = @[@"editedImage", @"outputImage", @"resultImage", @"originalImage"];
+    NSArray<NSString *> *keys = @[@"editedImage", @"outputImage", @"resultImage"];
     for (NSString *key in keys) {
         id candidate = NeoWCTweakSafeValue(logic, key);
         if ([candidate isKindOfClass:[UIImage class]]) return candidate;
     }
     return nil;
+}
+
+static UIImage *NeoWCOfficialDisplayImageForEditResult(id logic, id editResult) {
+    SEL selector = sel_registerName("getDisplayImage:");
+    if (logic && editResult && [logic respondsToSelector:selector]) {
+        id displayImage = ((id (*)(id, SEL, id))objc_msgSend)(logic, selector, editResult);
+        if ([displayImage isKindOfClass:[UIImage class]]) return displayImage;
+    }
+    id editedImage = NeoWCTweakSafeValue(editResult, @"editedImage");
+    return [editedImage isKindOfClass:[UIImage class]] ? editedImage : nil;
 }
 
 static BOOL NeoWCSendEditedImageToCurrentConversation(id logic) {
@@ -626,15 +636,17 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)OnClickEditImageDoneBarButton {
     NeoWCCurrentEditImageLogicController = self;
+    objc_setAssociatedObject(self, &NeoWCEditedImageKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     %orig;
 }
 
-- (void)processEditImage:(id)image {
+- (void)processEditImage:(id)editResult {
     NeoWCCurrentEditImageLogicController = self;
-    if ([image isKindOfClass:[UIImage class]]) {
-        objc_setAssociatedObject(self, &NeoWCEditedImageKey, image, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
+    UIImage *officialImage = NeoWCOfficialDisplayImageForEditResult(self, editResult);
+    if (officialImage) objc_setAssociatedObject(self, &NeoWCEditedImageKey, officialImage, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     %orig;
+    officialImage = NeoWCOfficialDisplayImageForEditResult(self, editResult);
+    if (officialImage) objc_setAssociatedObject(self, &NeoWCEditedImageKey, officialImage, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 %end
