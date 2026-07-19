@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import <objc/message.h>
 #import <objc/runtime.h>
 
 #import "Sources/NeoWCSettingsViewController.h"
@@ -46,10 +47,6 @@
 - (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap;
 @end
 
-@interface GameController : NSObject
-+ (NSString *)getMD5ByGameContent:(NSUInteger)content;
-@end
-
 @interface WCDeviceStepObject : NSObject
 - (unsigned int)m7StepCount;
 @end
@@ -69,6 +66,13 @@ static char NeoWCDeviceCardDidConfirmKey;
 static char NeoWCGameDidAuthorizeKey;
 static char NeoWCMomentsDoubleTapRecognizerKey;
 static char NeoWCGameSelectorPresentedKey;
+
+static NSString *NeoWCGameMD5ForContent(NSUInteger content) {
+    Class gameControllerClass = objc_getClass("GameController");
+    SEL selector = sel_registerName("getMD5ByGameContent:");
+    if (!gameControllerClass || ![gameControllerClass respondsToSelector:selector]) return nil;
+    return ((NSString *(*)(id, SEL, NSUInteger))objc_msgSend)(gameControllerClass, selector, content);
+}
 
 static void NeoWCSynchronizeMomentsCell(WCTimeLineCellView *cell) {
     if (!cell) return;
@@ -368,7 +372,8 @@ static void NeoWCRegisterPlugin(void) {
     for (NSDictionary *choice in choices) {
         [selector addAction:[UIAlertAction actionWithTitle:choice[@"title"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
             NSUInteger value = [choice[@"value"] unsignedIntegerValue];
-            wrap.m_nsEmoticonMD5 = [GameController getMD5ByGameContent:value];
+            NSString *gameMD5 = NeoWCGameMD5ForContent(value);
+            if (gameMD5.length > 0) wrap.m_nsEmoticonMD5 = gameMD5;
             wrap.m_uiGameContent = value;
             objc_setAssociatedObject(wrap, &NeoWCGameSelectorPresentedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             NeoWCLog(@"小游戏结果已选择：%@（原始值 %lu）", choice[@"title"], (unsigned long)value);
