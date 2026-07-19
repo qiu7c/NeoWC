@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import <math.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 
@@ -761,12 +762,17 @@ static void NeoWCRegisterPlugin(void) {
     }
     UIView *bubbleView = bubble;
     CGRect bubbleFrame = [bubbleView.superview convertRect:bubbleView.frame toView:self];
-    CGFloat labelWidth = 72.0;
+    CGSize promptSize = [prompt sizeWithAttributes:@{ NSFontAttributeName: label.font }];
+    CGFloat labelWidth = MIN(160.0, MAX(36.0, ceil(promptSize.width) + 8.0));
     CGFloat labelHeight = 18.0;
     BOOL isSender = [NeoWCTweakSafeValue(viewModel, @"isSender") boolValue];
-    CGFloat x = isSender ? CGRectGetMinX(bubbleFrame) - labelWidth - 7.0 : CGRectGetMaxX(bubbleFrame) + 7.0;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    id storedOffsetX = [defaults objectForKey:NeoWCAntiRevokeSideOffsetXKey];
+    CGFloat offsetX = storedOffsetX ? [storedOffsetX doubleValue] : 20.0;
+    CGFloat offsetY = [defaults doubleForKey:NeoWCAntiRevokeSideOffsetYKey];
+    CGFloat x = isSender ? CGRectGetMinX(bubbleFrame) - labelWidth - 7.0 + offsetX : CGRectGetMaxX(bubbleFrame) + 7.0 - offsetX;
     x = MIN(MAX(4.0, x), MAX(4.0, CGRectGetWidth(self.bounds) - labelWidth - 4.0));
-    CGFloat y = CGRectGetMidY(bubbleFrame) - labelHeight * 0.5;
+    CGFloat y = CGRectGetMidY(bubbleFrame) - labelHeight * 0.5 + offsetY;
     label.frame = CGRectIntegral(CGRectMake(x, y, labelWidth, labelHeight));
     [self bringSubviewToFront:label];
 }

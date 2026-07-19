@@ -1,4 +1,5 @@
 #import "NeoWCSettingsViewController.h"
+#import "NeoWCAntiRevoke.h"
 #import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCChatCapture.h"
@@ -164,6 +165,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCAntiRevokeNotifySenderKey: @NO,
         NeoWCAntiRevokeTimeFilterKey: @300.0,
         NeoWCAntiRevokePromptStyleKey: @0,
+        NeoWCAntiRevokeSideTextKey: @"已拦截撤回",
+        NeoWCAntiRevokeSideOffsetXKey: @20.0,
+        NeoWCAntiRevokeSideOffsetYKey: @0.0,
         NeoWCChatCaptureEnabledKey: @NO,
         NeoWCChatCaptureIncludeChromeKey: @YES,
         NeoWCChatCaptureHideMemberNamesKey: @NO,
@@ -210,6 +214,10 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     else if (revokeFilter >= 300.0) revokeFilterValue = @"5 分钟";
     else if (revokeFilter >= 60.0) revokeFilterValue = @"1 分钟";
     NSString *revokePromptStyle = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey] == 1 ? @"气泡旁" : @"消息下方";
+    NSString *sidePromptText = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCAntiRevokeSideTextKey] ?: @"已拦截撤回";
+    id storedSideOffsetX = [[NSUserDefaults standardUserDefaults] objectForKey:NeoWCAntiRevokeSideOffsetXKey];
+    NSString *sideOffsetX = [NSString stringWithFormat:@"%.0f", storedSideOffsetX ? [storedSideOffsetX doubleValue] : 20.0];
+    NSString *sideOffsetY = [NSString stringWithFormat:@"%.0f", [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCAntiRevokeSideOffsetYKey]];
 
     self.sections = @[
         [NeoWCSettingSection sectionWithIdentifier:@"general" title:@"总开关" subtitle:nil symbol:nil footer:@"关闭后仅保留设置入口，所有增强功能停止生效。" collapsible:NO items:@[
@@ -218,6 +226,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [NeoWCSettingSection sectionWithIdentifier:@"messages" title:@"消息增强" subtitle:@"撤回、时间与消息显示" symbol:@"bubble.left.and.bubble.right" footer:@"" collapsible:YES items:@[
             item(@"防撤回", @"保留好友撤回的消息并插入本地提示", @"arrow.uturn.backward.circle", NeoWCRowKindSwitch, NeoWCAntiRevokeKey, nil),
             item(@"防撤回提示位置", @"显示在消息下方，或与气泡水平对齐", @"text.bubble.fill", NeoWCRowKindDetail, nil, revokePromptStyle),
+            item(@"气泡旁提示文字", @"自定义气泡旁显示的小字", @"character.cursor.ibeam", NeoWCRowKindDetail, nil, sidePromptText),
+            item(@"气泡旁横向位置", @"正数向气泡贴近，默认约两个汉字", @"arrow.left.and.right", NeoWCRowKindDetail, nil, sideOffsetX),
+            item(@"气泡旁纵向位置", @"正数向下、负数向上", @"arrow.up.and.down", NeoWCRowKindDetail, nil, sideOffsetY),
             item(@"回复撤回者", @"自动发送提示，默认关闭", @"paperplane", NeoWCRowKindSwitch, NeoWCAntiRevokeNotifySenderKey, nil),
             item(@"回复时间限制", @"避免响应很久以前的撤回事件", @"timer", NeoWCRowKindDetail, nil, revokeFilterValue),
             item(@"本地提示模板", @"设置聊天中显示的防撤回提示", @"text.bubble", NeoWCRowKindDetail, nil, @"编辑"),
@@ -520,12 +531,13 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 }
 
 - (void)presentRevokePromptStylePicker {
+    NSInteger currentStyle = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey];
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"防撤回提示位置"
                                                                    message:@"“消息下方”显示完整提示；“气泡旁”显示与气泡持平的小字"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray<NSDictionary *> *options = @[
-        @{ @"title": @"消息下方", @"value": @0 },
-        @{ @"title": @"气泡旁", @"value": @1 },
+        @{ @"title": currentStyle == 0 ? @"✓  消息下方" : @"消息下方", @"value": @0 },
+        @{ @"title": currentStyle == 1 ? @"✓  气泡旁" : @"气泡旁", @"value": @1 },
     ];
     __weak typeof(self) weakSelf = self;
     for (NSDictionary *option in options) {
@@ -533,6 +545,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             [[NSUserDefaults standardUserDefaults] setInteger:[option[@"value"] integerValue] forKey:NeoWCAntiRevokePromptStyleKey];
             [weakSelf buildSections];
             [weakSelf.tableView reloadData];
+            [[NSNotificationCenter defaultCenter] postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
         }]];
     }
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
@@ -542,6 +555,45 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         popover.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds) - 1.0, 1.0, 1.0);
     }
     [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentSidePromptTextEditor {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"气泡旁提示文字" message:@"建议使用简短文字，避免覆盖消息气泡" preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCAntiRevokeSideTextKey] ?: @"已拦截撤回";
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *text = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (text.length == 0) text = @"已拦截撤回";
+        [[NSUserDefaults standardUserDefaults] setObject:text forKey:NeoWCAntiRevokeSideTextKey];
+        [weakSelf buildSections];
+        [weakSelf.tableView reloadData];
+        [[NSNotificationCenter defaultCenter] postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentSidePromptOffsetEditorForKey:(NSString *)key title:(NSString *)title defaultValue:(CGFloat)defaultValue {
+    id storedValue = [[NSUserDefaults standardUserDefaults] objectForKey:key];
+    CGFloat value = storedValue ? [storedValue doubleValue] : defaultValue;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:@"请输入 -80 到 80 之间的数值" preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = [NSString stringWithFormat:@"%.0f", value];
+        textField.keyboardType = UIKeyboardTypeNumbersAndPunctuation;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        CGFloat newValue = MIN(80.0, MAX(-80.0, alert.textFields.firstObject.text.doubleValue));
+        [[NSUserDefaults standardUserDefaults] setDouble:newValue forKey:key];
+        [weakSelf buildSections];
+        [weakSelf.tableView reloadData];
+        [[NSNotificationCenter defaultCenter] postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -556,6 +608,18 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     if (item.kind != NeoWCRowKindDetail) return;
     if ([item.title isEqualToString:@"防撤回提示位置"]) {
         [self presentRevokePromptStylePicker];
+        return;
+    }
+    if ([item.title isEqualToString:@"气泡旁提示文字"]) {
+        [self presentSidePromptTextEditor];
+        return;
+    }
+    if ([item.title isEqualToString:@"气泡旁横向位置"]) {
+        [self presentSidePromptOffsetEditorForKey:NeoWCAntiRevokeSideOffsetXKey title:item.title defaultValue:20.0];
+        return;
+    }
+    if ([item.title isEqualToString:@"气泡旁纵向位置"]) {
+        [self presentSidePromptOffsetEditorForKey:NeoWCAntiRevokeSideOffsetYKey title:item.title defaultValue:0.0];
         return;
     }
     if ([item.title isEqualToString:@"回复时间限制"]) {

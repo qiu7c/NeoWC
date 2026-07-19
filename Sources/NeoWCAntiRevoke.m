@@ -52,8 +52,9 @@ NSString *NeoWCAntiRevokeSidePromptForMessage(id message) {
     NSString *recordKey = NeoWCSidePromptRecordKey(message);
     if (recordKey.length == 0) return nil;
     NSDictionary *records = [[NSUserDefaults standardUserDefaults] dictionaryForKey:NeoWCAntiRevokeSidePromptRecordsKey];
-    id text = records[recordKey];
-    return [text isKindOfClass:[NSString class]] ? text : nil;
+    if (!records[recordKey]) return nil;
+    NSString *customText = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCAntiRevokeSideTextKey];
+    return customText.length > 0 ? customText : @"已拦截撤回";
 }
 
 static void NeoWCRememberSidePrompt(id message, NSString *text) {
