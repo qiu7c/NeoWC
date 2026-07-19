@@ -169,6 +169,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCAntiRevokeSideOffsetXKey: @0.0,
         NeoWCAntiRevokeSideOffsetYKey: @10.0,
         NeoWCChatCaptureEnabledKey: @NO,
+        NeoWCImageEditQuickSendEnabledKey: @NO,
         NeoWCChatCaptureIncludeChromeKey: @YES,
         NeoWCChatCaptureHideMemberNamesKey: @NO,
         NeoWCChatCaptureShowBackgroundKey: @YES,
@@ -255,6 +256,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     ]];
     if (stepOverrideEnabled) [enhancementItems addObject:item(@"设置运动步数", @"自定义数值仅在设置当天生效", @"number", NeoWCRowKindDetail, nil, stepValue)];
     [enhancementItems addObject:item(@"广告净化", @"隐藏朋友圈广告与小程序启动广告", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil)];
+    [enhancementItems addObject:item(@"图片编辑快捷发送", @"在官方图片编辑完成菜单中增加发送到当前会话", @"photo.badge.arrow.down", NeoWCRowKindSwitch, NeoWCImageEditQuickSendEnabledKey, nil)];
     [enhancementItems addObject:item(@"多选消息长截图", @"在聊天多选的“更多”中加入截图", @"rectangle.dashed", NeoWCRowKindSwitch, NeoWCChatCaptureEnabledKey, nil)];
     if (chatCaptureEnabled) [enhancementItems addObject:item(@"长截图设置", @"顶栏、昵称、背景与裁切选项", @"slider.horizontal.3", NeoWCRowKindDetail, nil, @"设置")];
     [enhancementItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];

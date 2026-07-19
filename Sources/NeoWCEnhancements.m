@@ -19,6 +19,7 @@ NSString *const NeoWCAntiRevokeSideTextKey = @"com.qiu7c.neowc.message.anti-revo
 NSString *const NeoWCAntiRevokeSideOffsetXKey = @"com.qiu7c.neowc.message.anti-revoke.side-offset-x";
 NSString *const NeoWCAntiRevokeSideOffsetYKey = @"com.qiu7c.neowc.message.anti-revoke.side-offset-y";
 NSString *const NeoWCChatCaptureEnabledKey = @"com.qiu7c.neowc.enhance.chat-capture";
+NSString *const NeoWCImageEditQuickSendEnabledKey = @"com.qiu7c.neowc.enhance.image-edit-quick-send";
 NSString *const NeoWCChatCaptureIncludeChromeKey = @"com.qiu7c.neowc.chat-capture.include-chrome";
 NSString *const NeoWCChatCaptureHideMemberNamesKey = @"com.qiu7c.neowc.chat-capture.hide-member-names";
 NSString *const NeoWCChatCaptureShowBackgroundKey = @"com.qiu7c.neowc.chat-capture.show-background";

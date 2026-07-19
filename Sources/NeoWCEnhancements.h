@@ -19,6 +19,7 @@ FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideTextKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideOffsetXKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideOffsetYKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatCaptureEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCImageEditQuickSendEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatCaptureIncludeChromeKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatCaptureHideMemberNamesKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatCaptureShowBackgroundKey;

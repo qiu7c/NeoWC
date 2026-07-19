@@ -104,11 +104,6 @@ static void NeoWCTweakSetValue(id object, NSString *key, id value) {
     }
 }
 
-static BOOL NeoWCMasterEnabled(void) {
-    id value = [[NSUserDefaults standardUserDefaults] objectForKey:@"com.qiu7c.neowc.enabled"];
-    return value ? [value boolValue] : YES;
-}
-
 static id NeoWCContactForUserName(NSString *userName) {
     if (userName.length == 0) return nil;
     Class centerClass = objc_getClass("MMServiceCenter");
@@ -120,6 +115,13 @@ static id NeoWCContactForUserName(NSString *userName) {
     SEL selector = sel_registerName("getContactByName:");
     if (!manager || ![manager respondsToSelector:selector]) return nil;
     return ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
+}
+
+static NSString *NeoWCConversationUserNameForEditLogic(id logic) {
+    SEL selector = sel_registerName("c2CUserName");
+    if (!logic || ![logic respondsToSelector:selector]) return nil;
+    id value = ((id (*)(id, SEL))objc_msgSend)(logic, selector);
+    return [value isKindOfClass:[NSString class]] && [value length] > 0 ? value : nil;
 }
 
 static UIImage *NeoWCEditedImageFromLogic(id logic) {
@@ -135,12 +137,7 @@ static UIImage *NeoWCEditedImageFromLogic(id logic) {
 
 static BOOL NeoWCSendEditedImageToCurrentConversation(id logic) {
     UIImage *image = NeoWCEditedImageFromLogic(logic);
-    NSString *userName = nil;
-    SEL userNameSelector = sel_registerName("c2CUserName");
-    if ([logic respondsToSelector:userNameSelector]) {
-        userName = ((id (*)(id, SEL))objc_msgSend)(logic, userNameSelector);
-    }
-    if (userName.length == 0) userName = NeoWCTweakSafeValue(logic, @"m_nsChatName");
+    NSString *userName = NeoWCConversationUserNameForEditLogic(logic);
     id contact = NeoWCContactForUserName(userName);
     Class providerClass = objc_getClass("PasteboardMsgProvider");
     Class forwardClass = objc_getClass("ForwardMessageLogicController");
@@ -149,10 +146,16 @@ static BOOL NeoWCSendEditedImageToCurrentConversation(id logic) {
     id message = ((id (*)(id, SEL, id, id))objc_msgSend)(providerClass, makeMessageSelector, image, contact);
     if (!message) return NO;
     id forwardLogic = [forwardClass new];
-    SEL forwardSelector = sel_registerName("forwardMsgList:toContacts:");
+    SEL forwardSelector = sel_registerName("forwardMsgList:msgOriginList:toContacts:ignoreTips:showConfirmView:");
     if (!forwardLogic || ![forwardLogic respondsToSelector:forwardSelector]) return NO;
+    SEL delegateSelector = sel_registerName("setDelegate:");
+    if ([forwardLogic respondsToSelector:delegateSelector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(forwardLogic, delegateSelector, logic);
+    }
+    NeoWCTweakSetValue(forwardLogic, @"bSpecificContact", @YES);
+    NeoWCTweakSetValue(forwardLogic, @"bPresent", @YES);
     objc_setAssociatedObject(logic, &NeoWCEditImageForwardLogicKey, forwardLogic, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    ((void (*)(id, SEL, id, id))objc_msgSend)(forwardLogic, forwardSelector, @[message], @[contact]);
+    ((void (*)(id, SEL, id, id, id, BOOL, BOOL))objc_msgSend)(forwardLogic, forwardSelector, @[message], nil, @[contact], NO, YES);
     return YES;
 }
 
@@ -625,17 +628,22 @@ static void NeoWCRegisterPlugin(void) {
     BOOL isEditedImageMenu = hasForward &&
                              [self isContainButtonTitle:@"收藏"] &&
                              [self isContainButtonTitle:@"保存图片"];
-    if (NeoWCMasterEnabled() && isEditedImageMenu && ![self isContainButtonTitle:@"发送到当前会话"]) {
+    if (NeoWCEnhancementEnabled(NeoWCImageEditQuickSendEnabledKey) && isEditedImageMenu && ![self isContainButtonTitle:@"发送到当前会话"]) {
         id logic = NeoWCTweakSafeValue(self, @"delegateEx") ?: NeoWCTweakSafeValue(self, @"delegate");
         Class logicClass = objc_getClass("EditImageForwardAndEditLogicController");
         if (!logicClass || ![logic isKindOfClass:logicClass]) logic = NeoWCCurrentEditImageLogicController;
-        if (logic) {
+        NSString *conversationUserName = NeoWCConversationUserNameForEditLogic(logic);
+        id conversationContact = NeoWCContactForUserName(conversationUserName);
+        if (logic && conversationUserName.length > 0 && conversationContact) {
             __weak id weakLogic = logic;
             [self addButtonWithTitle:@"发送到当前会话" eventAction:^{
                 id strongLogic = weakLogic;
-                if (!strongLogic || !NeoWCSendEditedImageToCurrentConversation(strongLogic)) {
-                    NeoWCLog(@"编辑图片发送到当前会话失败：未取得编辑结果或聊天联系人");
-                }
+                if (!strongLogic) return;
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    if (!NeoWCSendEditedImageToCurrentConversation(strongLogic)) {
+                        NeoWCLog(@"编辑图片发送到当前会话失败：未取得编辑结果、聊天联系人或确认转发接口");
+                    }
+                });
             }];
         }
     }
