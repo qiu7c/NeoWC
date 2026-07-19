@@ -181,6 +181,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 
 @interface NeoWCDebugDashboardViewController : UITableViewController
 @property (nonatomic, copy) void (^closeHandler)(void);
+@property (nonatomic, weak) UIViewController *sourceViewController;
 @end
 
 @interface NeoWCViewPickerController : UIViewController <UIGestureRecognizerDelegate>
@@ -347,8 +348,10 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 
 - (void)presentDashboardFromViewController:(UIViewController *)viewController {
     if (!viewController) return;
+    UIViewController *sourceViewController = NeoWCVisibleContainerController(viewController);
     self.floatingWindow.hidden = YES;
     NeoWCDebugDashboardViewController *dashboard = [[NeoWCDebugDashboardViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
+    dashboard.sourceViewController = sourceViewController;
     __weak typeof(self) weakSelf = self;
     dashboard.closeHandler = ^{
         if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCDebugFloatingEnabledKey]) {
@@ -501,8 +504,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.section != 0) return;
     if (indexPath.row == 0) {
-        UIViewController *page = self.navigationController.presentingViewController;
-        page = NeoWCVisibleContainerController(page);
+        UIViewController *page = self.sourceViewController;
         if (page) {
             NeoWCObjectInspectorViewController *inspector = [[NeoWCObjectInspectorViewController alloc] initWithObject:page.view inspectedClass:page.class];
             [self.navigationController pushViewController:inspector animated:YES];

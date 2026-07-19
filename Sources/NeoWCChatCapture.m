@@ -49,16 +49,22 @@ static UIImage *NeoWCSnapshotView(UIView *view, CGSize size) {
 
 static void NeoWCCollectOuterRoundedViews(UIView *view, NSMutableArray<NSDictionary *> *states) {
     if (!view) return;
-    if (view.layer.cornerRadius > 0.0) {
-        [states addObject:@{ @"view": view, @"radius": @(view.layer.cornerRadius), @"masks": @(view.layer.masksToBounds) }];
+    if (view.layer.cornerRadius > 0.0 || view.layer.mask) {
+        [states addObject:@{
+            @"view": view,
+            @"radius": @(view.layer.cornerRadius),
+            @"masks": @(view.layer.masksToBounds),
+            @"mask": view.layer.mask ?: NSNull.null,
+        }];
         view.layer.cornerRadius = 0.0;
+        view.layer.mask = nil;
     }
     CGFloat width = CGRectGetWidth(view.bounds);
     CGFloat height = CGRectGetHeight(view.bounds);
     for (UIView *subview in view.subviews) {
         if (width > 0.0 && height > 0.0 &&
-            CGRectGetWidth(subview.frame) >= width * 0.90 &&
-            CGRectGetHeight(subview.frame) >= height * 0.80) {
+            CGRectGetWidth(subview.frame) >= width * 0.85 &&
+            CGRectGetHeight(subview.frame) >= height * 0.55) {
             NeoWCCollectOuterRoundedViews(subview, states);
         }
     }
@@ -74,6 +80,8 @@ static UIImage *NeoWCSnapshotFlatFooterView(UIView *view, UIColor *backgroundCol
         UIView *roundedView = state[@"view"];
         roundedView.layer.cornerRadius = [state[@"radius"] doubleValue];
         roundedView.layer.masksToBounds = [state[@"masks"] boolValue];
+        id mask = state[@"mask"];
+        roundedView.layer.mask = mask == NSNull.null ? nil : mask;
     }
     if (!snapshot) return nil;
 
@@ -663,6 +671,8 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 @property (nonatomic, copy) NSArray<NSIndexPath *> *indexPaths;
 @property (nonatomic, strong) NSMutableArray<UIImage *> *cellImages;
 @property (nonatomic, assign) CGPoint originalOffset;
+@property (nonatomic, assign) CGFloat originalDistanceFromBottom;
+@property (nonatomic, assign) BOOL originallyAtBottom;
 @property (nonatomic, strong) UIView *loadingOverlay;
 @property (nonatomic, strong) UILabel *loadingLabel;
 @property (nonatomic, strong) UIImage *headerImage;
@@ -823,6 +833,11 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
         return;
     }
     self.originalOffset = self.tableView.contentOffset;
+    UIEdgeInsets originalInset = self.tableView.adjustedContentInset;
+    CGFloat originalMinimumOffsetY = -originalInset.top;
+    CGFloat originalMaximumOffsetY = MAX(originalMinimumOffsetY, self.tableView.contentSize.height - CGRectGetHeight(self.tableView.bounds) + originalInset.bottom);
+    self.originalDistanceFromBottom = MAX(0.0, originalMaximumOffsetY - self.originalOffset.y);
+    self.originallyAtBottom = self.originalDistanceFromBottom <= 80.0;
     [self installLoadingOverlay];
     NeoWCCallVoid(self.controller, NSSelectorFromString(@"exitMultiSelectMode"));
     __weak typeof(self) weakSelf = self;
@@ -911,7 +926,13 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 
 - (void)restoreInterface {
     if (self.tableView) {
-        [self.tableView setContentOffset:self.originalOffset animated:NO];
+        [self.tableView layoutIfNeeded];
+        UIEdgeInsets inset = self.tableView.adjustedContentInset;
+        CGFloat minimumOffsetY = -inset.top;
+        CGFloat maximumOffsetY = MAX(minimumOffsetY, self.tableView.contentSize.height - CGRectGetHeight(self.tableView.bounds) + inset.bottom);
+        CGFloat targetOffsetY = self.originallyAtBottom ? maximumOffsetY : maximumOffsetY - self.originalDistanceFromBottom;
+        targetOffsetY = MIN(maximumOffsetY, MAX(minimumOffsetY, targetOffsetY));
+        [self.tableView setContentOffset:CGPointMake(self.originalOffset.x, targetOffsetY) animated:NO];
         [self.tableView layoutIfNeeded];
     }
     [self.loadingOverlay removeFromSuperview];

@@ -82,24 +82,24 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     if (self) {
         self.backgroundColor = UIColor.clearColor;
         self.opaque = NO;
-        _fillColor = [UIColor secondarySystemFillColor];
+        _fillColor = [UIColor secondarySystemBackgroundColor];
     }
     return self;
 }
 
 - (void)drawRect:(CGRect)rect {
-    CGRect cardRect = CGRectInset(self.bounds, 14.0, 0.0);
+    CGRect cardRect = CGRectInset(self.bounds, 16.0, 0.0);
     UIRectCorner corners = 0;
     if (self.roundsTop) corners |= UIRectCornerTopLeft | UIRectCornerTopRight;
     if (self.roundsBottom) corners |= UIRectCornerBottomLeft | UIRectCornerBottomRight;
-    UIBezierPath *path = corners ? [UIBezierPath bezierPathWithRoundedRect:cardRect byRoundingCorners:corners cornerRadii:CGSizeMake(20.0, 20.0)] : [UIBezierPath bezierPathWithRect:cardRect];
+    UIBezierPath *path = corners ? [UIBezierPath bezierPathWithRoundedRect:cardRect byRoundingCorners:corners cornerRadii:CGSizeMake(11.0, 11.0)] : [UIBezierPath bezierPathWithRect:cardRect];
     [self.fillColor setFill];
     [path fill];
 
     if (self.drawsDivider) {
         CGFloat pixel = 1.0 / UIScreen.mainScreen.scale;
-        [[UIColor separatorColor] setFill];
-        UIRectFill(CGRectMake(CGRectGetMinX(cardRect) + 14.0, 0.0, CGRectGetWidth(cardRect) - 28.0, pixel));
+        [[[UIColor separatorColor] colorWithAlphaComponent:0.28] setFill];
+        UIRectFill(CGRectMake(CGRectGetMinX(cardRect) + 48.0, 0.0, CGRectGetWidth(cardRect) - 64.0, pixel));
     }
 }
 
@@ -178,7 +178,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCChatCaptureShowTimestampKey: @NO,
         NeoWCChatCaptureWatermarkStyleKey: @0,
         NeoWCChatCaptureWatermarkOpacityKey: @0.18,
-        @"com.qiu7c.neowc.privacy.typing": @YES,
         NeoWCDebugLoggingEnabledKey: @YES,
         NeoWCExpandedCategoriesKey: @[@"messages"],
     }];
@@ -187,15 +186,17 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
     self.title = @"NeoWC";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
-    self.tableView.rowHeight = 54.0;
-    self.tableView.estimatedRowHeight = 54.0;
+    self.tableView.rowHeight = 60.0;
+    self.tableView.estimatedRowHeight = 60.0;
     self.tableView.backgroundColor = [UIColor systemBackgroundColor];
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-    self.tableView.sectionHeaderHeight = 10.0;
+    self.tableView.sectionHeaderHeight = UITableViewAutomaticDimension;
+    self.tableView.estimatedSectionHeaderHeight = 58.0;
     self.tableView.sectionFooterHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedSectionFooterHeight = 44.0;
     self.tableView.cellLayoutMarginsFollowReadableWidth = NO;
     self.tableView.tableHeaderView = [self makeHeaderView];
+    if (@available(iOS 15.0, *)) self.tableView.sectionHeaderTopPadding = 0.0;
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"NeoWCSettingCell"];
 }
 
@@ -213,38 +214,33 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     else if (revokeFilter >= 1800.0) revokeFilterValue = @"30 分钟";
     else if (revokeFilter >= 300.0) revokeFilterValue = @"5 分钟";
     else if (revokeFilter >= 60.0) revokeFilterValue = @"1 分钟";
-    NSString *revokePromptStyle = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey] == 1 ? @"气泡旁" : @"消息下方";
+    NSInteger revokePromptStyleValue = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey];
+    NSString *revokePromptStyle = revokePromptStyleValue == 1 ? @"气泡旁" : @"消息下方";
     NSString *sidePromptText = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCAntiRevokeSideTextKey] ?: @"已拦截撤回";
     id storedSideOffsetX = [[NSUserDefaults standardUserDefaults] objectForKey:NeoWCAntiRevokeSideOffsetXKey];
     NSString *sideOffsetX = [NSString stringWithFormat:@"%.0f", storedSideOffsetX ? [storedSideOffsetX doubleValue] : 20.0];
     NSString *sideOffsetY = [NSString stringWithFormat:@"%.0f", [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCAntiRevokeSideOffsetYKey]];
 
+    NSMutableArray<NeoWCSettingItem *> *messageItems = [NSMutableArray array];
+    [messageItems addObject:item(@"防撤回", @"保留好友撤回的消息并显示提示", @"arrow.uturn.backward.circle", NeoWCRowKindSwitch, NeoWCAntiRevokeKey, nil)];
+    [messageItems addObject:item(@"防撤回提示方案", [NSString stringWithFormat:@"当前方案：%@", revokePromptStyle], @"text.bubble.fill", NeoWCRowKindDetail, nil, revokePromptStyle)];
+    if (revokePromptStyleValue == 1) {
+        [messageItems addObject:item(@"气泡旁提示文字", @"自定义气泡旁显示的小字", @"character.cursor.ibeam", NeoWCRowKindDetail, nil, sidePromptText)];
+        [messageItems addObject:item(@"气泡旁横向位置", @"正数向气泡贴近，默认约两个汉字", @"arrow.left.and.right", NeoWCRowKindDetail, nil, sideOffsetX)];
+        [messageItems addObject:item(@"气泡旁纵向位置", @"正数向下、负数向上", @"arrow.up.and.down", NeoWCRowKindDetail, nil, sideOffsetY)];
+    } else {
+        [messageItems addObject:item(@"本地提示模板", @"设置消息下方显示的完整防撤回提示", @"text.bubble", NeoWCRowKindDetail, nil, @"编辑")];
+    }
+    [messageItems addObject:item(@"回复撤回者", @"自动发送提示，默认关闭", @"paperplane", NeoWCRowKindSwitch, NeoWCAntiRevokeNotifySenderKey, nil)];
+    [messageItems addObject:item(@"回复时间限制", @"避免响应很久以前的撤回事件", @"timer", NeoWCRowKindDetail, nil, revokeFilterValue)];
+    [messageItems addObject:item(@"回复消息模板", @"设置发送给撤回者的提示", @"text.quote", NeoWCRowKindDetail, nil, @"编辑")];
+
     self.sections = @[
-        [NeoWCSettingSection sectionWithIdentifier:@"general" title:@"总开关" subtitle:nil symbol:nil footer:@"关闭后仅保留设置入口，所有增强功能停止生效。" collapsible:NO items:@[
+        [NeoWCSettingSection sectionWithIdentifier:@"general" title:@"总开关" subtitle:nil symbol:@"switch.2" footer:@"关闭后仅保留设置入口，所有增强功能停止生效。" collapsible:NO items:@[
             item(@"启用 NeoWC", @"插件功能总开关", @"power", NeoWCRowKindSwitch, NeoWCEnabledKey, nil),
         ]],
-        [NeoWCSettingSection sectionWithIdentifier:@"messages" title:@"消息增强" subtitle:@"撤回、时间与消息显示" symbol:@"bubble.left.and.bubble.right" footer:@"" collapsible:YES items:@[
-            item(@"防撤回", @"保留好友撤回的消息并插入本地提示", @"arrow.uturn.backward.circle", NeoWCRowKindSwitch, NeoWCAntiRevokeKey, nil),
-            item(@"防撤回提示位置", @"显示在消息下方，或与气泡水平对齐", @"text.bubble.fill", NeoWCRowKindDetail, nil, revokePromptStyle),
-            item(@"气泡旁提示文字", @"自定义气泡旁显示的小字", @"character.cursor.ibeam", NeoWCRowKindDetail, nil, sidePromptText),
-            item(@"气泡旁横向位置", @"正数向气泡贴近，默认约两个汉字", @"arrow.left.and.right", NeoWCRowKindDetail, nil, sideOffsetX),
-            item(@"气泡旁纵向位置", @"正数向下、负数向上", @"arrow.up.and.down", NeoWCRowKindDetail, nil, sideOffsetY),
-            item(@"回复撤回者", @"自动发送提示，默认关闭", @"paperplane", NeoWCRowKindSwitch, NeoWCAntiRevokeNotifySenderKey, nil),
-            item(@"回复时间限制", @"避免响应很久以前的撤回事件", @"timer", NeoWCRowKindDetail, nil, revokeFilterValue),
-            item(@"本地提示模板", @"设置聊天中显示的防撤回提示", @"text.bubble", NeoWCRowKindDetail, nil, @"编辑"),
-            item(@"回复消息模板", @"设置发送给撤回者的提示", @"text.quote", NeoWCRowKindDetail, nil, @"编辑"),
-            item(@"消息时间", @"在气泡旁显示精确发送时间", @"clock", NeoWCRowKindSwitch, @"com.qiu7c.neowc.message.timestamp", nil),
-        ]],
-        [NeoWCSettingSection sectionWithIdentifier:@"privacy" title:@"隐私保护" subtitle:@"输入状态与可见性" symbol:@"hand.raised.fill" footer:@"" collapsible:YES items:@[
-            item(@"隐藏正在输入", @"不向聊天对象发送输入状态", @"ellipsis.bubble", NeoWCRowKindSwitch, @"com.qiu7c.neowc.privacy.typing", nil),
-            item(@"隐藏已读状态", @"减少阅读状态暴露", @"eye.slash", NeoWCRowKindSwitch, @"com.qiu7c.neowc.privacy.read-status", nil),
-            item(@"隐私设置", @"管理更多可见性选项", @"lock.shield", NeoWCRowKindDetail, nil, @"规划中"),
-        ]],
-        [NeoWCSettingSection sectionWithIdentifier:@"appearance" title:@"界面个性化" subtitle:@"聊天与会话列表外观" symbol:@"paintbrush.fill" footer:@"" collapsible:YES items:@[
-            item(@"紧凑会话列表", @"在一屏显示更多会话", @"rectangle.grid.1x2", NeoWCRowKindSwitch, @"com.qiu7c.neowc.appearance.compact-list", nil),
-            item(@"气泡样式", @"自定义聊天气泡显示", @"message.fill", NeoWCRowKindDetail, nil, @"规划中"),
-        ]],
-        [NeoWCSettingSection sectionWithIdentifier:@"enhancements" title:@"增强功能" subtitle:@"快捷操作与自动授权" symbol:@"bolt.fill" footer:@"自动登录和授权会跳过手动确认，请只在可信设备和可信游戏中开启。" collapsible:YES items:@[
+        [NeoWCSettingSection sectionWithIdentifier:@"messages" title:@"消息增强" subtitle:@"撤回拦截与提示" symbol:@"bubble.left.and.bubble.right" footer:@"" collapsible:YES items:messageItems],
+        [NeoWCSettingSection sectionWithIdentifier:@"enhancements" title:@"增强功能" subtitle:@"快捷操作与自动授权" symbol:@"bolt" footer:@"自动登录和授权会跳过手动确认，请只在可信设备和可信游戏中开启。" collapsible:YES items:@[
             item(@"设备扫码自动登录", @"自动确认电脑、平板等设备登录", @"desktopcomputer", NeoWCRowKindSwitch, NeoWCAutoDeviceLoginKey, nil),
             item(@"游戏授权自动允许", @"自动点击游戏扫码授权页面的允许按钮", @"gamecontroller", NeoWCRowKindSwitch, NeoWCAutoGameAuthorizeKey, nil),
             item(@"朋友圈双击点赞", @"双击好友朋友圈内容直接点赞", @"hand.thumbsup", NeoWCRowKindSwitch, NeoWCMomentsDoubleTapLikeKey, nil),
@@ -257,12 +253,12 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             item(@"长截图设置", @"顶栏、昵称、背景与裁切选项", @"slider.horizontal.3", NeoWCRowKindDetail, nil, @"设置"),
             item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理"),
         ]],
-        [NeoWCSettingSection sectionWithIdentifier:@"developer" title:@"开发者功能" subtitle:@"界面检查与运行诊断" symbol:@"hammer.fill" footer:@"开发者功能用于辅助插件开发和问题排查。" collapsible:YES items:@[
+        [NeoWCSettingSection sectionWithIdentifier:@"developer" title:@"开发者功能" subtitle:@"界面检查与运行诊断" symbol:@"hammer" footer:@"开发者功能用于辅助插件开发和问题排查。" collapsible:YES items:@[
             item(@"调试悬浮按钮", @"仅由此开关控制，不监听全局手势", @"wrench.and.screwdriver", NeoWCRowKindSwitch, NeoWCDebugFloatingEnabledKey, nil),
             item(@"记录调试日志", @"记录 NeoWC 运行事件，关闭后停止新增", @"text.alignleft", NeoWCRowKindSwitch, NeoWCDebugLoggingEnabledKey, nil),
             item(@"调试中心", @"视图检查、Runtime 搜索与日志", @"ladybug", NeoWCRowKindDetail, nil, @"打开"),
         ]],
-        [NeoWCSettingSection sectionWithIdentifier:@"about" title:@"关于" subtitle:nil symbol:nil footer:@"NeoWC · Designed for WeChat" collapsible:NO items:@[
+        [NeoWCSettingSection sectionWithIdentifier:@"about" title:@"关于" subtitle:nil symbol:@"info.circle" footer:@"NeoWC · Designed for WeChat" collapsible:NO items:@[
             item(@"版本", @"NeoWC", @"shippingbox", NeoWCRowKindInfo, nil, NeoWCVersion),
         ]],
     ];
@@ -328,18 +324,74 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)sectionIndex {
     NeoWCSettingSection *section = self.sections[sectionIndex];
-    if (!section.isCollapsible) return section.items.count;
-    return [self isSectionExpanded:section] ? section.items.count + 1 : 1;
+    return [self isSectionExpanded:section] ? section.items.count : 0;
 }
 
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+- (NSString *)tableView:(__unused UITableView *)tableView titleForHeaderInSection:(__unused NSInteger)section {
+    return nil;
+}
+
+- (CGFloat)tableView:(__unused UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
     NeoWCSettingSection *model = self.sections[section];
-    if (!model.isCollapsible) return model.title;
-    return section == 1 ? @"插件分类" : nil;
+    return model.subtitle.length > 0 ? 62.0 : 46.0;
 }
 
-- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    return [self tableView:tableView titleForHeaderInSection:section].length > 0 ? 30.0 : 10.0;
+- (UIView *)tableView:(__unused UITableView *)tableView viewForHeaderInSection:(NSInteger)sectionIndex {
+    NeoWCSettingSection *section = self.sections[sectionIndex];
+    UIControl *header = [UIControl new];
+    header.tag = sectionIndex;
+    header.backgroundColor = UIColor.clearColor;
+    if (section.isCollapsible) [header addTarget:self action:@selector(sectionHeaderTapped:) forControlEvents:UIControlEventTouchUpInside];
+
+    UIImageView *icon = [[UIImageView alloc] initWithImage:section.symbol.length > 0 ? NeoWCSymbol(section.symbol) : nil];
+    icon.translatesAutoresizingMaskIntoConstraints = NO;
+    icon.tintColor = [UIColor secondaryLabelColor];
+    icon.contentMode = UIViewContentModeScaleAspectFit;
+    [header addSubview:icon];
+
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = section.title;
+    title.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold];
+    title.textColor = [UIColor labelColor];
+    [header addSubview:title];
+
+    UILabel *subtitle = [UILabel new];
+    subtitle.translatesAutoresizingMaskIntoConstraints = NO;
+    subtitle.text = section.subtitle;
+    subtitle.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+    subtitle.textColor = [UIColor tertiaryLabelColor];
+    subtitle.hidden = section.subtitle.length == 0;
+    [header addSubview:subtitle];
+
+    UIImageView *chevron = [[UIImageView alloc] initWithImage:section.isCollapsible ? [UIImage systemImageNamed:@"chevron.down"] : nil];
+    chevron.translatesAutoresizingMaskIntoConstraints = NO;
+    chevron.tintColor = [UIColor tertiaryLabelColor];
+    chevron.contentMode = UIViewContentModeScaleAspectFit;
+    chevron.transform = [self isSectionExpanded:section] ? CGAffineTransformIdentity : CGAffineTransformMakeRotation((CGFloat)-M_PI_2);
+    [header addSubview:chevron];
+
+    CGFloat titleLeading = section.symbol.length > 0 ? 46.0 : 18.0;
+    [NSLayoutConstraint activateConstraints:@[
+        [icon.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:18.0],
+        [icon.centerYAnchor constraintEqualToAnchor:title.centerYAnchor],
+        [icon.widthAnchor constraintEqualToConstant:18.0],
+        [icon.heightAnchor constraintEqualToConstant:18.0],
+        [title.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:titleLeading],
+        [title.trailingAnchor constraintLessThanOrEqualToAnchor:chevron.leadingAnchor constant:-10.0],
+        [title.topAnchor constraintEqualToAnchor:header.topAnchor constant:section.subtitle.length > 0 ? 12.0 : 17.0],
+        [subtitle.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+        [subtitle.trailingAnchor constraintLessThanOrEqualToAnchor:header.trailingAnchor constant:-36.0],
+        [subtitle.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:2.0],
+        [chevron.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-20.0],
+        [chevron.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
+        [chevron.widthAnchor constraintEqualToConstant:12.0],
+        [chevron.heightAnchor constraintEqualToConstant:16.0],
+    ]];
+    header.isAccessibilityElement = YES;
+    header.accessibilityLabel = section.subtitle.length > 0 ? [NSString stringWithFormat:@"%@，%@", section.title, section.subtitle] : section.title;
+    if (section.isCollapsible) header.accessibilityHint = [self isSectionExpanded:section] ? @"轻点折叠" : @"轻点展开";
+    return header;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
@@ -355,14 +407,13 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
 - (NeoWCSettingItem *)itemAtIndexPath:(NSIndexPath *)indexPath {
     NeoWCSettingSection *section = self.sections[indexPath.section];
-    NSInteger itemIndex = section.isCollapsible ? indexPath.row - 1 : indexPath.row;
+    NSInteger itemIndex = indexPath.row;
     if (itemIndex < 0 || itemIndex >= section.items.count) return nil;
     return section.items[itemIndex];
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    NeoWCSettingSection *section = self.sections[indexPath.section];
-    return section.isCollapsible && indexPath.row == 0 ? 58.0 : 54.0;
+    return 60.0;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -388,28 +439,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     selectedBackground.drawsDivider = !firstRow;
     selectedBackground.fillColor = [UIColor tertiarySystemFillColor];
     cell.selectedBackgroundView = selectedBackground;
-    cell.layoutMargins = UIEdgeInsetsMake(0.0, 26.0, 0.0, 26.0);
-
-    if (section.isCollapsible && indexPath.row == 0) {
-        UIListContentConfiguration *categoryContent = [UIListContentConfiguration subtitleCellConfiguration];
-        categoryContent.text = section.title;
-        categoryContent.secondaryText = section.subtitle;
-        categoryContent.image = NeoWCSymbol(section.symbol);
-        categoryContent.textProperties.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
-        categoryContent.secondaryTextProperties.color = [UIColor secondaryLabelColor];
-        categoryContent.imageProperties.tintColor = [UIColor labelColor];
-        categoryContent.imageProperties.maximumSize = CGSizeMake(25.0, 25.0);
-        categoryContent.directionalLayoutMargins = NSDirectionalEdgeInsetsMake(0.0, 26.0, 0.0, 26.0);
-        cell.contentConfiguration = categoryContent;
-
-        UIImageView *chevron = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.down"]];
-        chevron.tintColor = [UIColor tertiaryLabelColor];
-        chevron.contentMode = UIViewContentModeCenter;
-        chevron.transform = [self isSectionExpanded:section] ? CGAffineTransformIdentity : CGAffineTransformMakeRotation((CGFloat)-M_PI_2);
-        cell.accessoryView = chevron;
-        cell.accessibilityHint = [self isSectionExpanded:section] ? @"轻点折叠" : @"轻点展开";
-        return cell;
-    }
+    cell.layoutMargins = UIEdgeInsetsMake(0.0, 22.0, 0.0, 22.0);
 
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
     UIListContentConfiguration *content = [UIListContentConfiguration subtitleCellConfiguration];
@@ -418,9 +448,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     content.textProperties.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     content.secondaryTextProperties.color = [UIColor secondaryLabelColor];
     content.image = NeoWCSymbol(item.symbol);
-    content.imageProperties.tintColor = [UIColor labelColor];
-    content.imageProperties.maximumSize = CGSizeMake(23.0, 23.0);
-    content.directionalLayoutMargins = NSDirectionalEdgeInsetsMake(0.0, section.isCollapsible ? 42.0 : 26.0, 0.0, 26.0);
+    content.imageProperties.tintColor = [UIColor secondaryLabelColor];
+    content.imageProperties.maximumSize = CGSizeMake(20.0, 20.0);
+    content.directionalLayoutMargins = NSDirectionalEdgeInsetsMake(0.0, 22.0, 0.0, 22.0);
     cell.contentConfiguration = content;
 
     if (item.kind == NeoWCRowKindSwitch) {
@@ -439,7 +469,15 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         valueLabel.text = item.value ?: @"";
         valueLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
         valueLabel.textColor = [UIColor tertiaryLabelColor];
-        cell.accessoryView = valueLabel;
+        UIImageView *chevron = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.right"]];
+        chevron.tintColor = [UIColor quaternaryLabelColor];
+        chevron.contentMode = UIViewContentModeScaleAspectFit;
+        [chevron.widthAnchor constraintEqualToConstant:8.0].active = YES;
+        UIStackView *accessory = [[UIStackView alloc] initWithArrangedSubviews:@[valueLabel, chevron]];
+        accessory.axis = UILayoutConstraintAxisHorizontal;
+        accessory.alignment = UIStackViewAlignmentCenter;
+        accessory.spacing = 7.0;
+        cell.accessoryView = accessory;
     } else if (item.value.length > 0) {
         UILabel *valueLabel = [UILabel new];
         valueLabel.text = item.value;
@@ -477,6 +515,10 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     }
     [[NSUserDefaults standardUserDefaults] setObject:self.expandedCategoryIDs.allObjects forKey:NeoWCExpandedCategoriesKey];
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:sectionIndex] withRowAnimation:UITableViewRowAnimationAutomatic];
+}
+
+- (void)sectionHeaderTapped:(UIControl *)sender {
+    [self toggleSection:sender.tag];
 }
 
 - (void)presentRevokeFilterPicker {
@@ -532,7 +574,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
 - (void)presentRevokePromptStylePicker {
     NSInteger currentStyle = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey];
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"防撤回提示位置"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"防撤回提示方案"
                                                                    message:@"“消息下方”显示完整提示；“气泡旁”显示与气泡持平的小字"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray<NSDictionary *> *options = @[
@@ -598,15 +640,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    NeoWCSettingSection *section = self.sections[indexPath.section];
-    if (section.isCollapsible && indexPath.row == 0) {
-        [self toggleSection:indexPath.section];
-        return;
-    }
-
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
     if (item.kind != NeoWCRowKindDetail) return;
-    if ([item.title isEqualToString:@"防撤回提示位置"]) {
+    if ([item.title isEqualToString:@"防撤回提示方案"]) {
         [self presentRevokePromptStylePicker];
         return;
     }
@@ -673,11 +709,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [self presentViewController:alert animated:YES completion:nil];
         return;
     }
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:item.title
-                                                                   message:@"当前为 UI 预览阶段，功能将在界面确认后接入。"
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
 }
 
 @end
