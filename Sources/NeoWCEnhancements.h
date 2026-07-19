@@ -14,6 +14,7 @@ FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeNotifySenderKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeLocalTemplateKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeReplyTemplateKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeTimeFilterKey;
+FOUNDATION_EXPORT NSString *const NeoWCAntiRevokePromptStyleKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatCaptureEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatCaptureIncludeChromeKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatCaptureHideMemberNamesKey;

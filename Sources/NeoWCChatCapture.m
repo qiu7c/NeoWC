@@ -38,7 +38,7 @@ static UIImage *NeoWCSnapshotView(UIView *view, CGSize size) {
     if (!view || size.width <= 0.0 || size.height <= 0.0) return nil;
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
     format.opaque = NO;
-    format.scale = MIN(2.0, UIScreen.mainScreen.scale);
+    format.scale = MAX(1.0, UIScreen.mainScreen.scale);
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
     return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
         CGRect rect = (CGRect){CGPointZero, size};
@@ -86,6 +86,8 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     NeoWCChatCaptureEditModeNone,
     NeoWCChatCaptureEditModeBlur,
     NeoWCChatCaptureEditModeBlack,
+    NeoWCChatCaptureEditModeDraw,
+    NeoWCChatCaptureEditModeText,
 };
 
 @interface NeoWCChatCapturePreviewViewController : UIViewController <UIScrollViewDelegate>
@@ -102,12 +104,28 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 @property (nonatomic, strong) UIPanGestureRecognizer *selectionPan;
 @property (nonatomic, strong) UIBarButtonItem *blurItem;
 @property (nonatomic, strong) UIBarButtonItem *blackItem;
-- (instancetype)initWithImage:(UIImage *)image chatName:(NSString *)chatName;
+@property (nonatomic, strong) UIBarButtonItem *drawItem;
+@property (nonatomic, strong) UIBarButtonItem *textItem;
+@property (nonatomic, strong) UIView *blurControlView;
+@property (nonatomic, strong) UISlider *blurSlider;
+@property (nonatomic, strong) UITapGestureRecognizer *textTap;
+@property (nonatomic, strong) CAShapeLayer *drawingLayer;
+@property (nonatomic, strong) NSMutableArray<NSValue *> *currentDrawPoints;
+@property (nonatomic, copy) NSString *pendingText;
+@property (nonatomic, weak) UIViewController *sourceController;
+@property (nonatomic, strong) id forwardController;
+- (instancetype)initWithImage:(UIImage *)image chatName:(NSString *)chatName sourceController:(UIViewController *)sourceController;
 - (void)closePreview;
 - (void)shareImage;
+- (void)shareToContact;
+- (void)sendToCurrentConversation;
 - (void)saveImage;
 - (void)selectBlur;
 - (void)selectBlack;
+- (void)selectDraw;
+- (void)selectText;
+- (void)blurStrengthChanged:(UISlider *)slider;
+- (void)handleTextTap:(UITapGestureRecognizer *)gesture;
 - (void)undoEdit;
 - (void)finishEditing;
 - (void)handleSelectionPan:(UIPanGestureRecognizer *)gesture;
@@ -118,11 +136,12 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 
 @implementation NeoWCChatCapturePreviewViewController
 
-- (instancetype)initWithImage:(UIImage *)image chatName:(NSString *)chatName {
+- (instancetype)initWithImage:(UIImage *)image chatName:(NSString *)chatName sourceController:(UIViewController *)sourceController {
     self = [super init];
     if (self) {
         _image = image;
         _chatName = [chatName copy];
+        _sourceController = sourceController;
         _annotations = [NSMutableArray array];
     }
     return self;
@@ -133,10 +152,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     self.title = @"长截图预览";
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(closePreview)];
-    self.navigationItem.rightBarButtonItems = @[
-        [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAction target:self action:@selector(shareImage)],
-        [[UIBarButtonItem alloc] initWithTitle:@"保存" style:UIBarButtonItemStylePlain target:self action:@selector(saveImage)],
-    ];
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAction target:self action:@selector(shareImage)];
 
     self.scrollView = [UIScrollView new];
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -155,27 +171,62 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     selectionPan.enabled = NO;
     [self.imageView addGestureRecognizer:selectionPan];
     self.selectionPan = selectionPan;
+    UITapGestureRecognizer *textTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTextTap:)];
+    textTap.enabled = NO;
+    [self.imageView addGestureRecognizer:textTap];
+    self.textTap = textTap;
     [self.scrollView addSubview:self.imageView];
 
     UIToolbar *toolbar = [UIToolbar new];
-    toolbar.translatesAutoresizingMaskIntoConstraints = NO;
     self.blurItem = [[UIBarButtonItem alloc] initWithTitle:@"模糊" style:UIBarButtonItemStylePlain target:self action:@selector(selectBlur)];
     self.blackItem = [[UIBarButtonItem alloc] initWithTitle:@"涂黑" style:UIBarButtonItemStylePlain target:self action:@selector(selectBlack)];
+    self.drawItem = [[UIBarButtonItem alloc] initWithTitle:@"画笔" style:UIBarButtonItemStylePlain target:self action:@selector(selectDraw)];
+    self.textItem = [[UIBarButtonItem alloc] initWithTitle:@"文字" style:UIBarButtonItemStylePlain target:self action:@selector(selectText)];
     UIBarButtonItem *undo = [[UIBarButtonItem alloc] initWithTitle:@"撤销" style:UIBarButtonItemStylePlain target:self action:@selector(undoEdit)];
     UIBarButtonItem *done = [[UIBarButtonItem alloc] initWithTitle:@"完成" style:UIBarButtonItemStyleDone target:self action:@selector(finishEditing)];
     UIBarButtonItem *space = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil];
-    toolbar.items = @[self.blurItem, space, self.blackItem, space, undo, space, done];
-    [self.view addSubview:toolbar];
+    toolbar.items = @[self.blurItem, space, self.blackItem, space, self.drawItem, space, self.textItem, space, undo, space, done];
     self.editToolbar = toolbar;
+
+    UIView *blurControl = [UIView new];
+    UILabel *blurLabel = [UILabel new];
+    blurLabel.text = @"模糊度";
+    blurLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    blurLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    UISlider *blurSlider = [UISlider new];
+    blurSlider.minimumValue = 3.0;
+    blurSlider.maximumValue = 36.0;
+    blurSlider.value = 14.0;
+    blurSlider.translatesAutoresizingMaskIntoConstraints = NO;
+    [blurSlider addTarget:self action:@selector(blurStrengthChanged:) forControlEvents:UIControlEventValueChanged];
+    [blurControl addSubview:blurLabel];
+    [blurControl addSubview:blurSlider];
+    [NSLayoutConstraint activateConstraints:@[
+        [blurLabel.leadingAnchor constraintEqualToAnchor:blurControl.leadingAnchor constant:16.0],
+        [blurLabel.centerYAnchor constraintEqualToAnchor:blurControl.centerYAnchor],
+        [blurLabel.widthAnchor constraintEqualToConstant:52.0],
+        [blurSlider.leadingAnchor constraintEqualToAnchor:blurLabel.trailingAnchor constant:8.0],
+        [blurSlider.trailingAnchor constraintEqualToAnchor:blurControl.trailingAnchor constant:-16.0],
+        [blurSlider.centerYAnchor constraintEqualToAnchor:blurControl.centerYAnchor],
+        [blurControl.heightAnchor constraintEqualToConstant:44.0],
+    ]];
+    blurControl.hidden = YES;
+    self.blurControlView = blurControl;
+    self.blurSlider = blurSlider;
+
+    UIStackView *bottomStack = [[UIStackView alloc] initWithArrangedSubviews:@[blurControl, toolbar]];
+    bottomStack.axis = UILayoutConstraintAxisVertical;
+    bottomStack.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:bottomStack];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.scrollView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
-        [self.scrollView.bottomAnchor constraintEqualToAnchor:toolbar.topAnchor],
-        [toolbar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [toolbar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [toolbar.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:bottomStack.topAnchor],
+        [bottomStack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [bottomStack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [bottomStack.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
     ]];
     self.renderedImageCache = [self renderedImage];
     self.imageView.image = self.renderedImageCache;
@@ -201,15 +252,63 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 - (void)shareImage {
     UIImage *output = self.renderedImageCache ?: [self renderedImage];
     if (!output) return;
-    UIActivityViewController *activity = [[UIActivityViewController alloc] initWithActivityItems:@[output] applicationActivities:nil];
-    activity.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItems.firstObject;
+
+    Class sheetClass = NSClassFromString(@"WCActionSheet");
+    if (!sheetClass) return;
+    id sheet = ((id (*)(id, SEL, id, id))objc_msgSend)([sheetClass alloc], NSSelectorFromString(@"initWithTitle:cancelButtonTitle:"), nil, @"取消");
+    if (!sheet) return;
     __weak typeof(self) weakSelf = self;
-    activity.completionWithItemsHandler = ^(__unused UIActivityType type, BOOL completed, __unused NSArray *items, __unused NSError *error) {
-        if (completed && [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatCaptureCloseAfterShareKey]) {
-            [weakSelf closePreview];
-        }
-    };
-    [self presentViewController:activity animated:YES completion:nil];
+    SEL addSelector = NSSelectorFromString(@"addButtonWithTitle:eventAction:");
+    ((id (*)(id, SEL, id, id))objc_msgSend)(sheet, addSelector, @"保存到相册", ^{ [weakSelf saveImage]; });
+    ((id (*)(id, SEL, id, id))objc_msgSend)(sheet, addSelector, @"分享给联系人", ^{ [weakSelf shareToContact]; });
+    ((id (*)(id, SEL, id, id))objc_msgSend)(sheet, addSelector, @"发送到当前会话", ^{ [weakSelf sendToCurrentConversation]; });
+    ((void (*)(id, SEL, id))objc_msgSend)(sheet, NSSelectorFromString(@"showInView:"), self.view);
+}
+
+- (void)shareToContact {
+    UIImage *output = self.renderedImageCache ?: [self renderedImage];
+    Class providerClass = NSClassFromString(@"PasteboardMsgProvider");
+    Class forwardClass = NSClassFromString(@"ForwardMessageLogicController");
+    if (!output || !providerClass || !forwardClass) return;
+
+    id contact = NeoWCCallObject(self.sourceController, NSSelectorFromString(@"getChatContact"));
+    if (!contact) contact = NeoWCCallObject(self.sourceController, NSSelectorFromString(@"GetContact"));
+    id message = ((id (*)(id, SEL, id, id))objc_msgSend)(providerClass, NSSelectorFromString(@"GetMessageFromImage:contact:"), output, contact);
+    if (!message) return;
+
+    id logic = [[forwardClass alloc] init];
+    self.forwardController = logic;
+    ((void (*)(id, SEL, id))objc_msgSend)(logic, NSSelectorFromString(@"setDelegate:"), self);
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(logic, NSSelectorFromString(@"setBShowSendSuccessView:"), NO);
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(logic, NSSelectorFromString(@"setBHiddenSendSuccessToastView:"), NO);
+    ((void (*)(id, SEL, id))objc_msgSend)(logic, NSSelectorFromString(@"setFromAppName:"), @"NeoWC");
+    ((void (*)(id, SEL, id))objc_msgSend)(logic, NSSelectorFromString(@"setTitle:"), @"选择联系人");
+    ((void (*)(id, SEL, id))objc_msgSend)(logic, NSSelectorFromString(@"forwardMessage:"), message);
+}
+
+- (void)sendToCurrentConversation {
+    UIImage *output = self.renderedImageCache ?: [self renderedImage];
+    SEL sendSelector = NSSelectorFromString(@"sendCaptruedImage:");
+    if (!output || ![self.sourceController respondsToSelector:sendSelector]) return;
+    ((void (*)(id, SEL, id))objc_msgSend)(self.sourceController, sendSelector, output);
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatCaptureCloseAfterShareKey]) [self closePreview];
+}
+
+- (UIViewController *)getCurrentViewController {
+    return self;
+}
+
+- (BOOL)shouldShowSendSuccessView:(__unused id)logic {
+    return YES;
+}
+
+- (void)OnForwardMessageSend:(__unused id)logic {
+    self.forwardController = nil;
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatCaptureCloseAfterShareKey]) [self closePreview];
+}
+
+- (void)OnForwardMessageConfirmCanceled:(__unused id)logic {
+    self.forwardController = nil;
 }
 
 - (void)saveImage {
@@ -228,11 +327,18 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 
 - (void)applyEditMode:(NeoWCChatCaptureEditMode)mode {
     self.editMode = self.editMode == mode ? NeoWCChatCaptureEditModeNone : mode;
-    self.selectionPan.enabled = self.editMode != NeoWCChatCaptureEditModeNone;
+    self.selectionPan.enabled = self.editMode == NeoWCChatCaptureEditModeBlur || self.editMode == NeoWCChatCaptureEditModeBlack || self.editMode == NeoWCChatCaptureEditModeDraw;
+    self.textTap.enabled = self.editMode == NeoWCChatCaptureEditModeText;
     self.scrollView.scrollEnabled = self.editMode == NeoWCChatCaptureEditModeNone;
-    self.blurItem.title = self.editMode == NeoWCChatCaptureEditModeBlur ? @"✓ 模糊" : @"模糊";
-    self.blackItem.title = self.editMode == NeoWCChatCaptureEditModeBlack ? @"✓ 涂黑" : @"涂黑";
-    self.title = self.editMode == NeoWCChatCaptureEditModeNone ? @"长截图预览" : @"拖动框选区域";
+    self.blurControlView.hidden = self.editMode != NeoWCChatCaptureEditModeBlur;
+    self.blurItem.title = self.editMode == NeoWCChatCaptureEditModeBlur ? @"✓模糊" : @"模糊";
+    self.blackItem.title = self.editMode == NeoWCChatCaptureEditModeBlack ? @"✓涂黑" : @"涂黑";
+    self.drawItem.title = self.editMode == NeoWCChatCaptureEditModeDraw ? @"✓画笔" : @"画笔";
+    self.textItem.title = self.editMode == NeoWCChatCaptureEditModeText ? @"✓文字" : @"文字";
+    if (self.editMode == NeoWCChatCaptureEditModeNone) self.title = @"长截图预览";
+    else if (self.editMode == NeoWCChatCaptureEditModeDraw) self.title = @"在图片上自由绘制";
+    else if (self.editMode == NeoWCChatCaptureEditModeText) self.title = @"点击图片放置文字";
+    else self.title = @"拖动框选区域";
 }
 
 - (void)selectBlur {
@@ -243,15 +349,47 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     [self applyEditMode:NeoWCChatCaptureEditModeBlack];
 }
 
+- (void)selectDraw {
+    [self applyEditMode:NeoWCChatCaptureEditModeDraw];
+}
+
+- (void)selectText {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"添加文字" message:@"输入内容后，点击图片选择放置位置" preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"请输入文字";
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *text = alert.textFields.firstObject.text;
+        if (text.length == 0) return;
+        weakSelf.pendingText = text;
+        weakSelf.editMode = NeoWCChatCaptureEditModeNone;
+        [weakSelf applyEditMode:NeoWCChatCaptureEditModeText];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)blurStrengthChanged:(__unused UISlider *)slider {
+}
+
 - (void)finishEditing {
     self.editMode = NeoWCChatCaptureEditModeNone;
     self.selectionPan.enabled = NO;
+    self.textTap.enabled = NO;
     self.scrollView.scrollEnabled = YES;
+    self.blurControlView.hidden = YES;
     self.blurItem.title = @"模糊";
     self.blackItem.title = @"涂黑";
+    self.drawItem.title = @"画笔";
+    self.textItem.title = @"文字";
     self.title = @"长截图预览";
     [self.selectionView removeFromSuperview];
     self.selectionView = nil;
+    [self.drawingLayer removeFromSuperlayer];
+    self.drawingLayer = nil;
+    self.currentDrawPoints = nil;
 }
 
 - (void)undoEdit {
@@ -266,6 +404,47 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     CGPoint point = [gesture locationInView:self.imageView];
     point.x = MIN(CGRectGetWidth(self.imageView.bounds), MAX(0.0, point.x));
     point.y = MIN(CGRectGetHeight(self.imageView.bounds), MAX(0.0, point.y));
+
+    if (self.editMode == NeoWCChatCaptureEditModeDraw) {
+        if (gesture.state == UIGestureRecognizerStateBegan) {
+            self.currentDrawPoints = [NSMutableArray arrayWithObject:[NSValue valueWithCGPoint:point]];
+            CAShapeLayer *layer = [CAShapeLayer layer];
+            layer.fillColor = UIColor.clearColor.CGColor;
+            layer.strokeColor = UIColor.systemRedColor.CGColor;
+            layer.lineWidth = 4.0;
+            layer.lineCap = kCALineCapRound;
+            layer.lineJoin = kCALineJoinRound;
+            [self.imageView.layer addSublayer:layer];
+            self.drawingLayer = layer;
+        } else if (gesture.state == UIGestureRecognizerStateChanged) {
+            [self.currentDrawPoints addObject:[NSValue valueWithCGPoint:point]];
+            UIBezierPath *path = [UIBezierPath bezierPath];
+            [path moveToPoint:self.currentDrawPoints.firstObject.CGPointValue];
+            for (NSUInteger index = 1; index < self.currentDrawPoints.count; index++) [path addLineToPoint:self.currentDrawPoints[index].CGPointValue];
+            self.drawingLayer.path = path.CGPath;
+        } else if (gesture.state == UIGestureRecognizerStateEnded) {
+            [self.currentDrawPoints addObject:[NSValue valueWithCGPoint:point]];
+            CGFloat scaleX = self.image.size.width / MAX(1.0, CGRectGetWidth(self.imageView.bounds));
+            CGFloat scaleY = self.image.size.height / MAX(1.0, CGRectGetHeight(self.imageView.bounds));
+            NSMutableArray<NSValue *> *imagePoints = [NSMutableArray arrayWithCapacity:self.currentDrawPoints.count];
+            for (NSValue *value in self.currentDrawPoints) {
+                CGPoint displayPoint = value.CGPointValue;
+                [imagePoints addObject:[NSValue valueWithCGPoint:CGPointMake(displayPoint.x * scaleX, displayPoint.y * scaleY)]];
+            }
+            if (imagePoints.count > 1) [self.annotations addObject:@{ @"type": @"draw", @"points": imagePoints, @"width": @(4.0 * scaleX) }];
+            [self.drawingLayer removeFromSuperlayer];
+            self.drawingLayer = nil;
+            self.currentDrawPoints = nil;
+            self.renderedImageCache = [self renderedImage];
+            self.imageView.image = self.renderedImageCache;
+        } else if (gesture.state == UIGestureRecognizerStateCancelled || gesture.state == UIGestureRecognizerStateFailed) {
+            [self.drawingLayer removeFromSuperlayer];
+            self.drawingLayer = nil;
+            self.currentDrawPoints = nil;
+        }
+        return;
+    }
+
     if (gesture.state == UIGestureRecognizerStateBegan) {
         self.selectionStart = point;
         UIView *selection = [UIView new];
@@ -273,8 +452,6 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
         selection.backgroundColor = self.editMode == NeoWCChatCaptureEditModeBlack
             ? [[UIColor blackColor] colorWithAlphaComponent:0.38]
             : [[UIColor systemBlueColor] colorWithAlphaComponent:0.20];
-        selection.layer.borderWidth = 1.5;
-        selection.layer.borderColor = (self.editMode == NeoWCChatCaptureEditModeBlack ? UIColor.blackColor : UIColor.systemBlueColor).CGColor;
         selection.layer.cornerRadius = 4.0;
         [self.imageView addSubview:selection];
         self.selectionView = selection;
@@ -296,7 +473,9 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
         CGRect imageRect = CGRectMake(displayRect.origin.x * scaleX, displayRect.origin.y * scaleY,
                                       displayRect.size.width * scaleX, displayRect.size.height * scaleY);
         NSString *type = self.editMode == NeoWCChatCaptureEditModeBlack ? @"black" : @"blur";
-        [self.annotations addObject:@{ @"type": type, @"rect": [NSValue valueWithCGRect:imageRect] }];
+        NSMutableDictionary *annotation = [@{ @"type": type, @"rect": [NSValue valueWithCGRect:imageRect] } mutableCopy];
+        if (self.editMode == NeoWCChatCaptureEditModeBlur) annotation[@"radius"] = @(self.blurSlider.value);
+        [self.annotations addObject:annotation];
         self.renderedImageCache = [self renderedImage];
         self.imageView.image = self.renderedImageCache;
     } else if (gesture.state == UIGestureRecognizerStateCancelled || gesture.state == UIGestureRecognizerStateFailed) {
@@ -305,7 +484,20 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     }
 }
 
-- (UIImage *)blurredImageForRect:(CGRect)rect context:(CIContext *)context {
+- (void)handleTextTap:(UITapGestureRecognizer *)gesture {
+    if (self.editMode != NeoWCChatCaptureEditModeText || self.pendingText.length == 0) return;
+    CGPoint point = [gesture locationInView:self.imageView];
+    CGFloat scaleX = self.image.size.width / MAX(1.0, CGRectGetWidth(self.imageView.bounds));
+    CGFloat scaleY = self.image.size.height / MAX(1.0, CGRectGetHeight(self.imageView.bounds));
+    CGPoint imagePoint = CGPointMake(point.x * scaleX, point.y * scaleY);
+    [self.annotations addObject:@{ @"type": @"text", @"text": self.pendingText, @"point": [NSValue valueWithCGPoint:imagePoint], @"size": @(22.0 * scaleX) }];
+    self.pendingText = nil;
+    [self finishEditing];
+    self.renderedImageCache = [self renderedImage];
+    self.imageView.image = self.renderedImageCache;
+}
+
+- (UIImage *)blurredImageForRect:(CGRect)rect radius:(CGFloat)radius context:(CIContext *)context {
     CGRect bounds = CGRectMake(0.0, 0.0, self.image.size.width, self.image.size.height);
     rect = CGRectIntegral(CGRectIntersection(rect, bounds));
     if (CGRectIsEmpty(rect) || !self.image.CGImage) return nil;
@@ -315,9 +507,11 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     CGImageRef cropped = CGImageCreateWithImageInRect(self.image.CGImage, pixelRect);
     if (!cropped) return nil;
     CIImage *input = [CIImage imageWithCGImage:cropped];
+    CIFilter *clamp = [CIFilter filterWithName:@"CIAffineClamp"];
+    [clamp setValue:input forKey:kCIInputImageKey];
     CIFilter *filter = [CIFilter filterWithName:@"CIGaussianBlur"];
-    [filter setValue:input forKey:kCIInputImageKey];
-    [filter setValue:@12.0 forKey:kCIInputRadiusKey];
+    [filter setValue:clamp.outputImage forKey:kCIInputImageKey];
+    [filter setValue:@(MAX(1.0, radius) * imageScale) forKey:kCIInputRadiusKey];
     CGImageRef output = [context createCGImage:filter.outputImage fromRect:input.extent];
     CGImageRelease(cropped);
     if (!output) return nil;
@@ -367,9 +561,35 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
             if ([annotation[@"type"] isEqualToString:@"black"]) {
                 [[UIColor blackColor] setFill];
                 CGContextFillRect(rendererContext.CGContext, rect);
-            } else {
-                UIImage *blurred = [self blurredImageForRect:rect context:ciContext];
+            } else if ([annotation[@"type"] isEqualToString:@"blur"]) {
+                UIImage *blurred = [self blurredImageForRect:rect radius:[annotation[@"radius"] doubleValue] context:ciContext];
                 [blurred drawInRect:rect];
+            } else if ([annotation[@"type"] isEqualToString:@"draw"]) {
+                NSArray<NSValue *> *points = annotation[@"points"];
+                if (points.count > 1) {
+                    CGContextSetStrokeColorWithColor(rendererContext.CGContext, UIColor.systemRedColor.CGColor);
+                    CGContextSetLineWidth(rendererContext.CGContext, [annotation[@"width"] doubleValue]);
+                    CGContextSetLineCap(rendererContext.CGContext, kCGLineCapRound);
+                    CGContextSetLineJoin(rendererContext.CGContext, kCGLineJoinRound);
+                    CGContextBeginPath(rendererContext.CGContext);
+                    CGPoint first = points.firstObject.CGPointValue;
+                    CGContextMoveToPoint(rendererContext.CGContext, first.x, first.y);
+                    for (NSUInteger index = 1; index < points.count; index++) {
+                        CGPoint next = points[index].CGPointValue;
+                        CGContextAddLineToPoint(rendererContext.CGContext, next.x, next.y);
+                    }
+                    CGContextStrokePath(rendererContext.CGContext);
+                }
+            } else if ([annotation[@"type"] isEqualToString:@"text"]) {
+                NSString *text = annotation[@"text"];
+                CGFloat fontSize = MAX(12.0, [annotation[@"size"] doubleValue]);
+                NSDictionary *attributes = @{
+                    NSFontAttributeName: [UIFont systemFontOfSize:fontSize weight:UIFontWeightSemibold],
+                    NSForegroundColorAttributeName: UIColor.whiteColor,
+                    NSStrokeColorAttributeName: [[UIColor blackColor] colorWithAlphaComponent:0.85],
+                    NSStrokeWidthAttributeName: @(-3.0),
+                };
+                [text drawAtPoint:[annotation[@"point"] CGPointValue] withAttributes:attributes];
             }
         }
 
@@ -484,6 +704,10 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     card.translatesAutoresizingMaskIntoConstraints = NO;
     card.backgroundColor = [UIColor secondarySystemBackgroundColor];
     card.layer.cornerRadius = 18.0;
+    card.layer.shadowColor = UIColor.blackColor.CGColor;
+    card.layer.shadowOpacity = 0.18;
+    card.layer.shadowRadius = 18.0;
+    card.layer.shadowOffset = CGSizeMake(0.0, 8.0);
     [overlay addSubview:card];
 
     UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
@@ -493,7 +717,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 
     UILabel *label = [UILabel new];
     label.translatesAutoresizingMaskIntoConstraints = NO;
-    label.text = @"正在准备长截图…";
+    label.text = @"截图生成中";
     label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
     label.textColor = [UIColor labelColor];
     [card addSubview:label];
@@ -558,8 +782,11 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
         [weakSelf.controller.view layoutIfNeeded];
-        [weakSelf prepareChrome];
-        [weakSelf captureNextCell];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [weakSelf.controller.view layoutIfNeeded];
+            [weakSelf prepareChrome];
+            [weakSelf captureNextCell];
+        });
     });
 }
 
@@ -613,9 +840,9 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
     format.opaque = YES;
-    CGFloat maximumPixelArea = 28000000.0;
-    CGFloat qualityScale = sqrt(maximumPixelArea / MAX(1.0, width * totalHeight));
-    format.scale = MIN(MIN(2.0, UIScreen.mainScreen.scale), MAX(1.0, qualityScale));
+    CGFloat nativeScale = MAX(1.0, UIScreen.mainScreen.scale);
+    CGFloat maximumScaleForDimension = 32760.0 / MAX(width, totalHeight);
+    format.scale = MIN(nativeScale, MAX(1.0, maximumScaleForDimension));
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(width, totalHeight) format:format];
     return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
         [[UIColor systemBackgroundColor] setFill];
@@ -657,7 +884,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     }
     NSString *chatName = controller.navigationItem.title ?: controller.title;
     if (chatName.length == 0) chatName = NeoWCFirstLabelText(controller.navigationItem.titleView);
-    NeoWCChatCapturePreviewViewController *preview = [[NeoWCChatCapturePreviewViewController alloc] initWithImage:image chatName:chatName];
+    NeoWCChatCapturePreviewViewController *preview = [[NeoWCChatCapturePreviewViewController alloc] initWithImage:image chatName:chatName sourceController:controller];
     UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:preview];
     navigation.modalPresentationStyle = UIModalPresentationFullScreen;
     [controller presentViewController:navigation animated:YES completion:nil];
@@ -670,7 +897,7 @@ void NeoWCStartChatCapture(UIViewController *controller) {
     if (objc_getAssociatedObject(controller, &NeoWCActiveChatCaptureKey)) return;
     NeoWCChatCaptureSession *session = [[NeoWCChatCaptureSession alloc] initWithController:controller];
     objc_setAssociatedObject(controller, &NeoWCActiveChatCaptureKey, session, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_async(dispatch_get_main_queue(), ^{
         [session start];
     });
 }

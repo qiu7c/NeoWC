@@ -38,6 +38,9 @@
 @interface WCTimeLineOperateButtonView : UIButton
 @end
 
+@interface CommonMessageCellView : UIView
+@end
+
 @interface CMessageWrap : NSObject
 @property (nonatomic, assign) NSUInteger m_uiMessageType;
 @property (nonatomic, assign) NSUInteger m_uiGameType;
@@ -70,6 +73,7 @@ static char NeoWCGameDidAuthorizeKey;
 static char NeoWCMomentsDoubleTapRecognizerKey;
 static char NeoWCGameSelectorPresentedKey;
 static char NeoWCChatCaptureBuildingMenuKey;
+static char NeoWCAntiRevokeSideLabelKey;
 
 static id NeoWCTweakSafeValue(id object, NSString *key) {
     if (!object || key.length == 0) return nil;
@@ -176,6 +180,21 @@ static UIWindow *NeoWCActiveApplicationWindow(void) {
         if (candidate.isKeyWindow) return candidate;
     }
     return UIApplication.sharedApplication.windows.firstObject;
+}
+
+static void NeoWCRefreshAntiRevokeCellsInView(UIView *view) {
+    if (!view) return;
+    Class cellClass = NSClassFromString(@"CommonMessageCellView");
+    if (cellClass && [view isKindOfClass:cellClass]) {
+        [view setNeedsLayout];
+        [view layoutIfNeeded];
+    }
+    for (UIView *subview in view.subviews) NeoWCRefreshAntiRevokeCellsInView(subview);
+}
+
+static void NeoWCRefreshVisibleAntiRevokeCells(void) {
+    UIWindow *window = NeoWCActiveApplicationWindow();
+    if (window) NeoWCRefreshAntiRevokeCellsInView(window);
 }
 
 @interface NeoWCGameSelectorViewController : UIViewController
@@ -463,6 +482,14 @@ static void NeoWCRegisterPlugin(void) {
                         NeoWCSynchronizeVisibleMomentsCells();
                     }];
 
+        [[NSNotificationCenter defaultCenter]
+            addObserverForName:NeoWCAntiRevokePromptDidChangeNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(__unused NSNotification *note) {
+                        NeoWCRefreshVisibleAntiRevokeCells();
+                    }];
+
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{
             NeoWCRegisterPlugin();
@@ -526,6 +553,10 @@ static void NeoWCRegisterPlugin(void) {
     NSString *identifier = NeoWCTweakSafeValue(item, @"userInfo");
     if ([identifier isEqualToString:NeoWCChatCaptureActionIdentifier()] && NeoWCEnhancementEnabled(NeoWCChatCaptureEnabledKey)) {
         NeoWCStartChatCapture((UIViewController *)self);
+        SEL dismissSelector = NSSelectorFromString(@"dismissAnimated:");
+        if ([sheet respondsToSelector:dismissSelector]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(sheet, dismissSelector, YES);
+        }
         return;
     }
     %orig;
@@ -688,6 +719,63 @@ static void NeoWCRegisterPlugin(void) {
     if (![configuredDate isKindOfClass:[NSDate class]] || ![[NSCalendar currentCalendar] isDateInToday:configuredDate]) return originalValue;
     NSInteger configuredValue = [defaults integerForKey:NeoWCStepCountKey];
     return configuredValue > 0 ? (unsigned int)MIN(100000, configuredValue) : originalValue;
+}
+
+%end
+
+%hook CommonMessageCellView
+
+- (void)layoutSubviews {
+    %orig;
+    UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
+    id viewModel = NeoWCTweakSafeValue(self, @"viewModel");
+    id message = NeoWCTweakSafeValue(viewModel, @"messageWrap");
+    NSString *prompt = NeoWCAntiRevokeSidePromptForMessage(message);
+    BOOL useSidePrompt = NeoWCEnhancementEnabled(NeoWCAntiRevokeKey) &&
+                         [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey] == 1 &&
+                         prompt.length > 0;
+    if (!useSidePrompt) {
+        label.hidden = YES;
+        return;
+    }
+
+    if (!label) {
+        label = [UILabel new];
+        label.userInteractionEnabled = NO;
+        label.font = [UIFont systemFontOfSize:10.5 weight:UIFontWeightRegular];
+        label.textColor = [UIColor tertiaryLabelColor];
+        label.textAlignment = NSTextAlignmentCenter;
+        label.numberOfLines = 1;
+        [self addSubview:label];
+        objc_setAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey, label, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    label.hidden = NO;
+    label.text = prompt;
+
+    id bubble = nil;
+    SEL bubbleSelector = NSSelectorFromString(@"getBgImageView");
+    if ([self respondsToSelector:bubbleSelector]) bubble = ((id (*)(id, SEL))objc_msgSend)(self, bubbleSelector);
+    if (![bubble isKindOfClass:[UIView class]]) {
+        label.hidden = YES;
+        return;
+    }
+    UIView *bubbleView = bubble;
+    CGRect bubbleFrame = [bubbleView.superview convertRect:bubbleView.frame toView:self];
+    CGFloat labelWidth = 72.0;
+    CGFloat labelHeight = 18.0;
+    BOOL isSender = [NeoWCTweakSafeValue(viewModel, @"isSender") boolValue];
+    CGFloat x = isSender ? CGRectGetMinX(bubbleFrame) - labelWidth - 7.0 : CGRectGetMaxX(bubbleFrame) + 7.0;
+    x = MIN(MAX(4.0, x), MAX(4.0, CGRectGetWidth(self.bounds) - labelWidth - 4.0));
+    CGFloat y = CGRectGetMidY(bubbleFrame) - labelHeight * 0.5;
+    label.frame = CGRectIntegral(CGRectMake(x, y, labelWidth, labelHeight));
+    [self bringSubviewToFront:label];
+}
+
+- (void)prepareForReuse {
+    %orig;
+    UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
+    label.hidden = YES;
+    label.text = nil;
 }
 
 %end

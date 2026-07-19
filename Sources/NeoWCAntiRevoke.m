@@ -6,6 +6,9 @@
 #import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
 
+NSString *const NeoWCAntiRevokePromptDidChangeNotification = @"NeoWCAntiRevokePromptDidChangeNotification";
+static NSString *const NeoWCAntiRevokeSidePromptRecordsKey = @"com.qiu7c.neowc.message.anti-revoke.side-records";
+
 static NSString *const NeoWCDefaultLocalRevokeTemplate =
     @"拦截到一条{用户名}撤回的消息\n发送时间：{yyyy}-{MM}-{dd} {HH}:{mm}:{ss}\n内容：{内容}";
 
@@ -37,6 +40,35 @@ static NSString *NeoWCStringValue(id object, NSString *key) {
 static NSUInteger NeoWCUIntegerValue(id object, NSString *key) {
     id value = NeoWCSafeValue(object, key);
     return [value respondsToSelector:@selector(unsignedIntegerValue)] ? [value unsignedIntegerValue] : 0;
+}
+
+static NSString *NeoWCSidePromptRecordKey(id message) {
+    unsigned long long serverID = [NeoWCSafeValue(message, @"m_n64MesSvrID") unsignedLongLongValue];
+    if (serverID == 0) serverID = [NeoWCSafeValue(message, @"m_uiMesLocalID") unsignedLongLongValue];
+    return serverID == 0 ? nil : [NSString stringWithFormat:@"%llu", serverID];
+}
+
+NSString *NeoWCAntiRevokeSidePromptForMessage(id message) {
+    NSString *recordKey = NeoWCSidePromptRecordKey(message);
+    if (recordKey.length == 0) return nil;
+    NSDictionary *records = [[NSUserDefaults standardUserDefaults] dictionaryForKey:NeoWCAntiRevokeSidePromptRecordsKey];
+    id text = records[recordKey];
+    return [text isKindOfClass:[NSString class]] ? text : nil;
+}
+
+static void NeoWCRememberSidePrompt(id message, NSString *text) {
+    NSString *recordKey = NeoWCSidePromptRecordKey(message);
+    if (recordKey.length == 0 || text.length == 0) return;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    @synchronized (defaults) {
+        NSMutableDictionary *records = [[defaults dictionaryForKey:NeoWCAntiRevokeSidePromptRecordsKey] mutableCopy] ?: [NSMutableDictionary dictionary];
+        if (records.count >= 400 && !records[recordKey]) [records removeObjectForKey:records.allKeys.firstObject];
+        records[recordKey] = text;
+        [defaults setObject:records forKey:NeoWCAntiRevokeSidePromptRecordsKey];
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
+    });
 }
 
 static NSString *NeoWCTextBetween(NSString *text, NSString *opening, NSString *closing) {
@@ -182,14 +214,19 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
     NSString *localTemplate = [defaults stringForKey:NeoWCAntiRevokeLocalTemplateKey];
     if (localTemplate.length == 0) localTemplate = NeoWCDefaultLocalRevokeTemplate;
 
-    id localMessage = NeoWCNewMessageWrap(10000);
-    if (!localMessage) return NO;
-    NeoWCSafeSetValue(localMessage, @"m_nsFromUsr", originalFrom);
-    NeoWCSafeSetValue(localMessage, @"m_nsToUsr", NeoWCStringValue(original, @"m_nsToUsr"));
-    NeoWCSafeSetValue(localMessage, @"m_uiStatus", @4);
-    NeoWCSafeSetValue(localMessage, @"m_nsContent", NeoWCApplyRevokeTemplate(localTemplate, operatorName, summary, messageDate));
-    NeoWCSafeSetValue(localMessage, @"m_uiCreateTime", @(createTime));
-    if (!NeoWCInsertLocalMessage(messageManager, session, localMessage)) return NO;
+    NSInteger promptStyle = [defaults integerForKey:NeoWCAntiRevokePromptStyleKey];
+    if (promptStyle == 1) {
+        NeoWCRememberSidePrompt(original, @"已拦截撤回");
+    } else {
+        id localMessage = NeoWCNewMessageWrap(10000);
+        if (!localMessage) return NO;
+        NeoWCSafeSetValue(localMessage, @"m_nsFromUsr", originalFrom);
+        NeoWCSafeSetValue(localMessage, @"m_nsToUsr", NeoWCStringValue(original, @"m_nsToUsr"));
+        NeoWCSafeSetValue(localMessage, @"m_uiStatus", @4);
+        NeoWCSafeSetValue(localMessage, @"m_nsContent", NeoWCApplyRevokeTemplate(localTemplate, operatorName, summary, messageDate));
+        NeoWCSafeSetValue(localMessage, @"m_uiCreateTime", @(createTime + 1));
+        if (!NeoWCInsertLocalMessage(messageManager, session, localMessage)) return NO;
+    }
     NeoWCLog(@"已拦截 %@ 的撤回消息：%@", operatorName, summary);
 
     if (![defaults boolForKey:NeoWCAntiRevokeNotifySenderKey]) return YES;

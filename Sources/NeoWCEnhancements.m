@@ -14,6 +14,7 @@ NSString *const NeoWCAntiRevokeNotifySenderKey = @"com.qiu7c.neowc.message.anti-
 NSString *const NeoWCAntiRevokeLocalTemplateKey = @"com.qiu7c.neowc.message.anti-revoke.local-template";
 NSString *const NeoWCAntiRevokeReplyTemplateKey = @"com.qiu7c.neowc.message.anti-revoke.reply-template";
 NSString *const NeoWCAntiRevokeTimeFilterKey = @"com.qiu7c.neowc.message.anti-revoke.time-filter";
+NSString *const NeoWCAntiRevokePromptStyleKey = @"com.qiu7c.neowc.message.anti-revoke.prompt-style";
 NSString *const NeoWCChatCaptureEnabledKey = @"com.qiu7c.neowc.enhance.chat-capture";
 NSString *const NeoWCChatCaptureIncludeChromeKey = @"com.qiu7c.neowc.chat-capture.include-chrome";
 NSString *const NeoWCChatCaptureHideMemberNamesKey = @"com.qiu7c.neowc.chat-capture.hide-member-names";

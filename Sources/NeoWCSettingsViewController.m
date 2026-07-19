@@ -163,6 +163,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCAntiRevokeKey: @YES,
         NeoWCAntiRevokeNotifySenderKey: @NO,
         NeoWCAntiRevokeTimeFilterKey: @300.0,
+        NeoWCAntiRevokePromptStyleKey: @0,
         NeoWCChatCaptureEnabledKey: @NO,
         NeoWCChatCaptureIncludeChromeKey: @YES,
         NeoWCChatCaptureHideMemberNamesKey: @NO,
@@ -208,6 +209,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     else if (revokeFilter >= 1800.0) revokeFilterValue = @"30 分钟";
     else if (revokeFilter >= 300.0) revokeFilterValue = @"5 分钟";
     else if (revokeFilter >= 60.0) revokeFilterValue = @"1 分钟";
+    NSString *revokePromptStyle = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey] == 1 ? @"气泡旁" : @"消息下方";
 
     self.sections = @[
         [NeoWCSettingSection sectionWithIdentifier:@"general" title:@"总开关" subtitle:nil symbol:nil footer:@"关闭后仅保留设置入口，所有增强功能停止生效。" collapsible:NO items:@[
@@ -215,6 +217,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"messages" title:@"消息增强" subtitle:@"撤回、时间与消息显示" symbol:@"bubble.left.and.bubble.right" footer:@"" collapsible:YES items:@[
             item(@"防撤回", @"保留好友撤回的消息并插入本地提示", @"arrow.uturn.backward.circle", NeoWCRowKindSwitch, NeoWCAntiRevokeKey, nil),
+            item(@"防撤回提示位置", @"显示在消息下方，或与气泡水平对齐", @"text.bubble.fill", NeoWCRowKindDetail, nil, revokePromptStyle),
             item(@"回复撤回者", @"自动发送提示，默认关闭", @"paperplane", NeoWCRowKindSwitch, NeoWCAntiRevokeNotifySenderKey, nil),
             item(@"回复时间限制", @"避免响应很久以前的撤回事件", @"timer", NeoWCRowKindDetail, nil, revokeFilterValue),
             item(@"本地提示模板", @"设置聊天中显示的防撤回提示", @"text.bubble", NeoWCRowKindDetail, nil, @"编辑"),
@@ -516,6 +519,31 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)presentRevokePromptStylePicker {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"防撤回提示位置"
+                                                                   message:@"“消息下方”显示完整提示；“气泡旁”显示与气泡持平的小字"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSDictionary *> *options = @[
+        @{ @"title": @"消息下方", @"value": @0 },
+        @{ @"title": @"气泡旁", @"value": @1 },
+    ];
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary *option in options) {
+        [sheet addAction:[UIAlertAction actionWithTitle:option[@"title"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [[NSUserDefaults standardUserDefaults] setInteger:[option[@"value"] integerValue] forKey:NeoWCAntiRevokePromptStyleKey];
+            [weakSelf buildSections];
+            [weakSelf.tableView reloadData];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) {
+        popover.sourceView = self.view;
+        popover.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds) - 1.0, 1.0, 1.0);
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NeoWCSettingSection *section = self.sections[indexPath.section];
@@ -526,6 +554,10 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
     if (item.kind != NeoWCRowKindDetail) return;
+    if ([item.title isEqualToString:@"防撤回提示位置"]) {
+        [self presentRevokePromptStylePicker];
+        return;
+    }
     if ([item.title isEqualToString:@"回复时间限制"]) {
         [self presentRevokeFilterPicker];
         return;
