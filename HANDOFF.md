@@ -41,7 +41,11 @@
 - 点击确认发送后等待微信成功回调；20 秒无成功结果提示网络/接口超时。
 - 成功后显示“图片已发送”。
 - 设置项支持“发送后返回聊天”，仅在快捷发送开启时显示。
-- 使用全局活动集合保持 `ForwardMessageLogicController` 生命周期，确认按钮可正常工作。
+- 2026-07-19 回归修复：移除对全局 `ForwardMessageLogicController` 的全部 Hook，避免干扰微信官方编辑图片转发。
+- 快速发送改用 `NeoWCImageQuickSendDelegate` 专用代理；确认页动态从当前 Window 查找顶层 Controller，不再依赖即将退出的图片编辑 Controller。
+- 专用代理只持有 NeoWC 自己创建的转发实例，成功/取消后释放；120 秒仅作无提示生命周期兜底。
+- 编辑菜单关闭后延迟 0.55 秒启动确认发送，等待官方编辑页面完成退出动画。
+- 根因修复：禁止在 `processEditImage:` 前后主动调用 `getDisplayImage:`；改为 Hook 微信自身对 `getDisplayImage:` 的正常调用并旁路保存返回图片，避免重复消费编辑结果导致官方转发也失效。
 
 关键文件：`Tweak.xm`。
 

@@ -1237,7 +1237,6 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
         return;
     }
     CGFloat height = CGRectGetHeight([self.tableView rectForRowAtIndexPath:path]);
-    CGFloat width = CGRectGetWidth(self.tableView.bounds);
     if (height <= 0.0) height = CGRectGetHeight(cell.bounds);
 
     NSString *cellClassName = NSStringFromClass(cell.class).lowercaseString;

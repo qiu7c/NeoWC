@@ -86,29 +86,13 @@ static char NeoWCGameSelectorPresentedKey;
 static char NeoWCChatCaptureBuildingMenuKey;
 static char NeoWCAntiRevokeSideLabelKey;
 static char NeoWCEditedImageKey;
-static char NeoWCEditImageForwardLogicKey;
-static char NeoWCEditImageSourceLogicKey;
-static char NeoWCEditImageSendPendingKey;
 static __weak id NeoWCCurrentEditImageLogicController;
 
-static NSMutableSet *NeoWCActiveImageForwardLogics(void) {
-    static NSMutableSet *logics;
+static NSMutableSet *NeoWCActiveImageQuickSendDelegates(void) {
+    static NSMutableSet *delegates;
     static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{ logics = [NSMutableSet set]; });
-    return logics;
-}
-
-static void NeoWCRetainImageForwardLogic(id logic) {
-    if (!logic) return;
-    [NeoWCActiveImageForwardLogics() addObject:logic];
-}
-
-static void NeoWCReleaseImageForwardLogic(id logic) {
-    if (!logic) return;
-    id sourceLogic = objc_getAssociatedObject(logic, &NeoWCEditImageSourceLogicKey);
-    if (sourceLogic) objc_setAssociatedObject(sourceLogic, &NeoWCEditImageForwardLogicKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(logic, &NeoWCEditImageSourceLogicKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    [NeoWCActiveImageForwardLogics() removeObject:logic];
+    dispatch_once(&onceToken, ^{ delegates = [NSMutableSet set]; });
+    return delegates;
 }
 
 static id NeoWCTweakSafeValue(id object, NSString *key) {
@@ -159,24 +143,24 @@ static UIImage *NeoWCEditedImageFromLogic(id logic) {
     return nil;
 }
 
-static UIImage *NeoWCOfficialDisplayImageForEditResult(id logic, id editResult) {
-    SEL selector = sel_registerName("getDisplayImage:");
-    if (logic && editResult && [logic respondsToSelector:selector]) {
-        id displayImage = ((id (*)(id, SEL, id))objc_msgSend)(logic, selector, editResult);
-        if ([displayImage isKindOfClass:[UIImage class]]) return displayImage;
-    }
-    id editedImage = NeoWCTweakSafeValue(editResult, @"editedImage");
-    return [editedImage isKindOfClass:[UIImage class]] ? editedImage : nil;
-}
-
 static UIWindow *NeoWCActiveWindow(void) {
     for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
         if (scene.activationState != UISceneActivationStateForegroundActive || ![scene isKindOfClass:[UIWindowScene class]]) continue;
-        for (UIWindow *window in ((UIWindowScene *)scene).windows) if (window.isKeyWindow) return window;
+        NSArray<UIWindow *> *windows = ((UIWindowScene *)scene).windows;
+        for (UIWindow *window in windows) {
+            NSString *className = NSStringFromClass(window.class);
+            if (window.isKeyWindow && window.windowLevel == UIWindowLevelNormal && ![className containsString:@"iConsole"]) return window;
+        }
+        for (UIWindow *window in windows) {
+            NSString *className = NSStringFromClass(window.class);
+            if (!window.hidden && window.alpha > 0.0 && window.windowLevel == UIWindowLevelNormal && ![className containsString:@"iConsole"]) return window;
+        }
     }
     id windows = NeoWCTweakSafeValue(UIApplication.sharedApplication, @"windows");
     if ([windows isKindOfClass:[NSArray class]]) {
-        for (UIWindow *window in windows) if (!window.hidden && window.alpha > 0.0) return window;
+        for (UIWindow *window in windows) {
+            if (!window.hidden && window.alpha > 0.0 && window.windowLevel == UIWindowLevelNormal && ![NSStringFromClass(window.class) containsString:@"iConsole"]) return window;
+        }
     }
     return nil;
 }
@@ -202,6 +186,63 @@ static void NeoWCShowTransientMessage(NSString *message, BOOL success) {
     }];
 }
 
+static UIViewController *NeoWCQuickSendTopController(UIViewController *controller) {
+    if (!controller) return nil;
+    if (controller.presentedViewController && !controller.presentedViewController.isBeingDismissed) {
+        return NeoWCQuickSendTopController(controller.presentedViewController);
+    }
+    if ([controller isKindOfClass:[UINavigationController class]]) {
+        return NeoWCQuickSendTopController(((UINavigationController *)controller).visibleViewController);
+    }
+    if ([controller isKindOfClass:[UITabBarController class]]) {
+        return NeoWCQuickSendTopController(((UITabBarController *)controller).selectedViewController);
+    }
+    return controller;
+}
+
+@interface NeoWCImageQuickSendDelegate : NSObject
+@property (nonatomic, strong) id forwardLogic;
+@property (nonatomic, weak) id sourceLogic;
+@property (nonatomic, assign) BOOL finished;
+- (void)finishWithMessage:(NSString *)message success:(BOOL)success;
+@end
+
+@implementation NeoWCImageQuickSendDelegate
+
+- (UIViewController *)getCurrentViewController {
+    UIWindow *window = NeoWCActiveWindow();
+    return NeoWCQuickSendTopController(window.rootViewController);
+}
+
+- (UIViewController *)GetCurrentViewController {
+    return [self getCurrentViewController];
+}
+
+- (BOOL)shouldShowSendSuccessView:(__unused id)logic { return YES; }
+
+- (void)OnForwardMessageSend:(__unused id)logic {
+    [self finishWithMessage:@"图片已发送" success:YES];
+}
+
+- (void)OnForwardMessageConfirmCanceled:(__unused id)logic {
+    [self finishWithMessage:nil success:NO];
+}
+
+- (void)finishWithMessage:(NSString *)message success:(BOOL)success {
+    if (self.finished) return;
+    self.finished = YES;
+    if (message.length > 0) NeoWCShowTransientMessage(message, success);
+    if (success && [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCImageEditReturnToChatKey]) {
+        SEL dismissSelector = NSSelectorFromString(@"dismissViewController");
+        id source = self.sourceLogic;
+        if ([source respondsToSelector:dismissSelector]) ((void (*)(id, SEL))objc_msgSend)(source, dismissSelector);
+    }
+    self.forwardLogic = nil;
+    [NeoWCActiveImageQuickSendDelegates() removeObject:self];
+}
+
+@end
+
 static BOOL NeoWCSendEditedImageToCurrentConversation(id logic, NSString **failureReason) {
     UIImage *image = NeoWCEditedImageFromLogic(logic);
     NSString *userName = NeoWCConversationUserNameForEditLogic(logic);
@@ -222,16 +263,23 @@ static BOOL NeoWCSendEditedImageToCurrentConversation(id logic, NSString **failu
     id forwardLogic = [forwardClass new];
     SEL forwardSelector = sel_registerName("forwardMsgList:msgOriginList:toContacts:ignoreTips:showConfirmView:");
     if (!forwardLogic || ![forwardLogic respondsToSelector:forwardSelector]) { if (failureReason) *failureReason = @"微信确认发送方法已变化"; return NO; }
+    NeoWCImageQuickSendDelegate *delegate = [NeoWCImageQuickSendDelegate new];
+    delegate.forwardLogic = forwardLogic;
+    delegate.sourceLogic = logic;
     SEL delegateSelector = sel_registerName("setDelegate:");
-    if ([forwardLogic respondsToSelector:delegateSelector]) {
-        ((void (*)(id, SEL, id))objc_msgSend)(forwardLogic, delegateSelector, logic);
-    }
+    if (![forwardLogic respondsToSelector:delegateSelector]) { if (failureReason) *failureReason = @"微信转发代理接口已变化"; return NO; }
+    UIViewController *presenter = [delegate getCurrentViewController];
+    if (!presenter || !presenter.view.window) { if (failureReason) *failureReason = @"当前聊天界面尚未恢复，无法显示确认页"; return NO; }
+    ((void (*)(id, SEL, id))objc_msgSend)(forwardLogic, delegateSelector, delegate);
     NeoWCTweakSetValue(forwardLogic, @"bSpecificContact", @YES);
     NeoWCTweakSetValue(forwardLogic, @"bPresent", @YES);
-    objc_setAssociatedObject(logic, &NeoWCEditImageForwardLogicKey, forwardLogic, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(forwardLogic, &NeoWCEditImageSourceLogicKey, logic, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCRetainImageForwardLogic(forwardLogic);
+    [NeoWCActiveImageQuickSendDelegates() addObject:delegate];
     ((void (*)(id, SEL, id, id, id, BOOL, BOOL))objc_msgSend)(forwardLogic, forwardSelector, @[message], nil, @[contact], NO, YES);
+    __weak NeoWCImageQuickSendDelegate *weakDelegate = delegate;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(120.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        NeoWCImageQuickSendDelegate *activeDelegate = weakDelegate;
+        if (activeDelegate && !activeDelegate.finished) [activeDelegate finishWithMessage:nil success:NO];
+    });
     return YES;
 }
 
@@ -692,11 +740,15 @@ static void NeoWCRegisterPlugin(void) {
 - (void)processEditImage:(id)editResult {
     NeoWCCompatibilityMarkTriggered(@"image-edit");
     NeoWCCurrentEditImageLogicController = self;
-    UIImage *officialImage = NeoWCOfficialDisplayImageForEditResult(self, editResult);
-    if (officialImage) objc_setAssociatedObject(self, &NeoWCEditedImageKey, officialImage, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    id editedImage = NeoWCTweakSafeValue(editResult, @"editedImage");
+    if ([editedImage isKindOfClass:[UIImage class]]) objc_setAssociatedObject(self, &NeoWCEditedImageKey, editedImage, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     %orig;
-    officialImage = NeoWCOfficialDisplayImageForEditResult(self, editResult);
-    if (officialImage) objc_setAssociatedObject(self, &NeoWCEditedImageKey, officialImage, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+- (UIImage *)getDisplayImage:(id)editResult {
+    UIImage *officialImage = %orig;
+    if ([officialImage isKindOfClass:[UIImage class]]) objc_setAssociatedObject(self, &NeoWCEditedImageKey, officialImage, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return officialImage;
 }
 
 %end
@@ -719,7 +771,7 @@ static void NeoWCRegisterPlugin(void) {
             [self addButtonWithTitle:@"发送到当前会话" eventAction:^{
                 id strongLogic = weakLogic;
                 if (!strongLogic) { NeoWCShowTransientMessage(@"发送失败：图片编辑会话已经结束", NO); return; }
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.55 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     NSString *reason = nil;
                     if (!NeoWCSendEditedImageToCurrentConversation(strongLogic, &reason)) {
                         NSString *message = [NSString stringWithFormat:@"发送失败：%@", reason ?: @"未知原因"];
@@ -731,59 +783,6 @@ static void NeoWCRegisterPlugin(void) {
         }
     }
     %orig;
-}
-
-%end
-
-%hook ForwardMessageLogicController
-
-- (void)OnSharePreConfirmSheetViewSend:(id)view {
-    if (!objc_getAssociatedObject(self, &NeoWCEditImageSourceLogicKey)) {
-        %orig;
-        return;
-    }
-    objc_setAssociatedObject(self, &NeoWCEditImageSendPendingKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    %orig;
-    __weak id weakLogic = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        id logic = weakLogic;
-        if (logic && [objc_getAssociatedObject(logic, &NeoWCEditImageSendPendingKey) boolValue]) {
-            objc_setAssociatedObject(logic, &NeoWCEditImageSendPendingKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            NeoWCShowTransientMessage(@"发送失败：网络超时或微信未返回成功结果", NO);
-            NeoWCReleaseImageForwardLogic(logic);
-        }
-    });
-}
-
-- (void)OnSharePreConfirmSheetViewCancel:(id)view {
-    %orig;
-    objc_setAssociatedObject(self, &NeoWCEditImageSendPendingKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCReleaseImageForwardLogic(self);
-}
-
-- (void)OnSharePreConfirmSheetViewClose:(id)view {
-    %orig;
-    objc_setAssociatedObject(self, &NeoWCEditImageSendPendingKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCReleaseImageForwardLogic(self);
-}
-
-- (void)onForwardMessageSend {
-    %orig;
-    objc_setAssociatedObject(self, &NeoWCEditImageSendPendingKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    id sourceLogic = objc_getAssociatedObject(self, &NeoWCEditImageSourceLogicKey);
-    if (sourceLogic) {
-        NeoWCShowTransientMessage(@"图片已发送", YES);
-        if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCImageEditReturnToChatKey]) {
-            SEL dismissSelector = NSSelectorFromString(@"dismissViewController");
-            if ([sourceLogic respondsToSelector:dismissSelector]) ((void (*)(id, SEL))objc_msgSend)(sourceLogic, dismissSelector);
-        }
-    }
-    NeoWCReleaseImageForwardLogic(self);
-}
-
-- (void)dismissLogicController {
-    %orig;
-    NeoWCReleaseImageForwardLogic(self);
 }
 
 %end
