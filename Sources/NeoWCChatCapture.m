@@ -61,6 +61,38 @@ static UIImage *NeoWCSnapshotOpaqueView(UIView *view, UIColor *backgroundColor) 
     }];
 }
 
+static UIColor *NeoWCVisibleBackgroundColor(UIView *view) {
+    UIView *candidate = view;
+    while (candidate) {
+        UIColor *color = candidate.backgroundColor;
+        if (color && CGColorGetAlpha(color.CGColor) >= 0.20) return color;
+        candidate = candidate.superview;
+    }
+    return nil;
+}
+
+static UIColor *NeoWCDefaultChatBackgroundColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+            return traits.userInterfaceStyle == UIUserInterfaceStyleDark
+                ? [UIColor colorWithWhite:0.075 alpha:1.0]
+                : [UIColor colorWithWhite:0.945 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithWhite:0.945 alpha:1.0];
+}
+
+static BOOL NeoWCColorLooksLikePlainWhite(UIColor *color, UITraitCollection *traits) {
+    if (!color || traits.userInterfaceStyle == UIUserInterfaceStyleDark) return NO;
+    UIColor *resolved = [color resolvedColorWithTraitCollection:traits];
+    CGFloat red = 0.0, green = 0.0, blue = 0.0, alpha = 0.0;
+    if ([resolved getRed:&red green:&green blue:&blue alpha:&alpha]) {
+        return alpha > 0.9 && red > 0.975 && green > 0.975 && blue > 0.975;
+    }
+    CGFloat white = 0.0;
+    return [resolved getWhite:&white alpha:&alpha] && alpha > 0.9 && white > 0.975;
+}
+
 static void NeoWCCollectBubbleBackgroundViews(UIView *view, NSMutableArray<UIView *> *backgroundViews) {
     if (!view) return;
     id background = NeoWCCallObject(view, NSSelectorFromString(@"getBgImageView"));
@@ -730,6 +762,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 @property (nonatomic, strong) UIImage *headerImage;
 @property (nonatomic, strong) UIImage *footerImage;
 @property (nonatomic, strong) UIImage *backgroundImage;
+@property (nonatomic, strong) UIColor *bodyBackgroundColor;
 @property (nonatomic, assign) NSUInteger captureIndex;
 - (instancetype)initWithController:(UIViewController *)controller;
 - (void)start;
@@ -869,7 +902,19 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     BOOL showBackground = showBackgroundValue ? [showBackgroundValue boolValue] : YES;
     if (showBackground) {
         UIView *background = NeoWCSafeValue(self.controller, @"m_backgroundView");
-        if ([background isKindOfClass:[UIView class]]) self.backgroundImage = NeoWCSnapshotView(background, background.bounds.size);
+        if ([background isKindOfClass:[UIView class]]) {
+            self.backgroundImage = NeoWCSnapshotView(background, background.bounds.size);
+            self.bodyBackgroundColor = NeoWCVisibleBackgroundColor(background);
+        }
+        if (!self.bodyBackgroundColor) self.bodyBackgroundColor = NeoWCVisibleBackgroundColor(self.tableView);
+        if (!self.bodyBackgroundColor) self.bodyBackgroundColor = NeoWCVisibleBackgroundColor(self.controller.view);
+        if (!self.bodyBackgroundColor ||
+            [self.bodyBackgroundColor isEqual:UIColor.systemBackgroundColor] ||
+            NeoWCColorLooksLikePlainWhite(self.bodyBackgroundColor, self.controller.traitCollection)) {
+            self.bodyBackgroundColor = NeoWCDefaultChatBackgroundColor();
+        }
+    } else {
+        self.bodyBackgroundColor = UIColor.systemBackgroundColor;
     }
 }
 
@@ -973,7 +1018,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     format.scale = MIN(nativeScale, MAX(1.0, maximumScaleForDimension));
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(width, totalHeight) format:format];
     return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
-        [[UIColor systemBackgroundColor] setFill];
+        [(self.bodyBackgroundColor ?: NeoWCDefaultChatBackgroundColor()) setFill];
         CGContextFillRect(context.CGContext, CGRectMake(0.0, 0.0, width, totalHeight));
         CGFloat y = 0.0;
         if (self.headerImage) {

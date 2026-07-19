@@ -87,6 +87,23 @@ static char NeoWCEditedImageKey;
 static char NeoWCEditImageForwardLogicKey;
 static __weak id NeoWCCurrentEditImageLogicController;
 
+static NSMutableSet *NeoWCActiveImageForwardLogics(void) {
+    static NSMutableSet *logics;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ logics = [NSMutableSet set]; });
+    return logics;
+}
+
+static void NeoWCRetainImageForwardLogic(id logic) {
+    if (!logic) return;
+    [NeoWCActiveImageForwardLogics() addObject:logic];
+}
+
+static void NeoWCReleaseImageForwardLogic(id logic) {
+    if (!logic) return;
+    [NeoWCActiveImageForwardLogics() removeObject:logic];
+}
+
 static id NeoWCTweakSafeValue(id object, NSString *key) {
     if (!object || key.length == 0) return nil;
     @try {
@@ -155,6 +172,7 @@ static BOOL NeoWCSendEditedImageToCurrentConversation(id logic) {
     NeoWCTweakSetValue(forwardLogic, @"bSpecificContact", @YES);
     NeoWCTweakSetValue(forwardLogic, @"bPresent", @YES);
     objc_setAssociatedObject(logic, &NeoWCEditImageForwardLogicKey, forwardLogic, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NeoWCRetainImageForwardLogic(forwardLogic);
     ((void (*)(id, SEL, id, id, id, BOOL, BOOL))objc_msgSend)(forwardLogic, forwardSelector, @[message], nil, @[contact], NO, YES);
     return YES;
 }
@@ -648,6 +666,30 @@ static void NeoWCRegisterPlugin(void) {
         }
     }
     %orig;
+}
+
+%end
+
+%hook ForwardMessageLogicController
+
+- (void)OnSharePreConfirmSheetViewCancel:(id)view {
+    %orig;
+    NeoWCReleaseImageForwardLogic(self);
+}
+
+- (void)OnSharePreConfirmSheetViewClose:(id)view {
+    %orig;
+    NeoWCReleaseImageForwardLogic(self);
+}
+
+- (void)onForwardMessageSend {
+    %orig;
+    NeoWCReleaseImageForwardLogic(self);
+}
+
+- (void)dismissLogicController {
+    %orig;
+    NeoWCReleaseImageForwardLogic(self);
 }
 
 %end
