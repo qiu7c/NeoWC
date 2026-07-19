@@ -47,6 +47,34 @@ static UIImage *NeoWCSnapshotView(UIView *view, CGSize size) {
     }];
 }
 
+static UIImage *NeoWCSnapshotLayerView(UIView *view, CGSize size) {
+    if (!view || size.width <= 0.0 || size.height <= 0.0) return nil;
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
+    format.opaque = NO;
+    format.scale = MAX(1.0, UIScreen.mainScreen.scale);
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
+    return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        [view.layer renderInContext:context.CGContext];
+    }];
+}
+
+static UIImage *NeoWCSnapshotRectInView(UIView *view, CGRect rect) {
+    if (!view || CGRectIsEmpty(rect)) return nil;
+    rect = CGRectIntersection(rect, view.bounds);
+    if (CGRectIsEmpty(rect)) return nil;
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
+    format.opaque = YES;
+    format.scale = MAX(1.0, UIScreen.mainScreen.scale);
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:rect.size format:format];
+    return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        [[UIColor secondarySystemBackgroundColor] setFill];
+        UIRectFill((CGRect){CGPointZero, rect.size});
+        CGContextTranslateCTM(context.CGContext, -CGRectGetMinX(rect), -CGRectGetMinY(rect));
+        BOOL drew = [view drawViewHierarchyInRect:view.bounds afterScreenUpdates:YES];
+        if (!drew) [view.layer renderInContext:context.CGContext];
+    }];
+}
+
 static void NeoWCCollectOuterRoundedViews(UIView *view, NSMutableArray<NSDictionary *> *states) {
     if (!view) return;
     if (view.layer.cornerRadius > 0.0 || view.layer.mask) {
@@ -790,7 +818,10 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     if (includeChrome) {
         UINavigationBar *bar = self.controller.navigationController.navigationBar;
         if (bar && !bar.hidden && CGRectGetHeight(bar.bounds) > 0.0) {
-            self.headerImage = NeoWCSnapshotView(bar, bar.bounds.size);
+            UIView *navigationView = self.controller.navigationController.view;
+            CGRect barRect = [bar convertRect:bar.bounds toView:navigationView];
+            self.headerImage = NeoWCSnapshotRectInView(navigationView, barRect);
+            if (!self.headerImage) self.headerImage = NeoWCSnapshotView(bar, bar.bounds.size);
         }
         UIView *toolView = NeoWCCallObject(self.controller, NSSelectorFromString(@"getInputToolView"));
         if (![toolView isKindOfClass:[UIView class]]) toolView = NeoWCSafeValue(self.controller, @"_inputToolView");
@@ -879,7 +910,9 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
             label.hidden = YES;
         }
     }
-    UIImage *image = NeoWCSnapshotView(cell, CGSizeMake(width, height));
+    [cell layoutIfNeeded];
+    UIImage *image = NeoWCSnapshotLayerView(cell, CGSizeMake(width, height));
+    if (!image) image = NeoWCSnapshotView(cell, CGSizeMake(width, height));
     [nameLabels enumerateObjectsUsingBlock:^(UIView *label, NSUInteger index, __unused BOOL *stop) {
         label.hidden = hiddenStates[index].boolValue;
     }];
