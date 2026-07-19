@@ -1,6 +1,7 @@
 #import "NeoWCSettingsViewController.h"
 #import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
+#import "NeoWCChatCapture.h"
 #import "NeoWCPluginVisibility.h"
 
 static NSString *const NeoWCVersion = @"0.1.0";
@@ -159,7 +160,19 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [super viewDidLoad];
     [[NSUserDefaults standardUserDefaults] registerDefaults:@{
         NeoWCEnabledKey: @YES,
-        @"com.qiu7c.neowc.message.anti-revoke": @YES,
+        NeoWCAntiRevokeKey: @YES,
+        NeoWCAntiRevokeNotifySenderKey: @NO,
+        NeoWCAntiRevokeTimeFilterKey: @300.0,
+        NeoWCChatCaptureEnabledKey: @NO,
+        NeoWCChatCaptureIncludeChromeKey: @YES,
+        NeoWCChatCaptureHideMemberNamesKey: @NO,
+        NeoWCChatCaptureShowBackgroundKey: @YES,
+        NeoWCChatCaptureCloseAfterShareKey: @NO,
+        NeoWCChatCaptureCropTopPointsKey: @0.0,
+        NeoWCChatCaptureShowChatNameKey: @NO,
+        NeoWCChatCaptureShowTimestampKey: @NO,
+        NeoWCChatCaptureWatermarkStyleKey: @0,
+        NeoWCChatCaptureWatermarkOpacityKey: @0.18,
         @"com.qiu7c.neowc.privacy.typing": @YES,
         NeoWCDebugLoggingEnabledKey: @YES,
         NeoWCExpandedCategoriesKey: @[@"messages"],
@@ -174,7 +187,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     self.tableView.backgroundColor = [UIColor systemBackgroundColor];
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.sectionHeaderHeight = 10.0;
-    self.tableView.sectionFooterHeight = 10.0;
+    self.tableView.sectionFooterHeight = UITableViewAutomaticDimension;
+    self.tableView.estimatedSectionFooterHeight = 44.0;
     self.tableView.cellLayoutMarginsFollowReadableWidth = NO;
     self.tableView.tableHeaderView = [self makeHeaderView];
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"NeoWCSettingCell"];
@@ -187,15 +201,25 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     };
     NSInteger configuredStepCount = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCStepCountKey];
     NSString *stepValue = configuredStepCount > 0 ? [NSString stringWithFormat:@"%ld 步", (long)configuredStepCount] : @"设置";
+    NSTimeInterval revokeFilter = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCAntiRevokeTimeFilterKey];
+    NSString *revokeFilterValue = @"不限制";
+    if (revokeFilter >= 86400.0) revokeFilterValue = @"24 小时";
+    else if (revokeFilter >= 3600.0) revokeFilterValue = @"1 小时";
+    else if (revokeFilter >= 1800.0) revokeFilterValue = @"30 分钟";
+    else if (revokeFilter >= 300.0) revokeFilterValue = @"5 分钟";
+    else if (revokeFilter >= 60.0) revokeFilterValue = @"1 分钟";
 
     self.sections = @[
         [NeoWCSettingSection sectionWithIdentifier:@"general" title:@"总开关" subtitle:nil symbol:nil footer:@"关闭后仅保留设置入口，所有增强功能停止生效。" collapsible:NO items:@[
             item(@"启用 NeoWC", @"插件功能总开关", @"power", NeoWCRowKindSwitch, NeoWCEnabledKey, nil),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"messages" title:@"消息增强" subtitle:@"撤回、时间与消息显示" symbol:@"bubble.left.and.bubble.right" footer:@"" collapsible:YES items:@[
-            item(@"防撤回", @"保留好友撤回的消息提示", @"arrow.uturn.backward.circle", NeoWCRowKindSwitch, @"com.qiu7c.neowc.message.anti-revoke", nil),
+            item(@"防撤回", @"保留好友撤回的消息并插入本地提示", @"arrow.uturn.backward.circle", NeoWCRowKindSwitch, NeoWCAntiRevokeKey, nil),
+            item(@"回复撤回者", @"自动发送提示，默认关闭", @"paperplane", NeoWCRowKindSwitch, NeoWCAntiRevokeNotifySenderKey, nil),
+            item(@"回复时间限制", @"避免响应很久以前的撤回事件", @"timer", NeoWCRowKindDetail, nil, revokeFilterValue),
+            item(@"本地提示模板", @"设置聊天中显示的防撤回提示", @"text.bubble", NeoWCRowKindDetail, nil, @"编辑"),
+            item(@"回复消息模板", @"设置发送给撤回者的提示", @"text.quote", NeoWCRowKindDetail, nil, @"编辑"),
             item(@"消息时间", @"在气泡旁显示精确发送时间", @"clock", NeoWCRowKindSwitch, @"com.qiu7c.neowc.message.timestamp", nil),
-            item(@"消息增强设置", @"更多消息相关选项", @"slider.horizontal.3", NeoWCRowKindDetail, nil, @"规划中"),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"privacy" title:@"隐私保护" subtitle:@"输入状态与可见性" symbol:@"hand.raised.fill" footer:@"" collapsible:YES items:@[
             item(@"隐藏正在输入", @"不向聊天对象发送输入状态", @"ellipsis.bubble", NeoWCRowKindSwitch, @"com.qiu7c.neowc.privacy.typing", nil),
@@ -215,6 +239,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             item(@"自定义微信运动步数", @"使用设置的当天步数", @"figure.walk", NeoWCRowKindSwitch, NeoWCStepOverrideEnabledKey, nil),
             item(@"设置运动步数", @"自定义数值仅在设置当天生效", @"number", NeoWCRowKindDetail, nil, stepValue),
             item(@"广告净化", @"隐藏朋友圈广告与小程序启动广告", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil),
+            item(@"多选消息长截图", @"在聊天多选的“更多”中加入截图", @"rectangle.dashed", NeoWCRowKindSwitch, NeoWCChatCaptureEnabledKey, nil),
+            item(@"长截图设置", @"顶栏、昵称、背景与裁切选项", @"slider.horizontal.3", NeoWCRowKindDetail, nil, @"设置"),
             item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理"),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"developer" title:@"开发者功能" subtitle:@"界面检查与运行诊断" symbol:@"hammer.fill" footer:@"开发者功能用于辅助插件开发和问题排查。" collapsible:YES items:@[
@@ -306,6 +332,11 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     NeoWCSettingSection *model = self.sections[section];
     if (model.isCollapsible && ![self isSectionExpanded:model]) return nil;
     return model.footer.length > 0 ? model.footer : nil;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
+    NSString *footer = [self tableView:tableView titleForFooterInSection:section];
+    return footer.length > 0 ? UITableViewAutomaticDimension : 10.0;
 }
 
 - (NeoWCSettingItem *)itemAtIndexPath:(NSIndexPath *)indexPath {
@@ -434,6 +465,57 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:sectionIndex] withRowAnimation:UITableViewRowAnimationAutomatic];
 }
 
+- (void)presentRevokeFilterPicker {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"回复时间限制"
+                                                                   message:@"仅影响“回复撤回者”，不会影响本地防撤回"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSDictionary *> *options = @[
+        @{@"title": @"不限制", @"value": @0},
+        @{@"title": @"1 分钟", @"value": @60},
+        @{@"title": @"5 分钟", @"value": @300},
+        @{@"title": @"30 分钟", @"value": @1800},
+        @{@"title": @"1 小时", @"value": @3600},
+        @{@"title": @"24 小时", @"value": @86400},
+    ];
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary *option in options) {
+        [sheet addAction:[UIAlertAction actionWithTitle:option[@"title"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [[NSUserDefaults standardUserDefaults] setDouble:[option[@"value"] doubleValue] forKey:NeoWCAntiRevokeTimeFilterKey];
+            [weakSelf buildSections];
+            [weakSelf.tableView reloadData];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) {
+        popover.sourceView = self.view;
+        popover.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds) - 1.0, 1.0, 1.0);
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentTemplateEditorWithTitle:(NSString *)title key:(NSString *)key defaultValue:(NSString *)defaultValue {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                   message:@"支持 {用户名}、{内容}、{yyyy}、{MM}、{dd}、{HH}、{mm}、{ss}"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        NSString *savedValue = [[NSUserDefaults standardUserDefaults] stringForKey:key];
+        textField.text = savedValue.length > 0 ? savedValue : defaultValue;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"恢复默认" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:key];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *value = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (value.length > 0) [[NSUserDefaults standardUserDefaults] setObject:value forKey:key];
+        else [[NSUserDefaults standardUserDefaults] removeObjectForKey:key];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NeoWCSettingSection *section = self.sections[indexPath.section];
@@ -444,12 +526,32 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
     if (item.kind != NeoWCRowKindDetail) return;
+    if ([item.title isEqualToString:@"回复时间限制"]) {
+        [self presentRevokeFilterPicker];
+        return;
+    }
+    if ([item.title isEqualToString:@"本地提示模板"]) {
+        [self presentTemplateEditorWithTitle:item.title
+                                         key:NeoWCAntiRevokeLocalTemplateKey
+                                defaultValue:@"拦截到一条{用户名}撤回的消息\n发送时间：{yyyy}-{MM}-{dd} {HH}:{mm}:{ss}\n内容：{内容}"];
+        return;
+    }
+    if ([item.title isEqualToString:@"回复消息模板"]) {
+        [self presentTemplateEditorWithTitle:item.title
+                                         key:NeoWCAntiRevokeReplyTemplateKey
+                                defaultValue:@"【捕捉到一条撤回消息】\n操作用户：{用户名}\n发送时间：{yyyy}-{MM}-{dd} {HH}:{mm}:{ss}\n撤回内容：{内容}\n\n撤回无效，消息已保存"];
+        return;
+    }
     if ([item.title isEqualToString:@"调试中心"]) {
         [[NeoWCDebugManager sharedManager] presentDashboardFromViewController:self];
         return;
     }
     if ([item.title isEqualToString:@"插件显示管理"]) {
         [self.navigationController pushViewController:[NeoWCPluginVisibilityViewController new] animated:YES];
+        return;
+    }
+    if ([item.title isEqualToString:@"长截图设置"]) {
+        [self.navigationController pushViewController:[NeoWCChatCaptureSettingsViewController new] animated:YES];
         return;
     }
     if ([item.title isEqualToString:@"设置运动步数"]) {
