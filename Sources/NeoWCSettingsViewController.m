@@ -571,6 +571,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             accessory.axis = UILayoutConstraintAxisHorizontal;
             accessory.alignment = UIStackViewAlignmentCenter;
             accessory.spacing = 10.0;
+            accessory.frame = CGRectMake(0.0, 0.0, 72.0, 32.0);
             cell.accessoryView = accessory;
             cell.selectionStyle = toggle.isOn ? UITableViewCellSelectionStyleDefault : UITableViewCellSelectionStyleNone;
             cell.accessibilityHint = toggle.isOn ? ([self isFeatureExpandedForKey:item.defaultsKey] ? @"轻点卡片收起子选项" : @"轻点卡片展开子选项") : nil;

@@ -74,22 +74,6 @@ static UIImage *NeoWCSnapshotOpaqueView(UIView *view, UIColor *backgroundColor) 
     }];
 }
 
-static UIImage *NeoWCSnapshotMessageCell(UIView *cell, UIColor *backgroundColor) {
-    if (!cell || CGRectIsEmpty(cell.bounds)) return nil;
-    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
-    format.opaque = YES;
-    format.scale = MAX(1.0, UIScreen.mainScreen.scale);
-    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:cell.bounds.size format:format];
-    return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
-        [(backgroundColor ?: UIColor.secondarySystemBackgroundColor) setFill];
-        UIRectFill((CGRect){CGPointZero, cell.bounds.size});
-        // drawViewHierarchy captures the visible screen backing store. A tall message crossing
-        // the navigation/status-bar boundary can therefore contain a 44/97 pt horizontal seam.
-        // Rendering the layer is independent of the current viewport and captures full-height cells.
-        [cell.layer renderInContext:context.CGContext];
-    }];
-}
-
 static UIImage *NeoWCSnapshotRectInView(UIView *view, CGRect rect, UIColor *backgroundColor) {
     if (!view) return nil;
     rect = CGRectIntersection(rect, view.bounds);
@@ -107,6 +91,20 @@ static UIImage *NeoWCSnapshotRectInView(UIView *view, CGRect rect, UIColor *back
         if (!drew) [view.layer renderInContext:context.CGContext];
         CGContextRestoreGState(context.CGContext);
     }];
+}
+
+static void NeoWCDrawChatBackground(UIImage *image, CGRect rect) {
+    if (!image || CGRectIsEmpty(rect) || image.size.width <= 0.0 || image.size.height <= 0.0) return;
+    CGFloat tileHeight = CGRectGetWidth(rect) * image.size.height / image.size.width;
+    if (tileHeight <= 0.0) return;
+    for (CGFloat y = CGRectGetMinY(rect); y < CGRectGetMaxY(rect); y += tileHeight) {
+        CGFloat height = MIN(tileHeight, CGRectGetMaxY(rect) - y);
+        CGContextRef context = UIGraphicsGetCurrentContext();
+        CGContextSaveGState(context);
+        CGContextClipToRect(context, CGRectMake(CGRectGetMinX(rect), y, CGRectGetWidth(rect), height));
+        [image drawInRect:CGRectMake(CGRectGetMinX(rect), y, CGRectGetWidth(rect), tileHeight)];
+        CGContextRestoreGState(context);
+    }
 }
 
 static void NeoWCCollectPrivacyViews(UIView *view, NSMutableArray<UIView *> *views) {
@@ -936,6 +934,8 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 - (void)waitForChatInterface;
 - (void)cancelPreflight;
 - (void)captureNextCell;
+- (CGRect)safeCaptureRectInWindow:(UIWindow *)window;
+- (UIImage *)captureVisibleCellAtIndexPath:(NSIndexPath *)path height:(CGFloat)height;
 - (NSArray<UIImage *> *)composeImages;
 - (void)finish;
 - (void)restoreInterface;
@@ -1176,7 +1176,9 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     }
     BOOL showBackground = self.preset != NeoWCChatCapturePresetCompact || [defaults boolForKey:NeoWCChatCaptureShowBackgroundKey];
     if (showBackground) {
-        UIView *background = NeoWCSafeValue(self.controller, @"m_backgroundView");
+        UIView *background = NeoWCCallObject(self.controller, NSSelectorFromString(@"getBackgroundView"));
+        if (![background isKindOfClass:[UIView class]]) background = NeoWCSafeValue(self.controller, @"m_backgroundView");
+        if (![background isKindOfClass:[UIView class]]) background = self.tableView.backgroundView;
         if ([background isKindOfClass:[UIView class]]) {
             self.backgroundImage = NeoWCSnapshotView(background, background.bounds.size);
             self.bodyBackgroundColor = NeoWCVisibleBackgroundColor(background);
@@ -1264,6 +1266,100 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     [self captureNextCell];
 }
 
+- (CGRect)safeCaptureRectInWindow:(UIWindow *)window {
+    if (!window || !self.tableView) return CGRectZero;
+    CGRect tableRect = [self.tableView convertRect:self.tableView.bounds toView:window];
+    CGRect safeRect = CGRectIntersection(tableRect, window.bounds);
+    UINavigationBar *bar = self.controller.navigationController.navigationBar;
+    if (bar && !bar.hidden && bar.window == window) {
+        CGRect barRect = [bar convertRect:bar.bounds toView:window];
+        safeRect.origin.y = MAX(CGRectGetMinY(safeRect), CGRectGetMaxY(barRect));
+        safeRect.size.height = MAX(0.0, MIN(CGRectGetMaxY(tableRect), CGRectGetHeight(window.bounds)) - safeRect.origin.y);
+    }
+    UIView *toolView = NeoWCCallObject(self.controller, NSSelectorFromString(@"getInputToolView"));
+    if (![toolView isKindOfClass:[UIView class]]) toolView = NeoWCSafeValue(self.controller, @"_inputToolView");
+    if (![toolView isKindOfClass:[UIView class]]) toolView = NeoWCSafeValue(self.controller, @"m_inputToolView");
+    if ([toolView isKindOfClass:[UIView class]] && toolView.window == window) {
+        CGFloat toolHeight = CGRectGetHeight(toolView.bounds);
+        CGFloat toolWidth = CGRectGetWidth(toolView.bounds);
+        UIView *captureView = toolHeight >= 36.0 && toolHeight <= 180.0 && toolWidth >= CGRectGetWidth(self.controller.view.bounds) * 0.65 ? toolView : nil;
+        if (!captureView) {
+            CGFloat score = -CGFLOAT_MAX;
+            NeoWCFindBottomToolbar(toolView, self.controller.view, &captureView, &score);
+        }
+        if (captureView) {
+            CGRect toolRect = [captureView convertRect:captureView.bounds toView:window];
+            CGFloat bottom = MIN(CGRectGetMaxY(safeRect), CGRectGetMinY(toolRect));
+            safeRect.size.height = MAX(0.0, bottom - CGRectGetMinY(safeRect));
+        }
+    }
+    CGFloat scale = MAX(1.0, UIScreen.mainScreen.scale);
+    safeRect.origin.y = ceil(safeRect.origin.y * scale) / scale;
+    safeRect.size.height = floor(safeRect.size.height * scale) / scale;
+    return CGRectGetHeight(safeRect) >= 80.0 ? safeRect : CGRectIntersection(tableRect, window.bounds);
+}
+
+- (UIImage *)captureVisibleCellAtIndexPath:(NSIndexPath *)path height:(CGFloat)height {
+    UIWindow *window = self.controller.view.window;
+    if (!window || height <= 0.0) return nil;
+    CGRect safeRect = [self safeCaptureRectInWindow:window];
+    if (CGRectIsEmpty(safeRect)) return nil;
+    NSMutableArray<UIImage *> *chunks = [NSMutableArray array];
+    CGFloat consumed = 0.0;
+    NSUInteger attempts = 0;
+    while (consumed < height - 0.5 && attempts++ < 128) {
+        [self.tableView scrollToRowAtIndexPath:path atScrollPosition:UITableViewScrollPositionMiddle animated:NO];
+        [self.tableView layoutIfNeeded];
+        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:path];
+        if (!cell) break;
+
+        CGPoint chunkPoint = [cell convertPoint:CGPointMake(0.0, consumed) toView:window];
+        CGFloat targetOffsetY = self.tableView.contentOffset.y + chunkPoint.y - CGRectGetMinY(safeRect);
+        UIEdgeInsets inset = self.tableView.adjustedContentInset;
+        CGFloat minimumOffsetY = -inset.top;
+        CGFloat maximumOffsetY = MAX(minimumOffsetY, self.tableView.contentSize.height - CGRectGetHeight(self.tableView.bounds) + inset.bottom);
+        targetOffsetY = MIN(maximumOffsetY, MAX(minimumOffsetY, targetOffsetY));
+        [self.tableView setContentOffset:CGPointMake(self.tableView.contentOffset.x, targetOffsetY) animated:NO];
+        [self.tableView layoutIfNeeded];
+        [self.controller.view layoutIfNeeded];
+        [window layoutIfNeeded];
+        cell = [self.tableView cellForRowAtIndexPath:path];
+        if (!cell) break;
+
+        chunkPoint = [cell convertPoint:CGPointMake(0.0, consumed) toView:window];
+        CGFloat captureY = MAX(CGRectGetMinY(safeRect), chunkPoint.y);
+        CGFloat skipped = MAX(0.0, captureY - chunkPoint.y);
+        if (skipped > 0.5) consumed = MIN(height, consumed + skipped);
+        CGFloat availableHeight = CGRectGetMaxY(safeRect) - captureY;
+        CGFloat captureHeight = MIN(height - consumed, availableHeight);
+        if (captureHeight <= 0.5) break;
+
+        BOOL overlayWasHidden = self.loadingOverlay.hidden;
+        self.loadingOverlay.hidden = YES;
+        CGRect captureRect = CGRectMake(CGRectGetMinX(safeRect), captureY, CGRectGetWidth(safeRect), captureHeight);
+        UIImage *chunk = NeoWCSnapshotRectInView(window, captureRect, self.bodyBackgroundColor);
+        self.loadingOverlay.hidden = overlayWasHidden;
+        if (!chunk) break;
+        [chunks addObject:chunk];
+        consumed += captureHeight;
+    }
+    if (chunks.count == 0) return nil;
+    if (chunks.count == 1) return chunks.firstObject;
+    CGFloat resultHeight = 0.0;
+    for (UIImage *chunk in chunks) resultHeight += chunk.size.height;
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
+    format.opaque = YES;
+    format.scale = MAX(1.0, UIScreen.mainScreen.scale);
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(CGRectGetWidth(safeRect), resultHeight) format:format];
+    return [renderer imageWithActions:^(__unused UIGraphicsImageRendererContext *context) {
+        CGFloat y = 0.0;
+        for (UIImage *chunk in chunks) {
+            [chunk drawAtPoint:CGPointMake(0.0, y)];
+            y += chunk.size.height;
+        }
+    }];
+}
+
 - (void)captureNextCell {
     if (self.captureIndex >= self.indexPaths.count) {
         [self finish];
@@ -1306,9 +1402,9 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     }
     NSArray<UIVisualEffectView *> *privacyBlurs = self.preset == NeoWCChatCapturePresetPrivacy ? NeoWCInstallPrivacyBlurs(cell) : @[];
     [cell layoutIfNeeded];
-    // Render the message cell itself. Capturing a rect from the controller also captures
-    // transient multi-select sheets, loading overlays and transition remnants.
-    UIImage *image = NeoWCSnapshotMessageCell(cell, self.bodyBackgroundColor);
+    // Capture from the real WeChat window only while the row is inside the unobscured chat
+    // viewport. Tall rows are split into viewport-sized pieces and stitched back together.
+    UIImage *image = [self captureVisibleCellAtIndexPath:path height:height];
     for (UIVisualEffectView *blur in privacyBlurs) [blur removeFromSuperview];
     [nameLabels enumerateObjectsUsingBlock:^(UIView *label, NSUInteger index, __unused BOOL *stop) {
         label.hidden = hiddenStates[index].boolValue;
@@ -1373,7 +1469,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
                 [self.headerImage drawInRect:CGRectMake(0.0, -crop, width, self.headerImage.size.height)];
                 y += pageHeaderHeight;
             }
-            if (self.backgroundImage && bodyHeight > 0.0) [self.backgroundImage drawInRect:CGRectMake(0.0, y, width, bodyHeight)];
+            if (self.backgroundImage && bodyHeight > 0.0) NeoWCDrawChatBackground(self.backgroundImage, CGRectMake(0.0, y, width, bodyHeight));
             for (NSUInteger index = 0; index < group.count; index++) {
                 if (index > 0) y += messageSpacing;
                 UIImage *image = group[index];
