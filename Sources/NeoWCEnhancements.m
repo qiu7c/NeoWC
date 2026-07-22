@@ -25,7 +25,6 @@ NSString *const NeoWCAntiRevokeLocalTextColorKey = @"com.qiu7c.neowc.message.ant
 NSString *const NeoWCAntiRevokeSideTextColorKey = @"com.qiu7c.neowc.message.anti-revoke.side-text-color";
 NSString *const NeoWCAntiRevokePersistRecordsKey = @"com.qiu7c.neowc.message.anti-revoke.persist-records";
 NSString *const NeoWCImageEditQuickSendEnabledKey = @"com.qiu7c.neowc.enhance.image-edit-quick-send";
-NSString *const NeoWCImageEditReturnToChatKey = @"com.qiu7c.neowc.enhance.image-edit-return-to-chat";
 NSString *const NeoWCInputSwipeActionsEnabledKey = @"com.qiu7c.neowc.chat.input-swipe-actions";
 NSString *const NeoWCMultiSelectExportEnabledKey = @"com.qiu7c.neowc.enhance.multi-select-export";
 NSString *const NeoWCMultiSelectExportTextKey = @"com.qiu7c.neowc.enhance.multi-select-export.text";

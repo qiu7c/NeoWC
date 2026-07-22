@@ -24,7 +24,6 @@ FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeLocalTextColorKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideTextColorKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokePersistRecordsKey;
 FOUNDATION_EXPORT NSString *const NeoWCImageEditQuickSendEnabledKey;
-FOUNDATION_EXPORT NSString *const NeoWCImageEditReturnToChatKey;
 FOUNDATION_EXPORT NSString *const NeoWCInputSwipeActionsEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCMultiSelectExportEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCMultiSelectExportTextKey;

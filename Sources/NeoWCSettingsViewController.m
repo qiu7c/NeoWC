@@ -175,7 +175,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCAntiRevokeSideOffsetYKey: @10.0,
         NeoWCAntiRevokePersistRecordsKey: @NO,
         NeoWCImageEditQuickSendEnabledKey: @NO,
-        NeoWCImageEditReturnToChatKey: @YES,
         NeoWCInputSwipeActionsEnabledKey: @NO,
         NeoWCMomentsLikeHapticEnabledKey: @NO,
         NeoWCMomentsLikeHapticIntensityKey: @0.65,
@@ -276,7 +275,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     BOOL antiRevokeEnabled = antiRevokeValue ? [antiRevokeValue boolValue] : YES;
     BOOL notifySenderEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCAntiRevokeNotifySenderKey];
     BOOL stepOverrideEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCStepOverrideEnabledKey];
-    BOOL imageEditQuickSendEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCImageEditQuickSendEnabledKey];
     BOOL momentsLikeEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsDoubleTapLikeKey];
     BOOL momentsHapticEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsLikeHapticEnabledKey];
     BOOL multiSelectExportEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMultiSelectExportEnabledKey];
@@ -310,9 +308,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [messageItems addObject:item(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCRowKindSwitch, NeoWCGameSelectorKey, nil)];
     [messageItems addObject:item(@"输入框滑动操作", @"左滑清空，右滑从剪贴板粘贴", @"hand.draw", NeoWCRowKindSwitch, NeoWCInputSwipeActionsEnabledKey, nil)];
     [messageItems addObject:item(@"图片编辑快捷发送", @"在官方图片编辑完成菜单中增加发送到当前会话", @"photo.badge.arrow.down", NeoWCRowKindSwitch, NeoWCImageEditQuickSendEnabledKey, nil)];
-    if (imageEditQuickSendEnabled && [self isFeatureExpandedForKey:NeoWCImageEditQuickSendEnabledKey]) {
-        [messageItems addObject:item(@"发送后返回聊天", @"图片发送成功后退出编辑流程", @"arrow.uturn.backward", NeoWCRowKindSwitch, NeoWCImageEditReturnToChatKey, nil)];
-    }
     [messageItems addObject:item(@"多选消息导出", @"控制多选菜单中的复制、保存和分享功能", @"square.and.arrow.up.on.square", NeoWCRowKindSwitch, NeoWCMultiSelectExportEnabledKey, nil)];
     if (multiSelectExportEnabled && [self isFeatureExpandedForKey:NeoWCMultiSelectExportEnabledKey]) {
         [messageItems addObject:item(@"复制纯文本", @"只复制消息正文到剪贴板", @"doc.on.clipboard", NeoWCRowKindSwitch, NeoWCMultiSelectExportTextKey, nil)];
