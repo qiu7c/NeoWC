@@ -30,6 +30,9 @@
 - (BOOL)isContainButtonTitle:(NSString *)title;
 @end
 
+@interface SharePreConfirmSheetView : UIView
+@end
+
 @interface EditImageForwardAndEditLogicController : NSObject
 @end
 
@@ -104,11 +107,17 @@ static char NeoWCAntiRevokeOriginalSystemTextColorKey;
 static char NeoWCEditedImageKey;
 static char NeoWCEditConversationUserNameKey;
 static char NeoWCEditPresenterControllerKey;
-static char NeoWCQuickSendForwardLogicKey;
 static char NeoWCQuickSendPendingImageKey;
 static char NeoWCInputSwipeLeftRecognizerKey;
 static char NeoWCInputSwipeRightRecognizerKey;
 static __weak id NeoWCCurrentEditImageLogicController;
+
+static NSMutableSet *NeoWCActiveQuickSendSessions(void) {
+    static NSMutableSet *sessions;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ sessions = [NSMutableSet set]; });
+    return sessions;
+}
 
 static id NeoWCTweakSafeValue(id object, NSString *key) {
     if (!object || key.length == 0) return nil;
@@ -310,6 +319,70 @@ static UIViewController *NeoWCEditPresenterController(id logic) {
     return candidate;
 }
 
+@interface NeoWCQuickSendSession : NSObject
+@property (nonatomic, strong) id sourceLogic;
+@property (nonatomic, strong) id forwardLogic;
+@property (nonatomic, strong) id message;
+@property (nonatomic, strong) id contact;
+@property (nonatomic, strong) UIImage *image;
+@property (nonatomic, strong) UIViewController *presenter;
+@property (nonatomic, assign) BOOL finished;
+@property (nonatomic, assign) BOOL sendButtonTapped;
+- (void)finishSession;
+@end
+
+@implementation NeoWCQuickSendSession
+
+- (UIViewController *)getCurrentViewController { return self.presenter; }
+- (UIViewController *)GetCurrentViewController { return self.presenter; }
+- (BOOL)shouldShowSendSuccessView:(__unused id)logic { return YES; }
+
+- (void)OnForwardMessageSend:(id)logic {
+    if (self.finished) return;
+    id confirmSheet = NeoWCTweakSafeValue(self.forwardLogic, @"confirmSheetView");
+    BOOL confirmedBySheet = [NeoWCTweakSafeValue(confirmSheet, @"isClickedSend") boolValue];
+    if (!self.sendButtonTapped && !confirmedBySheet) {
+        NeoWCLog(@"快捷发送收到确认页准备回调，等待用户点击发送");
+        return;
+    }
+    SEL selector = NSSelectorFromString(@"OnForwardMessageSend:");
+    if ([self.sourceLogic respondsToSelector:selector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(self.sourceLogic, selector, logic ?: self.forwardLogic);
+    }
+    NeoWCLog(@"快捷发送已确认发送，结束图片编辑流程");
+    [self finishSession];
+}
+
+- (void)OnForwardMessageCancel:(id)logic {
+    if (self.finished) return;
+    SEL selector = NSSelectorFromString(@"OnForwardMessageCancel:");
+    if ([self.sourceLogic respondsToSelector:selector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(self.sourceLogic, selector, logic ?: self.forwardLogic);
+    }
+    NeoWCLog(@"快捷发送已取消，保留图片编辑流程");
+    [self finishSession];
+}
+
+- (void)OnForwardMessageConfirmCanceled:(id)logic {
+    [self OnForwardMessageCancel:logic];
+}
+
+- (void)finishSession {
+    if (self.finished) return;
+    self.finished = YES;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [NeoWCActiveQuickSendSessions() removeObject:self];
+        self.forwardLogic = nil;
+        self.sourceLogic = nil;
+        self.message = nil;
+        self.contact = nil;
+        self.image = nil;
+        self.presenter = nil;
+    });
+}
+
+@end
+
 static BOOL NeoWCSendEditedImageToCurrentConversation(id logic, NSString **failureReason) {
     UIImage *image = NeoWCEditedImageFromLogic(logic);
     NSString *userName = NeoWCConversationUserNameForEditLogic(logic);
@@ -341,15 +414,28 @@ static BOOL NeoWCSendEditedImageToCurrentConversation(id logic, NSString **failu
         if (failureReason) *failureReason = @"无法取得微信图片编辑页面";
         return NO;
     }
-    // Keep WeChat's editor as the delegate. Its official send/cancel callbacks own
-    // the editor lifecycle: confirmation first, dismissal only after a successful send.
-    ((void (*)(id, SEL, id))objc_msgSend)(forwardLogic, delegateSelector, logic);
+    NeoWCQuickSendSession *session = [NeoWCQuickSendSession new];
+    session.sourceLogic = logic;
+    session.forwardLogic = forwardLogic;
+    session.message = message;
+    session.contact = contact;
+    session.image = image;
+    session.presenter = presenter;
+    ((void (*)(id, SEL, id))objc_msgSend)(forwardLogic, delegateSelector, session);
     NeoWCTweakSetValue(forwardLogic, @"bSpecificContact", @YES);
     NeoWCTweakSetValue(forwardLogic, @"bPresent", @YES);
     NeoWCTweakSetValue(forwardLogic, @"bAnimation", @YES);
-    objc_setAssociatedObject(logic, &NeoWCQuickSendForwardLogicKey, forwardLogic, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [NeoWCActiveQuickSendSessions() addObject:session];
     NeoWCLog(@"快捷发送调用微信官方确认页：会话=%@ 页面=%@", userName, NSStringFromClass(presenter.class));
     ((void (*)(id, SEL, id, id, id, BOOL, BOOL))objc_msgSend)(forwardLogic, forwardSelector, @[message], nil, @[contact], NO, YES);
+    __weak NeoWCQuickSendSession *weakSession = session;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        NeoWCQuickSendSession *activeSession = weakSession;
+        if (activeSession && !activeSession.finished) {
+            NeoWCLog(@"快捷发送确认会话超时，释放保留资源");
+            [activeSession finishSession];
+        }
+    });
     return YES;
 }
 
@@ -998,17 +1084,56 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
-%hook MMInputToolView
+%hook SharePreConfirmSheetView
 
-- (void)layoutSubviews {
+- (void)onConfirmButtonClick {
+    id owner = NeoWCTweakSafeValue(self, @"delegate") ?: NeoWCTweakSafeValue(self, @"msgLogicController");
+    for (NeoWCQuickSendSession *session in [NeoWCActiveQuickSendSessions() copy]) {
+        if (session.forwardLogic == owner) session.sendButtonTapped = YES;
+    }
     %orig;
-    NeoWCApplyChatInputRoundingToToolView(self);
+}
+
+- (void)onCancelButtonClick {
+    id owner = NeoWCTweakSafeValue(self, @"delegate") ?: NeoWCTweakSafeValue(self, @"msgLogicController");
+    NSArray<NeoWCQuickSendSession *> *sessions = [NeoWCActiveQuickSendSessions() copy];
+    %orig;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        for (NeoWCQuickSendSession *session in sessions) {
+            if (!session.finished && session.forwardLogic == owner) [session OnForwardMessageCancel:owner];
+        }
+    });
+}
+
+%end
+
+%hook UIImageView
+
+- (void)setAccessibilityLabel:(NSString *)label {
+    %orig;
+    if ([label isEqualToString:@"免打扰"]) NeoWCUpdateChatMuteImageView(self);
 }
 
 - (void)didMoveToWindow {
     %orig;
+    if ([self.accessibilityLabel isEqualToString:@"免打扰"]) NeoWCUpdateChatMuteImageView(self);
+}
+
+- (void)setHidden:(BOOL)hidden {
+    if (!hidden && NeoWCShouldForceHideChatMuteImageView(self)) {
+        %orig(YES);
+        return;
+    }
+    %orig;
+}
+
+%end
+
+%hook MMInputToolView
+
+- (void)didMoveToWindow {
+    %orig;
     if (self.window) NeoWCApplyChatInputRoundingToToolView(self);
-    else NeoWCRestoreChatInputRoundingFromToolView(self);
 }
 
 %end

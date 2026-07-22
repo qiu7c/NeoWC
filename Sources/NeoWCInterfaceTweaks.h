@@ -11,3 +11,5 @@ FOUNDATION_EXPORT NSString *const NeoWCHideChatMuteIconKey;
 FOUNDATION_EXPORT void NeoWCApplyChatInputRoundingToToolView(UIView *inputToolView);
 FOUNDATION_EXPORT void NeoWCRestoreChatInputRoundingFromToolView(UIView *inputToolView);
 FOUNDATION_EXPORT void NeoWCUpdateChatMuteIconVisibility(UIViewController *controller);
+FOUNDATION_EXPORT void NeoWCUpdateChatMuteImageView(UIImageView *imageView);
+FOUNDATION_EXPORT BOOL NeoWCShouldForceHideChatMuteImageView(UIImageView *imageView);

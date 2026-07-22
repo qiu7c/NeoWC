@@ -7,11 +7,14 @@
 - 防撤回气泡旁提示恢复为消息 ViewModel 与气泡完成绑定后的主队列刷新，并在 Cell 重新进入窗口时补刷；同步刷新会在绑定未完成时把提示永久隐藏。提示层显式保持 alpha 与高 zPosition。
 - 功能子项折叠不再 `reloadSections` 带动整张分类卡片跳动，改为只淡入/淡出父开关紧随的子项，并无动画刷新父行圆角和箭头。
 - 新增插件管理快捷入口：可按需动态注册调试日志开关、调试悬浮窗开关、直达调试中心、直达防撤回记录；还可输入自定义入口名称与 Runtime 类名。`UIViewController` 子类直接注册，`UIView` 子类由 `NeoWCDynamicViewShortcutController` 承载。WCPluginsMgr 没有注销 API，因此关闭或更换已注册入口后需重启微信清理本次进程的旧入口。
-- 图片编辑快捷发送已能从 `EditImageAttr setEditedImage:` 取得最终编辑图；会话 ID 在编辑器存活时缓存。插件创建独立转发实例，但把微信原 `EditImageForwardAndEditLogicController` 作为代理，点击后立即进入官方确认流程，由微信在发送成功回调后退出编辑，取消确认则保留原编辑流程；不再等待聊天页或扫描 Window。
+- 图片编辑快捷发送已能从 `EditImageAttr setEditedImage:` 取得最终编辑图；会话 ID 在编辑器存活时缓存。插件为快捷发送创建完全隔离的 `NeoWCQuickSendSession`，强持有编辑图、消息、联系人、转发实例、编辑逻辑和承载页面，避免确认页停留后资源释放；只有实际发送回调才转交微信编辑逻辑关闭编辑，取消回调保留编辑流程。
+- 快捷发送额外关联 `SharePreConfirmSheetView`：只有对应确认页实际执行 `onConfirmButtonClick`（或 `isClickedSend` 已置位）后，发送回调才允许结束编辑；`onCancelButtonClick` 只走取消回调并释放隔离会话。会话资源最多保留 300 秒，解决确认页停留约十秒后图片或代理失效。
 - 设置分类重新整理：小游戏结果、图片编辑快捷发送和多选导出归入“聊天增强”；登录授权、朋友圈、运动和广告归入“常用增强”；新增“界面优化”。输入栏圆角的实机目标已确认为 `MMInputToolView.subviews.firstObject`（外部工具栏）和 `MMGrowTextView` 本身（内部输入框），内外均支持 0–40 自定义并可恢复微信原始 layer 状态；插件显示管理也移至该分类。
 - 聊天输入框新增局部滑动操作开关：仅给 `MMGrowTextView` 安装左右 `UISwipeGestureRecognizer`，左滑通过微信输入组件的文本更新路径清空内容，右滑调用内部 `UITextView paste:` 在当前光标位置粘贴；关闭后移除手势，不监听全局页面。
 - 调试视图选择器不再常驻顶部说明和取消按钮，也不再屏蔽顶部 64pt；启动时仅在底部显示约 1.35 秒的无交互 Toast，任意位置均可选择，双指轻点取消。
-- 界面优化新增“隐藏免打扰图标”：仅在 `BaseMsgContentViewController` 出现时遍历当前聊天内容与导航栏，隐藏 `accessibilityLabel == 免打扰` 的 `UIImageView`；保存原 hidden 状态，关闭功能或总开关后恢复，不做全局 `UIImageView` Hook。
+- 界面优化新增“隐藏免打扰图标”：页面进入前会遍历当前聊天内容与导航栏；同时对 `UIImageView` 仅精确匹配 `accessibilityLabel == 免打扰` 的设置、入窗和取消隐藏行为，确保首帧不可见。保存原 hidden 状态，关闭功能或总开关后恢复。
+- 设置页带子项开关关闭时，折叠箭头改为透明但保留布局占位，避免 UISwitch 因 Stack 重新排版向左跳动。
+- 输入栏圆角不再 Hook `MMInputToolView layoutSubviews`，也不在退出 Window 时改写 Layer；只在工具栏进入 Window 时同步应用一次，降低聊天转场和复用期间卡住的风险。
 - 设置页子选项折叠：带子设置的功能开启时自动展开；主功能开启后可轻点该行卡片手动收起/展开，右侧使用方向箭头提示状态，折叠状态独立保存且不改变功能开关。
 - 防撤回提示外观：消息下方模板改为全宽多行编辑页并支持自定义文字颜色；气泡旁提示增加系统颜色选择器，位置既可拖动也可直接输入 X/Y 数值；设置卡片内部取消分割线。
 - 朋友圈双击点赞反馈：点赞后在双击触点显示约 0.52 秒的爱心弹出、轻微上浮和淡出动画；震动三档统一使用中等触感风格并压缩为 0.58 / 0.76 / 0.90，解决轻档无感和重档过猛。
@@ -50,7 +53,7 @@
 - 成功后显示“图片已发送”。
 - 快捷发送不再提供“发送后返回聊天”子开关；生命周期完全跟随微信官方编辑转发逻辑。
 - 2026-07-19 回归修复：移除对全局 `ForwardMessageLogicController` 的全部 Hook，避免干扰微信官方编辑图片转发。
-- 快速发送不再使用 `NeoWCImageQuickSendDelegate`、Window 扫描或后台重试；新转发实例仅处理指定联系人，代理仍为微信原图片编辑逻辑，避免干扰官方“转发给朋友”。
+- 快速发送不使用 Window 扫描或页面重试；新转发实例仅处理指定联系人并由独立 `NeoWCQuickSendSession` 承担代理，官方“转发给朋友”的实例和代理不被修改。
 - 点击“发送到当前会话”时同步调用官方确认页；只有确认发送成功后才退出编辑模式。
 - 根因修复：禁止在 `processEditImage:` 前后主动调用 `getDisplayImage:`；改为 Hook 微信自身对 `getDisplayImage:` 的正常调用并旁路保存返回图片，避免重复消费编辑结果导致官方转发也失效。
 - 2026-07-22 再次确认官方转发隔离：已完全移除 `processEditImage:`、`getDisplayImage:`、`getEditImageAttr` Hook；只在功能开启时监听编辑完成入口与 `EditImageAttr setEditedImage:` / `setEditedImages:` 写入。若点击时图片尚未生成，则在 setter 写入后续接一次官方确认流程；官方图片生成、联系人选择和确认页逻辑不再经过 NeoWC。

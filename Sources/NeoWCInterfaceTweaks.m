@@ -123,27 +123,37 @@ void NeoWCRestoreChatInputRoundingFromToolView(UIView *inputToolView) {
     if (outerBar != growTextView) NeoWCSetRoundedState(outerBar, NO, 0.0);
 }
 
-static void NeoWCUpdateMuteIconInView(UIView *view, BOOL hideIcon) {
-    if (!view) return;
-    NSNumber *savedHidden = objc_getAssociatedObject(view, &NeoWCOriginalMuteIconHiddenKey);
-    BOOL isMuteIcon = [view isKindOfClass:[UIImageView class]] && [view.accessibilityLabel isEqualToString:@"免打扰"];
-    if (hideIcon && isMuteIcon) {
+BOOL NeoWCShouldForceHideChatMuteImageView(UIImageView *imageView) {
+    if (![imageView.accessibilityLabel isEqualToString:@"免打扰"]) return NO;
+    [[NSUserDefaults standardUserDefaults] registerDefaults:@{ NeoWCHideChatMuteIconKey: @NO }];
+    return NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey);
+}
+
+void NeoWCUpdateChatMuteImageView(UIImageView *imageView) {
+    if (!imageView) return;
+    NSNumber *savedHidden = objc_getAssociatedObject(imageView, &NeoWCOriginalMuteIconHiddenKey);
+    if (NeoWCShouldForceHideChatMuteImageView(imageView)) {
         if (!savedHidden) {
-            objc_setAssociatedObject(view, &NeoWCOriginalMuteIconHiddenKey, @(view.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(imageView, &NeoWCOriginalMuteIconHiddenKey, @(imageView.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
-        view.hidden = YES;
-    } else if (!hideIcon && savedHidden) {
-        view.hidden = savedHidden.boolValue;
-        objc_setAssociatedObject(view, &NeoWCOriginalMuteIconHiddenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        imageView.hidden = YES;
+    } else if (savedHidden) {
+        imageView.hidden = savedHidden.boolValue;
+        objc_setAssociatedObject(imageView, &NeoWCOriginalMuteIconHiddenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    for (UIView *subview in view.subviews) NeoWCUpdateMuteIconInView(subview, hideIcon);
+}
+
+static void NeoWCUpdateMuteIconInView(UIView *view) {
+    if (!view) return;
+    if ([view isKindOfClass:[UIImageView class]]) NeoWCUpdateChatMuteImageView((UIImageView *)view);
+    for (UIView *subview in view.subviews) NeoWCUpdateMuteIconInView(subview);
 }
 
 void NeoWCUpdateChatMuteIconVisibility(UIViewController *controller) {
     if (!controller.isViewLoaded) return;
     [[NSUserDefaults standardUserDefaults] registerDefaults:@{ NeoWCHideChatMuteIconKey: @NO }];
     BOOL hideIcon = NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey);
-    NeoWCUpdateMuteIconInView(controller.view, hideIcon);
-    NeoWCUpdateMuteIconInView(controller.navigationController.navigationBar, hideIcon);
+    NeoWCUpdateMuteIconInView(controller.view);
+    NeoWCUpdateMuteIconInView(controller.navigationController.navigationBar);
     if (hideIcon) NeoWCCompatibilityMarkTriggered(@"hide-chat-mute-icon");
 }

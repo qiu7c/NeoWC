@@ -239,7 +239,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             NeoWCMomentsDoubleTapLikeKey,
             NeoWCMomentsLikeHapticEnabledKey,
             NeoWCStepOverrideEnabledKey,
-            NeoWCImageEditQuickSendEnabledKey,
             NeoWCMultiSelectExportEnabledKey,
             NeoWCPluginShortcutsEnabledKey,
             NeoWCPluginShortcutCustomPageKey,
@@ -601,7 +600,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             UIImageView *chevron = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.down"]];
             chevron.tintColor = [UIColor tertiaryLabelColor];
             chevron.contentMode = UIViewContentModeScaleAspectFit;
-            chevron.hidden = !toggle.isOn;
+            chevron.hidden = NO;
+            chevron.alpha = toggle.isOn ? 1.0 : 0.0;
             chevron.transform = [self isFeatureExpandedForKey:item.defaultsKey] ? CGAffineTransformIdentity : CGAffineTransformMakeRotation((CGFloat)-M_PI_2);
             [chevron.widthAnchor constraintEqualToConstant:11.0].active = YES;
             [chevron.heightAnchor constraintEqualToConstant:15.0].active = YES;
@@ -675,7 +675,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
                               [item.defaultsKey isEqualToString:NeoWCMomentsDoubleTapLikeKey] ||
                               [item.defaultsKey isEqualToString:NeoWCMomentsLikeHapticEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCMultiSelectExportEnabledKey] ||
-                              [item.defaultsKey isEqualToString:NeoWCImageEditQuickSendEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCPluginShortcutsEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCPluginShortcutCustomPageKey] ||
                               [item.defaultsKey isEqualToString:NeoWCChatInputRoundingEnabledKey] ||
