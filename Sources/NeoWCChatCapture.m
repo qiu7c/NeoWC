@@ -42,6 +42,11 @@ static void NeoWCCallVoid(id object, SEL selector) {
     }
 }
 
+static BOOL NeoWCCallBool(id object, SEL selector) {
+    if (!object || !selector || ![object respondsToSelector:selector]) return NO;
+    return ((BOOL (*)(id, SEL))objc_msgSend)(object, selector);
+}
+
 static UIImage *NeoWCSnapshotView(UIView *view, CGSize size) {
     if (!view || size.width <= 0.0 || size.height <= 0.0) return nil;
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
@@ -66,6 +71,22 @@ static UIImage *NeoWCSnapshotOpaqueView(UIView *view, UIColor *backgroundColor) 
         UIRectFill((CGRect){CGPointZero, view.bounds.size});
         BOOL drew = [view drawViewHierarchyInRect:(CGRect){CGPointZero, view.bounds.size} afterScreenUpdates:YES];
         if (!drew) [view.layer renderInContext:context.CGContext];
+    }];
+}
+
+static UIImage *NeoWCSnapshotMessageCell(UIView *cell, UIColor *backgroundColor) {
+    if (!cell || CGRectIsEmpty(cell.bounds)) return nil;
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
+    format.opaque = YES;
+    format.scale = MAX(1.0, UIScreen.mainScreen.scale);
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:cell.bounds.size format:format];
+    return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        [(backgroundColor ?: UIColor.secondarySystemBackgroundColor) setFill];
+        UIRectFill((CGRect){CGPointZero, cell.bounds.size});
+        // drawViewHierarchy captures the visible screen backing store. A tall message crossing
+        // the navigation/status-bar boundary can therefore contain a 44/97 pt horizontal seam.
+        // Rendering the layer is independent of the current viewport and captures full-height cells.
+        [cell.layer renderInContext:context.CGContext];
     }];
 }
 
@@ -906,11 +927,13 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 @property (nonatomic, strong) UIImage *backgroundImage;
 @property (nonatomic, strong) UIColor *bodyBackgroundColor;
 @property (nonatomic, assign) NSUInteger captureIndex;
+@property (nonatomic, assign) NSUInteger interfaceSettleAttempt;
 @property (nonatomic, assign) NeoWCChatCapturePreset preset;
 - (instancetype)initWithController:(UIViewController *)controller;
 - (void)start;
 - (void)beginCaptureWithIndexPaths:(NSArray<NSIndexPath *> *)indexPaths preset:(NeoWCChatCapturePreset)preset;
 - (void)beginCaptureAfterInterfaceSettled;
+- (void)waitForChatInterface;
 - (void)cancelPreflight;
 - (void)captureNextCell;
 - (NSArray<UIImage *> *)composeImages;
@@ -1183,13 +1206,9 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
         [self showError:@"请先在聊天中选择至少一条消息。"];
         return;
     }
-    NeoWCChatCaptureRangeViewController *range = [NeoWCChatCaptureRangeViewController new];
-    range.session = self;
-    range.allIndexPaths = self.indexPaths;
-    UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:range];
-    navigation.modalPresentationStyle = UIModalPresentationPageSheet;
-    navigation.modalInPresentation = YES;
-    [self.controller presentViewController:navigation animated:YES completion:nil];
+    NSInteger presetValue = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCChatCapturePresetKey];
+    NeoWCChatCapturePreset preset = (NeoWCChatCapturePreset)MIN(2, MAX(0, presetValue));
+    [self beginCaptureWithIndexPaths:self.indexPaths preset:preset];
 }
 
 - (void)cancelPreflight {
@@ -1203,6 +1222,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     self.preset = preset;
     self.cellImages = [NSMutableArray array];
     self.captureIndex = 0;
+    self.interfaceSettleAttempt = 0;
     self.originalOffset = self.tableView.contentOffset;
     UIEdgeInsets originalInset = self.tableView.adjustedContentInset;
     CGFloat originalMinimumOffsetY = -originalInset.top;
@@ -1211,15 +1231,27 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     self.originallyAtBottom = self.originalDistanceFromBottom <= 80.0;
     NeoWCCallVoid(self.controller, NSSelectorFromString(@"exitMultiSelectMode"));
     __weak typeof(self) weakSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.55 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (!weakSelf || weakSelf.controller.presentedViewController || weakSelf.controller.transitionCoordinator) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [weakSelf beginCaptureAfterInterfaceSettled];
-            });
-            return;
-        }
-        [weakSelf beginCaptureAfterInterfaceSettled];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.65 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [weakSelf waitForChatInterface];
     });
+}
+
+- (void)waitForChatInterface {
+    if (!self.controller) return;
+    BOOL multiSelectVisible = NeoWCCallBool(self.controller, NSSelectorFromString(@"isInMultiSelectMsg")) ||
+                              NeoWCCallBool(self.controller, NSSelectorFromString(@"isMultiSelectMode"));
+    BOOL transitioning = self.controller.presentedViewController != nil || self.controller.transitionCoordinator != nil;
+    if ((multiSelectVisible || transitioning) && self.interfaceSettleAttempt < 16) {
+        self.interfaceSettleAttempt += 1;
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [weakSelf waitForChatInterface];
+        });
+        return;
+    }
+    // Give input toolbar and navigation bar one final run loop to restore their normal frames.
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf beginCaptureAfterInterfaceSettled]; });
 }
 
 - (void)beginCaptureAfterInterfaceSettled {
@@ -1276,7 +1308,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     [cell layoutIfNeeded];
     // Render the message cell itself. Capturing a rect from the controller also captures
     // transient multi-select sheets, loading overlays and transition remnants.
-    UIImage *image = NeoWCSnapshotOpaqueView(cell, self.bodyBackgroundColor);
+    UIImage *image = NeoWCSnapshotMessageCell(cell, self.bodyBackgroundColor);
     for (UIVisualEffectView *blur in privacyBlurs) [blur removeFromSuperview];
     [nameLabels enumerateObjectsUsingBlock:^(UIView *label, NSUInteger index, __unused BOOL *stop) {
         label.hidden = hiddenStates[index].boolValue;
@@ -1289,6 +1321,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 
 - (NSArray<UIImage *> *)composeImages {
     CGFloat width = CGRectGetWidth(self.tableView.bounds);
+    const CGFloat messageSpacing = 8.0;
     CGFloat crop = MAX(0.0, [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCChatCaptureCropTopPointsKey]);
     CGFloat headerHeight = self.headerImage ? MAX(0.0, self.headerImage.size.height - crop) : 0.0;
     CGFloat footerHeight = self.footerImage.size.height;
@@ -1300,13 +1333,15 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     NSMutableArray<UIImage *> *current = [NSMutableArray array];
     CGFloat currentHeight = 0.0;
     for (UIImage *image in self.cellImages) {
-        if (current.count > 0 && currentHeight + image.size.height > pageBodyLimit) {
+        CGFloat spacing = current.count > 0 ? messageSpacing : 0.0;
+        if (current.count > 0 && currentHeight + spacing + image.size.height > pageBodyLimit) {
             [groups addObject:[current copy]];
             current = [NSMutableArray array];
             currentHeight = 0.0;
+            spacing = 0.0;
         }
         [current addObject:image];
-        currentHeight += image.size.height;
+        currentHeight += spacing + image.size.height;
     }
     if (current.count > 0) [groups addObject:[current copy]];
     if (!autoSplit && groups.count > 1) return @[];
@@ -1316,7 +1351,10 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
         BOOL firstPage = groupIndex == 0;
         BOOL lastPage = groupIndex + 1 == groups.count;
         CGFloat bodyHeight = 0.0;
-        for (UIImage *image in group) bodyHeight += image.size.height;
+        for (NSUInteger index = 0; index < group.count; index++) {
+            if (index > 0) bodyHeight += messageSpacing;
+            bodyHeight += group[index].size.height;
+        }
         CGFloat pageHeaderHeight = firstPage ? headerHeight : 0.0;
         CGFloat pageFooterHeight = lastPage ? footerHeight : 0.0;
         CGFloat totalHeight = pageHeaderHeight + bodyHeight + pageFooterHeight;
@@ -1336,7 +1374,9 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
                 y += pageHeaderHeight;
             }
             if (self.backgroundImage && bodyHeight > 0.0) [self.backgroundImage drawInRect:CGRectMake(0.0, y, width, bodyHeight)];
-            for (UIImage *image in group) {
+            for (NSUInteger index = 0; index < group.count; index++) {
+                if (index > 0) y += messageSpacing;
+                UIImage *image = group[index];
                 [image drawInRect:CGRectMake(0.0, y, width, image.size.height)];
                 y += image.size.height;
             }

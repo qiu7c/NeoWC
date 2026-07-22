@@ -53,6 +53,11 @@
 - (void)neowc_refreshAntiRevokeSidePrompt;
 @end
 
+@interface SystemMessageCellView : UIView
+- (id)getRichTextView;
+- (void)neowc_applyAntiRevokeTextColor;
+@end
+
 @interface CMessageWrap : NSObject
 @property (nonatomic, assign) NSUInteger m_uiMessageType;
 @property (nonatomic, assign) NSUInteger m_uiGameType;
@@ -86,8 +91,8 @@ static char NeoWCMomentsDoubleTapRecognizerKey;
 static char NeoWCGameSelectorPresentedKey;
 static char NeoWCChatCaptureBuildingMenuKey;
 static char NeoWCAntiRevokeSideLabelKey;
+static char NeoWCAntiRevokeOriginalSystemTextColorKey;
 static char NeoWCEditedImageKey;
-static char NeoWCEditResultKey;
 static __weak id NeoWCCurrentEditImageLogicController;
 
 static NSMutableSet *NeoWCActiveImageQuickSendDelegates(void) {
@@ -137,15 +142,6 @@ static NSString *NeoWCConversationUserNameForEditLogic(id logic) {
 static UIImage *NeoWCEditedImageFromLogic(id logic) {
     UIImage *image = objc_getAssociatedObject(logic, &NeoWCEditedImageKey);
     if ([image isKindOfClass:[UIImage class]]) return image;
-    id editResult = objc_getAssociatedObject(logic, &NeoWCEditResultKey);
-    SEL displaySelector = sel_registerName("getDisplayImage:");
-    if (editResult && [logic respondsToSelector:displaySelector]) {
-        image = ((UIImage *(*)(id, SEL, id))objc_msgSend)(logic, displaySelector, editResult);
-        if ([image isKindOfClass:[UIImage class]]) {
-            objc_setAssociatedObject(logic, &NeoWCEditedImageKey, image, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            return image;
-        }
-    }
     NSArray<NSString *> *keys = @[@"editedImage", @"outputImage", @"resultImage"];
     for (NSString *key in keys) {
         id candidate = NeoWCTweakSafeValue(logic, key);
@@ -353,6 +349,48 @@ static void NeoWCSynchronizeVisibleMomentsCells(void) {
     });
 }
 
+static void NeoWCShowMomentsHeart(WCTimeLineCellView *cell) {
+    UITapGestureRecognizer *recognizer = objc_getAssociatedObject(cell, &NeoWCMomentsDoubleTapRecognizerKey);
+    UIWindow *window = cell.window;
+    if (!window || !recognizer) return;
+    CGPoint point = [recognizer locationInView:window];
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:34.0 weight:UIImageSymbolWeightSemibold];
+    UIImageView *heart = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"heart.fill" withConfiguration:configuration]];
+    heart.tintColor = [UIColor colorWithRed:0.96 green:0.25 blue:0.34 alpha:1.0];
+    heart.contentMode = UIViewContentModeScaleAspectFit;
+    heart.bounds = CGRectMake(0.0, 0.0, 44.0, 44.0);
+    heart.center = point;
+    heart.alpha = 0.0;
+    heart.transform = CGAffineTransformMakeScale(0.52, 0.52);
+    heart.userInteractionEnabled = NO;
+    [window addSubview:heart];
+    [UIView animateKeyframesWithDuration:0.52 delay:0.0 options:UIViewKeyframeAnimationOptionCalculationModeCubic | UIViewAnimationOptionAllowUserInteraction animations:^{
+        [UIView addKeyframeWithRelativeStartTime:0.0 relativeDuration:0.30 animations:^{
+            heart.alpha = 1.0;
+            heart.transform = CGAffineTransformConcat(CGAffineTransformMakeTranslation(0.0, -5.0), CGAffineTransformMakeScale(1.12, 1.12));
+        }];
+        [UIView addKeyframeWithRelativeStartTime:0.30 relativeDuration:0.32 animations:^{
+            heart.transform = CGAffineTransformConcat(CGAffineTransformMakeTranslation(0.0, -12.0), CGAffineTransformIdentity);
+        }];
+        [UIView addKeyframeWithRelativeStartTime:0.62 relativeDuration:0.38 animations:^{
+            heart.alpha = 0.0;
+            heart.transform = CGAffineTransformConcat(CGAffineTransformMakeTranslation(0.0, -24.0), CGAffineTransformMakeScale(0.88, 0.88));
+        }];
+    } completion:^(__unused BOOL finished) {
+        [heart removeFromSuperview];
+    }];
+}
+
+static void NeoWCPlayMomentsLikeHaptic(NSUserDefaults *defaults) {
+    if (![defaults boolForKey:NeoWCMomentsLikeHapticEnabledKey]) return;
+    CGFloat savedIntensity = [defaults objectForKey:NeoWCMomentsLikeHapticIntensityKey] ? [defaults doubleForKey:NeoWCMomentsLikeHapticIntensityKey] : 0.65;
+    CGFloat calibratedIntensity = savedIntensity < 0.34 ? 0.58 : (savedIntensity < 0.75 ? 0.76 : 0.90);
+    UIImpactFeedbackGenerator *generator = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+    [generator prepare];
+    if (@available(iOS 13.0, *)) [generator impactOccurredWithIntensity:calibratedIntensity];
+    else [generator impactOccurred];
+}
+
 static UIButton *NeoWCFindButton(NSString *title, UIView *rootView) {
     if (!rootView || title.length == 0) return nil;
     for (UIView *subview in rootView.subviews) {
@@ -406,6 +444,11 @@ static void NeoWCRefreshAntiRevokeCellsInView(UIView *view) {
         if ([view respondsToSelector:refreshSelector]) ((void (*)(id, SEL))objc_msgSend)(view, refreshSelector);
         [view setNeedsLayout];
         [view layoutIfNeeded];
+    }
+    Class systemCellClass = NSClassFromString(@"SystemMessageCellView");
+    SEL systemRefreshSelector = NSSelectorFromString(@"neowc_applyAntiRevokeTextColor");
+    if (systemCellClass && [view isKindOfClass:systemCellClass] && [view respondsToSelector:systemRefreshSelector]) {
+        ((void (*)(id, SEL))objc_msgSend)(view, systemRefreshSelector);
     }
     for (UIView *subview in view.subviews) NeoWCRefreshAntiRevokeCellsInView(subview);
 }
@@ -771,20 +814,25 @@ static void NeoWCRegisterPlugin(void) {
 - (void)OnClickEditImageDoneBarButton {
     NeoWCCurrentEditImageLogicController = self;
     objc_setAssociatedObject(self, &NeoWCEditedImageKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(self, &NeoWCEditResultKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     %orig;
 }
 
-- (void)processEditImage:(id)editResult {
+- (void)processEditImage:(void *)editResult {
     NeoWCCompatibilityMarkTriggered(@"image-edit");
     NeoWCCurrentEditImageLogicController = self;
-    if (editResult) objc_setAssociatedObject(self, &NeoWCEditResultKey, editResult, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    id editedImage = NeoWCTweakSafeValue(editResult, @"editedImage");
-    if ([editedImage isKindOfClass:[UIImage class]]) objc_setAssociatedObject(self, &NeoWCEditedImageKey, editedImage, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     %orig;
+    if (!objc_getAssociatedObject(self, &NeoWCEditedImageKey) && editResult) {
+        SEL displaySelector = sel_registerName("getDisplayImage:");
+        if ([self respondsToSelector:displaySelector]) {
+            UIImage *image = ((UIImage *(*)(id, SEL, void *))objc_msgSend)(self, displaySelector, editResult);
+            if ([image isKindOfClass:[UIImage class]]) {
+                objc_setAssociatedObject(self, &NeoWCEditedImageKey, image, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            }
+        }
+    }
 }
 
-- (UIImage *)getDisplayImage:(id)editResult {
+- (UIImage *)getDisplayImage:(void *)editResult {
     UIImage *officialImage = %orig;
     if ([officialImage isKindOfClass:[UIImage class]]) objc_setAssociatedObject(self, &NeoWCEditedImageKey, officialImage, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     return officialImage;
@@ -965,15 +1013,9 @@ static void NeoWCRegisterPlugin(void) {
 - (void)neowc_handleMomentsDoubleTap {
     if (!NeoWCEnhancementEnabled(NeoWCMomentsDoubleTapLikeKey)) return;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    if ([defaults boolForKey:NeoWCMomentsLikeHapticEnabledKey]) {
-        CGFloat intensity = [defaults objectForKey:NeoWCMomentsLikeHapticIntensityKey] ? [defaults doubleForKey:NeoWCMomentsLikeHapticIntensityKey] : 0.65;
-        UIImpactFeedbackStyle style = intensity < 0.34 ? UIImpactFeedbackStyleLight : (intensity < 0.75 ? UIImpactFeedbackStyleMedium : UIImpactFeedbackStyleHeavy);
-        UIImpactFeedbackGenerator *generator = [[UIImpactFeedbackGenerator alloc] initWithStyle:style];
-        [generator prepare];
-        if (@available(iOS 13.0, *)) [generator impactOccurredWithIntensity:MIN(1.0, MAX(0.1, intensity))];
-        else [generator impactOccurred];
-    }
     [self onAccessibilityLike];
+    NeoWCShowMomentsHeart(self);
+    NeoWCPlayMomentsLikeHaptic(defaults);
     NeoWCLog(@"已通过双击点赞朋友圈");
 }
 
@@ -1011,7 +1053,11 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap {
     NeoWCCompatibilityMarkTriggered(@"anti-revoke");
-    if (NeoWCHandleRevokeMessage(self, wrap)) return;
+    @try {
+        if (NeoWCHandleRevokeMessage(self, wrap)) return;
+    } @catch (NSException *exception) {
+        NeoWCLog(@"防撤回兼容保护已回退微信原逻辑：%@", exception.reason ?: exception.name);
+    }
     %orig;
 }
 
@@ -1076,10 +1122,8 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)setViewModel:(id)viewModel {
     %orig;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self neowc_refreshAntiRevokeSidePrompt];
-        [self setNeedsLayout];
-    });
+    [self neowc_refreshAntiRevokeSidePrompt];
+    [self setNeedsLayout];
 }
 
 - (void)updateStatus {
@@ -1116,6 +1160,7 @@ static void NeoWCRegisterPlugin(void) {
     }
     label.hidden = NO;
     label.text = prompt;
+    label.textColor = NeoWCColorForDefaultsKey(NeoWCAntiRevokeSideTextColorKey, UIColor.tertiaryLabelColor);
 
     id bubble = nil;
     SEL bubbleSelector = NSSelectorFromString(@"getBgImageView");
@@ -1147,6 +1192,40 @@ static void NeoWCRegisterPlugin(void) {
     UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
     label.hidden = YES;
     label.text = nil;
+}
+
+%end
+
+%hook SystemMessageCellView
+
+- (void)layoutSubviews {
+    %orig;
+    [self neowc_applyAntiRevokeTextColor];
+}
+
+%new
+- (void)neowc_applyAntiRevokeTextColor {
+    id viewModel = NeoWCTweakSafeValue(self, @"viewModel");
+    id message = NeoWCTweakSafeValue(viewModel, @"messageWrap");
+    id richTextView = [self respondsToSelector:@selector(getRichTextView)] ? [self getRichTextView] : NeoWCTweakSafeValue(self, @"m_richTextView");
+    if (!richTextView) return;
+    UIColor *originalColor = objc_getAssociatedObject(richTextView, &NeoWCAntiRevokeOriginalSystemTextColorKey);
+    if (!originalColor) {
+        id currentColor = NeoWCTweakSafeValue(richTextView, @"textColor");
+        if (![currentColor isKindOfClass:[UIColor class]]) currentColor = NeoWCTweakSafeValue(richTextView, @"oTextColor");
+        if ([currentColor isKindOfClass:[UIColor class]]) {
+            originalColor = currentColor;
+            objc_setAssociatedObject(richTextView, &NeoWCAntiRevokeOriginalSystemTextColorKey, originalColor, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    }
+    UIColor *color = NeoWCAntiRevokeIsLocalPromptMessage(message)
+        ? NeoWCColorForDefaultsKey(NeoWCAntiRevokeLocalTextColorKey, UIColor.secondaryLabelColor)
+        : originalColor;
+    if (color) {
+        NeoWCTweakSetValue(richTextView, @"textColor", color);
+        NeoWCTweakSetValue(richTextView, @"oTextColor", color);
+        if ([richTextView isKindOfClass:[UIView class]]) [(UIView *)richTextView setNeedsDisplay];
+    }
 }
 
 %end

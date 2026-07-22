@@ -1,4 +1,4 @@
-#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 FOUNDATION_EXPORT NSString *const NeoWCAutoDeviceLoginKey;
 FOUNDATION_EXPORT NSString *const NeoWCAutoGameAuthorizeKey;
@@ -20,6 +20,8 @@ FOUNDATION_EXPORT NSString *const NeoWCAntiRevokePromptStyleKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideTextKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideOffsetXKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideOffsetYKey;
+FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeLocalTextColorKey;
+FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideTextColorKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokePersistRecordsKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatCaptureEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCImageEditQuickSendEnabledKey;
@@ -44,3 +46,5 @@ FOUNDATION_EXPORT NSString *const NeoWCChatCaptureWatermarkOpacityKey;
 FOUNDATION_EXPORT NSString *const NeoWCEnhancementDidChangeNotification;
 
 FOUNDATION_EXPORT BOOL NeoWCEnhancementEnabled(NSString *key);
+FOUNDATION_EXPORT UIColor *NeoWCColorForDefaultsKey(NSString *key, UIColor *fallbackColor);
+FOUNDATION_EXPORT NSString *NeoWCHexStringFromColor(UIColor *color);

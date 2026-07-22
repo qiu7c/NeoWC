@@ -1,4 +1,5 @@
 #import "NeoWCEnhancements.h"
+#import <math.h>
 
 NSString *const NeoWCAutoDeviceLoginKey = @"com.qiu7c.neowc.enhance.auto-device-login";
 NSString *const NeoWCAutoGameAuthorizeKey = @"com.qiu7c.neowc.enhance.auto-game-authorize";
@@ -20,6 +21,8 @@ NSString *const NeoWCAntiRevokePromptStyleKey = @"com.qiu7c.neowc.message.anti-r
 NSString *const NeoWCAntiRevokeSideTextKey = @"com.qiu7c.neowc.message.anti-revoke.side-text";
 NSString *const NeoWCAntiRevokeSideOffsetXKey = @"com.qiu7c.neowc.message.anti-revoke.side-offset-x";
 NSString *const NeoWCAntiRevokeSideOffsetYKey = @"com.qiu7c.neowc.message.anti-revoke.side-offset-y";
+NSString *const NeoWCAntiRevokeLocalTextColorKey = @"com.qiu7c.neowc.message.anti-revoke.local-text-color";
+NSString *const NeoWCAntiRevokeSideTextColorKey = @"com.qiu7c.neowc.message.anti-revoke.side-text-color";
 NSString *const NeoWCAntiRevokePersistRecordsKey = @"com.qiu7c.neowc.message.anti-revoke.persist-records";
 NSString *const NeoWCChatCaptureEnabledKey = @"com.qiu7c.neowc.enhance.chat-capture";
 NSString *const NeoWCImageEditQuickSendEnabledKey = @"com.qiu7c.neowc.enhance.image-edit-quick-send";
@@ -42,6 +45,28 @@ NSString *const NeoWCChatCaptureWatermarkTextKey = @"com.qiu7c.neowc.chat-captur
 NSString *const NeoWCChatCaptureWatermarkStyleKey = @"com.qiu7c.neowc.chat-capture.watermark-style";
 NSString *const NeoWCChatCaptureWatermarkOpacityKey = @"com.qiu7c.neowc.chat-capture.watermark-opacity";
 NSString *const NeoWCEnhancementDidChangeNotification = @"NeoWCEnhancementDidChangeNotification";
+
+UIColor *NeoWCColorForDefaultsKey(NSString *key, UIColor *fallbackColor) {
+    NSString *hex = [[NSUserDefaults standardUserDefaults] stringForKey:key];
+    if (![hex isKindOfClass:[NSString class]]) return fallbackColor;
+    NSString *value = [[hex stringByReplacingOccurrencesOfString:@"#" withString:@""] uppercaseString];
+    if (value.length != 6 && value.length != 8) return fallbackColor;
+    unsigned long long rgba = 0;
+    if (![[NSScanner scannerWithString:value] scanHexLongLong:&rgba]) return fallbackColor;
+    CGFloat red = ((rgba >> (value.length == 8 ? 24 : 16)) & 0xFF) / 255.0;
+    CGFloat green = ((rgba >> (value.length == 8 ? 16 : 8)) & 0xFF) / 255.0;
+    CGFloat blue = ((rgba >> (value.length == 8 ? 8 : 0)) & 0xFF) / 255.0;
+    CGFloat alpha = value.length == 8 ? (rgba & 0xFF) / 255.0 : 1.0;
+    return [UIColor colorWithRed:red green:green blue:blue alpha:alpha];
+}
+
+NSString *NeoWCHexStringFromColor(UIColor *color) {
+    CGFloat red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0;
+    if (![color getRed:&red green:&green blue:&blue alpha:&alpha]) return @"#8E8E93FF";
+    return [NSString stringWithFormat:@"#%02X%02X%02X%02X",
+            (int)lround(red * 255.0), (int)lround(green * 255.0),
+            (int)lround(blue * 255.0), (int)lround(alpha * 255.0)];
+}
 
 BOOL NeoWCEnhancementEnabled(NSString *key) {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];

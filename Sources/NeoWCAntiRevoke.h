@@ -5,6 +5,7 @@ FOUNDATION_EXPORT BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMe
 
 /// Returns the compact side prompt associated with an intercepted message.
 FOUNDATION_EXPORT NSString *NeoWCAntiRevokeSidePromptForMessage(id message);
+FOUNDATION_EXPORT BOOL NeoWCAntiRevokeIsLocalPromptMessage(id message);
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokePromptDidChangeNotification;
 FOUNDATION_EXPORT void NeoWCAntiRevokeSetPersistenceEnabled(BOOL enabled);
 
