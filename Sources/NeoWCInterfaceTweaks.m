@@ -68,9 +68,10 @@ static void NeoWCSetRoundedState(UIView *view, BOOL enabled, CGFloat maximumRadi
             objc_setAssociatedObject(view, &NeoWCRoundingStateSavedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         CGFloat height = CGRectGetHeight(view.bounds);
-        view.layer.cornerRadius = height > 0.0 ? MIN(maximumRadius, height * 0.5) : maximumRadius;
-        view.layer.cornerCurve = kCACornerCurveContinuous;
-        view.layer.masksToBounds = YES;
+        CGFloat radius = height > 0.0 ? MIN(maximumRadius, height * 0.5) : maximumRadius;
+        if (ABS(view.layer.cornerRadius - radius) > 0.01) view.layer.cornerRadius = radius;
+        if (![view.layer.cornerCurve isEqualToString:kCACornerCurveContinuous]) view.layer.cornerCurve = kCACornerCurveContinuous;
+        if (!view.layer.masksToBounds) view.layer.masksToBounds = YES;
         return;
     }
     if (![objc_getAssociatedObject(view, &NeoWCRoundingStateSavedKey) boolValue]) return;
@@ -84,25 +85,17 @@ static void NeoWCSetRoundedState(UIView *view, BOOL enabled, CGFloat maximumRadi
     objc_setAssociatedObject(view, &NeoWCOriginalCornerCurveKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-void NeoWCApplyChatInputRounding(UIViewController *controller) {
-    if (!controller) return;
+void NeoWCApplyChatInputRoundingToToolView(UIView *inputToolView) {
+    if (!inputToolView) return;
     // Register fallback values on the chat path itself. The settings controller may
     // never have been opened in this process, especially immediately after launch.
     NeoWCRegisterChatInputRoundingDefaults();
-    id inputTool = nil;
-    SEL selector = NSSelectorFromString(@"getInputToolView");
-    if ([controller respondsToSelector:selector]) inputTool = ((id (*)(id, SEL))objc_msgSend)(controller, selector);
-    if (![inputTool isKindOfClass:[UIView class]]) {
-        inputTool = NeoWCInterfaceViewValue(controller, @[@"inputToolView", @"_inputToolView", @"m_inputToolView", @"toolView"]);
-    }
-    if (![inputTool isKindOfClass:[UIView class]]) return;
     NeoWCCompatibilityMarkTriggered(@"input-rounding");
 
-    UIView *inputToolView = inputTool;
     // Verified on the current WeChat build: the first UIView under MMInputToolView
     // is the visible outer toolbar background.
     UIView *outerBar = inputToolView.subviews.firstObject;
-    UIView *growTextView = NeoWCInterfaceViewValue(inputTool, @[@"textView", @"_textView"]);
+    UIView *growTextView = NeoWCInterfaceViewValue(inputToolView, @[@"textView", @"_textView"]);
     if (![NSStringFromClass(growTextView.class) containsString:@"MMGrowTextView"]) {
         growTextView = NeoWCFindSubviewOfClassName(inputToolView, @"MMGrowTextView");
     }
@@ -115,4 +108,15 @@ void NeoWCApplyChatInputRounding(UIViewController *controller) {
     CGFloat outerRadius = [defaults objectForKey:NeoWCChatInputOuterRadiusKey] ? [defaults doubleForKey:NeoWCChatInputOuterRadiusKey] : 22.0;
     NeoWCSetRoundedState(growTextView, innerEnabled, MIN(40.0, MAX(0.0, innerRadius)));
     if (outerBar != growTextView) NeoWCSetRoundedState(outerBar, outerEnabled, MIN(40.0, MAX(0.0, outerRadius)));
+}
+
+void NeoWCRestoreChatInputRoundingFromToolView(UIView *inputToolView) {
+    if (!inputToolView) return;
+    UIView *outerBar = inputToolView.subviews.firstObject;
+    UIView *growTextView = NeoWCInterfaceViewValue(inputToolView, @[@"textView", @"_textView"]);
+    if (![NSStringFromClass(growTextView.class) containsString:@"MMGrowTextView"]) {
+        growTextView = NeoWCFindSubviewOfClassName(inputToolView, @"MMGrowTextView");
+    }
+    NeoWCSetRoundedState(growTextView, NO, 0.0);
+    if (outerBar != growTextView) NeoWCSetRoundedState(outerBar, NO, 0.0);
 }

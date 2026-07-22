@@ -64,6 +64,9 @@
 - (void)neowc_handleInputSwipeRight:(UISwipeGestureRecognizer *)recognizer;
 @end
 
+@interface MMInputToolView : UIView
+@end
+
 @interface CMessageWrap : NSObject
 @property (nonatomic, assign) NSUInteger m_uiMessageType;
 @property (nonatomic, assign) NSUInteger m_uiGameType;
@@ -99,6 +102,7 @@ static char NeoWCChatExportBuildingMenuKey;
 static char NeoWCAntiRevokeSideLabelKey;
 static char NeoWCAntiRevokeOriginalSystemTextColorKey;
 static char NeoWCEditedImageKey;
+static char NeoWCEditConversationUserNameKey;
 static char NeoWCInputSwipeLeftRecognizerKey;
 static char NeoWCInputSwipeRightRecognizerKey;
 static __weak id NeoWCCurrentEditImageLogicController;
@@ -181,9 +185,16 @@ static id NeoWCContactForUserName(NSString *userName) {
 
 static NSString *NeoWCConversationUserNameForEditLogic(id logic) {
     SEL selector = sel_registerName("c2CUserName");
-    if (!logic || ![logic respondsToSelector:selector]) return nil;
-    id value = ((id (*)(id, SEL))objc_msgSend)(logic, selector);
-    return [value isKindOfClass:[NSString class]] && [value length] > 0 ? value : nil;
+    if (!logic) return nil;
+    if ([logic respondsToSelector:selector]) {
+        id value = ((id (*)(id, SEL))objc_msgSend)(logic, selector);
+        if ([value isKindOfClass:[NSString class]] && [value length] > 0) {
+            objc_setAssociatedObject(logic, &NeoWCEditConversationUserNameKey, value, OBJC_ASSOCIATION_COPY_NONATOMIC);
+            return value;
+        }
+    }
+    id cachedValue = objc_getAssociatedObject(logic, &NeoWCEditConversationUserNameKey);
+    return [cachedValue isKindOfClass:[NSString class]] && [cachedValue length] > 0 ? cachedValue : nil;
 }
 
 static UIImage *NeoWCImageFromEditValue(id value, NSUInteger depth) {
@@ -1163,6 +1174,21 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%hook MMInputToolView
+
+- (void)layoutSubviews {
+    %orig;
+    NeoWCApplyChatInputRoundingToToolView(self);
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    if (self.window) NeoWCApplyChatInputRoundingToToolView(self);
+    else NeoWCRestoreChatInputRoundingFromToolView(self);
+}
+
+%end
+
 %hook MMGrowTextView
 
 - (void)layoutSubviews {
@@ -1207,11 +1233,6 @@ static void NeoWCRegisterPlugin(void) {
 %end
 
 %hook BaseMsgContentViewController
-
-- (void)viewDidLayoutSubviews {
-    %orig;
-    NeoWCApplyChatInputRounding((UIViewController *)self);
-}
 
 - (void)ShowMultiSelectMoreOperation:(id)argument {
     NeoWCCompatibilityMarkTriggered(@"multi-select-export");

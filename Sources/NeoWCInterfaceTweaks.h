@@ -6,5 +6,6 @@ FOUNDATION_EXPORT NSString *const NeoWCChatInputOuterRoundingKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatInputInnerRadiusKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatInputOuterRadiusKey;
 
-/// Applies or restores NeoWC's chat input rounding according to current defaults.
-FOUNDATION_EXPORT void NeoWCApplyChatInputRounding(UIViewController *controller);
+/// Applies or restores NeoWC's chat input rounding on an existing MMInputToolView.
+FOUNDATION_EXPORT void NeoWCApplyChatInputRoundingToToolView(UIView *inputToolView);
+FOUNDATION_EXPORT void NeoWCRestoreChatInputRoundingFromToolView(UIView *inputToolView);
