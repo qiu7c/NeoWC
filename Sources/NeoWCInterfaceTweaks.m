@@ -18,7 +18,18 @@ static char NeoWCOriginalCornerRadiusKey;
 static char NeoWCOriginalMasksToBoundsKey;
 static char NeoWCOriginalCornerCurveKey;
 static char NeoWCRoundingStateSavedKey;
+static char NeoWCRoundingAppliedToToolViewKey;
+static char NeoWCRoundingConfigurationKey;
 static char NeoWCOriginalMuteIconHiddenKey;
+
+static NSHashTable<UIImageView *> *NeoWCHiddenMuteImageViews(void) {
+    static NSHashTable<UIImageView *> *imageViews;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        imageViews = [NSHashTable weakObjectsHashTable];
+    });
+    return imageViews;
+}
 
 static void NeoWCRegisterChatInputRoundingDefaults(void) {
     static dispatch_once_t onceToken;
@@ -92,7 +103,24 @@ void NeoWCApplyChatInputRoundingToToolView(UIView *inputToolView) {
     // Register fallback values on the chat path itself. The settings controller may
     // never have been opened in this process, especially immediately after launch.
     NeoWCRegisterChatInputRoundingDefaults();
-    NeoWCCompatibilityMarkTriggered(@"input-rounding");
+    static dispatch_once_t compatibilityOnce;
+    dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"input-rounding"); });
+
+    BOOL masterEnabled = NeoWCEnhancementEnabled(NeoWCChatInputRoundingEnabledKey);
+    BOOL wasApplied = [objc_getAssociatedObject(inputToolView, &NeoWCRoundingAppliedToToolViewKey) boolValue];
+    // The common disabled path must not walk WeChat's input hierarchy during a
+    // chat transition. Only revisit the hierarchy when there is state to restore.
+    if (!masterEnabled && !wasApplied) return;
+
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    BOOL innerEnabled = masterEnabled && [defaults boolForKey:NeoWCChatInputInnerRoundingKey];
+    BOOL outerEnabled = masterEnabled && [defaults boolForKey:NeoWCChatInputOuterRoundingKey];
+    CGFloat innerRadius = [defaults objectForKey:NeoWCChatInputInnerRadiusKey] ? [defaults doubleForKey:NeoWCChatInputInnerRadiusKey] : 18.0;
+    CGFloat outerRadius = [defaults objectForKey:NeoWCChatInputOuterRadiusKey] ? [defaults doubleForKey:NeoWCChatInputOuterRadiusKey] : 22.0;
+    NSString *configuration = masterEnabled
+        ? [NSString stringWithFormat:@"%d:%d:%.2f:%.2f", innerEnabled, outerEnabled, innerRadius, outerRadius]
+        : nil;
+    if (wasApplied && [configuration isEqualToString:objc_getAssociatedObject(inputToolView, &NeoWCRoundingConfigurationKey)]) return;
 
     // Verified on the current WeChat build: the first UIView under MMInputToolView
     // is the visible outer toolbar background.
@@ -102,14 +130,12 @@ void NeoWCApplyChatInputRoundingToToolView(UIView *inputToolView) {
         growTextView = NeoWCFindSubviewOfClassName(inputToolView, @"MMGrowTextView");
     }
 
-    BOOL masterEnabled = NeoWCEnhancementEnabled(NeoWCChatInputRoundingEnabledKey);
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    BOOL innerEnabled = masterEnabled && [defaults boolForKey:NeoWCChatInputInnerRoundingKey];
-    BOOL outerEnabled = masterEnabled && [defaults boolForKey:NeoWCChatInputOuterRoundingKey];
-    CGFloat innerRadius = [defaults objectForKey:NeoWCChatInputInnerRadiusKey] ? [defaults doubleForKey:NeoWCChatInputInnerRadiusKey] : 18.0;
-    CGFloat outerRadius = [defaults objectForKey:NeoWCChatInputOuterRadiusKey] ? [defaults doubleForKey:NeoWCChatInputOuterRadiusKey] : 22.0;
     NeoWCSetRoundedState(growTextView, innerEnabled, MIN(40.0, MAX(0.0, innerRadius)));
     if (outerBar != growTextView) NeoWCSetRoundedState(outerBar, outerEnabled, MIN(40.0, MAX(0.0, outerRadius)));
+    objc_setAssociatedObject(inputToolView, &NeoWCRoundingAppliedToToolViewKey,
+                             masterEnabled ? @YES : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(inputToolView, &NeoWCRoundingConfigurationKey,
+                             configuration, OBJC_ASSOCIATION_COPY_NONATOMIC);
 }
 
 void NeoWCRestoreChatInputRoundingFromToolView(UIView *inputToolView) {
@@ -129,16 +155,25 @@ BOOL NeoWCShouldForceHideChatMuteImageView(UIImageView *imageView) {
     return NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey);
 }
 
+BOOL NeoWCShouldKeepManagedChatMuteImageViewHidden(UIImageView *imageView) {
+    if (!objc_getAssociatedObject(imageView, &NeoWCOriginalMuteIconHiddenKey)) return NO;
+    return NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey);
+}
+
 void NeoWCUpdateChatMuteImageView(UIImageView *imageView) {
     if (!imageView) return;
     NSNumber *savedHidden = objc_getAssociatedObject(imageView, &NeoWCOriginalMuteIconHiddenKey);
     if (NeoWCShouldForceHideChatMuteImageView(imageView)) {
+        static dispatch_once_t compatibilityOnce;
+        dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"hide-chat-mute-icon"); });
         if (!savedHidden) {
             objc_setAssociatedObject(imageView, &NeoWCOriginalMuteIconHiddenKey, @(imageView.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
+        [NeoWCHiddenMuteImageViews() addObject:imageView];
         imageView.hidden = YES;
     } else if (savedHidden) {
         imageView.hidden = savedHidden.boolValue;
+        [NeoWCHiddenMuteImageViews() removeObject:imageView];
         objc_setAssociatedObject(imageView, &NeoWCOriginalMuteIconHiddenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
@@ -153,6 +188,14 @@ void NeoWCUpdateChatMuteIconVisibility(UIViewController *controller) {
     if (!controller.isViewLoaded) return;
     [[NSUserDefaults standardUserDefaults] registerDefaults:@{ NeoWCHideChatMuteIconKey: @NO }];
     BOOL hideIcon = NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey);
+    if (!hideIcon) {
+        // Restore only views that NeoWC actually changed. Do not recursively scan
+        // the full chat hierarchy while the feature is disabled.
+        for (UIImageView *imageView in NeoWCHiddenMuteImageViews().allObjects) {
+            NeoWCUpdateChatMuteImageView(imageView);
+        }
+        return;
+    }
     NeoWCUpdateMuteIconInView(controller.view);
     NeoWCUpdateMuteIconInView(controller.navigationController.navigationBar);
     if (hideIcon) NeoWCCompatibilityMarkTriggered(@"hide-chat-mute-icon");

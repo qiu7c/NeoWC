@@ -32,5 +32,9 @@ FOUNDATION_EXPORT NSString *const NeoWCMultiSelectShareCardKey;
 FOUNDATION_EXPORT NSString *const NeoWCEnhancementDidChangeNotification;
 
 FOUNDATION_EXPORT BOOL NeoWCEnhancementEnabled(NSString *key);
+FOUNDATION_EXPORT BOOL NeoWCHookUsesStartupIsolation(NSString *key);
+FOUNDATION_EXPORT void NeoWCRecordHookLoadedAtLaunch(NSString *key, BOOL loaded);
+FOUNDATION_EXPORT BOOL NeoWCHookLoadedAtLaunch(NSString *key);
+FOUNDATION_EXPORT BOOL NeoWCHookSelectionNeedsRestart(NSString *key);
 FOUNDATION_EXPORT UIColor *NeoWCColorForDefaultsKey(NSString *key, UIColor *fallbackColor);
 FOUNDATION_EXPORT NSString *NeoWCHexStringFromColor(UIColor *color);

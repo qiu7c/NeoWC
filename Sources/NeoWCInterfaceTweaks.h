@@ -13,3 +13,6 @@ FOUNDATION_EXPORT void NeoWCRestoreChatInputRoundingFromToolView(UIView *inputTo
 FOUNDATION_EXPORT void NeoWCUpdateChatMuteIconVisibility(UIViewController *controller);
 FOUNDATION_EXPORT void NeoWCUpdateChatMuteImageView(UIImageView *imageView);
 FOUNDATION_EXPORT BOOL NeoWCShouldForceHideChatMuteImageView(UIImageView *imageView);
+/// Fast path for the global UIImageView hook. Returns YES only after NeoWC has
+/// positively identified and taken ownership of the mute icon's hidden state.
+FOUNDATION_EXPORT BOOL NeoWCShouldKeepManagedChatMuteImageViewHidden(UIImageView *imageView);

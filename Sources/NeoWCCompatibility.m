@@ -29,8 +29,8 @@ static NSArray<NSDictionary *> *NeoWCCompatibilityDefinitions(void) {
         @{ @"id": @"ad-block", @"title": @"广告净化", @"class": @"WCDataItem", @"selector": @"isAd" },
         @{ @"id": @"plugin-visibility", @"title": @"插件显示管理", @"class": @"WCPluginsMgr", @"selector": @"registerControllerWithTitle:version:controller:" },
         @{ @"id": @"input-rounding", @"title": @"聊天输入栏圆角", @"class": @"MMInputToolView", @"selector": @"didMoveToWindow" },
-        @{ @"id": @"input-swipe", @"title": @"输入框滑动操作", @"class": @"MMGrowTextView", @"selector": @"layoutSubviews" },
-        @{ @"id": @"hide-chat-mute-icon", @"title": @"隐藏免打扰图标", @"class": @"BaseMsgContentViewController", @"selector": @"viewDidAppear:" },
+        @{ @"id": @"input-swipe", @"title": @"输入框滑动操作", @"class": @"MMGrowTextView", @"selector": @"didMoveToWindow" },
+        @{ @"id": @"hide-chat-mute-icon", @"title": @"隐藏免打扰图标", @"class": @"UIImageView", @"selector": @"didMoveToWindow" },
     ];
 }
 

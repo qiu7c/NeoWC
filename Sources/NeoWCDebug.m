@@ -33,8 +33,12 @@ static NSString *const NeoWCDebugLogDidChangeNotification = @"NeoWCDebugLogDidCh
 - (void)appendMessage:(NSString *)message {
     if (!message) return;
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSDateFormatter *formatter = [NSDateFormatter new];
-        formatter.dateFormat = @"HH:mm:ss.SSS";
+        static NSDateFormatter *formatter;
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            formatter = [NSDateFormatter new];
+            formatter.dateFormat = @"HH:mm:ss.SSS";
+        });
         NSString *line = [NSString stringWithFormat:@"[%@] %@", [formatter stringFromDate:[NSDate date]], message];
         [self.entries addObject:line];
         if (self.entries.count > 500) {

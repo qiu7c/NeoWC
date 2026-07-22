@@ -104,6 +104,7 @@ static char NeoWCGameSelectorPresentedKey;
 static char NeoWCChatExportBuildingMenuKey;
 static char NeoWCAntiRevokeSideLabelKey;
 static char NeoWCAntiRevokeOriginalSystemTextColorKey;
+static char NeoWCAntiRevokeSystemColorAppliedKey;
 static char NeoWCEditedImageKey;
 static char NeoWCEditConversationUserNameKey;
 static char NeoWCEditPresenterControllerKey;
@@ -126,6 +127,11 @@ static id NeoWCTweakSafeValue(id object, NSString *key) {
     } @catch (__unused NSException *exception) {
         return nil;
     }
+}
+
+static BOOL NeoWCUsesAntiRevokeSidePrompt(void) {
+    return NeoWCEnhancementEnabled(NeoWCAntiRevokeKey) &&
+           [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey] == 1;
 }
 
 static void NeoWCTweakSetValue(id object, NSString *key, id value) {
@@ -152,14 +158,14 @@ static void NeoWCSynchronizeInputSwipeActions(MMGrowTextView *view) {
         if (!left) {
             left = [[UISwipeGestureRecognizer alloc] initWithTarget:view action:@selector(neowc_handleInputSwipeLeft:)];
             left.direction = UISwipeGestureRecognizerDirectionLeft;
-            left.cancelsTouchesInView = YES;
+            left.cancelsTouchesInView = NO;
             [view addGestureRecognizer:left];
             objc_setAssociatedObject(view, &NeoWCInputSwipeLeftRecognizerKey, left, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         if (!right) {
             right = [[UISwipeGestureRecognizer alloc] initWithTarget:view action:@selector(neowc_handleInputSwipeRight:)];
             right.direction = UISwipeGestureRecognizerDirectionRight;
-            right.cancelsTouchesInView = YES;
+            right.cancelsTouchesInView = NO;
             [view addGestureRecognizer:right];
             objc_setAssociatedObject(view, &NeoWCInputSwipeRightRecognizerKey, right, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
@@ -630,16 +636,10 @@ static void NeoWCRefreshAntiRevokeCellsInView(UIView *view) {
     if (!view) return;
     Class cellClass = NSClassFromString(@"CommonMessageCellView");
     if (cellClass && [view isKindOfClass:cellClass]) {
-        SEL refreshSelector = NSSelectorFromString(@"neowc_refreshAntiRevokeSidePrompt");
-        if ([view respondsToSelector:refreshSelector]) ((void (*)(id, SEL))objc_msgSend)(view, refreshSelector);
         [view setNeedsLayout];
-        [view layoutIfNeeded];
     }
     Class systemCellClass = NSClassFromString(@"SystemMessageCellView");
-    SEL systemRefreshSelector = NSSelectorFromString(@"neowc_applyAntiRevokeTextColor");
-    if (systemCellClass && [view isKindOfClass:systemCellClass] && [view respondsToSelector:systemRefreshSelector]) {
-        ((void (*)(id, SEL))objc_msgSend)(view, systemRefreshSelector);
-    }
+    if (systemCellClass && [view isKindOfClass:systemCellClass]) [view setNeedsLayout];
     for (UIView *subview in view.subviews) NeoWCRefreshAntiRevokeCellsInView(subview);
 }
 
@@ -1107,6 +1107,8 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%group NeoWCMuteIconHooks
+
 %hook UIImageView
 
 - (void)setAccessibilityLabel:(NSString *)label {
@@ -1120,7 +1122,7 @@ static void NeoWCRegisterPlugin(void) {
 }
 
 - (void)setHidden:(BOOL)hidden {
-    if (!hidden && NeoWCShouldForceHideChatMuteImageView(self)) {
+    if (!hidden && NeoWCShouldKeepManagedChatMuteImageViewHidden(self)) {
         %orig(YES);
         return;
     }
@@ -1128,6 +1130,10 @@ static void NeoWCRegisterPlugin(void) {
 }
 
 %end
+
+%end
+
+%group NeoWCRoundingHooks
 
 %hook MMInputToolView
 
@@ -1138,12 +1144,11 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
-%hook MMGrowTextView
+%end
 
-- (void)layoutSubviews {
-    %orig;
-    NeoWCSynchronizeInputSwipeActions(self);
-}
+%group NeoWCInputSwipeHooks
+
+%hook MMGrowTextView
 
 - (void)didMoveToWindow {
     %orig;
@@ -1181,17 +1186,9 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%end
+
 %hook BaseMsgContentViewController
-
-- (void)viewWillAppear:(BOOL)animated {
-    %orig;
-    NeoWCUpdateChatMuteIconVisibility((UIViewController *)self);
-}
-
-- (void)viewDidAppear:(BOOL)animated {
-    %orig;
-    NeoWCUpdateChatMuteIconVisibility((UIViewController *)self);
-}
 
 - (void)ShowMultiSelectMoreOperation:(id)argument {
     NeoWCCompatibilityMarkTriggered(@"multi-select-export");
@@ -1332,10 +1329,13 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%group NeoWCAntiRevokeCoreHooks
+
 %hook CMessageMgr
 
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap {
-    NeoWCCompatibilityMarkTriggered(@"anti-revoke");
+    static dispatch_once_t compatibilityOnce;
+    dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"anti-revoke"); });
     @try {
         if (NeoWCHandleRevokeMessage(self, wrap)) return;
     } @catch (NSException *exception) {
@@ -1344,8 +1344,15 @@ static void NeoWCRegisterPlugin(void) {
     %orig;
 }
 
+%end
+
+%end
+
+%hook CMessageMgr
+
 - (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap {
-    NeoWCCompatibilityMarkTriggered(@"game-selector");
+    static dispatch_once_t compatibilityOnce;
+    dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"game-selector"); });
     BOOL isGameMessage = wrap.m_uiMessageType == 47 && (wrap.m_uiGameType == 1 || wrap.m_uiGameType == 2);
     if (!NeoWCEnhancementEnabled(NeoWCGameSelectorKey) || !isGameMessage) {
         %orig;
@@ -1384,7 +1391,8 @@ static void NeoWCRegisterPlugin(void) {
 %hook WCDeviceStepObject
 
 - (unsigned int)m7StepCount {
-    NeoWCCompatibilityMarkTriggered(@"steps");
+    static dispatch_once_t compatibilityOnce;
+    dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"steps"); });
     unsigned int originalValue = %orig;
     if (!NeoWCEnhancementEnabled(NeoWCStepOverrideEnabledKey)) return originalValue;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -1396,51 +1404,50 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%group NeoWCAntiRevokeUIHooks
+
 %hook CommonMessageCellView
 
 - (void)layoutSubviews {
     %orig;
-    [self neowc_refreshAntiRevokeSidePrompt];
+    UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
+    if (label || NeoWCUsesAntiRevokeSidePrompt()) [self neowc_refreshAntiRevokeSidePrompt];
 }
 
 - (void)setViewModel:(id)viewModel {
     %orig;
-    // WeChat finishes binding the message wrap and bubble view after setViewModel: returns.
-    // Refreshing synchronously sees an incomplete view model and permanently hides the label.
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self neowc_refreshAntiRevokeSidePrompt];
-        [self setNeedsLayout];
-    });
+    // Let WeChat's own next layout refresh the prompt. Queuing blocks here can
+    // retain recycled cells and stall search-result transitions/back navigation.
+    UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
+    label.hidden = YES;
+    if (NeoWCUsesAntiRevokeSidePrompt()) [self setNeedsLayout];
 }
 
 - (void)updateStatus {
     %orig;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self neowc_refreshAntiRevokeSidePrompt];
-    });
+    if (NeoWCUsesAntiRevokeSidePrompt()) [self setNeedsLayout];
 }
 
 - (void)didMoveToWindow {
     %orig;
-    if (self.window) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self neowc_refreshAntiRevokeSidePrompt];
-        });
-    }
+    if (self.window && NeoWCUsesAntiRevokeSidePrompt()) [self setNeedsLayout];
 }
 
 %new
 - (void)neowc_refreshAntiRevokeSidePrompt {
     UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
+    BOOL useSidePromptStyle = NeoWCUsesAntiRevokeSidePrompt();
+    if (!useSidePromptStyle) {
+        label.hidden = YES;
+        return;
+    }
     id viewModel = NeoWCTweakSafeValue(self, @"viewModel");
     if (!viewModel) viewModel = NeoWCTweakSafeValue(self, @"m_viewModel");
     id message = NeoWCTweakSafeValue(viewModel, @"messageWrap");
     if (!message) message = NeoWCTweakSafeValue(viewModel, @"m_messageWrap");
     if (!message) message = NeoWCTweakSafeValue(viewModel, @"msgWrap");
     NSString *prompt = NeoWCAntiRevokeSidePromptForMessage(message);
-    BOOL useSidePrompt = NeoWCEnhancementEnabled(NeoWCAntiRevokeKey) &&
-                         [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey] == 1 &&
-                         prompt.length > 0;
+    BOOL useSidePrompt = prompt.length > 0;
     if (!useSidePrompt) {
         label.hidden = YES;
         return;
@@ -1500,6 +1507,8 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)layoutSubviews {
     %orig;
+    BOOL wasApplied = [objc_getAssociatedObject(self, &NeoWCAntiRevokeSystemColorAppliedKey) boolValue];
+    if (!NeoWCEnhancementEnabled(NeoWCAntiRevokeKey) && !wasApplied) return;
     [self neowc_applyAntiRevokeTextColor];
 }
 
@@ -1518,22 +1527,31 @@ static void NeoWCRegisterPlugin(void) {
             objc_setAssociatedObject(richTextView, &NeoWCAntiRevokeOriginalSystemTextColorKey, originalColor, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
     }
-    UIColor *color = NeoWCAntiRevokeIsLocalPromptMessage(message)
+    BOOL shouldApply = NeoWCEnhancementEnabled(NeoWCAntiRevokeKey) && NeoWCAntiRevokeIsLocalPromptMessage(message);
+    UIColor *color = shouldApply
         ? NeoWCColorForDefaultsKey(NeoWCAntiRevokeLocalTextColorKey, UIColor.secondaryLabelColor)
         : originalColor;
     if (color) {
-        NeoWCTweakSetValue(richTextView, @"textColor", color);
-        NeoWCTweakSetValue(richTextView, @"oTextColor", color);
-        if ([richTextView isKindOfClass:[UIView class]]) [(UIView *)richTextView setNeedsDisplay];
+        UIColor *currentColor = NeoWCTweakSafeValue(richTextView, @"textColor");
+        if (![currentColor isEqual:color]) {
+            NeoWCTweakSetValue(richTextView, @"textColor", color);
+            NeoWCTweakSetValue(richTextView, @"oTextColor", color);
+            if ([richTextView isKindOfClass:[UIView class]]) [(UIView *)richTextView setNeedsDisplay];
+        }
     }
+    objc_setAssociatedObject(self, &NeoWCAntiRevokeSystemColorAppliedKey,
+                             shouldApply ? @YES : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
+
+%end
 
 %end
 
 %hook WCDataItem
 
 - (BOOL)isAd {
-    NeoWCCompatibilityMarkTriggered(@"ad-block");
+    static dispatch_once_t compatibilityOnce;
+    dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"ad-block"); });
     if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
     return %orig;
 }
@@ -1594,3 +1612,35 @@ static void NeoWCRegisterPlugin(void) {
 }
 
 %end
+
+%ctor {
+    @autoreleasepool {
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults registerDefaults:@{
+            @"com.qiu7c.neowc.enabled": @YES,
+            NeoWCAntiRevokeKey: @YES,
+            NeoWCInputSwipeActionsEnabledKey: @NO,
+            NeoWCChatInputRoundingEnabledKey: @NO,
+            NeoWCHideChatMuteIconKey: @NO,
+        }];
+
+        BOOL antiRevokeLoaded = NeoWCEnhancementEnabled(NeoWCAntiRevokeKey);
+        BOOL inputSwipeLoaded = NeoWCEnhancementEnabled(NeoWCInputSwipeActionsEnabledKey);
+        BOOL roundingLoaded = NeoWCEnhancementEnabled(NeoWCChatInputRoundingEnabledKey);
+        BOOL muteIconLoaded = NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey);
+
+        NeoWCRecordHookLoadedAtLaunch(NeoWCAntiRevokeKey, antiRevokeLoaded);
+        NeoWCRecordHookLoadedAtLaunch(NeoWCInputSwipeActionsEnabledKey, inputSwipeLoaded);
+        NeoWCRecordHookLoadedAtLaunch(NeoWCChatInputRoundingEnabledKey, roundingLoaded);
+        NeoWCRecordHookLoadedAtLaunch(NeoWCHideChatMuteIconKey, muteIconLoaded);
+
+        %init;
+        if (antiRevokeLoaded) {
+            %init(NeoWCAntiRevokeCoreHooks);
+            %init(NeoWCAntiRevokeUIHooks);
+        }
+        if (inputSwipeLoaded) %init(NeoWCInputSwipeHooks);
+        if (roundingLoaded) %init(NeoWCRoundingHooks);
+        if (muteIconLoaded) %init(NeoWCMuteIconHooks);
+    }
+}

@@ -261,6 +261,17 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     ^NeoWCSettingItem *(NSString *title, NSString *subtitle, NSString *symbol, NeoWCRowKind kind, NSString *key, NSString *value) {
         return [NeoWCSettingItem itemWithTitle:title subtitle:subtitle symbol:symbol kind:kind key:key value:value];
     };
+    NSString *(^hookSubtitle)(NSString *, NSString *) = ^NSString *(NSString *key, NSString *normalSubtitle) {
+        if (!NeoWCHookUsesStartupIsolation(key)) return normalSubtitle;
+        BOOL loaded = NeoWCHookLoadedAtLaunch(key);
+        NSString *state = nil;
+        if (NeoWCHookSelectionNeedsRestart(key)) {
+            state = NeoWCEnhancementEnabled(key) ? @"待重启启用" : @"待重启停用";
+        } else {
+            state = loaded ? @"已加载" : @"未加载";
+        }
+        return [NSString stringWithFormat:@"%@ · %@", normalSubtitle, state];
+    };
     NSInteger configuredStepCount = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCStepCountKey];
     NSString *stepValue = configuredStepCount > 0 ? [NSString stringWithFormat:@"%ld 步", (long)configuredStepCount] : @"设置";
     NSTimeInterval revokeFilter = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCAntiRevokeTimeFilterKey];
@@ -288,7 +299,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     NSString *sideOffsetY = [NSString stringWithFormat:@"%.0f", storedSideOffsetY ? [storedSideOffsetY doubleValue] : 10.0];
 
     NSMutableArray<NeoWCSettingItem *> *messageItems = [NSMutableArray array];
-    [messageItems addObject:item(@"防撤回", @"保留好友撤回的消息并显示提示", @"arrow.uturn.backward.circle", NeoWCRowKindSwitch, NeoWCAntiRevokeKey, nil)];
+    [messageItems addObject:item(@"防撤回", hookSubtitle(NeoWCAntiRevokeKey, @"保留好友撤回的消息并显示提示"), @"arrow.uturn.backward.circle", NeoWCRowKindSwitch, NeoWCAntiRevokeKey, nil)];
     if (antiRevokeEnabled && [self isFeatureExpandedForKey:NeoWCAntiRevokeKey]) {
         [messageItems addObject:item(@"防撤回提示方案", [NSString stringWithFormat:@"当前方案：%@", revokePromptStyle], @"text.bubble.fill", NeoWCRowKindDetail, nil, revokePromptStyle)];
         if (revokePromptStyleValue == 1) {
@@ -306,7 +317,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [messageItems addObject:item(@"本地保存撤回记录", @"默认关闭；仅保存摘要和分类", @"internaldrive", NeoWCRowKindSwitch, NeoWCAntiRevokePersistRecordsKey, nil)];
     }
     [messageItems addObject:item(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCRowKindSwitch, NeoWCGameSelectorKey, nil)];
-    [messageItems addObject:item(@"输入框滑动操作", @"左滑清空，右滑从剪贴板粘贴", @"hand.draw", NeoWCRowKindSwitch, NeoWCInputSwipeActionsEnabledKey, nil)];
+    [messageItems addObject:item(@"输入框滑动操作", hookSubtitle(NeoWCInputSwipeActionsEnabledKey, @"左滑清空，右滑从剪贴板粘贴"), @"hand.draw", NeoWCRowKindSwitch, NeoWCInputSwipeActionsEnabledKey, nil)];
     [messageItems addObject:item(@"图片编辑快捷发送", @"在官方图片编辑完成菜单中增加发送到当前会话", @"photo.badge.arrow.down", NeoWCRowKindSwitch, NeoWCImageEditQuickSendEnabledKey, nil)];
     [messageItems addObject:item(@"多选消息导出", @"控制多选菜单中的复制、保存和分享功能", @"square.and.arrow.up.on.square", NeoWCRowKindSwitch, NeoWCMultiSelectExportEnabledKey, nil)];
     if (multiSelectExportEnabled && [self isFeatureExpandedForKey:NeoWCMultiSelectExportEnabledKey]) {
@@ -335,7 +346,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [enhancementItems addObject:item(@"广告净化", @"隐藏朋友圈广告与小程序启动广告", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil)];
 
     NSMutableArray<NeoWCSettingItem *> *interfaceItems = [NSMutableArray arrayWithArray:@[
-        item(@"聊天输入栏圆角", @"分别控制输入框内部与外部工具栏", @"rectangle.roundedtop", NeoWCRowKindSwitch, NeoWCChatInputRoundingEnabledKey, nil),
+        item(@"聊天输入栏圆角", hookSubtitle(NeoWCChatInputRoundingEnabledKey, @"分别控制输入框内部与外部工具栏"), @"rectangle.roundedtop", NeoWCRowKindSwitch, NeoWCChatInputRoundingEnabledKey, nil),
     ]];
     if (inputRoundingEnabled && [self isFeatureExpandedForKey:NeoWCChatInputRoundingEnabledKey]) {
         [interfaceItems addObject:item(@"输入框内部圆角", @"调整文字输入区域的圆角", @"text.cursor", NeoWCRowKindSwitch, NeoWCChatInputInnerRoundingKey, nil)];
@@ -349,11 +360,11 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             [interfaceItems addObject:item(@"外部圆角程度", @"输入 0 到 40，数值越大越圆", @"slider.horizontal.3", NeoWCRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", outerRadius])];
         }
     }
-    [interfaceItems addObject:item(@"隐藏免打扰图标", @"隐藏聊天标题旁的免打扰标记", @"bell.slash", NeoWCRowKindSwitch, NeoWCHideChatMuteIconKey, nil)];
+    [interfaceItems addObject:item(@"隐藏免打扰图标", hookSubtitle(NeoWCHideChatMuteIconKey, @"隐藏聊天标题旁的免打扰标记"), @"bell.slash", NeoWCRowKindSwitch, NeoWCHideChatMuteIconKey, nil)];
     [interfaceItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];
 
     self.sections = @[
-        [NeoWCSettingSection sectionWithIdentifier:@"general" title:@"总开关" subtitle:nil symbol:@"switch.2" footer:@"关闭后仅保留设置入口，所有增强功能停止生效。" collapsible:NO items:@[
+        [NeoWCSettingSection sectionWithIdentifier:@"general" title:@"总开关" subtitle:nil symbol:@"switch.2" footer:@"关闭后仅保留设置入口。标记“待重启”的 Hook 会在重启微信后真正加载或卸载。" collapsible:NO items:@[
             item(@"启用 NeoWC", @"插件功能总开关", @"power", NeoWCRowKindSwitch, NeoWCEnabledKey, nil),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"messages" title:@"聊天增强" subtitle:@"消息、编辑与多选工具" symbol:@"bubble.left.and.bubble.right" footer:@"" collapsible:YES items:messageItems],
@@ -680,8 +691,10 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
                               [item.defaultsKey isEqualToString:NeoWCChatInputRoundingEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCChatInputInnerRoundingKey] ||
                               [item.defaultsKey isEqualToString:NeoWCChatInputOuterRoundingKey];
-    if (changesVisibleRows) [self buildSections];
-    if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] || changesVisibleRows) [self.tableView reloadData];
+    BOOL changesHookLoadState = NeoWCHookUsesStartupIsolation(item.defaultsKey) ||
+                                [item.defaultsKey isEqualToString:NeoWCEnabledKey];
+    if (changesVisibleRows || changesHookLoadState) [self buildSections];
+    if (changesVisibleRows || changesHookLoadState) [self.tableView reloadData];
 }
 
 - (void)toggleFeatureAtIndexPath:(NSIndexPath *)indexPath item:(NeoWCSettingItem *)item {

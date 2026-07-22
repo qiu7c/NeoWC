@@ -32,6 +32,46 @@ NSString *const NeoWCMultiSelectSaveImagesKey = @"com.qiu7c.neowc.enhance.multi-
 NSString *const NeoWCMultiSelectShareCardKey = @"com.qiu7c.neowc.enhance.multi-select-export.share-card";
 NSString *const NeoWCEnhancementDidChangeNotification = @"NeoWCEnhancementDidChangeNotification";
 
+static NSMutableDictionary<NSString *, NSNumber *> *NeoWCHookLaunchStates(void) {
+    static NSMutableDictionary<NSString *, NSNumber *> *states;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ states = [NSMutableDictionary dictionary]; });
+    return states;
+}
+
+BOOL NeoWCHookUsesStartupIsolation(NSString *key) {
+    if (key.length == 0) return NO;
+    static NSSet<NSString *> *keys;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        keys = [NSSet setWithArray:@[
+            NeoWCAntiRevokeKey,
+            NeoWCInputSwipeActionsEnabledKey,
+            @"com.qiu7c.neowc.interface.chat-input-rounding",
+            @"com.qiu7c.neowc.interface.hide-chat-mute-icon",
+        ]];
+    });
+    return [keys containsObject:key];
+}
+
+void NeoWCRecordHookLoadedAtLaunch(NSString *key, BOOL loaded) {
+    if (!NeoWCHookUsesStartupIsolation(key)) return;
+    @synchronized (NeoWCHookLaunchStates()) {
+        NeoWCHookLaunchStates()[key] = @(loaded);
+    }
+}
+
+BOOL NeoWCHookLoadedAtLaunch(NSString *key) {
+    @synchronized (NeoWCHookLaunchStates()) {
+        return [NeoWCHookLaunchStates()[key] boolValue];
+    }
+}
+
+BOOL NeoWCHookSelectionNeedsRestart(NSString *key) {
+    if (!NeoWCHookUsesStartupIsolation(key)) return NO;
+    return NeoWCHookLoadedAtLaunch(key) != NeoWCEnhancementEnabled(key);
+}
+
 UIColor *NeoWCColorForDefaultsKey(NSString *key, UIColor *fallbackColor) {
     NSString *hex = [[NSUserDefaults standardUserDefaults] stringForKey:key];
     if (![hex isKindOfClass:[NSString class]]) return fallbackColor;
