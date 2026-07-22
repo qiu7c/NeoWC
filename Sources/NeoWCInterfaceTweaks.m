@@ -18,6 +18,19 @@ static char NeoWCOriginalMasksToBoundsKey;
 static char NeoWCOriginalCornerCurveKey;
 static char NeoWCRoundingStateSavedKey;
 
+static void NeoWCRegisterChatInputRoundingDefaults(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        [[NSUserDefaults standardUserDefaults] registerDefaults:@{
+            NeoWCChatInputRoundingEnabledKey: @NO,
+            NeoWCChatInputInnerRoundingKey: @YES,
+            NeoWCChatInputOuterRoundingKey: @YES,
+            NeoWCChatInputInnerRadiusKey: @18.0,
+            NeoWCChatInputOuterRadiusKey: @22.0,
+        }];
+    });
+}
+
 static id NeoWCInterfaceSafeValue(id object, NSString *key) {
     if (!object || key.length == 0) return nil;
     @try {
@@ -73,6 +86,9 @@ static void NeoWCSetRoundedState(UIView *view, BOOL enabled, CGFloat maximumRadi
 
 void NeoWCApplyChatInputRounding(UIViewController *controller) {
     if (!controller) return;
+    // Register fallback values on the chat path itself. The settings controller may
+    // never have been opened in this process, especially immediately after launch.
+    NeoWCRegisterChatInputRoundingDefaults();
     id inputTool = nil;
     SEL selector = NSSelectorFromString(@"getInputToolView");
     if ([controller respondsToSelector:selector]) inputTool = ((id (*)(id, SEL))objc_msgSend)(controller, selector);

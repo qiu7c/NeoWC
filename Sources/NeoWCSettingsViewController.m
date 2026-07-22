@@ -343,12 +343,12 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         item(@"聊天输入栏圆角", @"分别控制输入框内部与外部工具栏", @"rectangle.roundedtop", NeoWCRowKindSwitch, NeoWCChatInputRoundingEnabledKey, nil),
     ]];
     if (inputRoundingEnabled && [self isFeatureExpandedForKey:NeoWCChatInputRoundingEnabledKey]) {
-        [interfaceItems addObject:item(@"输入框内部圆角", @"作用于 MMGrowTextView 输入区域", @"text.cursor", NeoWCRowKindSwitch, NeoWCChatInputInnerRoundingKey, nil)];
+        [interfaceItems addObject:item(@"输入框内部圆角", @"调整文字输入区域的圆角", @"text.cursor", NeoWCRowKindSwitch, NeoWCChatInputInnerRoundingKey, nil)];
         if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatInputInnerRoundingKey]) {
             CGFloat innerRadius = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCChatInputInnerRadiusKey];
             [interfaceItems addObject:item(@"内部圆角程度", @"输入 0 到 40，数值越大越圆", @"slider.horizontal.3", NeoWCRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", innerRadius])];
         }
-        [interfaceItems addObject:item(@"外部工具栏圆角", @"作用于 MMInputToolView 的第一层背景", @"rectangle.bottomhalf.filled", NeoWCRowKindSwitch, NeoWCChatInputOuterRoundingKey, nil)];
+        [interfaceItems addObject:item(@"外部工具栏圆角", @"调整聊天底部工具栏的圆角", @"rectangle.bottomhalf.filled", NeoWCRowKindSwitch, NeoWCChatInputOuterRoundingKey, nil)];
         if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatInputOuterRoundingKey]) {
             CGFloat outerRadius = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCChatInputOuterRadiusKey];
             [interfaceItems addObject:item(@"外部圆角程度", @"输入 0 到 40，数值越大越圆", @"slider.horizontal.3", NeoWCRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", outerRadius])];

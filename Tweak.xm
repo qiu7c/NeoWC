@@ -379,9 +379,64 @@ static UIViewController *NeoWCQuickSendVisibleController(void) {
     return nil;
 }
 
+static NSString *NeoWCChatControllerUserName(UIViewController *controller) {
+    if (!controller) return nil;
+    id contact = nil;
+    for (NSString *selectorName in @[@"GetContact", @"GetCContact", @"getChatContact"]) {
+        SEL selector = NSSelectorFromString(selectorName);
+        if ([controller respondsToSelector:selector]) {
+            contact = ((id (*)(id, SEL))objc_msgSend)(controller, selector);
+            if (contact) break;
+        }
+    }
+    id value = NeoWCTweakSafeValue(contact, @"m_nsUsrName");
+    return [value isKindOfClass:[NSString class]] ? value : nil;
+}
+
+static UIViewController *NeoWCFindChatController(UIViewController *controller, NSString *userName) {
+    if (!controller) return nil;
+    Class chatClass = objc_getClass("BaseMsgContentViewController");
+    if (chatClass && [controller isKindOfClass:chatClass]) {
+        NSString *candidate = NeoWCChatControllerUserName(controller);
+        if (userName.length == 0 || [candidate isEqualToString:userName]) return controller;
+    }
+    if (controller.presentedViewController) {
+        UIViewController *match = NeoWCFindChatController(controller.presentedViewController, userName);
+        if (match) return match;
+    }
+    for (UIViewController *child in controller.childViewControllers.reverseObjectEnumerator) {
+        UIViewController *match = NeoWCFindChatController(child, userName);
+        if (match) return match;
+    }
+    return nil;
+}
+
+static UIViewController *NeoWCQuickSendReadyChatController(NSString *userName) {
+    NSMutableArray<UIWindow *> *windows = [NSMutableArray array];
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:[UIWindowScene class]] || scene.activationState != UISceneActivationStateForegroundActive) continue;
+        [windows addObjectsFromArray:((UIWindowScene *)scene).windows];
+    }
+    id legacyWindows = NeoWCTweakSafeValue(UIApplication.sharedApplication, @"windows");
+    if ([legacyWindows isKindOfClass:[NSArray class]]) {
+        for (UIWindow *window in legacyWindows) if (![windows containsObject:window]) [windows addObject:window];
+    }
+    for (UIWindow *window in windows) {
+        NSString *windowClass = NSStringFromClass(window.class);
+        if (window.hidden || window.alpha <= 0.01 || window.windowLevel != UIWindowLevelNormal ||
+            [windowClass containsString:@"NeoWCDebugWindow"]) continue;
+        UIViewController *chat = NeoWCFindChatController(window.rootViewController, userName);
+        if (!chat || !chat.isViewLoaded || !chat.view.window) continue;
+        UIViewController *visible = NeoWCQuickSendTopController(window.rootViewController);
+        if (visible == chat && !chat.isBeingDismissed && !chat.isBeingPresented) return chat;
+    }
+    return nil;
+}
+
 @interface NeoWCImageQuickSendDelegate : NSObject
 @property (nonatomic, strong) id forwardLogic;
 @property (nonatomic, weak) id sourceLogic;
+@property (nonatomic, weak) UIViewController *presenterController;
 @property (nonatomic, assign) BOOL finished;
 - (void)finishWithMessage:(NSString *)message success:(BOOL)success;
 @end
@@ -389,7 +444,8 @@ static UIViewController *NeoWCQuickSendVisibleController(void) {
 @implementation NeoWCImageQuickSendDelegate
 
 - (UIViewController *)getCurrentViewController {
-    return NeoWCQuickSendVisibleController();
+    UIViewController *presenter = self.presenterController;
+    return presenter.view.window && !presenter.isBeingDismissed ? presenter : NeoWCQuickSendVisibleController();
 }
 
 - (UIViewController *)GetCurrentViewController {
@@ -450,15 +506,17 @@ static BOOL NeoWCSendEditedImageToCurrentConversation(id logic, NSString **failu
     delegate.sourceLogic = logic;
     SEL delegateSelector = sel_registerName("setDelegate:");
     if (![forwardLogic respondsToSelector:delegateSelector]) { if (failureReason) *failureReason = @"微信转发代理接口已变化"; return NO; }
-    UIViewController *presenter = [delegate getCurrentViewController];
-    if (!presenter || !presenter.view.window || presenter.isBeingDismissed) {
-        if (failureReason) *failureReason = @"当前页面正在切换，暂时无法显示确认页";
+    UIViewController *presenter = NeoWCQuickSendReadyChatController(userName);
+    if (!presenter) {
+        if (failureReason) *failureReason = @"原聊天页面尚未恢复，暂时无法显示确认页";
         return NO;
     }
+    delegate.presenterController = presenter;
     ((void (*)(id, SEL, id))objc_msgSend)(forwardLogic, delegateSelector, delegate);
     NeoWCTweakSetValue(forwardLogic, @"bSpecificContact", @YES);
     NeoWCTweakSetValue(forwardLogic, @"bPresent", @YES);
     [NeoWCActiveImageQuickSendDelegates() addObject:delegate];
+    NeoWCLog(@"快捷发送准备显示确认页：会话=%@ 页面=%@", userName, NSStringFromClass(presenter.class));
     ((void (*)(id, SEL, id, id, id, BOOL, BOOL))objc_msgSend)(forwardLogic, forwardSelector, @[message], nil, @[contact], NO, YES);
     __weak NeoWCImageQuickSendDelegate *weakDelegate = delegate;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(120.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -475,9 +533,9 @@ static void NeoWCAttemptQuickSendWhenReady(id logic, NSUInteger attempt) {
     }
     NSString *reason = nil;
     if (NeoWCSendEditedImageToCurrentConversation(logic, &reason)) return;
-    BOOL waitingForPresenter = [reason isEqualToString:@"当前页面正在切换，暂时无法显示确认页"];
-    if (waitingForPresenter && attempt < 24) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    BOOL waitingForPresenter = [reason isEqualToString:@"原聊天页面尚未恢复，暂时无法显示确认页"];
+    if (waitingForPresenter && attempt < 60) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             NeoWCAttemptQuickSendWhenReady(logic, attempt + 1);
         });
         return;
