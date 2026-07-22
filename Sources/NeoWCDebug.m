@@ -184,7 +184,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 @property (nonatomic, weak) UIViewController *sourceViewController;
 @end
 
-@interface NeoWCViewPickerController : UIViewController <UIGestureRecognizerDelegate>
+@interface NeoWCViewPickerController : UIViewController
 @end
 
 @interface NeoWCDebugManager ()
@@ -397,51 +397,41 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.08];
+    self.view.backgroundColor = UIColor.clearColor;
 
-    UILabel *banner = [UILabel new];
-    banner.translatesAutoresizingMaskIntoConstraints = NO;
-    banner.text = @"点击要检查的视图";
-    banner.textAlignment = NSTextAlignmentCenter;
-    banner.textColor = UIColor.whiteColor;
-    banner.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.92];
-    banner.layer.cornerRadius = 12.0;
-    banner.layer.cornerCurve = kCACornerCurveContinuous;
-    banner.layer.masksToBounds = YES;
-    [self.view addSubview:banner];
-
-    UIButton *cancel = [UIButton buttonWithType:UIButtonTypeSystem];
-    cancel.translatesAutoresizingMaskIntoConstraints = NO;
-    [cancel setTitle:@"取消" forState:UIControlStateNormal];
-    cancel.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    cancel.layer.cornerRadius = 12.0;
-    [cancel addTarget:self action:@selector(cancelTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:cancel];
+    UILabel *toast = [UILabel new];
+    toast.translatesAutoresizingMaskIntoConstraints = NO;
+    toast.text = @"轻点选择视图 · 双指轻点取消";
+    toast.textAlignment = NSTextAlignmentCenter;
+    toast.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    toast.textColor = UIColor.whiteColor;
+    toast.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.90];
+    toast.layer.cornerRadius = 12.0;
+    toast.layer.cornerCurve = kCACornerCurveContinuous;
+    toast.layer.masksToBounds = YES;
+    toast.userInteractionEnabled = NO;
+    [self.view addSubview:toast];
 
     [NSLayoutConstraint activateConstraints:@[
-        [banner.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:14.0],
-        [banner.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [banner.widthAnchor constraintEqualToConstant:180.0],
-        [banner.heightAnchor constraintEqualToConstant:42.0],
-        [cancel.centerYAnchor constraintEqualToAnchor:banner.centerYAnchor],
-        [cancel.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-14.0],
-        [cancel.widthAnchor constraintEqualToConstant:62.0],
-        [cancel.heightAnchor constraintEqualToConstant:42.0],
+        [toast.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [toast.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-28.0],
+        [toast.widthAnchor constraintEqualToConstant:238.0],
+        [toast.heightAnchor constraintEqualToConstant:40.0],
     ]];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [UIView animateWithDuration:0.18 animations:^{ toast.alpha = 0.0; } completion:^(__unused BOOL finished) {
+            [toast removeFromSuperview];
+        }];
+    });
 
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(screenTapped:)];
     tap.cancelsTouchesInView = NO;
-    tap.delegate = self;
+    UITapGestureRecognizer *cancelTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(cancelTapped)];
+    cancelTap.numberOfTouchesRequired = 2;
+    cancelTap.cancelsTouchesInView = YES;
+    [tap requireGestureRecognizerToFail:cancelTap];
     [self.view addGestureRecognizer:tap];
-}
-
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
-    UIView *candidate = touch.view;
-    while (candidate && candidate != self.view) {
-        if ([candidate isKindOfClass:[UIButton class]]) return NO;
-        candidate = candidate.superview;
-    }
-    return YES;
+    [self.view addGestureRecognizer:cancelTap];
 }
 
 - (void)cancelTapped {
@@ -450,7 +440,6 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 
 - (void)screenTapped:(UITapGestureRecognizer *)recognizer {
     CGPoint point = [recognizer locationInView:self.view];
-    if (point.y < CGRectGetMinY(self.view.safeAreaLayoutGuide.layoutFrame) + 64.0) return;
     NeoWCDebugManager *manager = [NeoWCDebugManager sharedManager];
     NeoWCDebugWindow *overlay = manager.pickerWindow;
     overlay.hidden = YES;

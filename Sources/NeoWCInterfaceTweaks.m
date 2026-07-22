@@ -12,11 +12,13 @@ NSString *const NeoWCChatInputInnerRoundingKey = @"com.qiu7c.neowc.interface.cha
 NSString *const NeoWCChatInputOuterRoundingKey = @"com.qiu7c.neowc.interface.chat-input-rounding.outer";
 NSString *const NeoWCChatInputInnerRadiusKey = @"com.qiu7c.neowc.interface.chat-input-rounding.inner-radius";
 NSString *const NeoWCChatInputOuterRadiusKey = @"com.qiu7c.neowc.interface.chat-input-rounding.outer-radius";
+NSString *const NeoWCHideChatMuteIconKey = @"com.qiu7c.neowc.interface.hide-chat-mute-icon";
 
 static char NeoWCOriginalCornerRadiusKey;
 static char NeoWCOriginalMasksToBoundsKey;
 static char NeoWCOriginalCornerCurveKey;
 static char NeoWCRoundingStateSavedKey;
+static char NeoWCOriginalMuteIconHiddenKey;
 
 static void NeoWCRegisterChatInputRoundingDefaults(void) {
     static dispatch_once_t onceToken;
@@ -119,4 +121,29 @@ void NeoWCRestoreChatInputRoundingFromToolView(UIView *inputToolView) {
     }
     NeoWCSetRoundedState(growTextView, NO, 0.0);
     if (outerBar != growTextView) NeoWCSetRoundedState(outerBar, NO, 0.0);
+}
+
+static void NeoWCUpdateMuteIconInView(UIView *view, BOOL hideIcon) {
+    if (!view) return;
+    NSNumber *savedHidden = objc_getAssociatedObject(view, &NeoWCOriginalMuteIconHiddenKey);
+    BOOL isMuteIcon = [view isKindOfClass:[UIImageView class]] && [view.accessibilityLabel isEqualToString:@"免打扰"];
+    if (hideIcon && isMuteIcon) {
+        if (!savedHidden) {
+            objc_setAssociatedObject(view, &NeoWCOriginalMuteIconHiddenKey, @(view.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        view.hidden = YES;
+    } else if (!hideIcon && savedHidden) {
+        view.hidden = savedHidden.boolValue;
+        objc_setAssociatedObject(view, &NeoWCOriginalMuteIconHiddenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    for (UIView *subview in view.subviews) NeoWCUpdateMuteIconInView(subview, hideIcon);
+}
+
+void NeoWCUpdateChatMuteIconVisibility(UIViewController *controller) {
+    if (!controller.isViewLoaded) return;
+    [[NSUserDefaults standardUserDefaults] registerDefaults:@{ NeoWCHideChatMuteIconKey: @NO }];
+    BOOL hideIcon = NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey);
+    NeoWCUpdateMuteIconInView(controller.view, hideIcon);
+    NeoWCUpdateMuteIconInView(controller.navigationController.navigationBar, hideIcon);
+    if (hideIcon) NeoWCCompatibilityMarkTriggered(@"hide-chat-mute-icon");
 }

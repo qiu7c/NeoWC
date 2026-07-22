@@ -196,6 +196,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCChatInputOuterRoundingKey: @YES,
         NeoWCChatInputInnerRadiusKey: @18.0,
         NeoWCChatInputOuterRadiusKey: @22.0,
+        NeoWCHideChatMuteIconKey: @NO,
         NeoWCExpandedCategoriesKey: @[@"messages"],
         NeoWCCollapsedFeaturesKey: @[],
     }];
@@ -349,6 +350,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             [interfaceItems addObject:item(@"外部圆角程度", @"输入 0 到 40，数值越大越圆", @"slider.horizontal.3", NeoWCRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", outerRadius])];
         }
     }
+    [interfaceItems addObject:item(@"隐藏免打扰图标", @"隐藏聊天标题旁的免打扰标记", @"bell.slash", NeoWCRowKindSwitch, NeoWCHideChatMuteIconKey, nil)];
     [interfaceItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];
 
     self.sections = @[
@@ -357,7 +359,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"messages" title:@"聊天增强" subtitle:@"消息、编辑与多选工具" symbol:@"bubble.left.and.bubble.right" footer:@"" collapsible:YES items:messageItems],
         [NeoWCSettingSection sectionWithIdentifier:@"enhancements" title:@"常用增强" subtitle:@"快捷操作与自动授权" symbol:@"bolt" footer:@"自动登录和授权会跳过手动确认，请只在可信设备和可信游戏中开启。" collapsible:YES items:enhancementItems],
-        [NeoWCSettingSection sectionWithIdentifier:@"interface" title:@"界面优化" subtitle:@"输入栏与插件页面外观" symbol:@"paintbrush" footer:@"输入栏圆角只作用于聊天页面，关闭后恢复微信原始样式。" collapsible:YES items:interfaceItems],
+        [NeoWCSettingSection sectionWithIdentifier:@"interface" title:@"界面优化" subtitle:@"聊天页面与插件入口外观" symbol:@"paintbrush" footer:@"界面调整只作用于聊天页面，关闭后恢复微信原始样式。" collapsible:YES items:interfaceItems],
         [NeoWCSettingSection sectionWithIdentifier:@"developer" title:@"开发者功能" subtitle:@"界面检查与运行诊断" symbol:@"hammer" footer:@"快捷入口启用后会立即尝试注册；关闭或移除入口后，重启微信即可从插件管理页面彻底消失。" collapsible:YES items:({
             NSMutableArray<NeoWCSettingItem *> *items = [NSMutableArray arrayWithArray:@[
                 item(@"调试悬浮按钮", @"仅由此开关控制，不监听全局手势", @"wrench.and.screwdriver", NeoWCRowKindSwitch, NeoWCDebugFloatingEnabledKey, nil),

@@ -10,6 +10,8 @@
 - 图片编辑快捷发送已能从 `EditImageAttr setEditedImage:` 取得最终编辑图；会话 ID 在编辑器存活时缓存。插件创建独立转发实例，但把微信原 `EditImageForwardAndEditLogicController` 作为代理，点击后立即进入官方确认流程，由微信在发送成功回调后退出编辑，取消确认则保留原编辑流程；不再等待聊天页或扫描 Window。
 - 设置分类重新整理：小游戏结果、图片编辑快捷发送和多选导出归入“聊天增强”；登录授权、朋友圈、运动和广告归入“常用增强”；新增“界面优化”。输入栏圆角的实机目标已确认为 `MMInputToolView.subviews.firstObject`（外部工具栏）和 `MMGrowTextView` 本身（内部输入框），内外均支持 0–40 自定义并可恢复微信原始 layer 状态；插件显示管理也移至该分类。
 - 聊天输入框新增局部滑动操作开关：仅给 `MMGrowTextView` 安装左右 `UISwipeGestureRecognizer`，左滑通过微信输入组件的文本更新路径清空内容，右滑调用内部 `UITextView paste:` 在当前光标位置粘贴；关闭后移除手势，不监听全局页面。
+- 调试视图选择器不再常驻顶部说明和取消按钮，也不再屏蔽顶部 64pt；启动时仅在底部显示约 1.35 秒的无交互 Toast，任意位置均可选择，双指轻点取消。
+- 界面优化新增“隐藏免打扰图标”：仅在 `BaseMsgContentViewController` 出现时遍历当前聊天内容与导航栏，隐藏 `accessibilityLabel == 免打扰` 的 `UIImageView`；保存原 hidden 状态，关闭功能或总开关后恢复，不做全局 `UIImageView` Hook。
 - 设置页子选项折叠：带子设置的功能开启时自动展开；主功能开启后可轻点该行卡片手动收起/展开，右侧使用方向箭头提示状态，折叠状态独立保存且不改变功能开关。
 - 防撤回提示外观：消息下方模板改为全宽多行编辑页并支持自定义文字颜色；气泡旁提示增加系统颜色选择器，位置既可拖动也可直接输入 X/Y 数值；设置卡片内部取消分割线。
 - 朋友圈双击点赞反馈：点赞后在双击触点显示约 0.52 秒的爱心弹出、轻微上浮和淡出动画；震动三档统一使用中等触感风格并压缩为 0.58 / 0.76 / 0.90，解决轻档无感和重档过猛。
@@ -51,6 +53,7 @@
 - 快速发送不再使用 `NeoWCImageQuickSendDelegate`、Window 扫描或后台重试；新转发实例仅处理指定联系人，代理仍为微信原图片编辑逻辑，避免干扰官方“转发给朋友”。
 - 点击“发送到当前会话”时同步调用官方确认页；只有确认发送成功后才退出编辑模式。
 - 根因修复：禁止在 `processEditImage:` 前后主动调用 `getDisplayImage:`；改为 Hook 微信自身对 `getDisplayImage:` 的正常调用并旁路保存返回图片，避免重复消费编辑结果导致官方转发也失效。
+- 2026-07-22 再次确认官方转发隔离：已完全移除 `processEditImage:`、`getDisplayImage:`、`getEditImageAttr` Hook；只在功能开启时监听编辑完成入口与 `EditImageAttr setEditedImage:` / `setEditedImages:` 写入。若点击时图片尚未生成，则在 setter 写入后续接一次官方确认流程；官方图片生成、联系人选择和确认页逻辑不再经过 NeoWC。
 
 关键文件：`Tweak.xm`。
 
