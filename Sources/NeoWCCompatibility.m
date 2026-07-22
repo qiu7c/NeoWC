@@ -19,7 +19,7 @@ void NeoWCCompatibilityMarkTriggered(NSString *identifier) {
 static NSArray<NSDictionary *> *NeoWCCompatibilityDefinitions(void) {
     return @[
         @{ @"id": @"anti-revoke", @"title": @"防撤回", @"class": @"CMessageMgr", @"selector": @"onNewSyncNotAddDBMessage:" },
-        @{ @"id": @"chat-capture", @"title": @"多选消息扩展", @"class": @"BaseMsgContentViewController", @"selector": @"ShowMultiSelectMoreOperation:" },
+        @{ @"id": @"multi-select-export", @"title": @"多选消息导出", @"class": @"BaseMsgContentViewController", @"selector": @"ShowMultiSelectMoreOperation:" },
         @{ @"id": @"image-edit", @"title": @"图片编辑快捷发送", @"class": @"EditImageForwardAndEditLogicController", @"selector": @"processEditImage:" },
         @{ @"id": @"device-login", @"title": @"设备扫码自动登录", @"class": @"MultiDeviceCardLoginContentView", @"selector": @"onTapConfirmButton" },
         @{ @"id": @"game-login", @"title": @"游戏扫码授权", @"class": @"MMAuthorizeUserInfoViewController", @"selector": @"viewDidAppear:" },
@@ -29,6 +29,7 @@ static NSArray<NSDictionary *> *NeoWCCompatibilityDefinitions(void) {
         @{ @"id": @"ad-block", @"title": @"广告净化", @"class": @"WCDataItem", @"selector": @"isAd" },
         @{ @"id": @"plugin-visibility", @"title": @"插件显示管理", @"class": @"WCPluginsMgr", @"selector": @"registerControllerWithTitle:version:controller:" },
         @{ @"id": @"input-rounding", @"title": @"聊天输入栏圆角", @"class": @"BaseMsgContentViewController", @"selector": @"getInputToolView" },
+        @{ @"id": @"input-swipe", @"title": @"输入框滑动操作", @"class": @"MMGrowTextView", @"selector": @"layoutSubviews" },
     ];
 }
 

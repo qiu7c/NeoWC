@@ -3,7 +3,6 @@
 #import "NeoWCAntiRevokeTemplateEditor.h"
 #import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
-#import "NeoWCChatCapture.h"
 #import "NeoWCCompatibility.h"
 #import "NeoWCPluginVisibility.h"
 #import "NeoWCPluginShortcuts.h"
@@ -175,27 +174,15 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCAntiRevokeSideOffsetXKey: @0.0,
         NeoWCAntiRevokeSideOffsetYKey: @10.0,
         NeoWCAntiRevokePersistRecordsKey: @NO,
-        NeoWCChatCaptureEnabledKey: @NO,
         NeoWCImageEditQuickSendEnabledKey: @NO,
         NeoWCImageEditReturnToChatKey: @YES,
+        NeoWCInputSwipeActionsEnabledKey: @NO,
         NeoWCMomentsLikeHapticEnabledKey: @NO,
         NeoWCMomentsLikeHapticIntensityKey: @0.65,
         NeoWCMultiSelectExportEnabledKey: @NO,
         NeoWCMultiSelectExportTextKey: @YES,
         NeoWCMultiSelectSaveImagesKey: @YES,
         NeoWCMultiSelectShareCardKey: @YES,
-        NeoWCChatCapturePresetKey: @0,
-        NeoWCChatCaptureIncludeStatusBarKey: @NO,
-        NeoWCChatCaptureAutoSplitKey: @YES,
-        NeoWCChatCaptureIncludeChromeKey: @YES,
-        NeoWCChatCaptureHideMemberNamesKey: @NO,
-        NeoWCChatCaptureShowBackgroundKey: @YES,
-        NeoWCChatCaptureCloseAfterShareKey: @NO,
-        NeoWCChatCaptureCropTopPointsKey: @0.0,
-        NeoWCChatCaptureShowChatNameKey: @NO,
-        NeoWCChatCaptureShowTimestampKey: @NO,
-        NeoWCChatCaptureWatermarkStyleKey: @0,
-        NeoWCChatCaptureWatermarkOpacityKey: @0.18,
         NeoWCDebugLoggingEnabledKey: @YES,
         NeoWCPluginShortcutsEnabledKey: @NO,
         NeoWCPluginShortcutLoggingKey: @YES,
@@ -208,6 +195,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCChatInputRoundingEnabledKey: @NO,
         NeoWCChatInputInnerRoundingKey: @YES,
         NeoWCChatInputOuterRoundingKey: @YES,
+        NeoWCChatInputInnerRadiusKey: @18.0,
+        NeoWCChatInputOuterRadiusKey: @22.0,
         NeoWCExpandedCategoriesKey: @[@"messages"],
         NeoWCCollapsedFeaturesKey: @[],
     }];
@@ -251,7 +240,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             NeoWCMomentsLikeHapticEnabledKey,
             NeoWCStepOverrideEnabledKey,
             NeoWCImageEditQuickSendEnabledKey,
-            NeoWCChatCaptureEnabledKey,
             NeoWCMultiSelectExportEnabledKey,
             NeoWCPluginShortcutsEnabledKey,
             NeoWCPluginShortcutCustomPageKey,
@@ -288,7 +276,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     BOOL antiRevokeEnabled = antiRevokeValue ? [antiRevokeValue boolValue] : YES;
     BOOL notifySenderEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCAntiRevokeNotifySenderKey];
     BOOL stepOverrideEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCStepOverrideEnabledKey];
-    BOOL chatCaptureEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatCaptureEnabledKey];
     BOOL imageEditQuickSendEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCImageEditQuickSendEnabledKey];
     BOOL momentsLikeEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsDoubleTapLikeKey];
     BOOL momentsHapticEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsLikeHapticEnabledKey];
@@ -321,13 +308,10 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [messageItems addObject:item(@"本地保存撤回记录", @"默认关闭；仅保存摘要和分类", @"internaldrive", NeoWCRowKindSwitch, NeoWCAntiRevokePersistRecordsKey, nil)];
     }
     [messageItems addObject:item(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCRowKindSwitch, NeoWCGameSelectorKey, nil)];
+    [messageItems addObject:item(@"输入框滑动操作", @"左滑清空，右滑从剪贴板粘贴", @"hand.draw", NeoWCRowKindSwitch, NeoWCInputSwipeActionsEnabledKey, nil)];
     [messageItems addObject:item(@"图片编辑快捷发送", @"在官方图片编辑完成菜单中增加发送到当前会话", @"photo.badge.arrow.down", NeoWCRowKindSwitch, NeoWCImageEditQuickSendEnabledKey, nil)];
     if (imageEditQuickSendEnabled && [self isFeatureExpandedForKey:NeoWCImageEditQuickSendEnabledKey]) {
         [messageItems addObject:item(@"发送后返回聊天", @"图片发送成功后退出编辑流程", @"arrow.uturn.backward", NeoWCRowKindSwitch, NeoWCImageEditReturnToChatKey, nil)];
-    }
-    [messageItems addObject:item(@"多选消息长截图", @"在聊天多选的“更多”中加入截图", @"rectangle.dashed", NeoWCRowKindSwitch, NeoWCChatCaptureEnabledKey, nil)];
-    if (chatCaptureEnabled && [self isFeatureExpandedForKey:NeoWCChatCaptureEnabledKey]) {
-        [messageItems addObject:item(@"长截图设置", @"顶栏、昵称、背景与裁切选项", @"slider.horizontal.3", NeoWCRowKindDetail, nil, @"设置")];
     }
     [messageItems addObject:item(@"多选消息导出", @"控制多选菜单中的复制、保存和分享功能", @"square.and.arrow.up.on.square", NeoWCRowKindSwitch, NeoWCMultiSelectExportEnabledKey, nil)];
     if (multiSelectExportEnabled && [self isFeatureExpandedForKey:NeoWCMultiSelectExportEnabledKey]) {
@@ -359,8 +343,16 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         item(@"聊天输入栏圆角", @"分别控制输入框内部与外部工具栏", @"rectangle.roundedtop", NeoWCRowKindSwitch, NeoWCChatInputRoundingEnabledKey, nil),
     ]];
     if (inputRoundingEnabled && [self isFeatureExpandedForKey:NeoWCChatInputRoundingEnabledKey]) {
-        [interfaceItems addObject:item(@"输入框内部圆角", @"将文字输入区域处理为连续圆角", @"text.cursor", NeoWCRowKindSwitch, NeoWCChatInputInnerRoundingKey, nil)];
-        [interfaceItems addObject:item(@"外部工具栏圆角", @"将语音、表情和加号所在工具栏圆角化", @"rectangle.bottomhalf.filled", NeoWCRowKindSwitch, NeoWCChatInputOuterRoundingKey, nil)];
+        [interfaceItems addObject:item(@"输入框内部圆角", @"作用于 MMGrowTextView 输入区域", @"text.cursor", NeoWCRowKindSwitch, NeoWCChatInputInnerRoundingKey, nil)];
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatInputInnerRoundingKey]) {
+            CGFloat innerRadius = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCChatInputInnerRadiusKey];
+            [interfaceItems addObject:item(@"内部圆角程度", @"输入 0 到 40，数值越大越圆", @"slider.horizontal.3", NeoWCRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", innerRadius])];
+        }
+        [interfaceItems addObject:item(@"外部工具栏圆角", @"作用于 MMInputToolView 的第一层背景", @"rectangle.bottomhalf.filled", NeoWCRowKindSwitch, NeoWCChatInputOuterRoundingKey, nil)];
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatInputOuterRoundingKey]) {
+            CGFloat outerRadius = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCChatInputOuterRadiusKey];
+            [interfaceItems addObject:item(@"外部圆角程度", @"输入 0 到 40，数值越大越圆", @"slider.horizontal.3", NeoWCRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", outerRadius])];
+        }
     }
     [interfaceItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];
 
@@ -686,11 +678,12 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
                               [item.defaultsKey isEqualToString:NeoWCMomentsDoubleTapLikeKey] ||
                               [item.defaultsKey isEqualToString:NeoWCMomentsLikeHapticEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCMultiSelectExportEnabledKey] ||
-                              [item.defaultsKey isEqualToString:NeoWCChatCaptureEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCImageEditQuickSendEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCPluginShortcutsEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCPluginShortcutCustomPageKey] ||
-                              [item.defaultsKey isEqualToString:NeoWCChatInputRoundingEnabledKey];
+                              [item.defaultsKey isEqualToString:NeoWCChatInputRoundingEnabledKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCChatInputInnerRoundingKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCChatInputOuterRoundingKey];
     if (changesVisibleRows) [self buildSections];
     if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] || changesVisibleRows) [self.tableView reloadData];
 }
@@ -873,6 +866,26 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)presentCornerRadiusEditorForKey:(NSString *)key title:(NSString *)title {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                   message:@"请输入 0 到 40 之间的数值；0 表示直角"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = [NSString stringWithFormat:@"%.0f", [[NSUserDefaults standardUserDefaults] doubleForKey:key]];
+        textField.keyboardType = UIKeyboardTypeDecimalPad;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        CGFloat radius = MIN(40.0, MAX(0.0, alert.textFields.firstObject.text.doubleValue));
+        [[NSUserDefaults standardUserDefaults] setDouble:radius forKey:key];
+        [weakSelf buildSections];
+        [weakSelf.tableView reloadData];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
@@ -937,12 +950,16 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [self presentPluginShortcutTextEditorForKey:NeoWCPluginShortcutCustomClassKey title:item.title placeholder:@"例如 NewSettingViewController"];
         return;
     }
-    if ([item.title isEqualToString:@"插件显示管理"]) {
-        [self.navigationController pushViewController:[NeoWCPluginVisibilityViewController new] animated:YES];
+    if ([item.title isEqualToString:@"内部圆角程度"]) {
+        [self presentCornerRadiusEditorForKey:NeoWCChatInputInnerRadiusKey title:item.title];
         return;
     }
-    if ([item.title isEqualToString:@"长截图设置"]) {
-        [self.navigationController pushViewController:[NeoWCChatCaptureSettingsViewController new] animated:YES];
+    if ([item.title isEqualToString:@"外部圆角程度"]) {
+        [self presentCornerRadiusEditorForKey:NeoWCChatInputOuterRadiusKey title:item.title];
+        return;
+    }
+    if ([item.title isEqualToString:@"插件显示管理"]) {
+        [self.navigationController pushViewController:[NeoWCPluginVisibilityViewController new] animated:YES];
         return;
     }
     if ([item.title isEqualToString:@"点赞震动力度"]) {

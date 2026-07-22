@@ -10,6 +10,8 @@
 NSString *const NeoWCChatInputRoundingEnabledKey = @"com.qiu7c.neowc.interface.chat-input-rounding";
 NSString *const NeoWCChatInputInnerRoundingKey = @"com.qiu7c.neowc.interface.chat-input-rounding.inner";
 NSString *const NeoWCChatInputOuterRoundingKey = @"com.qiu7c.neowc.interface.chat-input-rounding.outer";
+NSString *const NeoWCChatInputInnerRadiusKey = @"com.qiu7c.neowc.interface.chat-input-rounding.inner-radius";
+NSString *const NeoWCChatInputOuterRadiusKey = @"com.qiu7c.neowc.interface.chat-input-rounding.outer-radius";
 
 static char NeoWCOriginalCornerRadiusKey;
 static char NeoWCOriginalMasksToBoundsKey;
@@ -81,17 +83,20 @@ void NeoWCApplyChatInputRounding(UIViewController *controller) {
     NeoWCCompatibilityMarkTriggered(@"input-rounding");
 
     UIView *inputToolView = inputTool;
-    UIView *outerBar = NeoWCInterfaceViewValue(inputTool, @[@"toolView", @"_toolView"]);
-    if (!outerBar) outerBar = NeoWCFindSubviewOfClassName(inputToolView, @"InputToolViewBar");
-
+    // Verified on the current WeChat build: the first UIView under MMInputToolView
+    // is the visible outer toolbar background.
+    UIView *outerBar = inputToolView.subviews.firstObject;
     UIView *growTextView = NeoWCInterfaceViewValue(inputTool, @[@"textView", @"_textView"]);
-    UIView *innerBackground = NeoWCInterfaceViewValue(growTextView, @[@"backgroundView", @"_backgroundView"]);
-    if (!innerBackground) innerBackground = growTextView;
+    if (![NSStringFromClass(growTextView.class) containsString:@"MMGrowTextView"]) {
+        growTextView = NeoWCFindSubviewOfClassName(inputToolView, @"MMGrowTextView");
+    }
 
     BOOL masterEnabled = NeoWCEnhancementEnabled(NeoWCChatInputRoundingEnabledKey);
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     BOOL innerEnabled = masterEnabled && [defaults boolForKey:NeoWCChatInputInnerRoundingKey];
     BOOL outerEnabled = masterEnabled && [defaults boolForKey:NeoWCChatInputOuterRoundingKey];
-    NeoWCSetRoundedState(innerBackground, innerEnabled, 18.0);
-    if (outerBar != innerBackground) NeoWCSetRoundedState(outerBar, outerEnabled, 22.0);
+    CGFloat innerRadius = [defaults objectForKey:NeoWCChatInputInnerRadiusKey] ? [defaults doubleForKey:NeoWCChatInputInnerRadiusKey] : 18.0;
+    CGFloat outerRadius = [defaults objectForKey:NeoWCChatInputOuterRadiusKey] ? [defaults doubleForKey:NeoWCChatInputOuterRadiusKey] : 22.0;
+    NeoWCSetRoundedState(growTextView, innerEnabled, MIN(40.0, MAX(0.0, innerRadius)));
+    if (outerBar != growTextView) NeoWCSetRoundedState(outerBar, outerEnabled, MIN(40.0, MAX(0.0, outerRadius)));
 }

@@ -6,7 +6,6 @@
 
 #import "Sources/NeoWCSettingsViewController.h"
 #import "Sources/NeoWCAntiRevoke.h"
-#import "Sources/NeoWCChatCapture.h"
 #import "Sources/NeoWCChatExport.h"
 #import "Sources/NeoWCCompatibility.h"
 #import "Sources/NeoWCDebug.h"
@@ -60,6 +59,11 @@
 - (void)neowc_applyAntiRevokeTextColor;
 @end
 
+@interface MMGrowTextView : UIView
+- (void)neowc_handleInputSwipeLeft:(UISwipeGestureRecognizer *)recognizer;
+- (void)neowc_handleInputSwipeRight:(UISwipeGestureRecognizer *)recognizer;
+@end
+
 @interface CMessageWrap : NSObject
 @property (nonatomic, assign) NSUInteger m_uiMessageType;
 @property (nonatomic, assign) NSUInteger m_uiGameType;
@@ -91,10 +95,12 @@ static char NeoWCDeviceCardDidConfirmKey;
 static char NeoWCGameDidAuthorizeKey;
 static char NeoWCMomentsDoubleTapRecognizerKey;
 static char NeoWCGameSelectorPresentedKey;
-static char NeoWCChatCaptureBuildingMenuKey;
+static char NeoWCChatExportBuildingMenuKey;
 static char NeoWCAntiRevokeSideLabelKey;
 static char NeoWCAntiRevokeOriginalSystemTextColorKey;
 static char NeoWCEditedImageKey;
+static char NeoWCInputSwipeLeftRecognizerKey;
+static char NeoWCInputSwipeRightRecognizerKey;
 static __weak id NeoWCCurrentEditImageLogicController;
 
 static NSMutableSet *NeoWCActiveImageQuickSendDelegates(void) {
@@ -118,6 +124,45 @@ static void NeoWCTweakSetValue(id object, NSString *key, id value) {
     @try {
         [object setValue:value forKey:key];
     } @catch (__unused NSException *exception) {
+    }
+}
+
+static UITextView *NeoWCInnerTextView(id growTextView) {
+    id textView = NeoWCTweakSafeValue(growTextView, @"textView");
+    if (![textView isKindOfClass:[UITextView class]]) textView = NeoWCTweakSafeValue(growTextView, @"_textView");
+    return [textView isKindOfClass:[UITextView class]] ? textView : nil;
+}
+
+static void NeoWCSynchronizeInputSwipeActions(MMGrowTextView *view) {
+    if (!view) return;
+    BOOL enabled = NeoWCEnhancementEnabled(NeoWCInputSwipeActionsEnabledKey);
+    UISwipeGestureRecognizer *left = objc_getAssociatedObject(view, &NeoWCInputSwipeLeftRecognizerKey);
+    UISwipeGestureRecognizer *right = objc_getAssociatedObject(view, &NeoWCInputSwipeRightRecognizerKey);
+    if (enabled) {
+        NeoWCCompatibilityMarkTriggered(@"input-swipe");
+        if (!left) {
+            left = [[UISwipeGestureRecognizer alloc] initWithTarget:view action:@selector(neowc_handleInputSwipeLeft:)];
+            left.direction = UISwipeGestureRecognizerDirectionLeft;
+            left.cancelsTouchesInView = YES;
+            [view addGestureRecognizer:left];
+            objc_setAssociatedObject(view, &NeoWCInputSwipeLeftRecognizerKey, left, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        if (!right) {
+            right = [[UISwipeGestureRecognizer alloc] initWithTarget:view action:@selector(neowc_handleInputSwipeRight:)];
+            right.direction = UISwipeGestureRecognizerDirectionRight;
+            right.cancelsTouchesInView = YES;
+            [view addGestureRecognizer:right];
+            objc_setAssociatedObject(view, &NeoWCInputSwipeRightRecognizerKey, right, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        return;
+    }
+    if (left) {
+        [view removeGestureRecognizer:left];
+        objc_setAssociatedObject(view, &NeoWCInputSwipeLeftRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (right) {
+        [view removeGestureRecognizer:right];
+        objc_setAssociatedObject(view, &NeoWCInputSwipeRightRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
@@ -1060,6 +1105,49 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%hook MMGrowTextView
+
+- (void)layoutSubviews {
+    %orig;
+    NeoWCSynchronizeInputSwipeActions(self);
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    NeoWCSynchronizeInputSwipeActions(self);
+}
+
+%new
+- (void)neowc_handleInputSwipeLeft:(UISwipeGestureRecognizer *)recognizer {
+    if (recognizer.state != UIGestureRecognizerStateEnded || !NeoWCEnhancementEnabled(NeoWCInputSwipeActionsEnabledKey)) return;
+    UITextView *textView = NeoWCInnerTextView(self);
+    NeoWCTweakSetValue(self, @"text", @"");
+    if (textView) {
+        textView.text = @"";
+        textView.selectedRange = NSMakeRange(0, 0);
+        SEL changeSelector = NSSelectorFromString(@"textViewDidChange:");
+        if ([self respondsToSelector:changeSelector]) ((void (*)(id, SEL, id))objc_msgSend)(self, changeSelector, textView);
+    }
+}
+
+%new
+- (void)neowc_handleInputSwipeRight:(UISwipeGestureRecognizer *)recognizer {
+    if (recognizer.state != UIGestureRecognizerStateEnded || !NeoWCEnhancementEnabled(NeoWCInputSwipeActionsEnabledKey)) return;
+    UITextView *textView = NeoWCInnerTextView(self);
+    if (textView) {
+        [textView becomeFirstResponder];
+        [textView paste:nil];
+        return;
+    }
+    NSString *pasteText = UIPasteboard.generalPasteboard.string;
+    if (pasteText.length == 0) return;
+    NSString *currentText = NeoWCTweakSafeValue(self, @"text");
+    if (![currentText isKindOfClass:[NSString class]]) currentText = @"";
+    NeoWCTweakSetValue(self, @"text", [currentText stringByAppendingString:pasteText]);
+}
+
+%end
+
 %hook BaseMsgContentViewController
 
 - (void)viewDidLayoutSubviews {
@@ -1068,16 +1156,15 @@ static void NeoWCRegisterPlugin(void) {
 }
 
 - (void)ShowMultiSelectMoreOperation:(id)argument {
-    NeoWCCompatibilityMarkTriggered(@"chat-capture");
-    BOOL captureEnabled = NeoWCEnhancementEnabled(NeoWCChatCaptureEnabledKey);
+    NeoWCCompatibilityMarkTriggered(@"multi-select-export");
     BOOL exportEnabled = NeoWCEnhancementEnabled(NeoWCMultiSelectExportEnabledKey);
-    if (!captureEnabled && !exportEnabled) {
+    if (!exportEnabled) {
         %orig;
         return;
     }
-    objc_setAssociatedObject(self, &NeoWCChatCaptureBuildingMenuKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, &NeoWCChatExportBuildingMenuKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     %orig;
-    objc_setAssociatedObject(self, &NeoWCChatCaptureBuildingMenuKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, &NeoWCChatExportBuildingMenuKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 - (void)scrollActionSheet:(id)sheet didSelecteItem:(id)item {
@@ -1095,17 +1182,6 @@ static void NeoWCRegisterPlugin(void) {
         });
         return;
     }
-    if ([identifier isEqualToString:NeoWCChatCaptureActionIdentifier()] && NeoWCEnhancementEnabled(NeoWCChatCaptureEnabledKey)) {
-        SEL dismissSelector = NSSelectorFromString(@"dismissAnimated:");
-        if ([sheet respondsToSelector:dismissSelector]) {
-            ((void (*)(id, SEL, BOOL))objc_msgSend)(sheet, dismissSelector, YES);
-        }
-        __weak UIViewController *weakController = (UIViewController *)self;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            NeoWCStartChatCapture(weakController);
-        });
-        return;
-    }
     %orig;
 }
 
@@ -1115,33 +1191,14 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)showInView:(UIView *)view {
     id delegate = NeoWCTweakSafeValue(self, @"delegate");
-    BOOL isCaptureMenu = [objc_getAssociatedObject(delegate, &NeoWCChatCaptureBuildingMenuKey) boolValue];
-    if (isCaptureMenu && (NeoWCEnhancementEnabled(NeoWCChatCaptureEnabledKey) || NeoWCEnhancementEnabled(NeoWCMultiSelectExportEnabledKey))) {
+    BOOL isExportMenu = [objc_getAssociatedObject(delegate, &NeoWCChatExportBuildingMenuKey) boolValue];
+    if (isExportMenu && NeoWCEnhancementEnabled(NeoWCMultiSelectExportEnabledKey)) {
         NSArray *originalRows = NeoWCTweakSafeValue(self, @"itemArray");
         if ([originalRows isKindOfClass:[NSArray class]] && originalRows.count > 0) {
             NSMutableArray *rows = [NSMutableArray arrayWithCapacity:originalRows.count];
-            BOOL alreadyAdded = NO;
             for (id originalRow in originalRows) {
                 NSMutableArray *row = [originalRow isKindOfClass:[NSArray class]] ? [originalRow mutableCopy] : [NSMutableArray array];
-                for (id existingItem in row) {
-                    if ([NeoWCTweakSafeValue(existingItem, @"userInfo") isEqualToString:NeoWCChatCaptureActionIdentifier()]) {
-                        alreadyAdded = YES;
-                    }
-                }
                 [rows addObject:row];
-            }
-            if (!alreadyAdded && NeoWCEnhancementEnabled(NeoWCChatCaptureEnabledKey)) {
-                Class itemClass = NSClassFromString(@"MMScrollActionSheetItem");
-                id captureItem = itemClass ? [itemClass new] : nil;
-                if (captureItem) {
-                    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:22.0 weight:UIImageSymbolWeightRegular];
-                    UIImage *icon = [UIImage systemImageNamed:@"rectangle.dashed" withConfiguration:configuration];
-                    icon = [icon imageWithTintColor:[UIColor labelColor] renderingMode:UIImageRenderingModeAlwaysOriginal];
-                    NeoWCTweakSetValue(captureItem, @"title", @"截图");
-                    NeoWCTweakSetValue(captureItem, @"iconImg", icon);
-                    NeoWCTweakSetValue(captureItem, @"userInfo", NeoWCChatCaptureActionIdentifier());
-                    [(NSMutableArray *)rows.firstObject addObject:captureItem];
-                }
             }
             for (NSDictionary *action in NeoWCChatMultiSelectActions()) {
                 BOOL exists = NO;
