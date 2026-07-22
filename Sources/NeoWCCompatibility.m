@@ -28,6 +28,7 @@ static NSArray<NSDictionary *> *NeoWCCompatibilityDefinitions(void) {
         @{ @"id": @"steps", @"title": @"微信运动步数", @"class": @"WCDeviceStepObject", @"selector": @"m7StepCount" },
         @{ @"id": @"ad-block", @"title": @"广告净化", @"class": @"WCDataItem", @"selector": @"isAd" },
         @{ @"id": @"plugin-visibility", @"title": @"插件显示管理", @"class": @"WCPluginsMgr", @"selector": @"registerControllerWithTitle:version:controller:" },
+        @{ @"id": @"input-rounding", @"title": @"聊天输入栏圆角", @"class": @"BaseMsgContentViewController", @"selector": @"getInputToolView" },
     ];
 }
 

@@ -13,6 +13,7 @@
 #import "Sources/NeoWCEnhancements.h"
 #import "Sources/NeoWCPluginVisibility.h"
 #import "Sources/NeoWCPluginShortcuts.h"
+#import "Sources/NeoWCInterfaceTweaks.h"
 
 @interface WCPluginsMgr : NSObject
 + (instancetype)sharedInstance;
@@ -303,7 +304,34 @@ static UIViewController *NeoWCQuickSendTopController(UIViewController *controlle
     if ([controller isKindOfClass:[UITabBarController class]]) {
         return NeoWCQuickSendTopController(((UITabBarController *)controller).selectedViewController);
     }
+    for (UIViewController *child in controller.childViewControllers.reverseObjectEnumerator) {
+        if (child.isViewLoaded && child.view.window && !child.view.hidden) return NeoWCQuickSendTopController(child);
+    }
     return controller;
+}
+
+static UIViewController *NeoWCQuickSendVisibleController(void) {
+    NSMutableArray<UIWindow *> *windows = [NSMutableArray array];
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:[UIWindowScene class]] || scene.activationState != UISceneActivationStateForegroundActive) continue;
+        [windows addObjectsFromArray:((UIWindowScene *)scene).windows];
+    }
+    id legacyWindows = NeoWCTweakSafeValue(UIApplication.sharedApplication, @"windows");
+    if ([legacyWindows isKindOfClass:[NSArray class]]) {
+        for (UIWindow *window in legacyWindows) if (![windows containsObject:window]) [windows addObject:window];
+    }
+    [windows sortUsingComparator:^NSComparisonResult(UIWindow *left, UIWindow *right) {
+        if (left.isKeyWindow != right.isKeyWindow) return left.isKeyWindow ? NSOrderedAscending : NSOrderedDescending;
+        if (left.windowLevel != right.windowLevel) return left.windowLevel < right.windowLevel ? NSOrderedAscending : NSOrderedDescending;
+        return NSOrderedSame;
+    }];
+    for (UIWindow *window in windows) {
+        NSString *windowClass = NSStringFromClass(window.class);
+        if (window.hidden || window.alpha <= 0.01 || [windowClass containsString:@"NeoWCDebugWindow"]) continue;
+        UIViewController *controller = NeoWCQuickSendTopController(window.rootViewController);
+        if (controller && controller.view.window && !controller.isBeingDismissed) return controller;
+    }
+    return nil;
 }
 
 @interface NeoWCImageQuickSendDelegate : NSObject
@@ -316,8 +344,7 @@ static UIViewController *NeoWCQuickSendTopController(UIViewController *controlle
 @implementation NeoWCImageQuickSendDelegate
 
 - (UIViewController *)getCurrentViewController {
-    UIWindow *window = NeoWCActiveWindow();
-    return NeoWCQuickSendTopController(window.rootViewController);
+    return NeoWCQuickSendVisibleController();
 }
 
 - (UIViewController *)GetCurrentViewController {
@@ -379,7 +406,10 @@ static BOOL NeoWCSendEditedImageToCurrentConversation(id logic, NSString **failu
     SEL delegateSelector = sel_registerName("setDelegate:");
     if (![forwardLogic respondsToSelector:delegateSelector]) { if (failureReason) *failureReason = @"微信转发代理接口已变化"; return NO; }
     UIViewController *presenter = [delegate getCurrentViewController];
-    if (!presenter || !presenter.view.window) { if (failureReason) *failureReason = @"当前聊天界面尚未恢复，无法显示确认页"; return NO; }
+    if (!presenter || !presenter.view.window || presenter.isBeingDismissed) {
+        if (failureReason) *failureReason = @"当前页面正在切换，暂时无法显示确认页";
+        return NO;
+    }
     ((void (*)(id, SEL, id))objc_msgSend)(forwardLogic, delegateSelector, delegate);
     NeoWCTweakSetValue(forwardLogic, @"bSpecificContact", @YES);
     NeoWCTweakSetValue(forwardLogic, @"bPresent", @YES);
@@ -391,6 +421,25 @@ static BOOL NeoWCSendEditedImageToCurrentConversation(id logic, NSString **failu
         if (activeDelegate && !activeDelegate.finished) [activeDelegate finishWithMessage:nil success:NO];
     });
     return YES;
+}
+
+static void NeoWCAttemptQuickSendWhenReady(id logic, NSUInteger attempt) {
+    if (!logic) {
+        NeoWCShowTransientMessage(@"发送失败：图片编辑会话已经结束", NO);
+        return;
+    }
+    NSString *reason = nil;
+    if (NeoWCSendEditedImageToCurrentConversation(logic, &reason)) return;
+    BOOL waitingForPresenter = [reason isEqualToString:@"当前页面正在切换，暂时无法显示确认页"];
+    if (waitingForPresenter && attempt < 24) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            NeoWCAttemptQuickSendWhenReady(logic, attempt + 1);
+        });
+        return;
+    }
+    NSString *message = [NSString stringWithFormat:@"发送失败：%@", reason ?: @"未知原因"];
+    NeoWCShowTransientMessage(message, NO);
+    NeoWCLog(@"%@", message);
 }
 
 static NSString *NeoWCGameMD5ForContent(NSUInteger content) {
@@ -1000,13 +1049,8 @@ static void NeoWCRegisterPlugin(void) {
                 // Materialize the final edit while WeChat's editor and edit result are still alive.
                 // Forwarding waits until the action sheet has fully disappeared.
                 (void)NeoWCEditedImageFromLogic(strongLogic);
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.55 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    NSString *reason = nil;
-                    if (!NeoWCSendEditedImageToCurrentConversation(strongLogic, &reason)) {
-                        NSString *message = [NSString stringWithFormat:@"发送失败：%@", reason ?: @"未知原因"];
-                        NeoWCShowTransientMessage(message, NO);
-                        NeoWCLog(@"%@", message);
-                    }
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    NeoWCAttemptQuickSendWhenReady(strongLogic, 0);
                 });
             }];
         }
@@ -1017,6 +1061,11 @@ static void NeoWCRegisterPlugin(void) {
 %end
 
 %hook BaseMsgContentViewController
+
+- (void)viewDidLayoutSubviews {
+    %orig;
+    NeoWCApplyChatInputRounding((UIViewController *)self);
+}
 
 - (void)ShowMultiSelectMoreOperation:(id)argument {
     NeoWCCompatibilityMarkTriggered(@"chat-capture");

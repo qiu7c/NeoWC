@@ -60,6 +60,20 @@ static UIImage *NeoWCSnapshotView(UIView *view, CGSize size) {
     }];
 }
 
+static UIImage *NeoWCSnapshotLayerView(UIView *view, CGSize size) {
+    if (!view || size.width <= 0.0 || size.height <= 0.0) return nil;
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
+    format.opaque = NO;
+    format.scale = MAX(1.0, UIScreen.mainScreen.scale);
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
+    return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        // drawViewHierarchy snapshots against the current screen-sized render surface and
+        // creates horizontal tile seams in tall WeChat text bubbles. CALayer rendering uses
+        // the complete resized cell tree and is independent of the visible viewport.
+        [view.layer renderInContext:context.CGContext];
+    }];
+}
+
 static UIImage *NeoWCSnapshotOpaqueView(UIView *view, UIColor *backgroundColor) {
     if (!view || CGRectIsEmpty(view.bounds)) return nil;
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
@@ -1339,7 +1353,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     [cell layoutIfNeeded];
     NSArray<UIVisualEffectView *> *privacyBlurs = self.preset == NeoWCChatCapturePresetPrivacy ? NeoWCInstallPrivacyBlurs(cell) : @[];
     NSArray<UIView *> *bubbleFallbacks = NeoWCInstallBubbleSnapshotFallbacks(cell);
-    UIImage *image = NeoWCSnapshotView(cell, CGSizeMake(width, height));
+    UIImage *image = NeoWCSnapshotLayerView(cell, CGSizeMake(width, height));
     for (UIView *fallback in bubbleFallbacks) [fallback removeFromSuperview];
     for (UIVisualEffectView *blur in privacyBlurs) [blur removeFromSuperview];
     cell.frame = originalFrame;

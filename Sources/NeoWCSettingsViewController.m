@@ -7,6 +7,7 @@
 #import "NeoWCCompatibility.h"
 #import "NeoWCPluginVisibility.h"
 #import "NeoWCPluginShortcuts.h"
+#import "NeoWCInterfaceTweaks.h"
 
 static NSString *const NeoWCVersion = @"0.1.1";
 static NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
@@ -204,6 +205,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCPluginShortcutCustomPageKey: @NO,
         NeoWCPluginShortcutCustomTitleKey: @"快捷页面",
         NeoWCPluginShortcutCustomClassKey: @"",
+        NeoWCChatInputRoundingEnabledKey: @NO,
+        NeoWCChatInputInnerRoundingKey: @YES,
+        NeoWCChatInputOuterRoundingKey: @YES,
         NeoWCExpandedCategoriesKey: @[@"messages"],
         NeoWCCollapsedFeaturesKey: @[],
     }];
@@ -251,6 +255,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             NeoWCMultiSelectExportEnabledKey,
             NeoWCPluginShortcutsEnabledKey,
             NeoWCPluginShortcutCustomPageKey,
+            NeoWCChatInputRoundingEnabledKey,
         ]];
     });
     return [keys containsObject:key];
@@ -289,6 +294,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     BOOL momentsHapticEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsLikeHapticEnabledKey];
     BOOL multiSelectExportEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMultiSelectExportEnabledKey];
     BOOL pluginShortcutsEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCPluginShortcutsEnabledKey];
+    BOOL inputRoundingEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatInputRoundingEnabledKey];
     NSString *revokePromptStyle = revokePromptStyleValue == 1 ? @"气泡旁" : @"消息下方";
     NSString *sidePromptText = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCAntiRevokeSideTextKey] ?: @"已拦截撤回";
     id storedSideOffsetX = [[NSUserDefaults standardUserDefaults] objectForKey:NeoWCAntiRevokeSideOffsetXKey];
@@ -314,13 +320,27 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [messageItems addObject:item(@"防撤回记录中心", @"搜索本次运行期间拦截的撤回消息", @"tray.full", NeoWCRowKindDetail, nil, @"查看")];
         [messageItems addObject:item(@"本地保存撤回记录", @"默认关闭；仅保存摘要和分类", @"internaldrive", NeoWCRowKindSwitch, NeoWCAntiRevokePersistRecordsKey, nil)];
     }
+    [messageItems addObject:item(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCRowKindSwitch, NeoWCGameSelectorKey, nil)];
+    [messageItems addObject:item(@"图片编辑快捷发送", @"在官方图片编辑完成菜单中增加发送到当前会话", @"photo.badge.arrow.down", NeoWCRowKindSwitch, NeoWCImageEditQuickSendEnabledKey, nil)];
+    if (imageEditQuickSendEnabled && [self isFeatureExpandedForKey:NeoWCImageEditQuickSendEnabledKey]) {
+        [messageItems addObject:item(@"发送后返回聊天", @"图片发送成功后退出编辑流程", @"arrow.uturn.backward", NeoWCRowKindSwitch, NeoWCImageEditReturnToChatKey, nil)];
+    }
+    [messageItems addObject:item(@"多选消息长截图", @"在聊天多选的“更多”中加入截图", @"rectangle.dashed", NeoWCRowKindSwitch, NeoWCChatCaptureEnabledKey, nil)];
+    if (chatCaptureEnabled && [self isFeatureExpandedForKey:NeoWCChatCaptureEnabledKey]) {
+        [messageItems addObject:item(@"长截图设置", @"顶栏、昵称、背景与裁切选项", @"slider.horizontal.3", NeoWCRowKindDetail, nil, @"设置")];
+    }
+    [messageItems addObject:item(@"多选消息导出", @"控制多选菜单中的复制、保存和分享功能", @"square.and.arrow.up.on.square", NeoWCRowKindSwitch, NeoWCMultiSelectExportEnabledKey, nil)];
+    if (multiSelectExportEnabled && [self isFeatureExpandedForKey:NeoWCMultiSelectExportEnabledKey]) {
+        [messageItems addObject:item(@"复制纯文本", @"只复制消息正文到剪贴板", @"doc.on.clipboard", NeoWCRowKindSwitch, NeoWCMultiSelectExportTextKey, nil)];
+        [messageItems addObject:item(@"批量保存图片", @"保存所选且已下载到本机的图片", @"photo.on.rectangle.angled", NeoWCRowKindSwitch, NeoWCMultiSelectSaveImagesKey, nil)];
+        [messageItems addObject:item(@"生成分享卡片", @"可选择极简、对话或深色样式", @"rectangle.on.rectangle", NeoWCRowKindSwitch, NeoWCMultiSelectShareCardKey, nil)];
+    }
 
     NSMutableArray<NeoWCSettingItem *> *enhancementItems = [NSMutableArray arrayWithArray:@[
         item(@"设备扫码自动登录", @"自动确认电脑、平板等设备登录", @"desktopcomputer", NeoWCRowKindSwitch, NeoWCAutoDeviceLoginKey, nil),
         item(@"游戏授权自动允许", @"自动点击游戏扫码授权页面的允许按钮", @"gamecontroller", NeoWCRowKindSwitch, NeoWCAutoGameAuthorizeKey, nil),
         item(@"朋友圈双击点赞", @"双击好友朋友圈内容直接点赞", @"hand.thumbsup", NeoWCRowKindSwitch, NeoWCMomentsDoubleTapLikeKey, nil),
         item(@"朋友圈操作按钮替换为评论", @"点击后直接进入评论，不再展开操作菜单", @"bubble.middle.bottom", NeoWCRowKindSwitch, NeoWCMomentsQuickCommentKey, nil),
-        item(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCRowKindSwitch, NeoWCGameSelectorKey, nil),
         item(@"自定义微信运动步数", @"每天启动微信时自动使用设定步数", @"figure.walk", NeoWCRowKindSwitch, NeoWCStepOverrideEnabledKey, nil),
     ]];
     if (momentsLikeEnabled && [self isFeatureExpandedForKey:NeoWCMomentsDoubleTapLikeKey]) {
@@ -334,24 +354,23 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     }
     if (stepOverrideEnabled && [self isFeatureExpandedForKey:NeoWCStepOverrideEnabledKey]) [enhancementItems addObject:item(@"设置运动步数", @"设定值会在每天首次启动或回到微信时刷新", @"number", NeoWCRowKindDetail, nil, stepValue)];
     [enhancementItems addObject:item(@"广告净化", @"隐藏朋友圈广告与小程序启动广告", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil)];
-    [enhancementItems addObject:item(@"图片编辑快捷发送", @"在官方图片编辑完成菜单中增加发送到当前会话", @"photo.badge.arrow.down", NeoWCRowKindSwitch, NeoWCImageEditQuickSendEnabledKey, nil)];
-    if (imageEditQuickSendEnabled && [self isFeatureExpandedForKey:NeoWCImageEditQuickSendEnabledKey]) [enhancementItems addObject:item(@"发送后返回聊天", @"图片发送成功后退出编辑流程", @"arrow.uturn.backward", NeoWCRowKindSwitch, NeoWCImageEditReturnToChatKey, nil)];
-    [enhancementItems addObject:item(@"多选消息长截图", @"在聊天多选的“更多”中加入截图", @"rectangle.dashed", NeoWCRowKindSwitch, NeoWCChatCaptureEnabledKey, nil)];
-    if (chatCaptureEnabled && [self isFeatureExpandedForKey:NeoWCChatCaptureEnabledKey]) [enhancementItems addObject:item(@"长截图设置", @"顶栏、昵称、背景与裁切选项", @"slider.horizontal.3", NeoWCRowKindDetail, nil, @"设置")];
-    [enhancementItems addObject:item(@"多选消息导出", @"控制多选菜单中的复制、保存和分享功能", @"square.and.arrow.up.on.square", NeoWCRowKindSwitch, NeoWCMultiSelectExportEnabledKey, nil)];
-    if (multiSelectExportEnabled && [self isFeatureExpandedForKey:NeoWCMultiSelectExportEnabledKey]) {
-        [enhancementItems addObject:item(@"复制纯文本", @"只复制消息正文到剪贴板", @"doc.on.clipboard", NeoWCRowKindSwitch, NeoWCMultiSelectExportTextKey, nil)];
-        [enhancementItems addObject:item(@"批量保存图片", @"保存所选且已下载到本机的图片", @"photo.on.rectangle.angled", NeoWCRowKindSwitch, NeoWCMultiSelectSaveImagesKey, nil)];
-        [enhancementItems addObject:item(@"生成分享卡片", @"可选择极简、对话或深色样式", @"rectangle.on.rectangle", NeoWCRowKindSwitch, NeoWCMultiSelectShareCardKey, nil)];
+
+    NSMutableArray<NeoWCSettingItem *> *interfaceItems = [NSMutableArray arrayWithArray:@[
+        item(@"聊天输入栏圆角", @"分别控制输入框内部与外部工具栏", @"rectangle.roundedtop", NeoWCRowKindSwitch, NeoWCChatInputRoundingEnabledKey, nil),
+    ]];
+    if (inputRoundingEnabled && [self isFeatureExpandedForKey:NeoWCChatInputRoundingEnabledKey]) {
+        [interfaceItems addObject:item(@"输入框内部圆角", @"将文字输入区域处理为连续圆角", @"text.cursor", NeoWCRowKindSwitch, NeoWCChatInputInnerRoundingKey, nil)];
+        [interfaceItems addObject:item(@"外部工具栏圆角", @"将语音、表情和加号所在工具栏圆角化", @"rectangle.bottomhalf.filled", NeoWCRowKindSwitch, NeoWCChatInputOuterRoundingKey, nil)];
     }
-    [enhancementItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];
+    [interfaceItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];
 
     self.sections = @[
         [NeoWCSettingSection sectionWithIdentifier:@"general" title:@"总开关" subtitle:nil symbol:@"switch.2" footer:@"关闭后仅保留设置入口，所有增强功能停止生效。" collapsible:NO items:@[
             item(@"启用 NeoWC", @"插件功能总开关", @"power", NeoWCRowKindSwitch, NeoWCEnabledKey, nil),
         ]],
-        [NeoWCSettingSection sectionWithIdentifier:@"messages" title:@"消息增强" subtitle:@"撤回拦截与提示" symbol:@"bubble.left.and.bubble.right" footer:@"" collapsible:YES items:messageItems],
-        [NeoWCSettingSection sectionWithIdentifier:@"enhancements" title:@"增强功能" subtitle:@"快捷操作与自动授权" symbol:@"bolt" footer:@"自动登录和授权会跳过手动确认，请只在可信设备和可信游戏中开启。" collapsible:YES items:enhancementItems],
+        [NeoWCSettingSection sectionWithIdentifier:@"messages" title:@"聊天增强" subtitle:@"消息、编辑与多选工具" symbol:@"bubble.left.and.bubble.right" footer:@"" collapsible:YES items:messageItems],
+        [NeoWCSettingSection sectionWithIdentifier:@"enhancements" title:@"常用增强" subtitle:@"快捷操作与自动授权" symbol:@"bolt" footer:@"自动登录和授权会跳过手动确认，请只在可信设备和可信游戏中开启。" collapsible:YES items:enhancementItems],
+        [NeoWCSettingSection sectionWithIdentifier:@"interface" title:@"界面优化" subtitle:@"输入栏与插件页面外观" symbol:@"paintbrush" footer:@"输入栏圆角只作用于聊天页面，关闭后恢复微信原始样式。" collapsible:YES items:interfaceItems],
         [NeoWCSettingSection sectionWithIdentifier:@"developer" title:@"开发者功能" subtitle:@"界面检查与运行诊断" symbol:@"hammer" footer:@"快捷入口启用后会立即尝试注册；关闭或移除入口后，重启微信即可从插件管理页面彻底消失。" collapsible:YES items:({
             NSMutableArray<NeoWCSettingItem *> *items = [NSMutableArray arrayWithArray:@[
                 item(@"调试悬浮按钮", @"仅由此开关控制，不监听全局手势", @"wrench.and.screwdriver", NeoWCRowKindSwitch, NeoWCDebugFloatingEnabledKey, nil),
@@ -670,7 +689,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
                               [item.defaultsKey isEqualToString:NeoWCChatCaptureEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCImageEditQuickSendEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCPluginShortcutsEnabledKey] ||
-                              [item.defaultsKey isEqualToString:NeoWCPluginShortcutCustomPageKey];
+                              [item.defaultsKey isEqualToString:NeoWCPluginShortcutCustomPageKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCChatInputRoundingEnabledKey];
     if (changesVisibleRows) [self buildSections];
     if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] || changesVisibleRows) [self.tableView reloadData];
 }
