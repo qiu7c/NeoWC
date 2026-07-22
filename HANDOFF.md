@@ -2,8 +2,12 @@
 
 ## 2026-07-22 反馈修复（本地未推送）
 
+- 图片编辑快捷发送取图修复：不再只等待 `getDisplayImage:`；主动读取 `EditImageForwardAndEditLogicController.getEditImageAttr`、`_editImageAttr` 与编辑视图，解析 `EditImageAttr.editedImage/editedImages/unCropImage`，并 Hook `setEditedImage:`、`setEditedImages:` 在微信写入最终结果时缓存真实全分辨率 `UIImage`。
 - 设置页折叠附件布局修复：为“箭头 + UISwitch”的 accessory stack 明确设置 72×32 pt 外层尺寸，避免 UITableView 不计算 accessoryView 自适应尺寸时整体跑到屏幕左侧并重叠。
-- 长截图三次修复：取消 `CALayer renderInContext:` 的整 Cell 离屏方案；将消息滚动到导航栏与输入栏之间的安全区域，从真实微信窗口按行截图，高 Cell 按可视高度分块并以原生分辨率拼接，避免重复白色横条和长消息断层。聊天背景优先调用 `getBackgroundView`，并按原始比例纵向铺设而不是拉伸。
+- 长截图回退：真实窗口分块截取在实机出现巨幅空白、横条和消息残片，已整套移除。生成核心恢复到用户验证过的 0.1.0 方案：消息 Cell 临时调整到完整尺寸后使用 `drawViewHierarchyInRect:` 渲染，并恢复气泡背景兜底；保留等待多选界面退出、预览编辑、隐私模式、分页及新版聊天背景查找。聊天背景按 0.1.0 行为铺到消息区域，后续不要再启用窗口滚动分块方案。
+- 防撤回气泡旁提示恢复为消息 ViewModel 与气泡完成绑定后的主队列刷新，并在 Cell 重新进入窗口时补刷；同步刷新会在绑定未完成时把提示永久隐藏。提示层显式保持 alpha 与高 zPosition。
+- 功能子项折叠不再 `reloadSections` 带动整张分类卡片跳动，改为只淡入/淡出父开关紧随的子项，并无动画刷新父行圆角和箭头。
+- 新增插件管理快捷入口：可按需动态注册调试日志开关、调试悬浮窗开关、直达调试中心、直达防撤回记录；还可输入自定义入口名称与 Runtime 类名。`UIViewController` 子类直接注册，`UIView` 子类由 `NeoWCDynamicViewShortcutController` 承载。WCPluginsMgr 没有注销 API，因此关闭或更换已注册入口后需重启微信清理本次进程的旧入口。
 - 设置页子选项折叠：带子设置的功能开启时自动展开；主功能开启后可轻点该行卡片手动收起/展开，右侧使用方向箭头提示状态，折叠状态独立保存且不改变功能开关。
 - 防撤回提示外观：消息下方模板改为全宽多行编辑页并支持自定义文字颜色；气泡旁提示增加系统颜色选择器，位置既可拖动也可直接输入 X/Y 数值；设置卡片内部取消分割线。
 - 朋友圈双击点赞反馈：点赞后在双击触点显示约 0.52 秒的爱心弹出、轻微上浮和淡出动画；震动三档统一使用中等触感风格并压缩为 0.58 / 0.76 / 0.90，解决轻档无感和重档过猛。

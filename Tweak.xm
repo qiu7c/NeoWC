@@ -12,6 +12,7 @@
 #import "Sources/NeoWCDebug.h"
 #import "Sources/NeoWCEnhancements.h"
 #import "Sources/NeoWCPluginVisibility.h"
+#import "Sources/NeoWCPluginShortcuts.h"
 
 @interface WCPluginsMgr : NSObject
 + (instancetype)sharedInstance;
@@ -139,15 +140,113 @@ static NSString *NeoWCConversationUserNameForEditLogic(id logic) {
     return [value isKindOfClass:[NSString class]] && [value length] > 0 ? value : nil;
 }
 
+static UIImage *NeoWCImageFromEditValue(id value, NSUInteger depth) {
+    if (!value || depth > 4) return nil;
+    if ([value isKindOfClass:[UIImage class]]) return value;
+    if ([value isKindOfClass:[CIImage class]]) return [UIImage imageWithCIImage:value];
+    if ([value isKindOfClass:[NSData class]]) return [UIImage imageWithData:value];
+    if ([value isKindOfClass:[NSURL class]]) {
+        NSURL *url = value;
+        return url.isFileURL ? [UIImage imageWithContentsOfFile:url.path] : nil;
+    }
+    if ([value isKindOfClass:[NSString class]]) {
+        NSString *path = value;
+        if ([path hasPrefix:@"file://"]) path = [NSURL URLWithString:path].path;
+        return path.length > 0 && [[NSFileManager defaultManager] fileExistsAtPath:path] ? [UIImage imageWithContentsOfFile:path] : nil;
+    }
+    if ([value isKindOfClass:[NSArray class]]) {
+        for (id candidate in [(NSArray *)value reverseObjectEnumerator]) {
+            UIImage *image = NeoWCImageFromEditValue(candidate, depth + 1);
+            if (image) return image;
+        }
+        return nil;
+    }
+    if ([value isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *dictionary = value;
+        NSArray<NSString *> *preferredKeys = @[@"editedImage", @"image", @"outputImage", @"resultImage", @"fullImage", @"path", @"url"];
+        for (NSString *key in preferredKeys) {
+            UIImage *image = NeoWCImageFromEditValue(dictionary[key], depth + 1);
+            if (image) return image;
+        }
+        NSUInteger checked = 0;
+        for (id candidate in dictionary.allValues.reverseObjectEnumerator) {
+            UIImage *image = NeoWCImageFromEditValue(candidate, depth + 1);
+            if (image) return image;
+            if (++checked >= 16) break;
+        }
+    }
+    return nil;
+}
+
+static UIImage *NeoWCImageFromEditAttribute(id attribute) {
+    if (!attribute) return nil;
+    NSArray<NSString *> *keys = @[@"editedImage", @"editedImages", @"outputImage", @"resultImage", @"unCropImage", @"editImageAttrDic", @"userInfo"];
+    for (NSString *key in keys) {
+        UIImage *image = NeoWCImageFromEditValue(NeoWCTweakSafeValue(attribute, key), 0);
+        if (image) return image;
+    }
+    BOOL isEdited = [NeoWCTweakSafeValue(attribute, @"isEdited") boolValue];
+    if (!isEdited) return NeoWCImageFromEditValue(NeoWCTweakSafeValue(attribute, @"originalImage"), 0);
+    return nil;
+}
+
+static void NeoWCCacheEditedImage(id logic, UIImage *image, NSString *source) {
+    if (!logic || ![image isKindOfClass:[UIImage class]]) return;
+    objc_setAssociatedObject(logic, &NeoWCEditedImageKey, image, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NeoWCLog(@"已从 %@ 取得编辑图片：%.0f × %.0f", source ?: @"未知来源", image.size.width * image.scale, image.size.height * image.scale);
+}
+
 static UIImage *NeoWCEditedImageFromLogic(id logic) {
     UIImage *image = objc_getAssociatedObject(logic, &NeoWCEditedImageKey);
     if ([image isKindOfClass:[UIImage class]]) return image;
-    NSArray<NSString *> *keys = @[@"editedImage", @"outputImage", @"resultImage"];
+    SEL attributeSelector = sel_registerName("getEditImageAttr");
+    if ([logic respondsToSelector:attributeSelector]) {
+        id attribute = ((id (*)(id, SEL))objc_msgSend)(logic, attributeSelector);
+        image = NeoWCImageFromEditAttribute(attribute);
+        if (image) {
+            NeoWCCacheEditedImage(logic, image, @"getEditImageAttr");
+            return image;
+        }
+    }
+    NSArray<NSString *> *attributeKeys = @[@"editImageAttr", @"_editImageAttr"];
+    for (NSString *key in attributeKeys) {
+        image = NeoWCImageFromEditAttribute(NeoWCTweakSafeValue(logic, key));
+        if (image) {
+            NeoWCCacheEditedImage(logic, image, key);
+            return image;
+        }
+    }
+    id initialView = NeoWCTweakSafeValue(logic, @"editImageInitialView") ?: NeoWCTweakSafeValue(logic, @"_editImageInitialView");
+    if (initialView && [initialView respondsToSelector:attributeSelector]) {
+        id attribute = ((id (*)(id, SEL))objc_msgSend)(initialView, attributeSelector);
+        image = NeoWCImageFromEditAttribute(attribute);
+        if (image) {
+            NeoWCCacheEditedImage(logic, image, @"EditImageInitialView");
+            return image;
+        }
+    }
+    NSArray<NSString *> *keys = @[@"editedImage", @"editedImages", @"outputImage", @"resultImage"];
     for (NSString *key in keys) {
-        id candidate = NeoWCTweakSafeValue(logic, key);
-        if ([candidate isKindOfClass:[UIImage class]]) return candidate;
+        image = NeoWCImageFromEditValue(NeoWCTweakSafeValue(logic, key), 0);
+        if (image) {
+            NeoWCCacheEditedImage(logic, image, key);
+            return image;
+        }
     }
     return nil;
+}
+
+static void NeoWCLogEditImageDiagnostics(id logic) {
+    id attribute = nil;
+    SEL selector = sel_registerName("getEditImageAttr");
+    if ([logic respondsToSelector:selector]) attribute = ((id (*)(id, SEL))objc_msgSend)(logic, selector);
+    if (!attribute) attribute = NeoWCTweakSafeValue(logic, @"_editImageAttr");
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    for (NSString *key in @[@"editedImage", @"editedImages", @"unCropImage", @"editImageAttrDic", @"originalImage", @"isEdited"]) {
+        id value = NeoWCTweakSafeValue(attribute, key);
+        [parts addObject:[NSString stringWithFormat:@"%@=%@", key, value ? NSStringFromClass([value class]) : @"nil"]];
+    }
+    NeoWCLog(@"编辑图片取图诊断：logic=%@ attr=%@ %@", NSStringFromClass([logic class]), attribute ? NSStringFromClass([attribute class]) : @"nil", [parts componentsJoinedByString:@" "]);
 }
 
 static UIWindow *NeoWCActiveWindow(void) {
@@ -257,7 +356,11 @@ static BOOL NeoWCSendEditedImageToCurrentConversation(id logic, NSString **failu
     Class providerClass = objc_getClass("PasteboardMsgProvider");
     Class forwardClass = objc_getClass("ForwardMessageLogicController");
     SEL makeMessageSelector = sel_registerName("GetMessageFromImage:contact:");
-    if (!image) { if (failureReason) *failureReason = @"没有取得微信编辑后的图片"; return NO; }
+    if (!image) {
+        NeoWCLogEditImageDiagnostics(logic);
+        if (failureReason) *failureReason = @"没有取得微信编辑后的图片";
+        return NO;
+    }
     if (userName.length == 0) { if (failureReason) *failureReason = @"当前编辑页不属于聊天会话"; return NO; }
     if (!contact) { if (failureReason) *failureReason = @"当前聊天联系人已失效"; return NO; }
     id contactNameValue = NeoWCTweakSafeValue(contact, @"m_nsUsrName");
@@ -713,6 +816,7 @@ static void NeoWCRegisterPlugin(void) {
     [manager registerControllerWithTitle:@"NeoWC"
                                  version:@"0.1.1"
                               controller:NSStringFromClass([NeoWCSettingsViewController class])];
+    NeoWCRegisterPluginShortcuts(manager);
     NeoWCDidRegister = YES;
     NeoWCLog(@"已注册 WCPluginsMgr 设置入口");
 }
@@ -751,6 +855,18 @@ static void NeoWCRegisterPlugin(void) {
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(__unused NSNotification *note) {
                         NeoWCSynchronizeVisibleMomentsCells();
+                    }];
+
+        __block BOOL lastFloatingDebugState = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCDebugFloatingEnabledKey];
+        [[NSNotificationCenter defaultCenter]
+            addObserverForName:NSUserDefaultsDidChangeNotification
+                        object:[NSUserDefaults standardUserDefaults]
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(__unused NSNotification *note) {
+                        BOOL currentState = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCDebugFloatingEnabledKey];
+                        if (currentState == lastFloatingDebugState) return;
+                        lastFloatingDebugState = currentState;
+                        [[NeoWCDebugManager sharedManager] setFloatingEnabled:currentState];
                     }];
 
         [[NSNotificationCenter defaultCenter]
@@ -826,7 +942,7 @@ static void NeoWCRegisterPlugin(void) {
         if ([self respondsToSelector:displaySelector]) {
             UIImage *image = ((UIImage *(*)(id, SEL, void *))objc_msgSend)(self, displaySelector, editResult);
             if ([image isKindOfClass:[UIImage class]]) {
-                objc_setAssociatedObject(self, &NeoWCEditedImageKey, image, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                NeoWCCacheEditedImage(self, image, @"processEditImage/getDisplayImage");
             }
         }
     }
@@ -834,8 +950,31 @@ static void NeoWCRegisterPlugin(void) {
 
 - (UIImage *)getDisplayImage:(void *)editResult {
     UIImage *officialImage = %orig;
-    if ([officialImage isKindOfClass:[UIImage class]]) objc_setAssociatedObject(self, &NeoWCEditedImageKey, officialImage, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if ([officialImage isKindOfClass:[UIImage class]]) NeoWCCacheEditedImage(self, officialImage, @"getDisplayImage");
     return officialImage;
+}
+
+- (id)getEditImageAttr {
+    id attribute = %orig;
+    UIImage *image = NeoWCImageFromEditAttribute(attribute);
+    if (image) NeoWCCacheEditedImage(self, image, @"EditImageAttr");
+    return attribute;
+}
+
+%end
+
+%hook EditImageAttr
+
+- (void)setEditedImage:(id)value {
+    %orig;
+    UIImage *image = NeoWCImageFromEditValue(value, 0);
+    if (image && NeoWCCurrentEditImageLogicController) NeoWCCacheEditedImage(NeoWCCurrentEditImageLogicController, image, @"setEditedImage:");
+}
+
+- (void)setEditedImages:(id)value {
+    %orig;
+    UIImage *image = NeoWCImageFromEditValue(value, 0);
+    if (image && NeoWCCurrentEditImageLogicController) NeoWCCacheEditedImage(NeoWCCurrentEditImageLogicController, image, @"setEditedImages:");
 }
 
 %end
@@ -1122,13 +1261,28 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)setViewModel:(id)viewModel {
     %orig;
-    [self neowc_refreshAntiRevokeSidePrompt];
-    [self setNeedsLayout];
+    // WeChat finishes binding the message wrap and bubble view after setViewModel: returns.
+    // Refreshing synchronously sees an incomplete view model and permanently hides the label.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self neowc_refreshAntiRevokeSidePrompt];
+        [self setNeedsLayout];
+    });
 }
 
 - (void)updateStatus {
     %orig;
-    [self neowc_refreshAntiRevokeSidePrompt];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self neowc_refreshAntiRevokeSidePrompt];
+    });
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    if (self.window) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self neowc_refreshAntiRevokeSidePrompt];
+        });
+    }
 }
 
 %new
@@ -1159,6 +1313,7 @@ static void NeoWCRegisterPlugin(void) {
         objc_setAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey, label, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     label.hidden = NO;
+    label.alpha = 1.0;
     label.text = prompt;
     label.textColor = NeoWCColorForDefaultsKey(NeoWCAntiRevokeSideTextColorKey, UIColor.tertiaryLabelColor);
 
@@ -1184,6 +1339,7 @@ static void NeoWCRegisterPlugin(void) {
     x = MIN(MAX(4.0, x), MAX(4.0, CGRectGetWidth(self.bounds) - labelWidth - 4.0));
     CGFloat y = CGRectGetMidY(bubbleFrame) - labelHeight * 0.5 + offsetY;
     label.frame = CGRectIntegral(CGRectMake(x, y, labelWidth, labelHeight));
+    label.layer.zPosition = 1000.0;
     [self bringSubviewToFront:label];
 }
 

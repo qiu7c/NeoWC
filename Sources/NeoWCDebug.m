@@ -520,6 +520,22 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 
 @end
 
+// WCPluginsMgr needs a concrete controller class name. This subclass reuses the
+// dashboard directly instead of presenting a second modal controller.
+@interface NeoWCDebugShortcutViewController : NeoWCDebugDashboardViewController
+@end
+
+@implementation NeoWCDebugShortcutViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.navigationItem.leftBarButtonItem = nil;
+    NSArray<UIViewController *> *controllers = self.navigationController.viewControllers;
+    if (controllers.count >= 2) self.sourceViewController = controllers[controllers.count - 2];
+}
+
+@end
+
 @interface NeoWCObjectInspectorViewController ()
 @property (nonatomic, strong) id inspectedObject;
 @property (nonatomic, assign) Class inspectedClass;

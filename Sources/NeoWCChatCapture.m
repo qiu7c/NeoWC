@@ -93,20 +93,6 @@ static UIImage *NeoWCSnapshotRectInView(UIView *view, CGRect rect, UIColor *back
     }];
 }
 
-static void NeoWCDrawChatBackground(UIImage *image, CGRect rect) {
-    if (!image || CGRectIsEmpty(rect) || image.size.width <= 0.0 || image.size.height <= 0.0) return;
-    CGFloat tileHeight = CGRectGetWidth(rect) * image.size.height / image.size.width;
-    if (tileHeight <= 0.0) return;
-    for (CGFloat y = CGRectGetMinY(rect); y < CGRectGetMaxY(rect); y += tileHeight) {
-        CGFloat height = MIN(tileHeight, CGRectGetMaxY(rect) - y);
-        CGContextRef context = UIGraphicsGetCurrentContext();
-        CGContextSaveGState(context);
-        CGContextClipToRect(context, CGRectMake(CGRectGetMinX(rect), y, CGRectGetWidth(rect), height));
-        [image drawInRect:CGRectMake(CGRectGetMinX(rect), y, CGRectGetWidth(rect), tileHeight)];
-        CGContextRestoreGState(context);
-    }
-}
-
 static void NeoWCCollectPrivacyViews(UIView *view, NSMutableArray<UIView *> *views) {
     if (!view || view.hidden || view.alpha <= 0.01) return;
     NSString *className = NSStringFromClass(view.class).lowercaseString;
@@ -190,6 +176,44 @@ static UIColor *NeoWCDefaultChatBackgroundColor(void) {
         }];
     }
     return [UIColor colorWithWhite:0.945 alpha:1.0];
+}
+
+static void NeoWCCollectBubbleBackgroundViews(UIView *view, NSMutableArray<UIView *> *backgroundViews) {
+    if (!view) return;
+    id background = NeoWCCallObject(view, NSSelectorFromString(@"getBgImageView"));
+    if ([background isKindOfClass:[UIView class]] && ![backgroundViews containsObject:background]) {
+        [backgroundViews addObject:background];
+    }
+    for (UIView *subview in view.subviews) NeoWCCollectBubbleBackgroundViews(subview, backgroundViews);
+}
+
+static NSArray<UIView *> *NeoWCInstallBubbleSnapshotFallbacks(UITableViewCell *cell) {
+    NSMutableArray<UIView *> *backgroundViews = [NSMutableArray array];
+    NSMutableArray<UIView *> *fallbacks = [NSMutableArray array];
+    NeoWCCollectBubbleBackgroundViews(cell, backgroundViews);
+    CGFloat cellWidth = CGRectGetWidth(cell.bounds);
+    for (UIView *backgroundView in backgroundViews) {
+        UIView *container = backgroundView.superview;
+        if (!container || backgroundView.hidden || backgroundView.alpha <= 0.01 || CGRectIsEmpty(backgroundView.frame)) continue;
+        CGRect cellRect = [backgroundView convertRect:backgroundView.bounds toView:cell];
+        if (CGRectGetWidth(cellRect) < 18.0 || CGRectGetHeight(cellRect) < 16.0) continue;
+        BOOL outgoing = CGRectGetMidX(cellRect) > cellWidth * 0.5;
+        UIView *fallback = [[UIView alloc] initWithFrame:backgroundView.frame];
+        if (outgoing) {
+            fallback.backgroundColor = [UIColor colorWithRed:0.58 green:0.91 blue:0.43 alpha:1.0];
+            fallback.layer.borderColor = [[UIColor blackColor] colorWithAlphaComponent:0.08].CGColor;
+        } else {
+            fallback.backgroundColor = UIColor.systemBackgroundColor;
+            fallback.layer.borderColor = [[UIColor blackColor] colorWithAlphaComponent:0.12].CGColor;
+        }
+        fallback.layer.cornerRadius = backgroundView.layer.cornerRadius > 0.0 ? backgroundView.layer.cornerRadius : 6.0;
+        fallback.layer.cornerCurve = kCACornerCurveContinuous;
+        fallback.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+        fallback.userInteractionEnabled = NO;
+        [container insertSubview:fallback belowSubview:backgroundView];
+        [fallbacks addObject:fallback];
+    }
+    return fallbacks;
 }
 
 static BOOL NeoWCColorLooksLikePlainWhite(UIColor *color, UITraitCollection *traits) {
@@ -934,8 +958,6 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 - (void)waitForChatInterface;
 - (void)cancelPreflight;
 - (void)captureNextCell;
-- (CGRect)safeCaptureRectInWindow:(UIWindow *)window;
-- (UIImage *)captureVisibleCellAtIndexPath:(NSIndexPath *)path height:(CGFloat)height;
 - (NSArray<UIImage *> *)composeImages;
 - (void)finish;
 - (void)restoreInterface;
@@ -1266,100 +1288,6 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     [self captureNextCell];
 }
 
-- (CGRect)safeCaptureRectInWindow:(UIWindow *)window {
-    if (!window || !self.tableView) return CGRectZero;
-    CGRect tableRect = [self.tableView convertRect:self.tableView.bounds toView:window];
-    CGRect safeRect = CGRectIntersection(tableRect, window.bounds);
-    UINavigationBar *bar = self.controller.navigationController.navigationBar;
-    if (bar && !bar.hidden && bar.window == window) {
-        CGRect barRect = [bar convertRect:bar.bounds toView:window];
-        safeRect.origin.y = MAX(CGRectGetMinY(safeRect), CGRectGetMaxY(barRect));
-        safeRect.size.height = MAX(0.0, MIN(CGRectGetMaxY(tableRect), CGRectGetHeight(window.bounds)) - safeRect.origin.y);
-    }
-    UIView *toolView = NeoWCCallObject(self.controller, NSSelectorFromString(@"getInputToolView"));
-    if (![toolView isKindOfClass:[UIView class]]) toolView = NeoWCSafeValue(self.controller, @"_inputToolView");
-    if (![toolView isKindOfClass:[UIView class]]) toolView = NeoWCSafeValue(self.controller, @"m_inputToolView");
-    if ([toolView isKindOfClass:[UIView class]] && toolView.window == window) {
-        CGFloat toolHeight = CGRectGetHeight(toolView.bounds);
-        CGFloat toolWidth = CGRectGetWidth(toolView.bounds);
-        UIView *captureView = toolHeight >= 36.0 && toolHeight <= 180.0 && toolWidth >= CGRectGetWidth(self.controller.view.bounds) * 0.65 ? toolView : nil;
-        if (!captureView) {
-            CGFloat score = -CGFLOAT_MAX;
-            NeoWCFindBottomToolbar(toolView, self.controller.view, &captureView, &score);
-        }
-        if (captureView) {
-            CGRect toolRect = [captureView convertRect:captureView.bounds toView:window];
-            CGFloat bottom = MIN(CGRectGetMaxY(safeRect), CGRectGetMinY(toolRect));
-            safeRect.size.height = MAX(0.0, bottom - CGRectGetMinY(safeRect));
-        }
-    }
-    CGFloat scale = MAX(1.0, UIScreen.mainScreen.scale);
-    safeRect.origin.y = ceil(safeRect.origin.y * scale) / scale;
-    safeRect.size.height = floor(safeRect.size.height * scale) / scale;
-    return CGRectGetHeight(safeRect) >= 80.0 ? safeRect : CGRectIntersection(tableRect, window.bounds);
-}
-
-- (UIImage *)captureVisibleCellAtIndexPath:(NSIndexPath *)path height:(CGFloat)height {
-    UIWindow *window = self.controller.view.window;
-    if (!window || height <= 0.0) return nil;
-    CGRect safeRect = [self safeCaptureRectInWindow:window];
-    if (CGRectIsEmpty(safeRect)) return nil;
-    NSMutableArray<UIImage *> *chunks = [NSMutableArray array];
-    CGFloat consumed = 0.0;
-    NSUInteger attempts = 0;
-    while (consumed < height - 0.5 && attempts++ < 128) {
-        [self.tableView scrollToRowAtIndexPath:path atScrollPosition:UITableViewScrollPositionMiddle animated:NO];
-        [self.tableView layoutIfNeeded];
-        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:path];
-        if (!cell) break;
-
-        CGPoint chunkPoint = [cell convertPoint:CGPointMake(0.0, consumed) toView:window];
-        CGFloat targetOffsetY = self.tableView.contentOffset.y + chunkPoint.y - CGRectGetMinY(safeRect);
-        UIEdgeInsets inset = self.tableView.adjustedContentInset;
-        CGFloat minimumOffsetY = -inset.top;
-        CGFloat maximumOffsetY = MAX(minimumOffsetY, self.tableView.contentSize.height - CGRectGetHeight(self.tableView.bounds) + inset.bottom);
-        targetOffsetY = MIN(maximumOffsetY, MAX(minimumOffsetY, targetOffsetY));
-        [self.tableView setContentOffset:CGPointMake(self.tableView.contentOffset.x, targetOffsetY) animated:NO];
-        [self.tableView layoutIfNeeded];
-        [self.controller.view layoutIfNeeded];
-        [window layoutIfNeeded];
-        cell = [self.tableView cellForRowAtIndexPath:path];
-        if (!cell) break;
-
-        chunkPoint = [cell convertPoint:CGPointMake(0.0, consumed) toView:window];
-        CGFloat captureY = MAX(CGRectGetMinY(safeRect), chunkPoint.y);
-        CGFloat skipped = MAX(0.0, captureY - chunkPoint.y);
-        if (skipped > 0.5) consumed = MIN(height, consumed + skipped);
-        CGFloat availableHeight = CGRectGetMaxY(safeRect) - captureY;
-        CGFloat captureHeight = MIN(height - consumed, availableHeight);
-        if (captureHeight <= 0.5) break;
-
-        BOOL overlayWasHidden = self.loadingOverlay.hidden;
-        self.loadingOverlay.hidden = YES;
-        CGRect captureRect = CGRectMake(CGRectGetMinX(safeRect), captureY, CGRectGetWidth(safeRect), captureHeight);
-        UIImage *chunk = NeoWCSnapshotRectInView(window, captureRect, self.bodyBackgroundColor);
-        self.loadingOverlay.hidden = overlayWasHidden;
-        if (!chunk) break;
-        [chunks addObject:chunk];
-        consumed += captureHeight;
-    }
-    if (chunks.count == 0) return nil;
-    if (chunks.count == 1) return chunks.firstObject;
-    CGFloat resultHeight = 0.0;
-    for (UIImage *chunk in chunks) resultHeight += chunk.size.height;
-    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
-    format.opaque = YES;
-    format.scale = MAX(1.0, UIScreen.mainScreen.scale);
-    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(CGRectGetWidth(safeRect), resultHeight) format:format];
-    return [renderer imageWithActions:^(__unused UIGraphicsImageRendererContext *context) {
-        CGFloat y = 0.0;
-        for (UIImage *chunk in chunks) {
-            [chunk drawAtPoint:CGPointMake(0.0, y)];
-            y += chunk.size.height;
-        }
-    }];
-}
-
 - (void)captureNextCell {
     if (self.captureIndex >= self.indexPaths.count) {
         [self finish];
@@ -1376,6 +1304,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
         return;
     }
     CGFloat height = CGRectGetHeight([self.tableView rectForRowAtIndexPath:path]);
+    CGFloat width = CGRectGetWidth(self.tableView.bounds);
     if (height <= 0.0) height = CGRectGetHeight(cell.bounds);
 
     NSString *cellClassName = NSStringFromClass(cell.class).lowercaseString;
@@ -1400,12 +1329,22 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
             label.hidden = YES;
         }
     }
-    NSArray<UIVisualEffectView *> *privacyBlurs = self.preset == NeoWCChatCapturePresetPrivacy ? NeoWCInstallPrivacyBlurs(cell) : @[];
+    CGRect originalFrame = cell.frame;
+    CGRect originalBounds = cell.bounds;
+    BOOL originalClipsToBounds = cell.clipsToBounds;
+    cell.frame = CGRectMake(0.0, 0.0, width, height);
+    cell.bounds = CGRectMake(0.0, 0.0, width, height);
+    cell.clipsToBounds = YES;
+    [cell setNeedsLayout];
     [cell layoutIfNeeded];
-    // Capture from the real WeChat window only while the row is inside the unobscured chat
-    // viewport. Tall rows are split into viewport-sized pieces and stitched back together.
-    UIImage *image = [self captureVisibleCellAtIndexPath:path height:height];
+    NSArray<UIVisualEffectView *> *privacyBlurs = self.preset == NeoWCChatCapturePresetPrivacy ? NeoWCInstallPrivacyBlurs(cell) : @[];
+    NSArray<UIView *> *bubbleFallbacks = NeoWCInstallBubbleSnapshotFallbacks(cell);
+    UIImage *image = NeoWCSnapshotView(cell, CGSizeMake(width, height));
+    for (UIView *fallback in bubbleFallbacks) [fallback removeFromSuperview];
     for (UIVisualEffectView *blur in privacyBlurs) [blur removeFromSuperview];
+    cell.frame = originalFrame;
+    cell.bounds = originalBounds;
+    cell.clipsToBounds = originalClipsToBounds;
     [nameLabels enumerateObjectsUsingBlock:^(UIView *label, NSUInteger index, __unused BOOL *stop) {
         label.hidden = hiddenStates[index].boolValue;
     }];
@@ -1469,7 +1408,9 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
                 [self.headerImage drawInRect:CGRectMake(0.0, -crop, width, self.headerImage.size.height)];
                 y += pageHeaderHeight;
             }
-            if (self.backgroundImage && bodyHeight > 0.0) NeoWCDrawChatBackground(self.backgroundImage, CGRectMake(0.0, y, width, bodyHeight));
+            if (self.backgroundImage && bodyHeight > 0.0) {
+                [self.backgroundImage drawInRect:CGRectMake(0.0, y, width, bodyHeight)];
+            }
             for (NSUInteger index = 0; index < group.count; index++) {
                 if (index > 0) y += messageSpacing;
                 UIImage *image = group[index];

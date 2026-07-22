@@ -6,6 +6,7 @@
 #import "NeoWCChatCapture.h"
 #import "NeoWCCompatibility.h"
 #import "NeoWCPluginVisibility.h"
+#import "NeoWCPluginShortcuts.h"
 
 static NSString *const NeoWCVersion = @"0.1.1";
 static NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
@@ -195,6 +196,14 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCChatCaptureWatermarkStyleKey: @0,
         NeoWCChatCaptureWatermarkOpacityKey: @0.18,
         NeoWCDebugLoggingEnabledKey: @YES,
+        NeoWCPluginShortcutsEnabledKey: @NO,
+        NeoWCPluginShortcutLoggingKey: @YES,
+        NeoWCPluginShortcutFloatingDebugKey: @NO,
+        NeoWCPluginShortcutDebugCenterKey: @YES,
+        NeoWCPluginShortcutRevokeRecordsKey: @NO,
+        NeoWCPluginShortcutCustomPageKey: @NO,
+        NeoWCPluginShortcutCustomTitleKey: @"快捷页面",
+        NeoWCPluginShortcutCustomClassKey: @"",
         NeoWCExpandedCategoriesKey: @[@"messages"],
         NeoWCCollapsedFeaturesKey: @[],
     }];
@@ -240,6 +249,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             NeoWCImageEditQuickSendEnabledKey,
             NeoWCChatCaptureEnabledKey,
             NeoWCMultiSelectExportEnabledKey,
+            NeoWCPluginShortcutsEnabledKey,
+            NeoWCPluginShortcutCustomPageKey,
         ]];
     });
     return [keys containsObject:key];
@@ -277,6 +288,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     BOOL momentsLikeEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsDoubleTapLikeKey];
     BOOL momentsHapticEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsLikeHapticEnabledKey];
     BOOL multiSelectExportEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMultiSelectExportEnabledKey];
+    BOOL pluginShortcutsEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCPluginShortcutsEnabledKey];
     NSString *revokePromptStyle = revokePromptStyleValue == 1 ? @"气泡旁" : @"消息下方";
     NSString *sidePromptText = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCAntiRevokeSideTextKey] ?: @"已拦截撤回";
     id storedSideOffsetX = [[NSUserDefaults standardUserDefaults] objectForKey:NeoWCAntiRevokeSideOffsetXKey];
@@ -340,12 +352,30 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"messages" title:@"消息增强" subtitle:@"撤回拦截与提示" symbol:@"bubble.left.and.bubble.right" footer:@"" collapsible:YES items:messageItems],
         [NeoWCSettingSection sectionWithIdentifier:@"enhancements" title:@"增强功能" subtitle:@"快捷操作与自动授权" symbol:@"bolt" footer:@"自动登录和授权会跳过手动确认，请只在可信设备和可信游戏中开启。" collapsible:YES items:enhancementItems],
-        [NeoWCSettingSection sectionWithIdentifier:@"developer" title:@"开发者功能" subtitle:@"界面检查与运行诊断" symbol:@"hammer" footer:@"开发者功能用于辅助插件开发和问题排查。" collapsible:YES items:@[
-            item(@"调试悬浮按钮", @"仅由此开关控制，不监听全局手势", @"wrench.and.screwdriver", NeoWCRowKindSwitch, NeoWCDebugFloatingEnabledKey, nil),
-            item(@"记录调试日志", @"记录 NeoWC 运行事件，关闭后停止新增", @"text.alignleft", NeoWCRowKindSwitch, NeoWCDebugLoggingEnabledKey, nil),
-            item(@"调试中心", @"视图检查、Runtime 搜索与日志", @"ladybug", NeoWCRowKindDetail, nil, @"打开"),
-            item(@"功能兼容性", @"检查类、Selector 与本次运行触发状态", @"checklist", NeoWCRowKindDetail, nil, @"检查"),
-        ]],
+        [NeoWCSettingSection sectionWithIdentifier:@"developer" title:@"开发者功能" subtitle:@"界面检查与运行诊断" symbol:@"hammer" footer:@"快捷入口启用后会立即尝试注册；关闭或移除入口后，重启微信即可从插件管理页面彻底消失。" collapsible:YES items:({
+            NSMutableArray<NeoWCSettingItem *> *items = [NSMutableArray arrayWithArray:@[
+                item(@"调试悬浮按钮", @"仅由此开关控制，不监听全局手势", @"wrench.and.screwdriver", NeoWCRowKindSwitch, NeoWCDebugFloatingEnabledKey, nil),
+                item(@"记录调试日志", @"记录 NeoWC 运行事件，关闭后停止新增", @"text.alignleft", NeoWCRowKindSwitch, NeoWCDebugLoggingEnabledKey, nil),
+                item(@"调试中心", @"视图检查、Runtime 搜索与日志", @"ladybug", NeoWCRowKindDetail, nil, @"打开"),
+                item(@"功能兼容性", @"检查类、Selector 与本次运行触发状态", @"checklist", NeoWCRowKindDetail, nil, @"检查"),
+                item(@"插件管理快捷入口", @"把常用开关或页面注册到插件管理页", @"bolt.badge.clock", NeoWCRowKindSwitch, NeoWCPluginShortcutsEnabledKey, nil),
+            ]];
+            if (pluginShortcutsEnabled && [self isFeatureExpandedForKey:NeoWCPluginShortcutsEnabledKey]) {
+                [items addObject:item(@"快捷日志开关", @"在插件管理页直接开关 NeoWC 日志", @"text.alignleft", NeoWCRowKindSwitch, NeoWCPluginShortcutLoggingKey, nil)];
+                [items addObject:item(@"快捷悬浮窗开关", @"在插件管理页直接开关调试悬浮窗", @"wrench.and.screwdriver", NeoWCRowKindSwitch, NeoWCPluginShortcutFloatingDebugKey, nil)];
+                [items addObject:item(@"直达调试中心", @"在插件管理页增加独立页面入口", @"ladybug", NeoWCRowKindSwitch, NeoWCPluginShortcutDebugCenterKey, nil)];
+                [items addObject:item(@"直达防撤回记录", @"在插件管理页增加撤回记录入口", @"tray.full", NeoWCRowKindSwitch, NeoWCPluginShortcutRevokeRecordsKey, nil)];
+                [items addObject:item(@"自定义页面入口", @"输入 Controller 或 View 类名快速跳转", @"rectangle.and.hand.point.up.left", NeoWCRowKindSwitch, NeoWCPluginShortcutCustomPageKey, nil)];
+                if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCPluginShortcutCustomPageKey] &&
+                    [self isFeatureExpandedForKey:NeoWCPluginShortcutCustomPageKey]) {
+                    NSString *customTitle = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCPluginShortcutCustomTitleKey] ?: @"快捷页面";
+                    NSString *customClass = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCPluginShortcutCustomClassKey] ?: @"";
+                    [items addObject:item(@"自定义入口名称", @"显示在插件管理页面中的名称", @"textformat", NeoWCRowKindDetail, nil, customTitle)];
+                    [items addObject:item(@"页面 Runtime 类名", @"支持 UIViewController 或 UIView 子类", @"chevron.left.forwardslash.chevron.right", NeoWCRowKindDetail, nil, customClass.length > 0 ? customClass : @"输入")];
+                }
+            }
+            items;
+        })],
         [NeoWCSettingSection sectionWithIdentifier:@"about" title:@"关于" subtitle:nil symbol:@"info.circle" footer:@"NeoWC · Designed for WeChat" collapsible:NO items:@[
             item(@"版本", @"NeoWC", @"shippingbox", NeoWCRowKindInfo, nil, NeoWCVersion),
         ]],
@@ -625,6 +655,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     if ([item.defaultsKey isEqualToString:NeoWCDebugFloatingEnabledKey]) {
         [[NeoWCDebugManager sharedManager] setFloatingEnabled:sender.isOn];
     }
+    if ([item.defaultsKey hasPrefix:@"com.qiu7c.neowc.plugin-shortcuts."]) {
+        NeoWCRegisterPluginShortcutsIfAvailable();
+    }
     if ([item.defaultsKey isEqualToString:NeoWCAntiRevokeKey]) {
         [[NSNotificationCenter defaultCenter] postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
     }
@@ -635,7 +668,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
                               [item.defaultsKey isEqualToString:NeoWCMomentsLikeHapticEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCMultiSelectExportEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCChatCaptureEnabledKey] ||
-                              [item.defaultsKey isEqualToString:NeoWCImageEditQuickSendEnabledKey];
+                              [item.defaultsKey isEqualToString:NeoWCImageEditQuickSendEnabledKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCPluginShortcutsEnabledKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCPluginShortcutCustomPageKey];
     if (changesVisibleRows) [self buildSections];
     if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] || changesVisibleRows) [self.tableView reloadData];
 }
@@ -643,14 +678,33 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 - (void)toggleFeatureAtIndexPath:(NSIndexPath *)indexPath item:(NeoWCSettingItem *)item {
     if (![self featureHasChildrenForKey:item.defaultsKey] ||
         ![[NSUserDefaults standardUserDefaults] boolForKey:item.defaultsKey]) return;
-    if ([self.collapsedFeatureKeys containsObject:item.defaultsKey]) {
+    BOOL wasCollapsed = [self.collapsedFeatureKeys containsObject:item.defaultsKey];
+    NSInteger oldRowCount = [self.tableView numberOfRowsInSection:indexPath.section];
+    if (wasCollapsed) {
         [self.collapsedFeatureKeys removeObject:item.defaultsKey];
     } else {
         [self.collapsedFeatureKeys addObject:item.defaultsKey];
     }
     [self saveCollapsedFeatureKeys];
     [self buildSections];
-    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:indexPath.section] withRowAnimation:UITableViewRowAnimationAutomatic];
+    NSInteger newRowCount = self.sections[indexPath.section].items.count;
+    NSInteger changedCount = newRowCount >= oldRowCount ? newRowCount - oldRowCount : oldRowCount - newRowCount;
+    if (changedCount == 0) {
+        [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
+        return;
+    }
+    NSMutableArray<NSIndexPath *> *changedPaths = [NSMutableArray arrayWithCapacity:(NSUInteger)changedCount];
+    for (NSInteger offset = 0; offset < changedCount; offset++) {
+        [changedPaths addObject:[NSIndexPath indexPathForRow:indexPath.row + 1 + offset inSection:indexPath.section]];
+    }
+    [self.tableView performBatchUpdates:^{
+        if (newRowCount > oldRowCount) {
+            [self.tableView insertRowsAtIndexPaths:changedPaths withRowAnimation:UITableViewRowAnimationFade];
+        } else {
+            [self.tableView deleteRowsAtIndexPaths:changedPaths withRowAnimation:UITableViewRowAnimationFade];
+        }
+        [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
+    } completion:nil];
 }
 
 - (void)toggleSection:(NSInteger)sectionIndex {
@@ -771,6 +825,34 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)presentPluginShortcutTextEditorForKey:(NSString *)key
+                                        title:(NSString *)title
+                                  placeholder:(NSString *)placeholder {
+    BOOL editingClass = [key isEqualToString:NeoWCPluginShortcutCustomClassKey];
+    NSString *message = editingClass
+        ? @"输入 Objective-C Runtime 类名；支持 UIViewController 或 UIView 子类。修改已注册的类名后建议重启微信。"
+        : @"此名称会显示在插件管理页面中。";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:key];
+        textField.placeholder = placeholder;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *value = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (!editingClass && value.length == 0) value = @"快捷页面";
+        [[NSUserDefaults standardUserDefaults] setObject:value ?: @"" forKey:key];
+        [weakSelf buildSections];
+        [weakSelf.tableView reloadData];
+        NeoWCRegisterPluginShortcutsIfAvailable();
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
@@ -825,6 +907,14 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     }
     if ([item.title isEqualToString:@"功能兼容性"]) {
         [self.navigationController pushViewController:[NeoWCCompatibilityViewController new] animated:YES];
+        return;
+    }
+    if ([item.title isEqualToString:@"自定义入口名称"]) {
+        [self presentPluginShortcutTextEditorForKey:NeoWCPluginShortcutCustomTitleKey title:item.title placeholder:@"快捷页面"];
+        return;
+    }
+    if ([item.title isEqualToString:@"页面 Runtime 类名"]) {
+        [self presentPluginShortcutTextEditorForKey:NeoWCPluginShortcutCustomClassKey title:item.title placeholder:@"例如 NewSettingViewController"];
         return;
     }
     if ([item.title isEqualToString:@"插件显示管理"]) {
