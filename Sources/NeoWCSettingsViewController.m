@@ -173,6 +173,12 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCChatCaptureEnabledKey: @NO,
         NeoWCImageEditQuickSendEnabledKey: @NO,
         NeoWCImageEditReturnToChatKey: @YES,
+        NeoWCMomentsLikeHapticEnabledKey: @NO,
+        NeoWCMomentsLikeHapticIntensityKey: @0.65,
+        NeoWCMultiSelectExportEnabledKey: @NO,
+        NeoWCMultiSelectExportTextKey: @YES,
+        NeoWCMultiSelectSaveImagesKey: @YES,
+        NeoWCMultiSelectShareCardKey: @YES,
         NeoWCChatCapturePresetKey: @0,
         NeoWCChatCaptureIncludeStatusBarKey: @NO,
         NeoWCChatCaptureAutoSplitKey: @YES,
@@ -229,6 +235,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     BOOL stepOverrideEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCStepOverrideEnabledKey];
     BOOL chatCaptureEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatCaptureEnabledKey];
     BOOL imageEditQuickSendEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCImageEditQuickSendEnabledKey];
+    BOOL momentsLikeEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsDoubleTapLikeKey];
+    BOOL momentsHapticEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsLikeHapticEnabledKey];
+    BOOL multiSelectExportEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMultiSelectExportEnabledKey];
     NSString *revokePromptStyle = revokePromptStyleValue == 1 ? @"气泡旁" : @"消息下方";
     NSString *sidePromptText = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCAntiRevokeSideTextKey] ?: @"已拦截撤回";
     id storedSideOffsetX = [[NSUserDefaults standardUserDefaults] objectForKey:NeoWCAntiRevokeSideOffsetXKey];
@@ -261,14 +270,29 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         item(@"朋友圈双击点赞", @"双击好友朋友圈内容直接点赞", @"hand.thumbsup", NeoWCRowKindSwitch, NeoWCMomentsDoubleTapLikeKey, nil),
         item(@"朋友圈操作按钮替换为评论", @"点击后直接进入评论，不再展开操作菜单", @"bubble.middle.bottom", NeoWCRowKindSwitch, NeoWCMomentsQuickCommentKey, nil),
         item(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCRowKindSwitch, NeoWCGameSelectorKey, nil),
-        item(@"自定义微信运动步数", @"使用设置的当天步数", @"figure.walk", NeoWCRowKindSwitch, NeoWCStepOverrideEnabledKey, nil),
+        item(@"自定义微信运动步数", @"每天启动微信时自动使用设定步数", @"figure.walk", NeoWCRowKindSwitch, NeoWCStepOverrideEnabledKey, nil),
     ]];
-    if (stepOverrideEnabled) [enhancementItems addObject:item(@"设置运动步数", @"自定义数值仅在设置当天生效", @"number", NeoWCRowKindDetail, nil, stepValue)];
+    if (momentsLikeEnabled) {
+        NSUInteger hapticIndex = MIN((NSUInteger)3, enhancementItems.count);
+        [enhancementItems insertObject:item(@"点赞震动", @"双击点赞成功时提供触感反馈", @"waveform", NeoWCRowKindSwitch, NeoWCMomentsLikeHapticEnabledKey, nil) atIndex:hapticIndex];
+        if (momentsHapticEnabled) {
+            CGFloat intensity = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCMomentsLikeHapticIntensityKey];
+            NSString *intensityText = intensity < 0.34 ? @"轻" : (intensity < 0.75 ? @"中" : @"强");
+            [enhancementItems insertObject:item(@"点赞震动力度", @"调整双击点赞时的震动反馈", @"slider.horizontal.3", NeoWCRowKindDetail, nil, intensityText) atIndex:MIN(hapticIndex + 1, enhancementItems.count)];
+        }
+    }
+    if (stepOverrideEnabled) [enhancementItems addObject:item(@"设置运动步数", @"设定值会在每天首次启动或回到微信时刷新", @"number", NeoWCRowKindDetail, nil, stepValue)];
     [enhancementItems addObject:item(@"广告净化", @"隐藏朋友圈广告与小程序启动广告", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil)];
     [enhancementItems addObject:item(@"图片编辑快捷发送", @"在官方图片编辑完成菜单中增加发送到当前会话", @"photo.badge.arrow.down", NeoWCRowKindSwitch, NeoWCImageEditQuickSendEnabledKey, nil)];
     if (imageEditQuickSendEnabled) [enhancementItems addObject:item(@"发送后返回聊天", @"图片发送成功后退出编辑流程", @"arrow.uturn.backward", NeoWCRowKindSwitch, NeoWCImageEditReturnToChatKey, nil)];
     [enhancementItems addObject:item(@"多选消息长截图", @"在聊天多选的“更多”中加入截图", @"rectangle.dashed", NeoWCRowKindSwitch, NeoWCChatCaptureEnabledKey, nil)];
     if (chatCaptureEnabled) [enhancementItems addObject:item(@"长截图设置", @"顶栏、昵称、背景与裁切选项", @"slider.horizontal.3", NeoWCRowKindDetail, nil, @"设置")];
+    [enhancementItems addObject:item(@"多选消息导出", @"控制多选菜单中的复制、保存和分享功能", @"square.and.arrow.up.on.square", NeoWCRowKindSwitch, NeoWCMultiSelectExportEnabledKey, nil)];
+    if (multiSelectExportEnabled) {
+        [enhancementItems addObject:item(@"复制纯文本", @"只复制消息正文到剪贴板", @"doc.on.clipboard", NeoWCRowKindSwitch, NeoWCMultiSelectExportTextKey, nil)];
+        [enhancementItems addObject:item(@"批量保存图片", @"保存所选且已下载到本机的图片", @"photo.on.rectangle.angled", NeoWCRowKindSwitch, NeoWCMultiSelectSaveImagesKey, nil)];
+        [enhancementItems addObject:item(@"生成分享卡片", @"可选择极简、对话或深色样式", @"rectangle.on.rectangle", NeoWCRowKindSwitch, NeoWCMultiSelectShareCardKey, nil)];
+    }
     [enhancementItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];
 
     self.sections = @[
@@ -528,6 +552,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
     if (item.defaultsKey.length == 0) return;
     [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:item.defaultsKey];
+    if ([item.defaultsKey isEqualToString:NeoWCStepOverrideEnabledKey] && sender.isOn && [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCStepCountKey] > 0) {
+        [[NSUserDefaults standardUserDefaults] setObject:[NSDate date] forKey:NeoWCStepCountDateKey];
+    }
     if ([item.defaultsKey isEqualToString:NeoWCAntiRevokePersistRecordsKey]) NeoWCAntiRevokeSetPersistenceEnabled(sender.isOn);
     if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] ||
         [item.defaultsKey isEqualToString:NeoWCMomentsDoubleTapLikeKey] ||
@@ -543,6 +570,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     BOOL changesVisibleRows = [item.defaultsKey isEqualToString:NeoWCAntiRevokeKey] ||
                               [item.defaultsKey isEqualToString:NeoWCAntiRevokeNotifySenderKey] ||
                               [item.defaultsKey isEqualToString:NeoWCStepOverrideEnabledKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCMomentsDoubleTapLikeKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCMomentsLikeHapticEnabledKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCMultiSelectExportEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCChatCaptureEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCImageEditQuickSendEnabledKey];
     if (changesVisibleRows) [self buildSections];
@@ -742,8 +772,29 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [self.navigationController pushViewController:[NeoWCChatCaptureSettingsViewController new] animated:YES];
         return;
     }
+    if ([item.title isEqualToString:@"点赞震动力度"]) {
+        UIAlertController *picker = [UIAlertController alertControllerWithTitle:@"点赞震动力度" message:@"选择双击点赞时的触感强度" preferredStyle:UIAlertControllerStyleActionSheet];
+        NSArray<NSDictionary *> *options = @[
+            @{ @"title": @"轻", @"value": @0.25 },
+            @{ @"title": @"中", @"value": @0.65 },
+            @{ @"title": @"强", @"value": @1.0 },
+        ];
+        __weak typeof(self) weakSelf = self;
+        for (NSDictionary *option in options) {
+            [picker addAction:[UIAlertAction actionWithTitle:option[@"title"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+                [[NSUserDefaults standardUserDefaults] setDouble:[option[@"value"] doubleValue] forKey:NeoWCMomentsLikeHapticIntensityKey];
+                [weakSelf buildSections];
+                [weakSelf.tableView reloadData];
+            }]];
+        }
+        [picker addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+        UIPopoverPresentationController *popover = picker.popoverPresentationController;
+        if (popover) { popover.sourceView = self.view; popover.sourceRect = self.view.bounds; }
+        [self presentViewController:picker animated:YES completion:nil];
+        return;
+    }
     if ([item.title isEqualToString:@"设置运动步数"]) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"设置当天微信运动步数" message:@"请输入 1–100000 之间的数值" preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"设置每日微信运动步数" message:@"请输入 1–100000 之间的数值；每天自动沿用" preferredStyle:UIAlertControllerStyleAlert];
         [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
             NSInteger value = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCStepCountKey];
             textField.text = value > 0 ? [NSString stringWithFormat:@"%ld", (long)value] : nil;

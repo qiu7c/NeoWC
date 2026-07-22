@@ -910,6 +910,7 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
 - (instancetype)initWithController:(UIViewController *)controller;
 - (void)start;
 - (void)beginCaptureWithIndexPaths:(NSArray<NSIndexPath *> *)indexPaths preset:(NeoWCChatCapturePreset)preset;
+- (void)beginCaptureAfterInterfaceSettled;
 - (void)cancelPreflight;
 - (void)captureNextCell;
 - (NSArray<UIImage *> *)composeImages;
@@ -1208,17 +1209,27 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     CGFloat originalMaximumOffsetY = MAX(originalMinimumOffsetY, self.tableView.contentSize.height - CGRectGetHeight(self.tableView.bounds) + originalInset.bottom);
     self.originalDistanceFromBottom = MAX(0.0, originalMaximumOffsetY - self.originalOffset.y);
     self.originallyAtBottom = self.originalDistanceFromBottom <= 80.0;
-    [self installLoadingOverlay];
     NeoWCCallVoid(self.controller, NSSelectorFromString(@"exitMultiSelectMode"));
     __weak typeof(self) weakSelf = self;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [weakSelf.controller.view layoutIfNeeded];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [weakSelf.controller.view layoutIfNeeded];
-            [weakSelf prepareChrome];
-            [weakSelf captureNextCell];
-        });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.55 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (!weakSelf || weakSelf.controller.presentedViewController || weakSelf.controller.transitionCoordinator) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [weakSelf beginCaptureAfterInterfaceSettled];
+            });
+            return;
+        }
+        [weakSelf beginCaptureAfterInterfaceSettled];
     });
+}
+
+- (void)beginCaptureAfterInterfaceSettled {
+    [UIView performWithoutAnimation:^{
+        [self.controller.view layoutIfNeeded];
+        [self.tableView layoutIfNeeded];
+    }];
+    [self prepareChrome];
+    [self installLoadingOverlay];
+    [self captureNextCell];
 }
 
 - (void)captureNextCell {
@@ -1263,15 +1274,9 @@ typedef NS_ENUM(NSInteger, NeoWCChatCaptureEditMode) {
     }
     NSArray<UIVisualEffectView *> *privacyBlurs = self.preset == NeoWCChatCapturePresetPrivacy ? NeoWCInstallPrivacyBlurs(cell) : @[];
     [cell layoutIfNeeded];
-    self.loadingOverlay.hidden = YES;
-    CGRect cellRect = [cell convertRect:cell.bounds toView:self.controller.view];
-    UIImage *image = nil;
-    if (CGRectGetHeight(cellRect) <= CGRectGetHeight(self.controller.view.bounds) &&
-        CGRectContainsRect(CGRectInset(self.controller.view.bounds, 0.0, -1.0), cellRect)) {
-        image = NeoWCSnapshotRectInView(self.controller.view, cellRect, self.bodyBackgroundColor);
-    }
-    if (!image) image = NeoWCSnapshotOpaqueView(cell, self.bodyBackgroundColor);
-    self.loadingOverlay.hidden = NO;
+    // Render the message cell itself. Capturing a rect from the controller also captures
+    // transient multi-select sheets, loading overlays and transition remnants.
+    UIImage *image = NeoWCSnapshotOpaqueView(cell, self.bodyBackgroundColor);
     for (UIVisualEffectView *blur in privacyBlurs) [blur removeFromSuperview];
     [nameLabels enumerateObjectsUsingBlock:^(UIView *label, NSUInteger index, __unused BOOL *stop) {
         label.hidden = hiddenStates[index].boolValue;

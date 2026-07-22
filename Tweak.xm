@@ -50,6 +50,7 @@
 @end
 
 @interface CommonMessageCellView : UIView
+- (void)neowc_refreshAntiRevokeSidePrompt;
 @end
 
 @interface CMessageWrap : NSObject
@@ -86,6 +87,7 @@ static char NeoWCGameSelectorPresentedKey;
 static char NeoWCChatCaptureBuildingMenuKey;
 static char NeoWCAntiRevokeSideLabelKey;
 static char NeoWCEditedImageKey;
+static char NeoWCEditResultKey;
 static __weak id NeoWCCurrentEditImageLogicController;
 
 static NSMutableSet *NeoWCActiveImageQuickSendDelegates(void) {
@@ -135,6 +137,15 @@ static NSString *NeoWCConversationUserNameForEditLogic(id logic) {
 static UIImage *NeoWCEditedImageFromLogic(id logic) {
     UIImage *image = objc_getAssociatedObject(logic, &NeoWCEditedImageKey);
     if ([image isKindOfClass:[UIImage class]]) return image;
+    id editResult = objc_getAssociatedObject(logic, &NeoWCEditResultKey);
+    SEL displaySelector = sel_registerName("getDisplayImage:");
+    if (editResult && [logic respondsToSelector:displaySelector]) {
+        image = ((UIImage *(*)(id, SEL, id))objc_msgSend)(logic, displaySelector, editResult);
+        if ([image isKindOfClass:[UIImage class]]) {
+            objc_setAssociatedObject(logic, &NeoWCEditedImageKey, image, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            return image;
+        }
+    }
     NSArray<NSString *> *keys = @[@"editedImage", @"outputImage", @"resultImage"];
     for (NSString *key in keys) {
         id candidate = NeoWCTweakSafeValue(logic, key);
@@ -290,6 +301,18 @@ static NSString *NeoWCGameMD5ForContent(NSUInteger content) {
     return ((NSString *(*)(id, SEL, NSUInteger))objc_msgSend)(gameControllerClass, selector, content);
 }
 
+static void NeoWCRefreshDailyStepOverride(void) {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if (![defaults boolForKey:NeoWCStepOverrideEnabledKey]) return;
+    NSInteger stepCount = [defaults integerForKey:NeoWCStepCountKey];
+    if (stepCount <= 0) return;
+    NSDate *configuredDate = [defaults objectForKey:NeoWCStepCountDateKey];
+    if (![configuredDate isKindOfClass:[NSDate class]] || ![[NSCalendar currentCalendar] isDateInToday:configuredDate]) {
+        [defaults setObject:[NSDate date] forKey:NeoWCStepCountDateKey];
+        NeoWCLog(@"微信运动已按每日配置刷新为 %ld 步", (long)stepCount);
+    }
+}
+
 static void NeoWCSynchronizeMomentsCell(WCTimeLineCellView *cell) {
     if (!cell) return;
     UITapGestureRecognizer *recognizer = objc_getAssociatedObject(cell, &NeoWCMomentsDoubleTapRecognizerKey);
@@ -361,6 +384,7 @@ static UIWindow *NeoWCActiveApplicationWindow(void) {
         for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
             if (scene.activationState != UISceneActivationStateForegroundActive || ![scene isKindOfClass:[UIWindowScene class]]) continue;
             for (UIWindow *candidate in ((UIWindowScene *)scene).windows) {
+                if ([NSStringFromClass(candidate.class) containsString:@"iConsole"]) continue;
                 if (candidate.isKeyWindow) return candidate;
                 if (!candidate.hidden && candidate.alpha > 0.0 && !fallbackWindow) fallbackWindow = candidate;
             }
@@ -368,6 +392,7 @@ static UIWindow *NeoWCActiveApplicationWindow(void) {
         if (fallbackWindow) return fallbackWindow;
     }
     for (UIWindow *candidate in UIApplication.sharedApplication.windows) {
+        if ([NSStringFromClass(candidate.class) containsString:@"iConsole"]) continue;
         if (candidate.isKeyWindow) return candidate;
     }
     return UIApplication.sharedApplication.windows.firstObject;
@@ -377,6 +402,8 @@ static void NeoWCRefreshAntiRevokeCellsInView(UIView *view) {
     if (!view) return;
     Class cellClass = NSClassFromString(@"CommonMessageCellView");
     if (cellClass && [view isKindOfClass:cellClass]) {
+        SEL refreshSelector = NSSelectorFromString(@"neowc_refreshAntiRevokeSidePrompt");
+        if ([view respondsToSelector:refreshSelector]) ((void (*)(id, SEL))objc_msgSend)(view, refreshSelector);
         [view setNeedsLayout];
         [view layoutIfNeeded];
     }
@@ -559,12 +586,12 @@ static void NeoWCRefreshVisibleAntiRevokeCells(void) {
         [content.topAnchor constraintEqualToAnchor:sheet.topAnchor constant:10.0],
         [content.bottomAnchor constraintEqualToAnchor:sheet.safeAreaLayoutGuide.bottomAnchor constant:-16.0],
     ]];
-    self.sheetView.transform = CGAffineTransformMakeTranslation(0.0, 480.0);
+    self.sheetView.transform = CGAffineTransformMakeTranslation(0.0, 120.0);
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    [UIView animateWithDuration:0.30 delay:0.0 usingSpringWithDamping:0.88 initialSpringVelocity:0.15 options:UIViewAnimationOptionBeginFromCurrentState animations:^{
+    [UIView animateWithDuration:0.16 delay:0.0 usingSpringWithDamping:0.94 initialSpringVelocity:0.25 options:UIViewAnimationOptionBeginFromCurrentState animations:^{
         self.dimmingButton.alpha = 1.0;
         self.sheetView.transform = CGAffineTransformIdentity;
     } completion:nil];
@@ -655,6 +682,7 @@ static void NeoWCRegisterPlugin(void) {
 + (void)load {
     dispatch_async(dispatch_get_main_queue(), ^{
         NeoWCRegisterPlugin();
+        NeoWCRefreshDailyStepOverride();
 
         [[NSNotificationCenter defaultCenter]
             addObserverForName:UIApplicationDidFinishLaunchingNotification
@@ -662,7 +690,16 @@ static void NeoWCRegisterPlugin(void) {
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(__unused NSNotification *note) {
                         NeoWCRegisterPlugin();
+                        NeoWCRefreshDailyStepOverride();
                         [[NeoWCDebugManager sharedManager] applySavedState];
+                    }];
+
+        [[NSNotificationCenter defaultCenter]
+            addObserverForName:UIApplicationWillEnterForegroundNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(__unused NSNotification *note) {
+                        NeoWCRefreshDailyStepOverride();
                     }];
 
         [[NSNotificationCenter defaultCenter]
@@ -734,12 +771,14 @@ static void NeoWCRegisterPlugin(void) {
 - (void)OnClickEditImageDoneBarButton {
     NeoWCCurrentEditImageLogicController = self;
     objc_setAssociatedObject(self, &NeoWCEditedImageKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, &NeoWCEditResultKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     %orig;
 }
 
 - (void)processEditImage:(id)editResult {
     NeoWCCompatibilityMarkTriggered(@"image-edit");
     NeoWCCurrentEditImageLogicController = self;
+    if (editResult) objc_setAssociatedObject(self, &NeoWCEditResultKey, editResult, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     id editedImage = NeoWCTweakSafeValue(editResult, @"editedImage");
     if ([editedImage isKindOfClass:[UIImage class]]) objc_setAssociatedObject(self, &NeoWCEditedImageKey, editedImage, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     %orig;
@@ -771,6 +810,9 @@ static void NeoWCRegisterPlugin(void) {
             [self addButtonWithTitle:@"发送到当前会话" eventAction:^{
                 id strongLogic = weakLogic;
                 if (!strongLogic) { NeoWCShowTransientMessage(@"发送失败：图片编辑会话已经结束", NO); return; }
+                // Materialize the final edit while WeChat's editor and edit result are still alive.
+                // Forwarding waits until the action sheet has fully disappeared.
+                (void)NeoWCEditedImageFromLogic(strongLogic);
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.55 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     NSString *reason = nil;
                     if (!NeoWCSendEditedImageToCurrentConversation(strongLogic, &reason)) {
@@ -791,7 +833,9 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)ShowMultiSelectMoreOperation:(id)argument {
     NeoWCCompatibilityMarkTriggered(@"chat-capture");
-    if (!NeoWCEnhancementEnabled(NeoWCChatCaptureEnabledKey)) {
+    BOOL captureEnabled = NeoWCEnhancementEnabled(NeoWCChatCaptureEnabledKey);
+    BOOL exportEnabled = NeoWCEnhancementEnabled(NeoWCMultiSelectExportEnabledKey);
+    if (!captureEnabled && !exportEnabled) {
         %orig;
         return;
     }
@@ -836,7 +880,7 @@ static void NeoWCRegisterPlugin(void) {
 - (void)showInView:(UIView *)view {
     id delegate = NeoWCTweakSafeValue(self, @"delegate");
     BOOL isCaptureMenu = [objc_getAssociatedObject(delegate, &NeoWCChatCaptureBuildingMenuKey) boolValue];
-    if (isCaptureMenu && NeoWCEnhancementEnabled(NeoWCChatCaptureEnabledKey)) {
+    if (isCaptureMenu && (NeoWCEnhancementEnabled(NeoWCChatCaptureEnabledKey) || NeoWCEnhancementEnabled(NeoWCMultiSelectExportEnabledKey))) {
         NSArray *originalRows = NeoWCTweakSafeValue(self, @"itemArray");
         if ([originalRows isKindOfClass:[NSArray class]] && originalRows.count > 0) {
             NSMutableArray *rows = [NSMutableArray arrayWithCapacity:originalRows.count];
@@ -850,7 +894,7 @@ static void NeoWCRegisterPlugin(void) {
                 }
                 [rows addObject:row];
             }
-            if (!alreadyAdded) {
+            if (!alreadyAdded && NeoWCEnhancementEnabled(NeoWCChatCaptureEnabledKey)) {
                 Class itemClass = NSClassFromString(@"MMScrollActionSheetItem");
                 id captureItem = itemClass ? [itemClass new] : nil;
                 if (captureItem) {
@@ -920,6 +964,15 @@ static void NeoWCRegisterPlugin(void) {
 %new
 - (void)neowc_handleMomentsDoubleTap {
     if (!NeoWCEnhancementEnabled(NeoWCMomentsDoubleTapLikeKey)) return;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults boolForKey:NeoWCMomentsLikeHapticEnabledKey]) {
+        CGFloat intensity = [defaults objectForKey:NeoWCMomentsLikeHapticIntensityKey] ? [defaults doubleForKey:NeoWCMomentsLikeHapticIntensityKey] : 0.65;
+        UIImpactFeedbackStyle style = intensity < 0.34 ? UIImpactFeedbackStyleLight : (intensity < 0.75 ? UIImpactFeedbackStyleMedium : UIImpactFeedbackStyleHeavy);
+        UIImpactFeedbackGenerator *generator = [[UIImpactFeedbackGenerator alloc] initWithStyle:style];
+        [generator prepare];
+        if (@available(iOS 13.0, *)) [generator impactOccurredWithIntensity:MIN(1.0, MAX(0.1, intensity))];
+        else [generator impactOccurred];
+    }
     [self onAccessibilityLike];
     NeoWCLog(@"已通过双击点赞朋友圈");
 }
@@ -994,7 +1047,7 @@ static void NeoWCRegisterPlugin(void) {
     selector.cancelHandler = ^{
         objc_setAssociatedObject(wrap, &NeoWCGameSelectorPresentedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     };
-    [presenter presentViewController:selector animated:YES completion:nil];
+    [presenter presentViewController:selector animated:NO completion:nil];
 }
 
 %end
@@ -1018,9 +1071,30 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)layoutSubviews {
     %orig;
+    [self neowc_refreshAntiRevokeSidePrompt];
+}
+
+- (void)setViewModel:(id)viewModel {
+    %orig;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self neowc_refreshAntiRevokeSidePrompt];
+        [self setNeedsLayout];
+    });
+}
+
+- (void)updateStatus {
+    %orig;
+    [self neowc_refreshAntiRevokeSidePrompt];
+}
+
+%new
+- (void)neowc_refreshAntiRevokeSidePrompt {
     UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
     id viewModel = NeoWCTweakSafeValue(self, @"viewModel");
+    if (!viewModel) viewModel = NeoWCTweakSafeValue(self, @"m_viewModel");
     id message = NeoWCTweakSafeValue(viewModel, @"messageWrap");
+    if (!message) message = NeoWCTweakSafeValue(viewModel, @"m_messageWrap");
+    if (!message) message = NeoWCTweakSafeValue(viewModel, @"msgWrap");
     NSString *prompt = NeoWCAntiRevokeSidePromptForMessage(message);
     BOOL useSidePrompt = NeoWCEnhancementEnabled(NeoWCAntiRevokeKey) &&
                          [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey] == 1 &&
