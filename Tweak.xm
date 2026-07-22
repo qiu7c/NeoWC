@@ -55,6 +55,7 @@
 
 @interface CommonMessageCellView : UIView
 - (void)neowc_refreshAntiRevokeSidePrompt;
+- (void)neowc_scheduleAntiRevokeSidePromptRefresh;
 @end
 
 @interface SystemMessageCellView : UIView
@@ -103,6 +104,7 @@ static char NeoWCMomentsDoubleTapRecognizerKey;
 static char NeoWCGameSelectorPresentedKey;
 static char NeoWCChatExportBuildingMenuKey;
 static char NeoWCAntiRevokeSideLabelKey;
+static char NeoWCAntiRevokeSideRefreshScheduledKey;
 static char NeoWCAntiRevokeOriginalSystemTextColorKey;
 static char NeoWCAntiRevokeSystemColorAppliedKey;
 static char NeoWCEditedImageKey;
@@ -636,7 +638,10 @@ static void NeoWCRefreshAntiRevokeCellsInView(UIView *view) {
     if (!view) return;
     Class cellClass = NSClassFromString(@"CommonMessageCellView");
     if (cellClass && [view isKindOfClass:cellClass]) {
-        [view setNeedsLayout];
+        SEL refreshSelector = NSSelectorFromString(@"neowc_scheduleAntiRevokeSidePromptRefresh");
+        if ([view respondsToSelector:refreshSelector]) {
+            ((void (*)(id, SEL))objc_msgSend)(view, refreshSelector);
+        }
     }
     Class systemCellClass = NSClassFromString(@"SystemMessageCellView");
     if (systemCellClass && [view isKindOfClass:systemCellClass]) [view setNeedsLayout];
@@ -1408,29 +1413,43 @@ static void NeoWCRegisterPlugin(void) {
 
 %hook CommonMessageCellView
 
-- (void)layoutSubviews {
-    %orig;
-    UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
-    if (label || NeoWCUsesAntiRevokeSidePrompt()) [self neowc_refreshAntiRevokeSidePrompt];
-}
-
 - (void)setViewModel:(id)viewModel {
     %orig;
-    // Let WeChat's own next layout refresh the prompt. Queuing blocks here can
-    // retain recycled cells and stall search-result transitions/back navigation.
-    UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
-    label.hidden = YES;
-    if (NeoWCUsesAntiRevokeSidePrompt()) [self setNeedsLayout];
+    [self neowc_scheduleAntiRevokeSidePromptRefresh];
 }
 
 - (void)updateStatus {
     %orig;
-    if (NeoWCUsesAntiRevokeSidePrompt()) [self setNeedsLayout];
+    [self neowc_scheduleAntiRevokeSidePromptRefresh];
 }
 
 - (void)didMoveToWindow {
     %orig;
-    if (self.window && NeoWCUsesAntiRevokeSidePrompt()) [self setNeedsLayout];
+    if (self.window) {
+        [self neowc_scheduleAntiRevokeSidePromptRefresh];
+    } else {
+        UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
+        if (label && !label.hidden) label.hidden = YES;
+    }
+}
+
+%new
+- (void)neowc_scheduleAntiRevokeSidePromptRefresh {
+    UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
+    if (!NeoWCUsesAntiRevokeSidePrompt()) {
+        if (label && !label.hidden) label.hidden = YES;
+        return;
+    }
+    if ([objc_getAssociatedObject(self, &NeoWCAntiRevokeSideRefreshScheduledKey) boolValue]) return;
+    objc_setAssociatedObject(self, &NeoWCAntiRevokeSideRefreshScheduledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    __weak CommonMessageCellView *weakCell = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        CommonMessageCellView *cell = weakCell;
+        if (!cell) return;
+        objc_setAssociatedObject(cell, &NeoWCAntiRevokeSideRefreshScheduledKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (!cell.window) return;
+        [cell neowc_refreshAntiRevokeSidePrompt];
+    });
 }
 
 %new
@@ -1438,7 +1457,7 @@ static void NeoWCRegisterPlugin(void) {
     UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
     BOOL useSidePromptStyle = NeoWCUsesAntiRevokeSidePrompt();
     if (!useSidePromptStyle) {
-        label.hidden = YES;
+        if (label && !label.hidden) label.hidden = YES;
         return;
     }
     id viewModel = NeoWCTweakSafeValue(self, @"viewModel");
@@ -1449,7 +1468,7 @@ static void NeoWCRegisterPlugin(void) {
     NSString *prompt = NeoWCAntiRevokeSidePromptForMessage(message);
     BOOL useSidePrompt = prompt.length > 0;
     if (!useSidePrompt) {
-        label.hidden = YES;
+        if (label && !label.hidden) label.hidden = YES;
         return;
     }
 
@@ -1460,19 +1479,21 @@ static void NeoWCRegisterPlugin(void) {
         label.textColor = [UIColor tertiaryLabelColor];
         label.textAlignment = NSTextAlignmentCenter;
         label.numberOfLines = 1;
+        label.layer.zPosition = 1000.0;
         [self addSubview:label];
         objc_setAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey, label, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    label.hidden = NO;
-    label.alpha = 1.0;
-    label.text = prompt;
-    label.textColor = NeoWCColorForDefaultsKey(NeoWCAntiRevokeSideTextColorKey, UIColor.tertiaryLabelColor);
+    if (label.hidden) label.hidden = NO;
+    if (label.alpha != 1.0) label.alpha = 1.0;
+    if (![label.text isEqualToString:prompt]) label.text = prompt;
+    UIColor *promptColor = NeoWCColorForDefaultsKey(NeoWCAntiRevokeSideTextColorKey, UIColor.tertiaryLabelColor);
+    if (![label.textColor isEqual:promptColor]) label.textColor = promptColor;
 
     id bubble = nil;
     SEL bubbleSelector = NSSelectorFromString(@"getBgImageView");
     if ([self respondsToSelector:bubbleSelector]) bubble = ((id (*)(id, SEL))objc_msgSend)(self, bubbleSelector);
     if (![bubble isKindOfClass:[UIView class]]) {
-        label.hidden = YES;
+        if (!label.hidden) label.hidden = YES;
         return;
     }
     UIView *bubbleView = bubble;
@@ -1489,9 +1510,8 @@ static void NeoWCRegisterPlugin(void) {
     CGFloat x = isSender ? CGRectGetMinX(bubbleFrame) - labelWidth - 7.0 + offsetX : CGRectGetMaxX(bubbleFrame) + 7.0 - offsetX;
     x = MIN(MAX(4.0, x), MAX(4.0, CGRectGetWidth(self.bounds) - labelWidth - 4.0));
     CGFloat y = CGRectGetMidY(bubbleFrame) - labelHeight * 0.5 + offsetY;
-    label.frame = CGRectIntegral(CGRectMake(x, y, labelWidth, labelHeight));
-    label.layer.zPosition = 1000.0;
-    [self bringSubviewToFront:label];
+    CGRect targetFrame = CGRectIntegral(CGRectMake(x, y, labelWidth, labelHeight));
+    if (!CGRectEqualToRect(label.frame, targetFrame)) label.frame = targetFrame;
 }
 
 - (void)prepareForReuse {
