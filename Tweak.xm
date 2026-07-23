@@ -161,9 +161,14 @@ static BOOL NeoWCTextLooksLikeAmount(NSString *text) {
            [value rangeOfCharacterFromSet:NSCharacterSet.decimalDigitCharacterSet].location != NSNotFound;
 }
 
+static long long NeoWCLongLongDefaultForKey(NSString *key) {
+    id value = [[NSUserDefaults standardUserDefaults] objectForKey:key];
+    return [value respondsToSelector:@selector(longLongValue)] ? [value longLongValue] : 0;
+}
+
 static NSString *NeoWCWalletBalanceText(void) {
     if (!NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey)) return nil;
-    long long fen = [[NSUserDefaults standardUserDefaults] longLongForKey:NeoWCWalletBalanceFenKey];
+    long long fen = NeoWCLongLongDefaultForKey(NeoWCWalletBalanceFenKey);
     if (fen <= 0) return nil;
     return [NSString stringWithFormat:@"¥%.2f", fen / 100.0];
 }
@@ -836,7 +841,7 @@ static void NeoWCPresentWalletBalanceEditor(void) {
                                                                    message:@"仅修改本机界面文字；留空或输入 0 恢复真实显示"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        long long fen = [[NSUserDefaults standardUserDefaults] longLongForKey:NeoWCWalletBalanceFenKey];
+        long long fen = NeoWCLongLongDefaultForKey(NeoWCWalletBalanceFenKey);
         textField.text = fen > 0 ? [NSString stringWithFormat:@"%.2f", fen / 100.0] : nil;
         textField.placeholder = @"例如 888.88";
         textField.keyboardType = UIKeyboardTypeDecimalPad;
@@ -1470,7 +1475,8 @@ static void NeoWCRegisterPlugin(void) {
 %hook TextMessageCellView
 
 - (NSArray *)operationMenuItems {
-    return NeoWCOperationMenuItemsWithJoker(self, %orig);
+    NSArray *items = %orig;
+    return NeoWCOperationMenuItemsWithJoker(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
@@ -1489,7 +1495,8 @@ static void NeoWCRegisterPlugin(void) {
 %hook AppMessageCellView
 
 - (NSArray *)operationMenuItems {
-    return NeoWCOperationMenuItemsWithJoker(self, %orig);
+    NSArray *items = %orig;
+    return NeoWCOperationMenuItemsWithJoker(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
@@ -1508,7 +1515,8 @@ static void NeoWCRegisterPlugin(void) {
 %hook WCPayTransferMessageCellView
 
 - (NSArray *)operationMenuItems {
-    return NeoWCOperationMenuItemsWithJoker(self, %orig);
+    NSArray *items = %orig;
+    return NeoWCOperationMenuItemsWithJoker(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
@@ -1871,8 +1879,9 @@ static void NeoWCRegisterPlugin(void) {
 - (void)updateNumber:(id)number {
     %orig;
     NSString *balanceText = NeoWCWalletBalanceText();
-    if (balanceText.length > 0 && [self respondsToSelector:@selector(setText:)]) {
-        ((void (*)(id, SEL, id))objc_msgSend)(self, @selector(setText:), balanceText);
+    id receiver = (id)self;
+    if (balanceText.length > 0 && [receiver respondsToSelector:@selector(setText:)]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(receiver, @selector(setText:), balanceText);
     }
 }
 
