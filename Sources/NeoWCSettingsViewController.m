@@ -207,9 +207,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCChatInputInnerRadiusKey: @18.0,
         NeoWCChatInputOuterRadiusKey: @22.0,
         NeoWCHideChatMuteIconKey: @NO,
-        NeoWCGlobalTextReplaceEnabledKey: @NO,
-        NeoWCGlobalTextReplaceSourceKey: @"",
-        NeoWCGlobalTextReplaceTargetKey: @"",
         NeoWCExpandedCategoriesKey: @[@"messages"],
         NeoWCCollapsedFeaturesKey: @[],
     }];
@@ -257,7 +254,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             NeoWCPluginShortcutsEnabledKey,
             NeoWCPluginShortcutCustomPageKey,
             NeoWCChatInputRoundingEnabledKey,
-            NeoWCGlobalTextReplaceEnabledKey,
         ]];
     });
     return [keys containsObject:key];
@@ -276,35 +272,33 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     ^NeoWCSettingItem *(NSString *title, NSString *subtitle, NSString *symbol, NeoWCRowKind kind, NSString *key, NSString *value) {
         return [NeoWCSettingItem itemWithTitle:title subtitle:subtitle symbol:symbol kind:kind key:key value:value];
     };
-    NSInteger configuredStepCount = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCStepCountKey];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSInteger configuredStepCount = [defaults integerForKey:NeoWCStepCountKey];
     NSString *stepValue = configuredStepCount > 0 ? [NSString stringWithFormat:@"%ld 步", (long)configuredStepCount] : @"设置";
-    NSInteger contactsCount = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCContactsCountKey];
+    NSInteger contactsCount = [defaults integerForKey:NeoWCContactsCountKey];
     NSString *contactsValue = contactsCount > 0 ? [NSString stringWithFormat:@"%ld 个", (long)contactsCount] : @"设置";
-    NSTimeInterval revokeFilter = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCAntiRevokeTimeFilterKey];
+    NSTimeInterval revokeFilter = [defaults doubleForKey:NeoWCAntiRevokeTimeFilterKey];
     NSString *revokeFilterValue = @"不限制";
     if (revokeFilter >= 86400.0) revokeFilterValue = @"24 小时";
     else if (revokeFilter >= 3600.0) revokeFilterValue = @"1 小时";
     else if (revokeFilter >= 1800.0) revokeFilterValue = @"30 分钟";
     else if (revokeFilter >= 300.0) revokeFilterValue = @"5 分钟";
     else if (revokeFilter >= 60.0) revokeFilterValue = @"1 分钟";
-    NSInteger revokePromptStyleValue = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey];
-    id antiRevokeValue = [[NSUserDefaults standardUserDefaults] objectForKey:NeoWCAntiRevokeKey];
+    NSInteger revokePromptStyleValue = [defaults integerForKey:NeoWCAntiRevokePromptStyleKey];
+    id antiRevokeValue = [defaults objectForKey:NeoWCAntiRevokeKey];
     BOOL antiRevokeEnabled = antiRevokeValue ? [antiRevokeValue boolValue] : YES;
-    BOOL notifySenderEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCAntiRevokeNotifySenderKey];
-    BOOL stepOverrideEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCStepOverrideEnabledKey];
-    BOOL momentsLikeEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsDoubleTapLikeKey];
-    BOOL momentsHapticEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsLikeHapticEnabledKey];
-    BOOL multiSelectExportEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMultiSelectExportEnabledKey];
-    BOOL contactsCountEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCContactsCountEnabledKey];
-    BOOL pluginShortcutsEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCPluginShortcutsEnabledKey];
-    BOOL inputRoundingEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatInputRoundingEnabledKey];
-    BOOL globalTextReplaceEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCGlobalTextReplaceEnabledKey];
-    NSString *globalReplaceSource = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCGlobalTextReplaceSourceKey] ?: @"";
-    NSString *globalReplaceTarget = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCGlobalTextReplaceTargetKey] ?: @"";
+    BOOL notifySenderEnabled = [defaults boolForKey:NeoWCAntiRevokeNotifySenderKey];
+    BOOL stepOverrideEnabled = [defaults boolForKey:NeoWCStepOverrideEnabledKey];
+    BOOL momentsLikeEnabled = [defaults boolForKey:NeoWCMomentsDoubleTapLikeKey];
+    BOOL momentsHapticEnabled = [defaults boolForKey:NeoWCMomentsLikeHapticEnabledKey];
+    BOOL multiSelectExportEnabled = [defaults boolForKey:NeoWCMultiSelectExportEnabledKey];
+    BOOL contactsCountEnabled = [defaults boolForKey:NeoWCContactsCountEnabledKey];
+    BOOL pluginShortcutsEnabled = [defaults boolForKey:NeoWCPluginShortcutsEnabledKey];
+    BOOL inputRoundingEnabled = [defaults boolForKey:NeoWCChatInputRoundingEnabledKey];
     NSString *revokePromptStyle = revokePromptStyleValue == 1 ? @"气泡旁" : @"消息下方";
-    NSString *sidePromptText = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCAntiRevokeSideTextKey] ?: @"已拦截撤回";
-    id storedSideOffsetX = [[NSUserDefaults standardUserDefaults] objectForKey:NeoWCAntiRevokeSideOffsetXKey];
-    id storedSideOffsetY = [[NSUserDefaults standardUserDefaults] objectForKey:NeoWCAntiRevokeSideOffsetYKey];
+    NSString *sidePromptText = [defaults stringForKey:NeoWCAntiRevokeSideTextKey] ?: @"已拦截撤回";
+    id storedSideOffsetX = [defaults objectForKey:NeoWCAntiRevokeSideOffsetXKey];
+    id storedSideOffsetY = [defaults objectForKey:NeoWCAntiRevokeSideOffsetYKey];
     NSString *sideOffsetX = [NSString stringWithFormat:@"%.0f", storedSideOffsetX ? [storedSideOffsetX doubleValue] : 0.0];
     NSString *sideOffsetY = [NSString stringWithFormat:@"%.0f", storedSideOffsetY ? [storedSideOffsetY doubleValue] : 10.0];
 
@@ -350,7 +344,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NSUInteger hapticIndex = MIN((NSUInteger)3, enhancementItems.count);
         [enhancementItems insertObject:item(@"点赞震动", @"双击点赞成功时提供触感反馈", @"waveform", NeoWCRowKindSwitch, NeoWCMomentsLikeHapticEnabledKey, nil) atIndex:hapticIndex];
         if (momentsHapticEnabled && [self isFeatureExpandedForKey:NeoWCMomentsLikeHapticEnabledKey]) {
-            CGFloat intensity = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCMomentsLikeHapticIntensityKey];
+            CGFloat intensity = [defaults doubleForKey:NeoWCMomentsLikeHapticIntensityKey];
             NSString *intensityText = intensity < 0.34 ? @"轻" : (intensity < 0.75 ? @"中" : @"强");
             [enhancementItems insertObject:item(@"点赞震动力度", @"调整双击点赞时的震动反馈", @"slider.horizontal.3", NeoWCRowKindDetail, nil, intensityText) atIndex:MIN(hapticIndex + 1, enhancementItems.count)];
         }
@@ -364,22 +358,17 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     ]];
     if (inputRoundingEnabled && [self isFeatureExpandedForKey:NeoWCChatInputRoundingEnabledKey]) {
         [interfaceItems addObject:item(@"输入框内部圆角", @"调整文字输入区域的圆角", @"text.cursor", NeoWCRowKindSwitch, NeoWCChatInputInnerRoundingKey, nil)];
-        if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatInputInnerRoundingKey]) {
-            CGFloat innerRadius = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCChatInputInnerRadiusKey];
+        if ([defaults boolForKey:NeoWCChatInputInnerRoundingKey]) {
+            CGFloat innerRadius = [defaults doubleForKey:NeoWCChatInputInnerRadiusKey];
             [interfaceItems addObject:item(@"内部圆角程度", @"输入 0 到 40，数值越大越圆", @"slider.horizontal.3", NeoWCRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", innerRadius])];
         }
         [interfaceItems addObject:item(@"外部工具栏圆角", @"调整聊天底部工具栏的圆角", @"rectangle.bottomhalf.filled", NeoWCRowKindSwitch, NeoWCChatInputOuterRoundingKey, nil)];
-        if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatInputOuterRoundingKey]) {
-            CGFloat outerRadius = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCChatInputOuterRadiusKey];
+        if ([defaults boolForKey:NeoWCChatInputOuterRoundingKey]) {
+            CGFloat outerRadius = [defaults doubleForKey:NeoWCChatInputOuterRadiusKey];
             [interfaceItems addObject:item(@"外部圆角程度", @"输入 0 到 40，数值越大越圆", @"slider.horizontal.3", NeoWCRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", outerRadius])];
         }
     }
     [interfaceItems addObject:item(@"隐藏免打扰图标", @"隐藏聊天标题旁的免打扰标记", @"bell.slash", NeoWCRowKindSwitch, NeoWCHideChatMuteIconKey, nil)];
-    [interfaceItems addObject:item(@"全局文字替换", @"风险开关：替换所有 MMUILabel 命中的文字", @"textformat.alt", NeoWCRowKindSwitch, NeoWCGlobalTextReplaceEnabledKey, nil)];
-    if (globalTextReplaceEnabled && [self isFeatureExpandedForKey:NeoWCGlobalTextReplaceEnabledKey]) {
-        [interfaceItems addObject:item(@"替换原文字", @"完全匹配后替换；留空则不生效", @"text.magnifyingglass", NeoWCRowKindDetail, nil, globalReplaceSource.length > 0 ? globalReplaceSource : @"输入")];
-        [interfaceItems addObject:item(@"替换为文字", @"替换后的显示文字", @"text.append", NeoWCRowKindDetail, nil, globalReplaceTarget.length > 0 ? globalReplaceTarget : @"输入")];
-    }
     [interfaceItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];
 
     self.sections = @[
@@ -403,10 +392,10 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
                 [items addObject:item(@"直达调试中心", @"在插件管理页增加独立页面入口", @"ladybug", NeoWCRowKindSwitch, NeoWCPluginShortcutDebugCenterKey, nil)];
                 [items addObject:item(@"直达防撤回记录", @"在插件管理页增加撤回记录入口", @"tray.full", NeoWCRowKindSwitch, NeoWCPluginShortcutRevokeRecordsKey, nil)];
                 [items addObject:item(@"自定义页面入口", @"输入 Controller 或 View 类名快速跳转", @"rectangle.and.hand.point.up.left", NeoWCRowKindSwitch, NeoWCPluginShortcutCustomPageKey, nil)];
-                if ([[NSUserDefaults standardUserDefaults] boolForKey:NeoWCPluginShortcutCustomPageKey] &&
+                if ([defaults boolForKey:NeoWCPluginShortcutCustomPageKey] &&
                     [self isFeatureExpandedForKey:NeoWCPluginShortcutCustomPageKey]) {
-                    NSString *customTitle = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCPluginShortcutCustomTitleKey] ?: @"快捷页面";
-                    NSString *customClass = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCPluginShortcutCustomClassKey] ?: @"";
+                    NSString *customTitle = [defaults stringForKey:NeoWCPluginShortcutCustomTitleKey] ?: @"快捷页面";
+                    NSString *customClass = [defaults stringForKey:NeoWCPluginShortcutCustomClassKey] ?: @"";
                     [items addObject:item(@"自定义入口名称", @"显示在插件管理页面中的名称", @"textformat", NeoWCRowKindDetail, nil, customTitle)];
                     [items addObject:item(@"页面 Runtime 类名", @"支持 UIViewController 或 UIView 子类", @"chevron.left.forwardslash.chevron.right", NeoWCRowKindDetail, nil, customClass.length > 0 ? customClass : @"输入")];
                 }
@@ -581,6 +570,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     cell.accessoryView = nil;
     cell.accessoryType = UITableViewCellAccessoryNone;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+    cell.accessibilityHint = nil;
     NSInteger visibleRows = [tableView numberOfRowsInSection:indexPath.section];
     BOOL firstRow = indexPath.row == 0;
     BOOL lastRow = indexPath.row == visibleRows - 1;
@@ -711,8 +701,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
                               [item.defaultsKey isEqualToString:NeoWCPluginShortcutCustomPageKey] ||
                               [item.defaultsKey isEqualToString:NeoWCChatInputRoundingEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCChatInputInnerRoundingKey] ||
-                              [item.defaultsKey isEqualToString:NeoWCChatInputOuterRoundingKey] ||
-                              [item.defaultsKey isEqualToString:NeoWCGlobalTextReplaceEnabledKey];
+                              [item.defaultsKey isEqualToString:NeoWCChatInputOuterRoundingKey];
     if (changesVisibleRows) [self buildSections];
     if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] || changesVisibleRows) [self.tableView reloadData];
 }
@@ -905,26 +894,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)presentGlobalTextReplaceEditorForKey:(NSString *)key title:(NSString *)title placeholder:(NSString *)placeholder {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
-                                                                   message:@"这是风险功能，会影响所有匹配的微信标签文字"
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:key];
-        textField.placeholder = placeholder;
-        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-    }];
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    __weak typeof(self) weakSelf = self;
-    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        NSString *value = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
-        [[NSUserDefaults standardUserDefaults] setObject:value forKey:key];
-        [weakSelf buildSections];
-        [weakSelf.tableView reloadData];
-    }]];
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
@@ -995,14 +964,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     }
     if ([item.title isEqualToString:@"外部圆角程度"]) {
         [self presentCornerRadiusEditorForKey:NeoWCChatInputOuterRadiusKey title:item.title];
-        return;
-    }
-    if ([item.title isEqualToString:@"替换原文字"]) {
-        [self presentGlobalTextReplaceEditorForKey:NeoWCGlobalTextReplaceSourceKey title:item.title placeholder:@"例如 微信"];
-        return;
-    }
-    if ([item.title isEqualToString:@"替换为文字"]) {
-        [self presentGlobalTextReplaceEditorForKey:NeoWCGlobalTextReplaceTargetKey title:item.title placeholder:@"例如 NeoWC"];
         return;
     }
     if ([item.title isEqualToString:@"插件显示管理"]) {

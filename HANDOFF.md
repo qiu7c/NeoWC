@@ -1,16 +1,15 @@
 # NeoWC 项目交接文档
 
-更新时间：2026-07-22
+更新时间：2026-07-23
 项目版本：0.1.1
 仓库：`git@github.com:qiu7c/NeoWC.git`
 主分支：`main`
 
 ## 1. 当前工作区状态
 
-- 最近已推送提交：`1488432 Remove anti-revoke cell layout loop`。
-- 当前本地还有未推送修改：
-  - 保留防撤回气泡方案的弱引用合并刷新修复。
-  - 优化设置页分类和功能子项展开动画。
+- 最近已推送提交：`65c75aa Fix wallet and chat display overrides`。
+- `main` 已与 `origin/main` 同步；开始新工作前仍须重新检查 `git status` 和当前 diff。
+- `65c75aa` 的真机结果不合格：钱包余额功能会导致余额页面无法进入，聊天记录文字修改仍不生效。详见“当前阻断问题”。
 - 提交前必须先执行 `git status --short` 和 `git diff --check`，不要覆盖用户已有修改。
 - 用户通常会明确说“推送”后再提交；推送后不主动查询 GitHub Actions 构建结果。
 
@@ -113,7 +112,6 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 - 外部工具栏圆角
 - 内外圆角 0–40 自定义
 - 隐藏聊天标题旁“免打扰”图片
-- 全局文字替换风险开关：通过 `MMUILabel setText:` 完全匹配原文字后替换
 - 插件显示管理
 
 ### 开发者功能
@@ -141,9 +139,8 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | 朋友圈 | `WCTimeLineCellView`、`WCTimeLineOperateButtonView` | 所有逻辑必须受开关控制 |
 | 游戏选择 | `CMessageMgr AddEmoticonMsg:MsgWrap:` | 非游戏消息和关闭状态直接 `%orig` |
 | 聊天记录小丑 | `TextMessageCellView`、`AppMessageCellView`、`WCPayTransferMessageCellView` 的 `operationMenuItems`/`canPerformAction:withSender:` | 仅在开关开启时插入“小丑”菜单；只做当前页面本机显示修改 |
-| 钱包余额显示 | `TimeoutNumber updateNumber:/didMoveToSuperview`、`WCPayWalletEntryHeaderView didMoveToSuperview`、`MMUILabel setText:` | 仅替换本机 UI 文本，不触碰支付动作、交易状态或网络请求 |
+| 钱包余额显示 | `TimeoutNumber updateNumber:/didMoveToSuperview`、`WCPayWalletEntryHeaderView didMoveToSuperview` | 当前 `updateNumber:` 参数替换方案会阻断钱包余额页面，修复前必须核对参考 dylib 的真实参数类型和调用顺序；禁止恢复通过 `MMUILabel` 猜测所有数字的方案 |
 | 好友数量显示 | `MMUILabel setText:` | 必须匹配“个朋友”等明确文案，禁止无条件全局替换 |
-| 全局文字替换 | `MMUILabel setText:` | 风险开关默认关闭；必须配置原文字和替换文字；只做完全匹配，不做模糊/正则替换 |
 | 广告 | `WCDataItem`、`WAAppTaskSplashADConfig` | 关闭状态返回微信原值 |
 
 私有类不要以强链接符号方式引用。优先使用 `NSClassFromString`、`objc_getClass`、`sel_registerName` 和类型明确的 `objc_msgSend`。
@@ -208,6 +205,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 
 - 长截图功能已完全移除，不要恢复相关 Controller、菜单和渲染代码。
 - Markdown 导出已移除。
+- 全局文字替换已完全移除；`MMUILabel setText:` 只保留好友数量的受限文案匹配，不得扩展为通用替换入口。
 - 多选批量保存文件附件不实现，只保存已下载图片。
 - View 选择器不提供“复制 Hook”。
 - 不使用全局手势启动调试悬浮窗。
@@ -216,18 +214,36 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 
 - 微信私有类和 Selector 会随版本变化，必须依赖兼容性中心和真机日志确认。
 - `WCPluginsMgr` 没有注销 API；动态快捷入口关闭或改名后，旧入口可能要重启微信才消失。
-- 多开微信可能更改 Bundle ID、容器和运行环境；主 plist 当前只注入官方 `com.tencent.xin`。
+- 多开微信可能更改 Bundle ID、容器和运行环境；当前 plist 已包含 `com.tencent.xin`、`com.tencent.wx`、`com.tencent.qy.xin`。
 - 本地 Windows 无法完整验证 Theos/iOS 私有 API 编译，推送后由云端构建。
 - 调试日志默认开启；排查性能时可先关闭。
 
+### 当前阻断问题
+
+参考插件：`2DD小丑助手-arm64.deb`。本地提取目录为 `.codex-analysis/2dd-joker/`，该目录已被 Git 忽略，只用于分析。用户已确认参考 dylib 在同一真机环境中余额修改和聊天文字修改都完全生效。
+
+1. 钱包余额页面无法进入
+   - 出现在提交 `65c75aa` 后。
+   - 该提交移除了钱包对全局 `MMUILabel setText:` 的金额猜测，解决了插件管理页版本号被误改的问题。
+   - 但当前 `TimeoutNumber updateNumber:` 在开关开启且配置余额后直接执行 `%orig(balanceText)`，其中 `balanceText` 是带货币符号的 `NSString`。真机表现说明原方法参数类型或内部调用契约与此不符，可能在进入余额页面时触发异常或破坏初始化。
+   - 修复时不得继续猜测参数类型。必须反编译参考 dylib 中 `TimeoutNumber updateNumber:` 的替换函数，确认传给原 IMP 的对象类型、金额单位、格式及调用前后顺序。
+   - 在精确实现完成前，最小安全回退是让 `updateNumber:` 原样 `%orig`，确保钱包页面可进入；不得再次用全局数字匹配替换余额。
+
+2. 聊天记录文字修改仍不生效
+   - 菜单和编辑弹窗可以出现，但确认后真机显示不改变。
+   - `65c75aa` 已尝试扩展 `messageWrap/msgWrap/getMessageWrap/getMsgWrap` 获取方式、显式调用 `setM_nsContent:` 等 setter、强持有目标 Cell、刷新消息节点及递归替换 `UILabel`，仍然无效。
+   - 这说明实际消息对象入口、正文控件类型或刷新调用与推测不一致；正文也可能不是普通 `UILabel`。
+   - 下一轮必须逐个反编译参考 dylib 对 `TextMessageCellView`、`AppMessageCellView`、`WCPayTransferMessageCellView` 新增的 `joker_handleMenuItem:` 及相关辅助函数，记录它取得消息对象、判断类型、修改字段和刷新 Cell 的完整顺序。
+   - 不要继续叠加宽泛 KVC、遍历全局窗口或无目标的 UI 文本替换。只迁移参考 dylib 已验证的调用路径，并保留“仅修改当前页面本机显示”的边界。
+
 ## 12. 下一轮真机验证顺序
 
-1. 开启防撤回气泡方案，进入普通聊天。
-2. 搜索聊天记录并跳转到目标消息，再返回。
-3. 快速切换多个聊天并接收新消息。
-4. 撤回后确认提示立即出现且不会消失。
-5. 关闭防撤回后重复上述流程。
-6. 测试输入栏圆角开启/关闭、搜索跳转和返回。
+1. 先关闭钱包余额开关，确认钱包和余额页面可正常进入。
+2. 按参考 dylib 精确修复后再开启钱包余额，验证页面可进入、长按可设置、只修改真实余额位置且插件版本号不变。
+3. 分别测试文字、应用消息和转账消息的“小丑”菜单，确认提交后当前 Cell 立即改变。
+4. 退出并重新进入聊天，确认该功能仍保持“仅当前页面本机显示”的预期边界。
+5. 开启防撤回气泡方案，进入普通聊天，搜索并跳转到目标消息后返回。
+6. 快速切换多个聊天并接收新消息，确认撤回提示立即出现且不会消失。
 7. 测试图片编辑快捷发送与官方转发。
 8. 测试设置页分类和子项展开动画。
 
@@ -254,5 +270,13 @@ ssh://git@ssh.github.com:443/qiu7c/NeoWC.git
 ## 14. 新窗口接手提示词
 
 ```text
-继续维护 D:\Vibe\NeoWC。先完整阅读 HANDOFF.md，再查看 git status、最近提交和当前 diff。不要恢复长截图或 Markdown 导出。当前最重要的是保持防撤回气泡方案不使用 CommonMessageCellView layoutSubviews，不主动 setNeedsLayout/layoutIfNeeded；刷新必须弱引用并合并。保留图片编辑快捷发送与官方转发隔离。未经我明确要求不要推送，推送后不要查询构建结果。
+继续维护 D:\Vibe\NeoWC。先完整阅读 D:\Vibe\NeoWC\HANDOFF.md，再检查 git status、最近提交和当前 diff；工作区中的所有现有修改都要保留，不得覆盖或回退。
+
+当前最高优先级是修复提交 65c75aa 后的两个真机阻断问题：开启并配置钱包余额后，余额页面无法进入；聊天记录“小丑”菜单和弹窗能出现，但确认修改后文字完全不生效。用户提供的 D:\Documents\xwechat_files\wxid_0e2foxbt1jso22_a88c\msg\file\2026-07\2DD小丑助手-arm64.deb 在同一环境中这两项功能完全生效，本地已提取到 D:\Vibe\NeoWC\.codex-analysis\2dd-joker，仅供反编译分析且不得加入提交。
+
+不要继续猜测私有 API。先精确反编译参考 dylib 中 TimeoutNumber updateNumber: 的 Hook，确认原方法参数类型、余额单位、格式和调用顺序；再逐个还原 TextMessageCellView、AppMessageCellView、WCPayTransferMessageCellView 的 joker_handleMenuItem: 及辅助函数，确认消息对象来源、字段 setter、正文控件类型和刷新入口。钱包修复前可先让 updateNumber: 原样 %orig 保证页面可进入，禁止恢复 MMUILabel 全局猜测数字，否则会再次修改插件版本号。
+
+必须保留已经修好的防撤回气泡方案：禁止给 CommonMessageCellView 恢复 layoutSubviews Hook，禁止主动调用 setNeedsLayout/layoutIfNeeded，提示刷新必须弱引用且合并执行。保留图片编辑快捷发送与微信官方转发完全隔离的逻辑，保留设置页最新无动画 reloadData 与滚动位置保持方案。不要恢复长截图、Markdown 导出或已删除的诊断提示方案。
+
+修改后先执行 git status --short、git diff --check、git diff --stat 和约束扫描。本机没有 Theos，说明无法本地完成 iOS 私有 API 编译。未经用户明确要求不要提交或推送；推送 main 后不要查询云端构建结果。项目版本为 0.1.1，远程仓库为 git@github.com:qiu7c/NeoWC.git。
 ```

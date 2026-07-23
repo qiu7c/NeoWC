@@ -386,8 +386,12 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
     NSUInteger type = [record[@"type"] unsignedIntegerValue];
     NSString *category = type == 1 ? @"文字" : (type == 3 ? @"图片" : (type == 49 ? @"文件/分享" : NeoWCMessageTypeName(type)));
     NSDate *date = [NSDate dateWithTimeIntervalSince1970:[record[@"time"] doubleValue]];
-    NSDateFormatter *formatter = [NSDateFormatter new];
-    formatter.dateFormat = @"MM-dd HH:mm:ss";
+    static NSDateFormatter *formatter;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        formatter = [NSDateFormatter new];
+        formatter.dateFormat = @"MM-dd HH:mm:ss";
+    });
     cell.textLabel.text = [NSString stringWithFormat:@"%@ · %@", record[@"contact"], category];
     cell.detailTextLabel.text = [NSString stringWithFormat:@"%@  %@", [formatter stringFromDate:date], record[@"summary"]];
     cell.detailTextLabel.numberOfLines = 2;

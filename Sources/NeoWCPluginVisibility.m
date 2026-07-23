@@ -156,7 +156,15 @@ void NeoWCFilterPluginListController(id controller) {
 }
 
 - (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
-- (void)reloadPlugins { self.plugins = [[NeoWCPluginVisibilityManager sharedManager] sortedRecords]; [self.tableView reloadData]; }
+- (void)reloadPlugins {
+    if (![NSThread isMainThread]) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf reloadPlugins]; });
+        return;
+    }
+    self.plugins = [[NeoWCPluginVisibilityManager sharedManager] sortedRecords];
+    [self.tableView reloadData];
+}
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return self.plugins.count; }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section { return @"已发现的插件"; }
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section { return @"关闭“显示”只会从插件管理页面隐藏入口，不会停止插件运行；本次没有注册的插件会标记为未加载。"; }

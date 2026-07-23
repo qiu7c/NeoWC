@@ -120,7 +120,6 @@ static char NeoWCQuickSendPendingImageKey;
 static char NeoWCInputSwipeLeftRecognizerKey;
 static char NeoWCInputSwipeRightRecognizerKey;
 static char NeoWCWalletGestureRecognizerKey;
-static char NeoWCJokerOverrideTextKey;
 static __weak id NeoWCCurrentEditImageLogicController;
 
 static NSMutableSet *NeoWCActiveQuickSendSessions(void) {
@@ -165,26 +164,15 @@ static void NeoWCTweakSetStringForSelectorName(id object, NSString *selectorName
     if ([object respondsToSelector:selector]) ((void (*)(id, SEL, id))objc_msgSend)(object, selector, value);
 }
 
-static BOOL NeoWCTextLooksLikeAmount(NSString *text) {
-    if (![text isKindOfClass:[NSString class]] || text.length == 0) return NO;
-    NSString *value = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    if ([value hasPrefix:@"¥"] || [value hasPrefix:@"￥"]) value = [value substringFromIndex:1];
-    if (value.length == 0 || value.length > 18) return NO;
-    NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"0123456789,."];
-    return [value rangeOfCharacterFromSet:allowed.invertedSet].location == NSNotFound &&
-           [value rangeOfCharacterFromSet:NSCharacterSet.decimalDigitCharacterSet].location != NSNotFound;
-}
-
 static long long NeoWCLongLongDefaultForKey(NSString *key) {
     id value = [[NSUserDefaults standardUserDefaults] objectForKey:key];
     return [value respondsToSelector:@selector(longLongValue)] ? [value longLongValue] : 0;
 }
 
-static NSString *NeoWCWalletBalanceText(void) {
-    if (!NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey)) return nil;
+static unsigned long long NeoWCWalletBalanceFenOverride(void) {
+    if (!NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey)) return 0;
     long long fen = NeoWCLongLongDefaultForKey(NeoWCWalletBalanceFenKey);
-    if (fen <= 0) return nil;
-    return [NSString stringWithFormat:@"¥%.2f", fen / 100.0];
+    return fen > 0 ? (unsigned long long)fen : 0;
 }
 
 static NSString *NeoWCContactsCountTextForOriginal(NSString *original) {
@@ -192,127 +180,135 @@ static NSString *NeoWCContactsCountTextForOriginal(NSString *original) {
     NSInteger count = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCContactsCountKey];
     if (count <= 0 || ![original isKindOfClass:[NSString class]]) return nil;
     NSString *trimmed = [original stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    if ([trimmed hasSuffix:@"个朋友"]) return [NSString stringWithFormat:@"%ld个朋友", (long)count];
     if ([trimmed hasSuffix:@" 个朋友"]) return [NSString stringWithFormat:@"%ld 个朋友", (long)count];
+    if ([trimmed hasSuffix:@"个朋友"]) return [NSString stringWithFormat:@"%ld个朋友", (long)count];
     if ([trimmed hasSuffix:@"个"] && [trimmed rangeOfString:@"朋友"].location == NSNotFound) {
-        NSString *number = [trimmed substringToIndex:trimmed.length - 1];
-        if ([number rangeOfCharacterFromSet:NSCharacterSet.decimalDigitCharacterSet].location != NSNotFound) {
+        NSString *number = [[trimmed substringToIndex:trimmed.length - 1]
+            stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (number.length > 0 &&
+            [number rangeOfCharacterFromSet:NSCharacterSet.decimalDigitCharacterSet.invertedSet].location == NSNotFound) {
             return [NSString stringWithFormat:@"%ld 个", (long)count];
         }
     }
     return nil;
 }
 
-static NSString *NeoWCLabelReplacementText(NSString *text) {
-    NSString *contactsText = NeoWCContactsCountTextForOriginal(text);
-    if (contactsText.length > 0) return contactsText;
-    if (NeoWCEnhancementEnabled(NeoWCGlobalTextReplaceEnabledKey) && [text isKindOfClass:[NSString class]]) {
-        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        NSString *source = [[defaults stringForKey:NeoWCGlobalTextReplaceSourceKey] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        NSString *target = [defaults stringForKey:NeoWCGlobalTextReplaceTargetKey] ?: @"";
-        if (source.length > 0 && target.length > 0 && [text isEqualToString:source]) return target;
-    }
-    return nil;
+static id NeoWCMessageWrapForCell(id cell) {
+    id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel"]);
+    return NeoWCTweakValueForSelectorNames(viewModel, @[@"messageWrap"]);
 }
 
-static id NeoWCMessageWrapForCell(id cell) {
-    NSArray<NSString *> *messageSelectors = @[@"messageWrap", @"msgWrap", @"getMessageWrap", @"getMsgWrap"];
-    id message = NeoWCTweakValueForSelectorNames(cell, messageSelectors);
-    if (!message) message = NeoWCTweakSafeValue(cell, @"messageWrap") ?: NeoWCTweakSafeValue(cell, @"m_messageWrap") ?: NeoWCTweakSafeValue(cell, @"m_msgWrap");
-    id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel", @"getViewModel"]);
-    if (!viewModel) viewModel = NeoWCTweakSafeValue(cell, @"viewModel") ?: NeoWCTweakSafeValue(cell, @"m_viewModel");
-    if (!message) message = NeoWCTweakValueForSelectorNames(viewModel, messageSelectors);
-    if (!message) message = NeoWCTweakSafeValue(viewModel, @"messageWrap") ?: NeoWCTweakSafeValue(viewModel, @"m_messageWrap") ?: NeoWCTweakSafeValue(viewModel, @"m_msgWrap");
-    return message;
+static BOOL NeoWCMessageIsText(id message) {
+    SEL selector = NSSelectorFromString(@"IsTextMsg");
+    return message && [message respondsToSelector:selector] && ((BOOL (*)(id, SEL))objc_msgSend)(message, selector);
+}
+
+static BOOL NeoWCMessageIsRefer(id message) {
+    SEL selector = NSSelectorFromString(@"isReferMsgType");
+    return message && [message respondsToSelector:selector] && ((BOOL (*)(id, SEL))objc_msgSend)(message, selector);
+}
+
+static BOOL NeoWCMessageIsTransfer(id message) {
+    if (!message) return NO;
+    SEL parseSelector = NSSelectorFromString(@"parseWCPayInfoItemIfNeed");
+    if ([message respondsToSelector:parseSelector]) ((void (*)(id, SEL))objc_msgSend)(message, parseSelector);
+    id payItem = NeoWCTweakSafeValue(message, @"m_oWCPayInfoItem");
+    if (!payItem) return NO;
+    NSUInteger subType = [NeoWCTweakSafeValue(payItem, @"m_uiPaySubType") unsignedIntegerValue];
+    if (subType == 3 || subType == 4) return YES;
+    NSString *transferID = NeoWCTweakSafeValue(payItem, @"m_nsTransferID");
+    return [transferID isKindOfClass:[NSString class]] && transferID.length > 0;
+}
+
+static BOOL NeoWCMessageCanJokerEdit(id message) {
+    return NeoWCMessageIsText(message) || NeoWCMessageIsRefer(message) || NeoWCMessageIsTransfer(message);
 }
 
 static NSString *NeoWCDisplayTextForJokerCell(id cell, id message) {
-    SEL contentSelector = NSSelectorFromString(@"GetDisplayContent");
-    if ([cell respondsToSelector:contentSelector]) {
-        id value = ((id (*)(id, SEL))objc_msgSend)(cell, contentSelector);
+    if (NeoWCMessageIsText(message)) {
+        SEL contentSelector = NSSelectorFromString(@"GetDisplayContent");
+        if ([message respondsToSelector:contentSelector]) {
+            id value = ((id (*)(id, SEL))objc_msgSend)(message, contentSelector);
+            if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
+        }
+    }
+    if (NeoWCMessageIsRefer(message)) {
+        id value = NeoWCTweakSafeValue(message, @"m_nsTitle");
         if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
     }
-    for (NSString *key in @[@"m_nsContent", @"m_nsTitle", @"m_nsFeeDesc", @"content", @"title"]) {
-        id value = NeoWCTweakSafeValue(message, key);
-        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
-    }
-    id payItem = NeoWCTweakSafeValue(message, @"m_oWCPayInfoItem");
-    for (NSString *key in @[@"m_nsFeeDesc", @"m_nsTitle", @"m_receiverDesc", @"m_senderDesc"]) {
-        id value = NeoWCTweakSafeValue(payItem, key);
+    if (NeoWCMessageIsTransfer(message)) {
+        id payItem = NeoWCTweakSafeValue(message, @"m_oWCPayInfoItem");
+        id value = NeoWCTweakSafeValue(payItem, @"m_nsFeeDesc");
         if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
     }
     return @"";
 }
 
-static void NeoWCReloadJokerCell(id cell, id message) {
+static UIViewController *NeoWCJokerPresenterForCell(id cell) {
     UIResponder *responder = [cell isKindOfClass:[UIResponder class]] ? (UIResponder *)cell : nil;
     while (responder) {
-        SEL reloadCellSelector = NSSelectorFromString(@"reloadVisibleNodeWithCellView:");
-        if ([responder respondsToSelector:reloadCellSelector]) {
-            ((void (*)(id, SEL, id))objc_msgSend)(responder, reloadCellSelector, cell);
-            return;
-        }
-        SEL reloadWrapSelector = NSSelectorFromString(@"reloadNodeWithMessageWrap:");
-        if (message && [responder respondsToSelector:reloadWrapSelector]) {
-            ((void (*)(id, SEL, id))objc_msgSend)(responder, reloadWrapSelector, message);
-            return;
-        }
+        if ([responder isKindOfClass:[UIViewController class]]) return (UIViewController *)responder;
         responder = responder.nextResponder;
     }
-    id tableView = nil;
-    SEL tableSelector = NSSelectorFromString(@"getMsgTableView");
-    if ([cell respondsToSelector:tableSelector]) tableView = ((id (*)(id, SEL))objc_msgSend)(cell, tableSelector);
-    if ([tableView isKindOfClass:[UITableView class]]) [(UITableView *)tableView reloadData];
+    return nil;
 }
 
-static void NeoWCApplyJokerTextToVisibleLabels(UIView *view, NSString *original, NSString *text, BOOL *changed) {
-    if (!view || text.length == 0) return;
-    if ([view isKindOfClass:[UILabel class]]) {
-        UILabel *label = (UILabel *)view;
-        NSString *labelText = label.text;
-        NSString *attributedText = label.attributedText.string;
-        BOOL shouldReplace = NO;
-        if (original.length > 0 && ([labelText isEqualToString:original] || [attributedText isEqualToString:original])) shouldReplace = YES;
-        if (!shouldReplace && NeoWCTextLooksLikeAmount(labelText) && NeoWCTextLooksLikeAmount(text)) shouldReplace = YES;
-        if (!shouldReplace && labelText.length > 0 && original.length == 0) shouldReplace = YES;
-        if (shouldReplace) {
-            label.attributedText = nil;
-            label.text = text;
-            if (changed) *changed = YES;
+static void NeoWCReloadJokerCell(id cell, id message) {
+    UIViewController *controller = NeoWCJokerPresenterForCell(cell);
+    if (!controller || !message) return;
+    SEL clearSelector = NSSelectorFromString(@"clearNodeLayoutCache");
+    if ([controller respondsToSelector:clearSelector]) ((void (*)(id, SEL))objc_msgSend)(controller, clearSelector);
+    SEL reloadWrapSelector = NSSelectorFromString(@"reloadNodeWithMessageWrap:");
+    if ([controller respondsToSelector:reloadWrapSelector]) ((void (*)(id, SEL, id))objc_msgSend)(controller, reloadWrapSelector, message);
+    SEL reloadCellSelector = NSSelectorFromString(@"reloadVisibleNodeWithCellView:");
+    if ([controller respondsToSelector:reloadCellSelector]) ((void (*)(id, SEL, id))objc_msgSend)(controller, reloadCellSelector, cell);
+    SEL tableSelector = NSSelectorFromString(@"getMsgTableView");
+    if ([controller respondsToSelector:tableSelector]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            id tableView = ((id (*)(id, SEL))objc_msgSend)(controller, tableSelector);
+            if ([tableView isKindOfClass:[UITableView class]]) {
+                [UIView performWithoutAnimation:^{
+                    [(UITableView *)tableView beginUpdates];
+                    [(UITableView *)tableView endUpdates];
+                }];
+            }
+        });
+    }
+}
+
+static NSString *NeoWCJokerSanitizedAmountText(NSString *text) {
+    NSMutableString *result = [NSMutableString string];
+    for (NSUInteger index = 0; index < text.length; index++) {
+        unichar character = [text characterAtIndex:index];
+        if (character == '.' || (character >= '0' && character <= '9')) {
+            [result appendFormat:@"%C", character];
         }
     }
-    for (UIView *subview in view.subviews) NeoWCApplyJokerTextToVisibleLabels(subview, original, text, changed);
+    return result.length > 0 ? result : nil;
 }
 
 static void NeoWCApplyJokerText(id cell, NSString *text) {
     if (text.length == 0) return;
     id message = NeoWCMessageWrapForCell(cell);
+    if (!NeoWCMessageCanJokerEdit(message)) return;
     NSString *original = NeoWCDisplayTextForJokerCell(cell, message);
-    objc_setAssociatedObject(cell, &NeoWCJokerOverrideTextKey, text, OBJC_ASSOCIATION_COPY_NONATOMIC);
-    if (message) {
-        objc_setAssociatedObject(message, &NeoWCJokerOverrideTextKey, text, OBJC_ASSOCIATION_COPY_NONATOMIC);
-        SEL parsePaySelector = NSSelectorFromString(@"parseWCPayInfoItemIfNeed");
-        if ([message respondsToSelector:parsePaySelector]) ((void (*)(id, SEL))objc_msgSend)(message, parsePaySelector);
-        id payItem = NeoWCTweakSafeValue(message, @"m_oWCPayInfoItem");
-        if (payItem) {
-            NeoWCTweakSetStringForSelectorName(payItem, @"setM_nsFeeDesc:", text);
-            NeoWCTweakSetStringForSelectorName(payItem, @"setM_senderDesc:", text);
-            NeoWCTweakSetStringForSelectorName(payItem, @"setM_receiverDesc:", text);
-            NeoWCTweakSetValue(payItem, @"m_nsFeeDesc", text);
-            NeoWCTweakSetValue(payItem, @"m_senderDesc", text);
-            NeoWCTweakSetValue(payItem, @"m_receiverDesc", text);
-        }
+    if ([text isEqualToString:original]) return;
+    if (NeoWCMessageIsText(message)) {
         NeoWCTweakSetStringForSelectorName(message, @"setM_nsContent:", text);
+    } else if (NeoWCMessageIsRefer(message)) {
         NeoWCTweakSetStringForSelectorName(message, @"setM_nsTitle:", text);
-        NeoWCTweakSetStringForSelectorName(message, @"setM_nsFeeDesc:", text);
-        NeoWCTweakSetValue(message, @"m_nsContent", text);
-        NeoWCTweakSetValue(message, @"m_nsTitle", text);
-        NeoWCTweakSetValue(message, @"m_nsFeeDesc", text);
+    } else if (NeoWCMessageIsTransfer(message)) {
+        NSString *amount = NeoWCJokerSanitizedAmountText(text);
+        if (amount.length == 0) return;
+        id payItem = NeoWCTweakSafeValue(message, @"m_oWCPayInfoItem");
+        NSString *feeDesc = [@"¥" stringByAppendingString:amount];
+        if (payItem) {
+            NeoWCTweakSetStringForSelectorName(payItem, @"setM_nsFeeDesc:", feeDesc);
+            NeoWCTweakSetStringForSelectorName(payItem, @"setM_receiverDesc:", feeDesc);
+            NeoWCTweakSetStringForSelectorName(payItem, @"setM_senderDesc:", feeDesc);
+        }
     }
-    BOOL changed = NO;
-    if ([cell isKindOfClass:[UIView class]]) NeoWCApplyJokerTextToVisibleLabels((UIView *)cell, original, text, &changed);
-    if (message) NeoWCReloadJokerCell(cell, message);
-    if (!changed && [cell isKindOfClass:[UIView class]]) NeoWCApplyJokerTextToVisibleLabels((UIView *)cell, nil, text, &changed);
+    NeoWCReloadJokerCell(cell, message);
     NeoWCLog(@"聊天记录小丑已修改当前页面显示");
 }
 
@@ -832,18 +828,20 @@ static void NeoWCRefreshVisibleAntiRevokeCells(void) {
 
 static void NeoWCPresentJokerEditorForCell(id cell) {
     if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return;
-    UIWindow *window = NeoWCActiveApplicationWindow();
-    [[UIMenuController sharedMenuController] hideMenuFromView:window];
     id message = NeoWCMessageWrapForCell(cell);
-    NSString *current = NeoWCDisplayTextForJokerCell(cell, message);
-    UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
+    if (!NeoWCMessageCanJokerEdit(message)) return;
+    UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
     if (!presenter.view.window) return;
+    NSString *current = NeoWCDisplayTextForJokerCell(cell, message);
+    BOOL isTransfer = NeoWCMessageIsTransfer(message);
+    if (isTransfer && ([current hasPrefix:@"¥"] || [current hasPrefix:@"￥"])) current = [current substringFromIndex:1];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"聊天记录小丑"
                                                                    message:@"仅修改当前页面的本机显示，离开页面后可能恢复"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
         textField.text = current;
         textField.placeholder = @"输入新的显示文字或金额";
+        if (isTransfer) textField.keyboardType = UIKeyboardTypeDecimalPad;
         textField.clearButtonMode = UITextFieldViewModeWhileEditing;
     }];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
@@ -852,22 +850,19 @@ static void NeoWCPresentJokerEditorForCell(id cell) {
         NSString *text = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
         if (targetCell && text.length > 0) NeoWCApplyJokerText(targetCell, text);
     }]];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *activeWindow = NeoWCActiveApplicationWindow();
-        UIViewController *activePresenter = NeoWCTopControllerForLoginToast(activeWindow.rootViewController);
-        if (activePresenter.presentedViewController) activePresenter = NeoWCTopControllerForLoginToast(activePresenter.presentedViewController);
-        if (activePresenter.view.window) [activePresenter presentViewController:alert animated:YES completion:nil];
-    });
+    [presenter presentViewController:alert animated:YES completion:nil];
 }
 
 static MMMenuItem *NeoWCJokerMenuItem(id target) {
     if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return nil;
+    id message = NeoWCMessageWrapForCell(target);
+    if (!NeoWCMessageCanJokerEdit(message)) return nil;
     Class itemClass = NSClassFromString(@"MMMenuItem");
     if (!itemClass) return nil;
     if (![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) return nil;
     UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightRegular];
-    UIImage *icon = [UIImage systemImageNamed:@"face.smiling" withConfiguration:configuration];
-    return [[itemClass alloc] initWithTitle:@"小丑" icon:icon target:target action:@selector(neowc_jokerHandleMenuItem:)];
+    UIImage *icon = [[UIImage systemImageNamed:@"face.smiling.fill" withConfiguration:configuration] imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
+    return [[itemClass alloc] initWithTitle:@"小丑" icon:icon target:target action:@selector(joker_handleMenuItem:)];
 }
 
 static NSArray *NeoWCOperationMenuItemsWithJoker(id target, NSArray *originalItems) {
@@ -878,7 +873,7 @@ static NSArray *NeoWCOperationMenuItemsWithJoker(id target, NSArray *originalIte
     MMMenuItem *jokerItem = NeoWCJokerMenuItem(target);
     if (!jokerItem) return originalItems;
     NSMutableArray *items = [originalItems mutableCopy];
-    [items addObject:jokerItem];
+    [items insertObject:jokerItem atIndex:0];
     return items;
 }
 
@@ -1523,27 +1518,20 @@ static void NeoWCRegisterPlugin(void) {
 
 %hook TextMessageCellView
 
-- (id)GetDisplayContent {
-    id override = objc_getAssociatedObject(self, &NeoWCJokerOverrideTextKey);
-    if ([override isKindOfClass:[NSString class]] && [override length] > 0) return override;
-    id message = NeoWCMessageWrapForCell(self);
-    override = objc_getAssociatedObject(message, &NeoWCJokerOverrideTextKey);
-    if ([override isKindOfClass:[NSString class]] && [override length] > 0) return override;
-    return %orig;
-}
-
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
     return NeoWCOperationMenuItemsWithJoker(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-    if (action == @selector(neowc_jokerHandleMenuItem:) && NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return YES;
+    if (action == @selector(joker_handleMenuItem:)) {
+        return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageCanJokerEdit(NeoWCMessageWrapForCell(self));
+    }
     return %orig;
 }
 
 %new
-- (void)neowc_jokerHandleMenuItem:(id)sender {
+- (void)joker_handleMenuItem:(id)sender {
     NeoWCCompatibilityMarkTriggered(@"chat-joker");
     NeoWCPresentJokerEditorForCell(self);
 }
@@ -1552,27 +1540,20 @@ static void NeoWCRegisterPlugin(void) {
 
 %hook AppMessageCellView
 
-- (id)GetDisplayContent {
-    id override = objc_getAssociatedObject(self, &NeoWCJokerOverrideTextKey);
-    if ([override isKindOfClass:[NSString class]] && [override length] > 0) return override;
-    id message = NeoWCMessageWrapForCell(self);
-    override = objc_getAssociatedObject(message, &NeoWCJokerOverrideTextKey);
-    if ([override isKindOfClass:[NSString class]] && [override length] > 0) return override;
-    return %orig;
-}
-
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
     return NeoWCOperationMenuItemsWithJoker(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-    if (action == @selector(neowc_jokerHandleMenuItem:) && NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return YES;
+    if (action == @selector(joker_handleMenuItem:)) {
+        return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageCanJokerEdit(NeoWCMessageWrapForCell(self));
+    }
     return %orig;
 }
 
 %new
-- (void)neowc_jokerHandleMenuItem:(id)sender {
+- (void)joker_handleMenuItem:(id)sender {
     NeoWCCompatibilityMarkTriggered(@"chat-joker");
     NeoWCPresentJokerEditorForCell(self);
 }
@@ -1581,27 +1562,20 @@ static void NeoWCRegisterPlugin(void) {
 
 %hook WCPayTransferMessageCellView
 
-- (id)GetDisplayContent {
-    id override = objc_getAssociatedObject(self, &NeoWCJokerOverrideTextKey);
-    if ([override isKindOfClass:[NSString class]] && [override length] > 0) return override;
-    id message = NeoWCMessageWrapForCell(self);
-    override = objc_getAssociatedObject(message, &NeoWCJokerOverrideTextKey);
-    if ([override isKindOfClass:[NSString class]] && [override length] > 0) return override;
-    return %orig;
-}
-
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
     return NeoWCOperationMenuItemsWithJoker(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-    if (action == @selector(neowc_jokerHandleMenuItem:) && NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return YES;
+    if (action == @selector(joker_handleMenuItem:)) {
+        return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageCanJokerEdit(NeoWCMessageWrapForCell(self));
+    }
     return %orig;
 }
 
 %new
-- (void)neowc_jokerHandleMenuItem:(id)sender {
+- (void)joker_handleMenuItem:(id)sender {
     NeoWCCompatibilityMarkTriggered(@"chat-joker");
     NeoWCPresentJokerEditorForCell(self);
 }
@@ -1934,12 +1908,11 @@ static void NeoWCRegisterPlugin(void) {
 %hook MMUILabel
 
 - (void)setText:(NSString *)text {
-    NSString *replacement = NeoWCLabelReplacementText(text);
-    if (replacement.length > 0 && ![replacement isEqualToString:text]) {
-        if (NeoWCContactsCountTextForOriginal(text).length > 0) NeoWCCompatibilityMarkTriggered(@"contacts-count");
-        else NeoWCCompatibilityMarkTriggered(@"global-text-replace");
+    NSString *contactsText = NeoWCContactsCountTextForOriginal(text);
+    if (contactsText.length > 0 && ![contactsText isEqualToString:text]) {
+        NeoWCCompatibilityMarkTriggered(@"contacts-count");
     }
-    %orig(replacement ?: text);
+    %orig(contactsText ?: text);
 }
 
 %end
@@ -1951,11 +1924,11 @@ static void NeoWCRegisterPlugin(void) {
     NeoWCInstallWalletLongPressIfNeeded((UIView *)self, self, @selector(neowc_walletHandleLongPress:));
 }
 
-- (void)updateNumber:(id)number {
-    NSString *balanceText = NeoWCWalletBalanceText();
-    if (balanceText.length > 0) {
+- (void)updateNumber:(unsigned long long)number {
+    unsigned long long balanceFen = NeoWCWalletBalanceFenOverride();
+    if (balanceFen > 0) {
         NeoWCCompatibilityMarkTriggered(@"wallet-balance");
-        %orig(balanceText);
+        %orig(balanceFen);
         return;
     }
     %orig;
