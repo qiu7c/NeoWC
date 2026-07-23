@@ -139,7 +139,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | 多选导出 | `BaseMsgContentViewController`、`MMScrollActionSheet` | 只在多选“更多”菜单构建期间插入项目 |
 | 朋友圈 | `WCTimeLineCellView`、`WCTimeLineOperateButtonView` | 所有逻辑必须受开关控制 |
 | 游戏选择 | `CMessageMgr AddEmoticonMsg:MsgWrap:` | 非游戏消息和关闭状态直接 `%orig` |
-| 聊天记录小丑 | `TextMessageCellView`、`AppMessageCellView`、`WCPayTransferMessageCellView` 的 `operationMenuItems`/`canPerformAction:withSender:`，`WCPayTransferMessageViewModel` 的 `titleText`/`descText` | 仅在开关开启时插入“小丑”菜单；引用消息只修改回复文字，不修改被引用原文；转账金额覆盖只关联到被修改的消息；只做当前页面本机显示修改 |
+| 聊天记录小丑 | `TextMessageCellView`、`AppMessageCellView`、`WCPayTransferMessageCellView` 的 `operationMenuItems`/`canPerformAction:withSender:` | 仅在开关开启时插入“小丑”菜单；引用消息只修改回复文字，不修改被引用原文；转账按参考插件直接修改当前消息的 pay item；只做当前页面本机显示修改 |
 | 钱包余额显示 | `TimeoutNumber updateNumber:/didMoveToSuperview`、`WCPayWalletEntryHeaderView didMoveToSuperview` | 当前 `updateNumber:` 参数替换方案会阻断钱包余额页面，修复前必须核对参考 dylib 的真实参数类型和调用顺序；禁止恢复通过 `MMUILabel` 猜测所有数字的方案 |
 | 好友数量显示 | `MMUILabel setText:` | 必须匹配“个朋友”等明确文案，禁止无条件全局替换 |
 | 广告 | `WCDataItem`、`WAAppTaskSplashADConfig` | 关闭状态返回微信原值 |
@@ -237,6 +237,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
    - 这说明实际消息对象入口、正文控件类型或刷新调用与推测不一致；正文也可能不是普通 `UILabel`。
    - 下一轮必须逐个反编译参考 dylib 对 `TextMessageCellView`、`AppMessageCellView`、`WCPayTransferMessageCellView` 新增的 `joker_handleMenuItem:` 及相关辅助函数，记录它取得消息对象、判断类型、修改字段和刷新 Cell 的完整顺序。
    - 不要继续叠加宽泛 KVC、遍历全局窗口或无目标的 UI 文本替换。只迁移参考 dylib 已验证的调用路径，并保留“仅修改当前页面本机显示”的边界。
+   - 2026-07-23 最新未提交修复已移除转账专用强制分支、`WCPayTransferMessageViewModel` 覆盖和 `updateStatus/updateTitleLabel/updateDescLabel` 额外刷新。三个 Cell 统一从 `viewModel.messageWrap` 分类；转账确认后按 `m_nsFeeDesc`、`m_receiverDesc`、`m_senderDesc` 的顺序写入当前 pay item，再执行 `clearNodeLayoutCache`、`reloadNodeWithMessageWrap:`、`reloadVisibleNodeWithCellView:` 和异步 table begin/end；等待真机验证。
 
 ## 12. 下一轮真机验证顺序
 
