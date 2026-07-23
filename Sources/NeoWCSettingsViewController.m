@@ -13,6 +13,11 @@ static NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 static NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
 
+static long long NeoWCSettingsLongLongDefaultForKey(NSString *key) {
+    id value = [[NSUserDefaults standardUserDefaults] objectForKey:key];
+    return [value respondsToSelector:@selector(longLongValue)] ? [value longLongValue] : 0;
+}
+
 static UIImage *NeoWCSymbol(NSString *name) {
     UIImage *image = [UIImage systemImageNamed:name];
     return image ?: [UIImage systemImageNamed:@"circle.grid.2x2"];
@@ -274,7 +279,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     };
     NSInteger configuredStepCount = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCStepCountKey];
     NSString *stepValue = configuredStepCount > 0 ? [NSString stringWithFormat:@"%ld 步", (long)configuredStepCount] : @"设置";
-    long long balanceFen = [[NSUserDefaults standardUserDefaults] longLongForKey:NeoWCWalletBalanceFenKey];
+    long long balanceFen = NeoWCSettingsLongLongDefaultForKey(NeoWCWalletBalanceFenKey);
     NSString *balanceValue = balanceFen > 0 ? [NSString stringWithFormat:@"¥%.2f", balanceFen / 100.0] : @"设置";
     NSInteger contactsCount = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCContactsCountKey];
     NSString *contactsValue = contactsCount > 0 ? [NSString stringWithFormat:@"%ld 个", (long)contactsCount] : @"设置";
@@ -1117,7 +1122,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
                                                                        message:@"仅修改本机界面显示；留空或输入 0 可恢复真实显示"
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-            long long fen = [[NSUserDefaults standardUserDefaults] longLongForKey:NeoWCWalletBalanceFenKey];
+            long long fen = NeoWCSettingsLongLongDefaultForKey(NeoWCWalletBalanceFenKey);
             textField.text = fen > 0 ? [NSString stringWithFormat:@"%.2f", fen / 100.0] : nil;
             textField.keyboardType = UIKeyboardTypeDecimalPad;
             textField.placeholder = @"例如 888.88";
