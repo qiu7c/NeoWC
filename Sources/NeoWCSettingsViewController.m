@@ -1,4 +1,5 @@
 #import "NeoWCSettingsViewController.h"
+#import "NeoWCAccount.h"
 #import "NeoWCAntiRevoke.h"
 #import "NeoWCAntiRevokeTemplateEditor.h"
 #import "NeoWCDebug.h"
@@ -27,6 +28,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     NeoWCRowKindSwitch,
     NeoWCRowKindDetail,
     NeoWCRowKindInfo,
+    NeoWCRowKindCopy,
 };
 
 @interface NeoWCSettingItem : NSObject
@@ -301,6 +303,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     id storedSideOffsetY = [defaults objectForKey:NeoWCAntiRevokeSideOffsetYKey];
     NSString *sideOffsetX = [NSString stringWithFormat:@"%.0f", storedSideOffsetX ? [storedSideOffsetX doubleValue] : 0.0];
     NSString *sideOffsetY = [NSString stringWithFormat:@"%.0f", storedSideOffsetY ? [storedSideOffsetY doubleValue] : 10.0];
+    NSString *currentWXID = NeoWCCurrentUserWXID();
 
     NSMutableArray<NeoWCSettingItem *> *messageItems = [NSMutableArray array];
     [messageItems addObject:item(@"防撤回", @"保留好友撤回的消息并显示提示", @"arrow.uturn.backward.circle", NeoWCRowKindSwitch, NeoWCAntiRevokeKey, nil)];
@@ -404,6 +407,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         })],
         [NeoWCSettingSection sectionWithIdentifier:@"about" title:@"关于" subtitle:nil symbol:@"info.circle" footer:@"NeoWC · Designed for WeChat" collapsible:NO items:@[
             item(@"版本", @"NeoWC", @"shippingbox", NeoWCRowKindInfo, nil, NeoWCVersion),
+            item(@"当前用户 wxid", currentWXID ?: @"未获取", @"person.crop.circle", NeoWCRowKindCopy, nil, currentWXID),
         ]],
     ];
 }
@@ -652,6 +656,15 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         accessory.alignment = UIStackViewAlignmentCenter;
         accessory.spacing = 7.0;
         cell.accessoryView = accessory;
+    } else if (item.kind == NeoWCRowKindCopy) {
+        UIImageView *copyIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"doc.on.doc"]];
+        copyIcon.tintColor = item.value.length > 0 ? [UIColor secondaryLabelColor] : [UIColor quaternaryLabelColor];
+        copyIcon.contentMode = UIViewContentModeScaleAspectFit;
+        [copyIcon.widthAnchor constraintEqualToConstant:17.0].active = YES;
+        [copyIcon.heightAnchor constraintEqualToConstant:17.0].active = YES;
+        cell.accessoryView = copyIcon;
+        cell.selectionStyle = item.value.length > 0 ? UITableViewCellSelectionStyleDefault : UITableViewCellSelectionStyleNone;
+        cell.accessibilityHint = item.value.length > 0 ? @"轻点复制 wxid" : @"当前未获取到 wxid";
     } else if (item.value.length > 0) {
         UILabel *valueLabel = [UILabel new];
         valueLabel.text = item.value;
@@ -897,6 +910,16 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
+    if (item.kind == NeoWCRowKindCopy) {
+        if (item.value.length == 0) return;
+        UIPasteboard.generalPasteboard.string = item.value;
+        self.navigationItem.prompt = @"wxid 已复制";
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            weakSelf.navigationItem.prompt = nil;
+        });
+        return;
+    }
     if (item.kind == NeoWCRowKindSwitch && [self featureHasChildrenForKey:item.defaultsKey]) {
         [self toggleFeatureAtIndexPath:indexPath item:item];
         return;

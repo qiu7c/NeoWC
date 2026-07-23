@@ -120,6 +120,7 @@ static char NeoWCQuickSendPendingImageKey;
 static char NeoWCInputSwipeLeftRecognizerKey;
 static char NeoWCInputSwipeRightRecognizerKey;
 static char NeoWCWalletGestureRecognizerKey;
+static char NeoWCTransferAmountOverrideKey;
 static __weak id NeoWCCurrentEditImageLogicController;
 
 static NSMutableSet *NeoWCActiveQuickSendSessions(void) {
@@ -236,10 +237,48 @@ static BOOL NeoWCMessageCanJokerEdit(id message) {
 }
 
 static NSString *NeoWCTransferDisplayText(id message) {
+    NSString *override = objc_getAssociatedObject(message, &NeoWCTransferAmountOverrideKey);
+    if ([override isKindOfClass:[NSString class]] && override.length > 0) return override;
     id payItem = NeoWCPayInfoItemForMessage(message);
     SEL feeDescSelector = NSSelectorFromString(@"m_nsFeeDesc");
     id value = payItem ? ((id (*)(id, SEL))objc_msgSend)(payItem, feeDescSelector) : nil;
     return [value isKindOfClass:[NSString class]] ? value : @"";
+}
+
+static NSRange NeoWCTransferAmountRange(NSString *text) {
+    if (![text isKindOfClass:[NSString class]] || text.length == 0) return NSMakeRange(NSNotFound, 0);
+    NSCharacterSet *amountCharacters = [NSCharacterSet characterSetWithCharactersInString:@"0123456789., "];
+    NSRange currencyRange = [text rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"¥￥"]];
+    if (currencyRange.location != NSNotFound) {
+        NSUInteger end = NSMaxRange(currencyRange);
+        while (end < text.length && [amountCharacters characterIsMember:[text characterAtIndex:end]]) end += 1;
+        return NSMakeRange(currencyRange.location, end - currencyRange.location);
+    }
+    NSString *trimmed = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (trimmed.length == 0 ||
+        [trimmed rangeOfCharacterFromSet:amountCharacters.invertedSet].location != NSNotFound) {
+        return NSMakeRange(NSNotFound, 0);
+    }
+    return [text rangeOfString:trimmed];
+}
+
+static id NeoWCTransferValueByApplyingOverride(id value, id message) {
+    NSString *override = objc_getAssociatedObject(message, &NeoWCTransferAmountOverrideKey);
+    if (![override isKindOfClass:[NSString class]] || override.length == 0) return value;
+    NSString *text = nil;
+    if ([value isKindOfClass:[NSString class]]) {
+        text = value;
+    } else if ([value isKindOfClass:[NSAttributedString class]]) {
+        text = [value string];
+    }
+    NSRange amountRange = NeoWCTransferAmountRange(text);
+    if (amountRange.location == NSNotFound) return value;
+    if ([value isKindOfClass:[NSAttributedString class]]) {
+        NSMutableAttributedString *updated = [value mutableCopy];
+        [updated replaceCharactersInRange:amountRange withString:override];
+        return updated;
+    }
+    return [text stringByReplacingCharactersInRange:amountRange withString:override];
 }
 
 static NSString *NeoWCDisplayTextForJokerMessage(id message) {
@@ -341,6 +380,10 @@ static void NeoWCApplyJokerText(id cell,
         id payItem = NeoWCPayInfoItemForMessage(message);
         NSString *feeDesc = [@"¥" stringByAppendingString:amount];
         if (payItem) {
+            objc_setAssociatedObject(message,
+                                     &NeoWCTransferAmountOverrideKey,
+                                     feeDesc,
+                                     OBJC_ASSOCIATION_COPY_NONATOMIC);
             ((void (*)(id, SEL, id))objc_msgSend)(payItem, NSSelectorFromString(@"setM_nsFeeDesc:"), feeDesc);
             ((void (*)(id, SEL, id))objc_msgSend)(payItem, NSSelectorFromString(@"setM_receiverDesc:"), feeDesc);
             ((void (*)(id, SEL, id))objc_msgSend)(payItem, NSSelectorFromString(@"setM_senderDesc:"), feeDesc);
@@ -1604,6 +1647,22 @@ static void NeoWCRegisterPlugin(void) {
 - (void)joker_handleMenuItem:(id)sender {
     NeoWCCompatibilityMarkTriggered(@"chat-joker");
     NeoWCPresentJokerEditorForCell(self, NO);
+}
+
+%end
+
+%hook WCPayTransferMessageViewModel
+
+- (id)titleText {
+    id value = %orig;
+    id message = ((id (*)(id, SEL))objc_msgSend)(self, NSSelectorFromString(@"messageWrap"));
+    return NeoWCTransferValueByApplyingOverride(value, message);
+}
+
+- (id)descText {
+    id value = %orig;
+    id message = ((id (*)(id, SEL))objc_msgSend)(self, NSSelectorFromString(@"messageWrap"));
+    return NeoWCTransferValueByApplyingOverride(value, message);
 }
 
 %end
