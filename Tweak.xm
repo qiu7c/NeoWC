@@ -815,10 +815,10 @@ static void NeoWCRefreshVisibleAntiRevokeCells(void) {
 
 static void NeoWCPresentJokerEditorForCell(id cell) {
     if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return;
-    [[UIMenuController sharedMenuController] setMenuVisible:NO animated:YES];
+    UIWindow *window = NeoWCActiveApplicationWindow();
+    [[UIMenuController sharedMenuController] hideMenuFromView:window];
     id message = NeoWCMessageWrapForCell(cell);
     NSString *current = NeoWCDisplayTextForJokerCell(cell, message);
-    UIWindow *window = NeoWCActiveApplicationWindow();
     UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
     if (!presenter.view.window) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"聊天记录小丑"
