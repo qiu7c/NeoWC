@@ -103,6 +103,95 @@
 - (BOOL)launchShow;
 @end
 
+typedef NS_ENUM(NSInteger, NeoWCJokerReferXMLTarget) {
+    NeoWCJokerReferXMLTargetNone,
+    NeoWCJokerReferXMLTargetReply,
+    NeoWCJokerReferXMLTargetQuoted,
+};
+
+@interface NeoWCJokerReferXMLReader : NSObject <NSXMLParserDelegate>
+@property (nonatomic, copy) NSString *replyText;
+@property (nonatomic, copy) NSString *quotedText;
+@property (nonatomic, strong) NSMutableString *capturedText;
+@property (nonatomic, assign) NSInteger depth;
+@property (nonatomic, assign) NSInteger appMessageDepth;
+@property (nonatomic, assign) NSInteger referMessageDepth;
+@property (nonatomic, assign) NeoWCJokerReferXMLTarget target;
+@end
+
+@implementation NeoWCJokerReferXMLReader
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _appMessageDepth = -1;
+        _referMessageDepth = -1;
+    }
+    return self;
+}
+
+- (void)parser:(__unused NSXMLParser *)parser
+ didStartElement:(NSString *)elementName
+    namespaceURI:(__unused NSString *)namespaceURI
+   qualifiedName:(__unused NSString *)qualifiedName
+      attributes:(__unused NSDictionary<NSString *, NSString *> *)attributeDict {
+    self.depth += 1;
+    if ([elementName isEqualToString:@"appmsg"] && self.appMessageDepth < 0) {
+        self.appMessageDepth = self.depth;
+    } else if ([elementName isEqualToString:@"refermsg"] && self.appMessageDepth >= 0) {
+        self.referMessageDepth = self.depth;
+    } else if ([elementName isEqualToString:@"title"] &&
+               self.appMessageDepth >= 0 &&
+               self.referMessageDepth < 0 &&
+               self.depth == self.appMessageDepth + 1) {
+        self.target = NeoWCJokerReferXMLTargetReply;
+        self.capturedText = [NSMutableString string];
+    } else if ([elementName isEqualToString:@"content"] &&
+               self.referMessageDepth >= 0 &&
+               self.depth == self.referMessageDepth + 1) {
+        self.target = NeoWCJokerReferXMLTargetQuoted;
+        self.capturedText = [NSMutableString string];
+    }
+}
+
+- (void)parser:(__unused NSXMLParser *)parser foundCharacters:(NSString *)string {
+    if (self.target != NeoWCJokerReferXMLTargetNone) [self.capturedText appendString:string];
+}
+
+- (void)parser:(__unused NSXMLParser *)parser foundCDATA:(NSData *)CDATABlock {
+    if (self.target == NeoWCJokerReferXMLTargetNone) return;
+    NSString *text = [[NSString alloc] initWithData:CDATABlock encoding:NSUTF8StringEncoding];
+    if (text) [self.capturedText appendString:text];
+}
+
+- (void)parser:(__unused NSXMLParser *)parser
+   didEndElement:(NSString *)elementName
+    namespaceURI:(__unused NSString *)namespaceURI
+   qualifiedName:(__unused NSString *)qName {
+    if (self.target == NeoWCJokerReferXMLTargetReply &&
+        [elementName isEqualToString:@"title"] &&
+        self.depth == self.appMessageDepth + 1) {
+        self.replyText = self.capturedText.copy;
+        self.capturedText = nil;
+        self.target = NeoWCJokerReferXMLTargetNone;
+    } else if (self.target == NeoWCJokerReferXMLTargetQuoted &&
+               [elementName isEqualToString:@"content"] &&
+               self.depth == self.referMessageDepth + 1) {
+        self.quotedText = self.capturedText.copy;
+        self.capturedText = nil;
+        self.target = NeoWCJokerReferXMLTargetNone;
+    }
+    if ([elementName isEqualToString:@"refermsg"] && self.depth == self.referMessageDepth) {
+        self.referMessageDepth = -1;
+    }
+    if ([elementName isEqualToString:@"appmsg"] && self.depth == self.appMessageDepth) {
+        self.appMessageDepth = -1;
+    }
+    self.depth -= 1;
+}
+
+@end
+
 static BOOL NeoWCDidRegister = NO;
 static char NeoWCDeviceCardDidConfirmKey;
 static char NeoWCGameDidAuthorizeKey;
@@ -159,9 +248,97 @@ static id NeoWCTweakValueForSelectorNames(id object, NSArray<NSString *> *select
     return nil;
 }
 
-static void NeoWCTweakSetStringForSelectorName(id object, NSString *selectorName, NSString *value) {
+static BOOL NeoWCTweakSetStringForSelectorName(id object, NSString *selectorName, NSString *value) {
     SEL selector = NSSelectorFromString(selectorName);
-    if ([object respondsToSelector:selector]) ((void (*)(id, SEL, id))objc_msgSend)(object, selector, value);
+    if (!object || ![object respondsToSelector:selector]) return NO;
+    ((void (*)(id, SEL, id))objc_msgSend)(object, selector, value);
+    return YES;
+}
+
+static NeoWCJokerReferXMLReader *NeoWCJokerReferXMLValues(NSString *xml) {
+    if (![xml isKindOfClass:[NSString class]] || xml.length == 0) return nil;
+    NSString *document = xml;
+    NSRange messageStart = [xml rangeOfString:@"<msg"];
+    NSRange messageEnd = [xml rangeOfString:@"</msg>" options:NSBackwardsSearch];
+    if (messageStart.location != NSNotFound &&
+        messageEnd.location != NSNotFound &&
+        messageEnd.location >= messageStart.location) {
+        NSUInteger end = NSMaxRange(messageEnd);
+        document = [xml substringWithRange:NSMakeRange(messageStart.location, end - messageStart.location)];
+    }
+    NSData *data = [document dataUsingEncoding:NSUTF8StringEncoding];
+    if (!data) return nil;
+    NeoWCJokerReferXMLReader *reader = [NeoWCJokerReferXMLReader new];
+    NSXMLParser *parser = [[NSXMLParser alloc] initWithData:data];
+    parser.delegate = reader;
+    parser.shouldResolveExternalEntities = NO;
+    return [parser parse] ? reader : nil;
+}
+
+static NSRange NeoWCXMLOpeningTagRange(NSString *xml, NSString *tag, NSRange searchRange) {
+    NSString *prefix = [NSString stringWithFormat:@"<%@", tag];
+    NSUInteger searchEnd = NSMaxRange(searchRange);
+    while (searchRange.length > 0) {
+        NSRange match = [xml rangeOfString:prefix options:0 range:searchRange];
+        if (match.location == NSNotFound) return NSMakeRange(NSNotFound, 0);
+        NSUInteger nextIndex = NSMaxRange(match);
+        if (nextIndex < xml.length) {
+            unichar next = [xml characterAtIndex:nextIndex];
+            if (next == '>' || next == '/' || [[NSCharacterSet whitespaceAndNewlineCharacterSet] characterIsMember:next]) {
+                NSRange remainder = NSMakeRange(nextIndex, searchEnd - nextIndex);
+                NSRange end = [xml rangeOfString:@">" options:0 range:remainder];
+                if (end.location != NSNotFound) {
+                    return NSMakeRange(match.location, NSMaxRange(end) - match.location);
+                }
+                return NSMakeRange(NSNotFound, 0);
+            }
+        }
+        NSUInteger newStart = nextIndex;
+        if (newStart >= searchEnd) break;
+        searchRange = NSMakeRange(newStart, searchEnd - newStart);
+    }
+    return NSMakeRange(NSNotFound, 0);
+}
+
+static NSRange NeoWCXMLInnerTextRange(NSString *xml, NSString *containerTag, NSString *elementTag) {
+    NSRange fullRange = NSMakeRange(0, xml.length);
+    NSRange containerOpen = NeoWCXMLOpeningTagRange(xml, containerTag, fullRange);
+    if (containerOpen.location == NSNotFound) return NSMakeRange(NSNotFound, 0);
+    NSString *containerCloseText = [NSString stringWithFormat:@"</%@>", containerTag];
+    NSRange afterContainerOpen = NSMakeRange(NSMaxRange(containerOpen), xml.length - NSMaxRange(containerOpen));
+    NSRange containerClose = [xml rangeOfString:containerCloseText options:0 range:afterContainerOpen];
+    if (containerClose.location == NSNotFound) return NSMakeRange(NSNotFound, 0);
+
+    NSRange containerContents = NSMakeRange(NSMaxRange(containerOpen), containerClose.location - NSMaxRange(containerOpen));
+    NSRange elementOpen = NeoWCXMLOpeningTagRange(xml, elementTag, containerContents);
+    if (elementOpen.location == NSNotFound) return NSMakeRange(NSNotFound, 0);
+    NSString *elementCloseText = [NSString stringWithFormat:@"</%@>", elementTag];
+    NSUInteger elementTextStart = NSMaxRange(elementOpen);
+    NSRange elementRemainder = NSMakeRange(elementTextStart, containerClose.location - elementTextStart);
+    NSRange elementClose = [xml rangeOfString:elementCloseText options:0 range:elementRemainder];
+    if (elementClose.location == NSNotFound) return NSMakeRange(NSNotFound, 0);
+    return NSMakeRange(elementTextStart, elementClose.location - elementTextStart);
+}
+
+static NSString *NeoWCXMLEscapedText(NSString *text) {
+    NSString *escaped = [text stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
+    escaped = [escaped stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
+    return [escaped stringByReplacingOccurrencesOfString:@">" withString:@"&gt;"];
+}
+
+static NSString *NeoWCJokerXMLByReplacingText(NSString *xml,
+                                              NSString *containerTag,
+                                              NSString *elementTag,
+                                              NSString *text,
+                                              BOOL quotedText) {
+    if (xml.length == 0 || text.length == 0) return nil;
+    NSRange range = NeoWCXMLInnerTextRange(xml, containerTag, elementTag);
+    if (range.location == NSNotFound) return nil;
+    NSMutableString *updated = [xml mutableCopy];
+    [updated replaceCharactersInRange:range withString:NeoWCXMLEscapedText(text)];
+    NeoWCJokerReferXMLReader *values = NeoWCJokerReferXMLValues(updated);
+    NSString *updatedValue = quotedText ? values.quotedText : values.replyText;
+    return [updatedValue isEqualToString:text] ? updated : nil;
 }
 
 static long long NeoWCLongLongDefaultForKey(NSString *key) {
@@ -208,15 +385,31 @@ static BOOL NeoWCMessageIsRefer(id message) {
     return message && [message respondsToSelector:selector] && ((BOOL (*)(id, SEL))objc_msgSend)(message, selector);
 }
 
-static BOOL NeoWCMessageIsTransfer(id message) {
-    if (!message) return NO;
+static id NeoWCPayInfoItemForMessage(id message) {
+    if (!message) return nil;
     SEL parseSelector = NSSelectorFromString(@"parseWCPayInfoItemIfNeed");
     if ([message respondsToSelector:parseSelector]) ((void (*)(id, SEL))objc_msgSend)(message, parseSelector);
-    id payItem = NeoWCTweakSafeValue(message, @"m_oWCPayInfoItem");
+
+    SEL payItemSelector = NSSelectorFromString(@"m_oWCPayInfoItem");
+    if (![message respondsToSelector:payItemSelector]) return nil;
+    return ((id (*)(id, SEL))objc_msgSend)(message, payItemSelector);
+}
+
+static BOOL NeoWCMessageIsTransfer(id message) {
+    id payItem = NeoWCPayInfoItemForMessage(message);
     if (!payItem) return NO;
-    NSUInteger subType = [NeoWCTweakSafeValue(payItem, @"m_uiPaySubType") unsignedIntegerValue];
+
+    unsigned int subType = 0;
+    SEL subTypeSelector = NSSelectorFromString(@"m_uiPaySubType");
+    if ([payItem respondsToSelector:subTypeSelector]) {
+        subType = ((unsigned int (*)(id, SEL))objc_msgSend)(payItem, subTypeSelector);
+    }
     if (subType == 3 || subType == 4) return YES;
-    NSString *transferID = NeoWCTweakSafeValue(payItem, @"m_nsTransferID");
+
+    SEL transferIDSelector = NSSelectorFromString(@"m_nsTransferID");
+    NSString *transferID = [payItem respondsToSelector:transferIDSelector]
+        ? ((id (*)(id, SEL))objc_msgSend)(payItem, transferIDSelector)
+        : nil;
     return [transferID isKindOfClass:[NSString class]] && transferID.length > 0;
 }
 
@@ -224,21 +417,26 @@ static BOOL NeoWCMessageCanJokerEdit(id message) {
     return NeoWCMessageIsText(message) || NeoWCMessageIsRefer(message) || NeoWCMessageIsTransfer(message);
 }
 
-static NSString *NeoWCDisplayTextForJokerCell(id cell, id message) {
-    if (NeoWCMessageIsText(message)) {
+static NSString *NeoWCDisplayTextForJokerMessage(id message) {
+    if (NeoWCMessageIsRefer(message)) {
+        id value = NeoWCTweakSafeValue(message, @"m_nsTitle");
+        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
+        NSString *xml = NeoWCTweakSafeValue(message, @"m_nsContent");
+        NSString *replyText = NeoWCJokerReferXMLValues(xml).replyText;
+        if (replyText.length > 0) return replyText;
+    } else if (NeoWCMessageIsText(message)) {
         SEL contentSelector = NSSelectorFromString(@"GetDisplayContent");
         if ([message respondsToSelector:contentSelector]) {
             id value = ((id (*)(id, SEL))objc_msgSend)(message, contentSelector);
             if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
         }
     }
-    if (NeoWCMessageIsRefer(message)) {
-        id value = NeoWCTweakSafeValue(message, @"m_nsTitle");
-        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
-    }
     if (NeoWCMessageIsTransfer(message)) {
-        id payItem = NeoWCTweakSafeValue(message, @"m_oWCPayInfoItem");
-        id value = NeoWCTweakSafeValue(payItem, @"m_nsFeeDesc");
+        id payItem = NeoWCPayInfoItemForMessage(message);
+        SEL feeDescSelector = NSSelectorFromString(@"m_nsFeeDesc");
+        id value = [payItem respondsToSelector:feeDescSelector]
+            ? ((id (*)(id, SEL))objc_msgSend)(payItem, feeDescSelector)
+            : nil;
         if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
     }
     return @"";
@@ -253,8 +451,8 @@ static UIViewController *NeoWCJokerPresenterForCell(id cell) {
     return nil;
 }
 
-static void NeoWCReloadJokerCell(id cell, id message) {
-    UIViewController *controller = NeoWCJokerPresenterForCell(cell);
+static void NeoWCReloadJokerCell(id cell, id message, UIViewController *controller) {
+    if (!controller) controller = NeoWCJokerPresenterForCell(cell);
     if (!controller || !message) return;
     SEL clearSelector = NSSelectorFromString(@"clearNodeLayoutCache");
     if ([controller respondsToSelector:clearSelector]) ((void (*)(id, SEL))objc_msgSend)(controller, clearSelector);
@@ -287,28 +485,67 @@ static NSString *NeoWCJokerSanitizedAmountText(NSString *text) {
     return result.length > 0 ? result : nil;
 }
 
-static void NeoWCApplyJokerText(id cell, NSString *text) {
-    if (text.length == 0) return;
-    id message = NeoWCMessageWrapForCell(cell);
+static void NeoWCApplyJokerText(id cell,
+                                id message,
+                                UIViewController *controller,
+                                NSString *text,
+                                NSString *quotedText) {
     if (!NeoWCMessageCanJokerEdit(message)) return;
-    NSString *original = NeoWCDisplayTextForJokerCell(cell, message);
-    if ([text isEqualToString:original]) return;
-    if (NeoWCMessageIsText(message)) {
-        NeoWCTweakSetStringForSelectorName(message, @"setM_nsContent:", text);
-    } else if (NeoWCMessageIsRefer(message)) {
-        NeoWCTweakSetStringForSelectorName(message, @"setM_nsTitle:", text);
+    BOOL changed = NO;
+    if (NeoWCMessageIsRefer(message)) {
+        id xmlValue = NeoWCTweakSafeValue(message, @"m_nsContent");
+        NSString *originalXML = [xmlValue isKindOfClass:[NSString class]] ? xmlValue : nil;
+        NeoWCJokerReferXMLReader *values = NeoWCJokerReferXMLValues(originalXML);
+        id titleValue = NeoWCTweakSafeValue(message, @"m_nsTitle");
+        NSString *originalReply = [titleValue isKindOfClass:[NSString class]] ? titleValue : values.replyText;
+        NSString *updatedXML = originalXML;
+        BOOL xmlChanged = NO;
+
+        if (text.length > 0 && ![text isEqualToString:originalReply]) {
+            NSString *candidate = NeoWCJokerXMLByReplacingText(updatedXML, @"appmsg", @"title", text, NO);
+            if (candidate) {
+                updatedXML = candidate;
+                xmlChanged = YES;
+            }
+            changed = NeoWCTweakSetStringForSelectorName(message, @"setM_nsTitle:", text) || changed;
+        }
+        if (quotedText.length > 0 && ![quotedText isEqualToString:values.quotedText]) {
+            NSString *candidate = NeoWCJokerXMLByReplacingText(updatedXML, @"refermsg", @"content", quotedText, YES);
+            if (candidate) {
+                updatedXML = candidate;
+                xmlChanged = YES;
+            } else {
+                NeoWCLog(@"聊天记录小丑未找到引用原文 XML 节点");
+            }
+        }
+        if (xmlChanged) {
+            changed = NeoWCTweakSetStringForSelectorName(message, @"setM_nsContent:", updatedXML) || changed;
+            if (text.length > 0) {
+                changed = NeoWCTweakSetStringForSelectorName(message, @"setM_nsTitle:", text) || changed;
+            }
+        }
+    } else if (NeoWCMessageIsText(message)) {
+        NSString *original = NeoWCDisplayTextForJokerMessage(message);
+        if (text.length > 0 && ![text isEqualToString:original]) {
+            changed = NeoWCTweakSetStringForSelectorName(message, @"setM_nsContent:", text);
+        }
     } else if (NeoWCMessageIsTransfer(message)) {
+        if (text.length == 0) return;
+        NSString *original = NeoWCDisplayTextForJokerMessage(message);
+        if ([text isEqualToString:original]) return;
         NSString *amount = NeoWCJokerSanitizedAmountText(text);
         if (amount.length == 0) return;
-        id payItem = NeoWCTweakSafeValue(message, @"m_oWCPayInfoItem");
+        id payItem = NeoWCPayInfoItemForMessage(message);
         NSString *feeDesc = [@"¥" stringByAppendingString:amount];
         if (payItem) {
-            NeoWCTweakSetStringForSelectorName(payItem, @"setM_nsFeeDesc:", feeDesc);
-            NeoWCTweakSetStringForSelectorName(payItem, @"setM_receiverDesc:", feeDesc);
-            NeoWCTweakSetStringForSelectorName(payItem, @"setM_senderDesc:", feeDesc);
+            BOOL feeChanged = NeoWCTweakSetStringForSelectorName(payItem, @"setM_nsFeeDesc:", feeDesc);
+            BOOL receiverChanged = NeoWCTweakSetStringForSelectorName(payItem, @"setM_receiverDesc:", feeDesc);
+            BOOL senderChanged = NeoWCTweakSetStringForSelectorName(payItem, @"setM_senderDesc:", feeDesc);
+            changed = feeChanged || receiverChanged || senderChanged;
         }
     }
-    NeoWCReloadJokerCell(cell, message);
+    if (!changed) return;
+    NeoWCReloadJokerCell(cell, message, controller);
     NeoWCLog(@"聊天记录小丑已修改当前页面显示");
 }
 
@@ -832,23 +1069,48 @@ static void NeoWCPresentJokerEditorForCell(id cell) {
     if (!NeoWCMessageCanJokerEdit(message)) return;
     UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
     if (!presenter.view.window) return;
-    NSString *current = NeoWCDisplayTextForJokerCell(cell, message);
+    BOOL isRefer = NeoWCMessageIsRefer(message);
+    NSString *current = NeoWCDisplayTextForJokerMessage(message);
+    NSString *quoted = nil;
+    if (isRefer) {
+        id xmlValue = NeoWCTweakSafeValue(message, @"m_nsContent");
+        NSString *xml = [xmlValue isKindOfClass:[NSString class]] ? xmlValue : nil;
+        quoted = NeoWCJokerReferXMLValues(xml).quotedText ?: @"";
+    }
     BOOL isTransfer = NeoWCMessageIsTransfer(message);
     if (isTransfer && ([current hasPrefix:@"¥"] || [current hasPrefix:@"￥"])) current = [current substringFromIndex:1];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"聊天记录小丑"
-                                                                   message:@"仅修改当前页面的本机显示，离开页面后可能恢复"
+                                                                   message:isRefer
+        ? @"第一项修改回复文字，第二项修改被引用原文；留空的项目不修改"
+        : @"仅修改当前页面的本机显示，离开页面后可能恢复"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
         textField.text = current;
-        textField.placeholder = @"输入新的显示文字或金额";
+        textField.placeholder = isRefer ? @"回复文字（留空不修改）" : @"输入新的显示文字或金额";
+        textField.accessibilityLabel = isRefer ? @"回复文字" : @"新的显示文字或金额";
         if (isTransfer) textField.keyboardType = UIKeyboardTypeDecimalPad;
         textField.clearButtonMode = UITextFieldViewModeWhileEditing;
     }];
+    if (isRefer) {
+        [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+            textField.text = quoted;
+            textField.placeholder = @"被引用原文（留空不修改）";
+            textField.accessibilityLabel = @"被引用原文";
+            textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+        }];
+    }
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     id targetCell = cell;
+    id targetMessage = message;
+    UIViewController *targetController = presenter;
     [alert addAction:[UIAlertAction actionWithTitle:@"应用" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         NSString *text = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        if (targetCell && text.length > 0) NeoWCApplyJokerText(targetCell, text);
+        NSString *quotedText = isRefer && alert.textFields.count > 1
+            ? [alert.textFields[1].text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
+            : nil;
+        if (targetCell && (text.length > 0 || quotedText.length > 0)) {
+            NeoWCApplyJokerText(targetCell, targetMessage, targetController, text, quotedText);
+        }
     }]];
     [presenter presentViewController:alert animated:YES completion:nil];
 }
@@ -861,7 +1123,9 @@ static MMMenuItem *NeoWCJokerMenuItem(id target) {
     if (!itemClass) return nil;
     if (![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) return nil;
     UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightRegular];
-    UIImage *icon = [[UIImage systemImageNamed:@"face.smiling.fill" withConfiguration:configuration] imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
+    UIImage *icon = [UIImage systemImageNamed:@"theatermasks.fill" withConfiguration:configuration];
+    if (!icon) icon = [UIImage systemImageNamed:@"face.smiling.fill" withConfiguration:configuration];
+    icon = [icon imageWithTintColor:UIColor.systemPurpleColor renderingMode:UIImageRenderingModeAlwaysOriginal];
     return [[itemClass alloc] initWithTitle:@"小丑" icon:icon target:target action:@selector(joker_handleMenuItem:)];
 }
 
