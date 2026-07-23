@@ -248,13 +248,6 @@ static id NeoWCTweakValueForSelectorNames(id object, NSArray<NSString *> *select
     return nil;
 }
 
-static BOOL NeoWCTweakSetStringForSelectorName(id object, NSString *selectorName, NSString *value) {
-    SEL selector = NSSelectorFromString(selectorName);
-    if (!object || ![object respondsToSelector:selector]) return NO;
-    ((void (*)(id, SEL, id))objc_msgSend)(object, selector, value);
-    return YES;
-}
-
 static NeoWCJokerReferXMLReader *NeoWCJokerReferXMLValues(NSString *xml) {
     if (![xml isKindOfClass:[NSString class]] || xml.length == 0) return nil;
     NSString *document = xml;
@@ -417,27 +410,24 @@ static BOOL NeoWCMessageCanJokerEdit(id message) {
     return NeoWCMessageIsText(message) || NeoWCMessageIsRefer(message) || NeoWCMessageIsTransfer(message);
 }
 
+static NSString *NeoWCTransferDisplayText(id message) {
+    id payItem = NeoWCPayInfoItemForMessage(message);
+    SEL feeDescSelector = NSSelectorFromString(@"m_nsFeeDesc");
+    id value = payItem ? ((id (*)(id, SEL))objc_msgSend)(payItem, feeDescSelector) : nil;
+    return [value isKindOfClass:[NSString class]] ? value : @"";
+}
+
 static NSString *NeoWCDisplayTextForJokerMessage(id message) {
-    if (NeoWCMessageIsRefer(message)) {
-        id value = NeoWCTweakSafeValue(message, @"m_nsTitle");
-        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
-        NSString *xml = NeoWCTweakSafeValue(message, @"m_nsContent");
-        NSString *replyText = NeoWCJokerReferXMLValues(xml).replyText;
-        if (replyText.length > 0) return replyText;
-    } else if (NeoWCMessageIsText(message)) {
+    if (NeoWCMessageIsText(message)) {
         SEL contentSelector = NSSelectorFromString(@"GetDisplayContent");
-        if ([message respondsToSelector:contentSelector]) {
-            id value = ((id (*)(id, SEL))objc_msgSend)(message, contentSelector);
-            if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
-        }
-    }
-    if (NeoWCMessageIsTransfer(message)) {
-        id payItem = NeoWCPayInfoItemForMessage(message);
-        SEL feeDescSelector = NSSelectorFromString(@"m_nsFeeDesc");
-        id value = [payItem respondsToSelector:feeDescSelector]
-            ? ((id (*)(id, SEL))objc_msgSend)(payItem, feeDescSelector)
-            : nil;
+        id value = ((id (*)(id, SEL))objc_msgSend)(message, contentSelector);
         if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
+    } else if (NeoWCMessageIsRefer(message)) {
+        SEL titleSelector = NSSelectorFromString(@"m_nsTitle");
+        id value = ((id (*)(id, SEL))objc_msgSend)(message, titleSelector);
+        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
+    } else if (NeoWCMessageIsTransfer(message)) {
+        return NeoWCTransferDisplayText(message);
     }
     return @"";
 }
@@ -489,10 +479,20 @@ static void NeoWCApplyJokerText(id cell,
                                 id message,
                                 UIViewController *controller,
                                 NSString *text,
-                                NSString *quotedText) {
-    if (!NeoWCMessageCanJokerEdit(message)) return;
+                                NSString *quotedText,
+                                BOOL forceTransfer) {
+    BOOL isText = !forceTransfer && NeoWCMessageIsText(message);
+    BOOL isRefer = !forceTransfer && !isText && NeoWCMessageIsRefer(message);
+    BOOL isTransfer = forceTransfer || (!isText && !isRefer && NeoWCMessageIsTransfer(message));
+    if (!message || (!isText && !isRefer && !isTransfer)) return;
     BOOL changed = NO;
-    if (NeoWCMessageIsRefer(message)) {
+    if (isText) {
+        NSString *original = NeoWCDisplayTextForJokerMessage(message);
+        if (text.length > 0 && ![text isEqualToString:original]) {
+            ((void (*)(id, SEL, id))objc_msgSend)(message, NSSelectorFromString(@"setM_nsContent:"), text);
+            changed = YES;
+        }
+    } else if (isRefer) {
         id xmlValue = NeoWCTweakSafeValue(message, @"m_nsContent");
         NSString *originalXML = [xmlValue isKindOfClass:[NSString class]] ? xmlValue : nil;
         NeoWCJokerReferXMLReader *values = NeoWCJokerReferXMLValues(originalXML);
@@ -500,14 +500,14 @@ static void NeoWCApplyJokerText(id cell,
         NSString *originalReply = [titleValue isKindOfClass:[NSString class]] ? titleValue : values.replyText;
         NSString *updatedXML = originalXML;
         BOOL xmlChanged = NO;
+        BOOL replyChanged = text.length > 0 && ![text isEqualToString:originalReply];
 
-        if (text.length > 0 && ![text isEqualToString:originalReply]) {
+        if (replyChanged) {
             NSString *candidate = NeoWCJokerXMLByReplacingText(updatedXML, @"appmsg", @"title", text, NO);
             if (candidate) {
                 updatedXML = candidate;
                 xmlChanged = YES;
             }
-            changed = NeoWCTweakSetStringForSelectorName(message, @"setM_nsTitle:", text) || changed;
         }
         if (quotedText.length > 0 && ![quotedText isEqualToString:values.quotedText]) {
             NSString *candidate = NeoWCJokerXMLByReplacingText(updatedXML, @"refermsg", @"content", quotedText, YES);
@@ -519,29 +519,26 @@ static void NeoWCApplyJokerText(id cell,
             }
         }
         if (xmlChanged) {
-            changed = NeoWCTweakSetStringForSelectorName(message, @"setM_nsContent:", updatedXML) || changed;
-            if (text.length > 0) {
-                changed = NeoWCTweakSetStringForSelectorName(message, @"setM_nsTitle:", text) || changed;
-            }
+            ((void (*)(id, SEL, id))objc_msgSend)(message, NSSelectorFromString(@"setM_nsContent:"), updatedXML);
+            changed = YES;
         }
-    } else if (NeoWCMessageIsText(message)) {
-        NSString *original = NeoWCDisplayTextForJokerMessage(message);
-        if (text.length > 0 && ![text isEqualToString:original]) {
-            changed = NeoWCTweakSetStringForSelectorName(message, @"setM_nsContent:", text);
+        if (replyChanged) {
+            ((void (*)(id, SEL, id))objc_msgSend)(message, NSSelectorFromString(@"setM_nsTitle:"), text);
+            changed = YES;
         }
-    } else if (NeoWCMessageIsTransfer(message)) {
+    } else if (isTransfer) {
         if (text.length == 0) return;
-        NSString *original = NeoWCDisplayTextForJokerMessage(message);
+        NSString *original = NeoWCTransferDisplayText(message);
         if ([text isEqualToString:original]) return;
         NSString *amount = NeoWCJokerSanitizedAmountText(text);
         if (amount.length == 0) return;
         id payItem = NeoWCPayInfoItemForMessage(message);
         NSString *feeDesc = [@"¥" stringByAppendingString:amount];
         if (payItem) {
-            BOOL feeChanged = NeoWCTweakSetStringForSelectorName(payItem, @"setM_nsFeeDesc:", feeDesc);
-            BOOL receiverChanged = NeoWCTweakSetStringForSelectorName(payItem, @"setM_receiverDesc:", feeDesc);
-            BOOL senderChanged = NeoWCTweakSetStringForSelectorName(payItem, @"setM_senderDesc:", feeDesc);
-            changed = feeChanged || receiverChanged || senderChanged;
+            ((void (*)(id, SEL, id))objc_msgSend)(payItem, NSSelectorFromString(@"setM_nsFeeDesc:"), feeDesc);
+            ((void (*)(id, SEL, id))objc_msgSend)(payItem, NSSelectorFromString(@"setM_receiverDesc:"), feeDesc);
+            ((void (*)(id, SEL, id))objc_msgSend)(payItem, NSSelectorFromString(@"setM_senderDesc:"), feeDesc);
+            changed = YES;
         }
     }
     if (!changed) return;
@@ -1063,21 +1060,21 @@ static void NeoWCRefreshVisibleAntiRevokeCells(void) {
     if (window) NeoWCRefreshAntiRevokeCellsInView(window);
 }
 
-static void NeoWCPresentJokerEditorForCell(id cell) {
+static void NeoWCPresentJokerEditorForCell(id cell, BOOL forceTransfer) {
     if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return;
     id message = NeoWCMessageWrapForCell(cell);
-    if (!NeoWCMessageCanJokerEdit(message)) return;
+    if (!message || (!forceTransfer && !NeoWCMessageCanJokerEdit(message))) return;
     UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
     if (!presenter.view.window) return;
-    BOOL isRefer = NeoWCMessageIsRefer(message);
-    NSString *current = NeoWCDisplayTextForJokerMessage(message);
+    BOOL isRefer = !forceTransfer && NeoWCMessageIsRefer(message);
+    NSString *current = forceTransfer ? NeoWCTransferDisplayText(message) : NeoWCDisplayTextForJokerMessage(message);
     NSString *quoted = nil;
     if (isRefer) {
         id xmlValue = NeoWCTweakSafeValue(message, @"m_nsContent");
         NSString *xml = [xmlValue isKindOfClass:[NSString class]] ? xmlValue : nil;
         quoted = NeoWCJokerReferXMLValues(xml).quotedText ?: @"";
     }
-    BOOL isTransfer = NeoWCMessageIsTransfer(message);
+    BOOL isTransfer = forceTransfer || NeoWCMessageIsTransfer(message);
     if (isTransfer && ([current hasPrefix:@"¥"] || [current hasPrefix:@"￥"])) current = [current substringFromIndex:1];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"聊天记录小丑"
                                                                    message:isRefer
@@ -1109,32 +1106,32 @@ static void NeoWCPresentJokerEditorForCell(id cell) {
             ? [alert.textFields[1].text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
             : nil;
         if (targetCell && (text.length > 0 || quotedText.length > 0)) {
-            NeoWCApplyJokerText(targetCell, targetMessage, targetController, text, quotedText);
+            NeoWCApplyJokerText(targetCell, targetMessage, targetController, text, quotedText, forceTransfer);
         }
     }]];
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
-static MMMenuItem *NeoWCJokerMenuItem(id target) {
+static MMMenuItem *NeoWCJokerMenuItem(id target, BOOL forceTransfer) {
     if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return nil;
     id message = NeoWCMessageWrapForCell(target);
-    if (!NeoWCMessageCanJokerEdit(message)) return nil;
+    if (!message || (!forceTransfer && !NeoWCMessageCanJokerEdit(message))) return nil;
     Class itemClass = NSClassFromString(@"MMMenuItem");
     if (!itemClass) return nil;
     if (![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) return nil;
     UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightRegular];
-    UIImage *icon = [UIImage systemImageNamed:@"theatermasks.fill" withConfiguration:configuration];
-    if (!icon) icon = [UIImage systemImageNamed:@"face.smiling.fill" withConfiguration:configuration];
-    icon = [icon imageWithTintColor:UIColor.systemPurpleColor renderingMode:UIImageRenderingModeAlwaysOriginal];
+    UIImage *icon = [UIImage systemImageNamed:@"pencil.circle.fill" withConfiguration:configuration];
+    if (!icon) icon = [UIImage systemImageNamed:@"square.and.pencil" withConfiguration:configuration];
+    icon = [icon imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
     return [[itemClass alloc] initWithTitle:@"小丑" icon:icon target:target action:@selector(joker_handleMenuItem:)];
 }
 
-static NSArray *NeoWCOperationMenuItemsWithJoker(id target, NSArray *originalItems) {
+static NSArray *NeoWCOperationMenuItemsWithJoker(id target, NSArray *originalItems, BOOL forceTransfer) {
     if (![originalItems isKindOfClass:[NSArray class]] || !NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return originalItems;
     for (id item in originalItems) {
         if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"小丑"]) return originalItems;
     }
-    MMMenuItem *jokerItem = NeoWCJokerMenuItem(target);
+    MMMenuItem *jokerItem = NeoWCJokerMenuItem(target, forceTransfer);
     if (!jokerItem) return originalItems;
     NSMutableArray *items = [originalItems mutableCopy];
     [items insertObject:jokerItem atIndex:0];
@@ -1784,7 +1781,7 @@ static void NeoWCRegisterPlugin(void) {
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    return NeoWCOperationMenuItemsWithJoker(self, items);
+    return NeoWCOperationMenuItemsWithJoker(self, items, NO);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
@@ -1797,7 +1794,7 @@ static void NeoWCRegisterPlugin(void) {
 %new
 - (void)joker_handleMenuItem:(id)sender {
     NeoWCCompatibilityMarkTriggered(@"chat-joker");
-    NeoWCPresentJokerEditorForCell(self);
+    NeoWCPresentJokerEditorForCell(self, NO);
 }
 
 %end
@@ -1806,7 +1803,7 @@ static void NeoWCRegisterPlugin(void) {
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    return NeoWCOperationMenuItemsWithJoker(self, items);
+    return NeoWCOperationMenuItemsWithJoker(self, items, NO);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
@@ -1819,7 +1816,7 @@ static void NeoWCRegisterPlugin(void) {
 %new
 - (void)joker_handleMenuItem:(id)sender {
     NeoWCCompatibilityMarkTriggered(@"chat-joker");
-    NeoWCPresentJokerEditorForCell(self);
+    NeoWCPresentJokerEditorForCell(self, NO);
 }
 
 %end
@@ -1828,12 +1825,12 @@ static void NeoWCRegisterPlugin(void) {
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    return NeoWCOperationMenuItemsWithJoker(self, items);
+    return NeoWCOperationMenuItemsWithJoker(self, items, YES);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
     if (action == @selector(joker_handleMenuItem:)) {
-        return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageCanJokerEdit(NeoWCMessageWrapForCell(self));
+        return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey);
     }
     return %orig;
 }
@@ -1841,7 +1838,7 @@ static void NeoWCRegisterPlugin(void) {
 %new
 - (void)joker_handleMenuItem:(id)sender {
     NeoWCCompatibilityMarkTriggered(@"chat-joker");
-    NeoWCPresentJokerEditorForCell(self);
+    NeoWCPresentJokerEditorForCell(self, YES);
 }
 
 %end
