@@ -103,7 +103,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 - 朋友圈双击点赞、爱心动画和震动强度
 - 朋友圈操作按钮直接评论
 - 自定义微信运动步数，每日启动或回前台刷新日期
-- 钱包余额本地显示：长按钱包入口或余额数字设置，仅替换本机界面文字
+- 钱包余额本地显示：设置页只提供开关，余额必须在钱包页长按入口或余额数字设置，仅替换本机界面文字
 - 好友数量本地显示：仅替换“个朋友”等明确好友数量文案
 - 朋友圈与小程序启动广告净化
 
@@ -199,12 +199,10 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 - 带子项的功能支持轻点父卡片收起或展开。
 - 关闭主开关时箭头透明但保留占位，避免 UISwitch 左移。
 - 当前本地动画优化：
-  - 分类标题不 reload，只插入/删除内部行。
-  - 父功能行不 reload。
-  - 子项使用顶部轻滑动画。
-  - 箭头独立进行 0.2 秒旋转。
-  - 父卡片圆角原位更新。
-- 不要恢复整段 `reloadSections` 或父行 reload 动画，否则会造成整张卡片跳动。
+  - 分类和父功能折叠使用无动画 `reloadData` 并保持当前滚动位置。
+  - 不再使用 `insertRows/deleteRows` 的 `UITableViewRowAnimationTop`，避免卡片瞬间跳到页面顶部。
+  - 箭头跟随刷新后的状态重建，不做中间态旋转动画。
+- 不要恢复整段 `reloadSections`、父行 reload 动画或 Top 插入/删除动画，否则会造成整张卡片跳动。
 
 ## 10. 已删除或明确不做
 

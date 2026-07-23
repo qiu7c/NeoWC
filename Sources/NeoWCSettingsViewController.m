@@ -252,7 +252,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             NeoWCMomentsDoubleTapLikeKey,
             NeoWCMomentsLikeHapticEnabledKey,
             NeoWCStepOverrideEnabledKey,
-            NeoWCWalletBalanceEnabledKey,
             NeoWCContactsCountEnabledKey,
             NeoWCMultiSelectExportEnabledKey,
             NeoWCPluginShortcutsEnabledKey,
@@ -279,8 +278,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     };
     NSInteger configuredStepCount = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCStepCountKey];
     NSString *stepValue = configuredStepCount > 0 ? [NSString stringWithFormat:@"%ld 步", (long)configuredStepCount] : @"设置";
-    long long balanceFen = NeoWCSettingsLongLongDefaultForKey(NeoWCWalletBalanceFenKey);
-    NSString *balanceValue = balanceFen > 0 ? [NSString stringWithFormat:@"¥%.2f", balanceFen / 100.0] : @"设置";
     NSInteger contactsCount = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCContactsCountKey];
     NSString *contactsValue = contactsCount > 0 ? [NSString stringWithFormat:@"%ld 个", (long)contactsCount] : @"设置";
     NSTimeInterval revokeFilter = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCAntiRevokeTimeFilterKey];
@@ -298,7 +295,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     BOOL momentsLikeEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsDoubleTapLikeKey];
     BOOL momentsHapticEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMomentsLikeHapticEnabledKey];
     BOOL multiSelectExportEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCMultiSelectExportEnabledKey];
-    BOOL walletBalanceEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCWalletBalanceEnabledKey];
     BOOL contactsCountEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCContactsCountEnabledKey];
     BOOL pluginShortcutsEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCPluginShortcutsEnabledKey];
     BOOL inputRoundingEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCChatInputRoundingEnabledKey];
@@ -347,7 +343,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         item(@"朋友圈双击点赞", @"双击好友朋友圈内容直接点赞", @"hand.thumbsup", NeoWCRowKindSwitch, NeoWCMomentsDoubleTapLikeKey, nil),
         item(@"朋友圈操作按钮替换为评论", @"点击后直接进入评论，不再展开操作菜单", @"bubble.middle.bottom", NeoWCRowKindSwitch, NeoWCMomentsQuickCommentKey, nil),
         item(@"自定义微信运动步数", @"每天启动微信时自动使用设定步数", @"figure.walk", NeoWCRowKindSwitch, NeoWCStepOverrideEnabledKey, nil),
-        item(@"钱包余额本地显示", @"长按钱包入口或余额数字设置，只修改本机文字显示", @"creditcard", NeoWCRowKindSwitch, NeoWCWalletBalanceEnabledKey, nil),
+        item(@"钱包余额本地显示", @"开启后长按钱包入口或余额数字设置，仅修改本机文字", @"creditcard", NeoWCRowKindSwitch, NeoWCWalletBalanceEnabledKey, nil),
         item(@"好友数量本地显示", @"替换“个朋友”等好友数量文案", @"person.2", NeoWCRowKindSwitch, NeoWCContactsCountEnabledKey, nil),
     ]];
     if (momentsLikeEnabled && [self isFeatureExpandedForKey:NeoWCMomentsDoubleTapLikeKey]) {
@@ -360,7 +356,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         }
     }
     if (stepOverrideEnabled && [self isFeatureExpandedForKey:NeoWCStepOverrideEnabledKey]) [enhancementItems addObject:item(@"设置运动步数", @"设定值会在每天首次启动或回到微信时刷新", @"number", NeoWCRowKindDetail, nil, stepValue)];
-    if (walletBalanceEnabled && [self isFeatureExpandedForKey:NeoWCWalletBalanceEnabledKey]) [enhancementItems addObject:item(@"设置钱包余额", @"输入本机显示的零钱余额，可留空恢复真实显示", @"yensign.circle", NeoWCRowKindDetail, nil, balanceValue)];
     if (contactsCountEnabled && [self isFeatureExpandedForKey:NeoWCContactsCountEnabledKey]) [enhancementItems addObject:item(@"设置好友数量", @"输入本机显示的好友数量", @"number", NeoWCRowKindDetail, nil, contactsValue)];
     [enhancementItems addObject:item(@"广告净化", @"隐藏朋友圈广告与小程序启动广告", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil)];
 
@@ -708,7 +703,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     BOOL changesVisibleRows = [item.defaultsKey isEqualToString:NeoWCAntiRevokeKey] ||
                               [item.defaultsKey isEqualToString:NeoWCAntiRevokeNotifySenderKey] ||
                               [item.defaultsKey isEqualToString:NeoWCStepOverrideEnabledKey] ||
-                              [item.defaultsKey isEqualToString:NeoWCWalletBalanceEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCContactsCountEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCMomentsDoubleTapLikeKey] ||
                               [item.defaultsKey isEqualToString:NeoWCMomentsLikeHapticEnabledKey] ||
@@ -726,58 +720,17 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 - (void)toggleFeatureAtIndexPath:(NSIndexPath *)indexPath item:(NeoWCSettingItem *)item {
     if (![self featureHasChildrenForKey:item.defaultsKey] ||
         ![[NSUserDefaults standardUserDefaults] boolForKey:item.defaultsKey]) return;
-    BOOL wasCollapsed = [self.collapsedFeatureKeys containsObject:item.defaultsKey];
-    NSInteger oldRowCount = [self.tableView numberOfRowsInSection:indexPath.section];
-    if (wasCollapsed) {
+    if ([self.collapsedFeatureKeys containsObject:item.defaultsKey]) {
         [self.collapsedFeatureKeys removeObject:item.defaultsKey];
     } else {
         [self.collapsedFeatureKeys addObject:item.defaultsKey];
     }
     [self saveCollapsedFeatureKeys];
     [self buildSections];
-    NSInteger newRowCount = self.sections[indexPath.section].items.count;
-    NSInteger changedCount = newRowCount >= oldRowCount ? newRowCount - oldRowCount : oldRowCount - newRowCount;
-    if (changedCount == 0) {
-        [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
-        return;
-    }
-    NSMutableArray<NSIndexPath *> *changedPaths = [NSMutableArray arrayWithCapacity:(NSUInteger)changedCount];
-    for (NSInteger offset = 0; offset < changedCount; offset++) {
-        [changedPaths addObject:[NSIndexPath indexPathForRow:indexPath.row + 1 + offset inSection:indexPath.section]];
-    }
-    UITableViewCell *parentCell = [self.tableView cellForRowAtIndexPath:indexPath];
-    UIStackView *accessory = [parentCell.accessoryView isKindOfClass:[UIStackView class]] ? (UIStackView *)parentCell.accessoryView : nil;
-    UIImageView *chevron = [accessory.arrangedSubviews.firstObject isKindOfClass:[UIImageView class]]
-        ? (UIImageView *)accessory.arrangedSubviews.firstObject : nil;
-    BOOL willExpand = wasCollapsed;
-    parentCell.accessibilityHint = willExpand ? @"轻点卡片收起子选项" : @"轻点卡片展开子选项";
-    [UIView animateWithDuration:0.20
-                          delay:0.0
-                        options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionCurveEaseInOut
-                     animations:^{
-        chevron.transform = willExpand ? CGAffineTransformIdentity : CGAffineTransformMakeRotation((CGFloat)-M_PI_2);
-    } completion:nil];
-
-    [self.tableView performBatchUpdates:^{
-        if (newRowCount > oldRowCount) {
-            [self.tableView insertRowsAtIndexPaths:changedPaths withRowAnimation:UITableViewRowAnimationTop];
-        } else {
-            [self.tableView deleteRowsAtIndexPaths:changedPaths withRowAnimation:UITableViewRowAnimationTop];
-        }
-    } completion:^(__unused BOOL finished) {
-        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
-        NSInteger visibleRows = [self.tableView numberOfRowsInSection:indexPath.section];
-        BOOL isLast = indexPath.row == visibleRows - 1;
-        if ([cell.backgroundView isKindOfClass:[NeoWCCardBackgroundView class]]) {
-            NeoWCCardBackgroundView *background = (NeoWCCardBackgroundView *)cell.backgroundView;
-            background.roundsBottom = isLast;
-            [background setNeedsDisplay];
-        }
-        if ([cell.selectedBackgroundView isKindOfClass:[NeoWCCardBackgroundView class]]) {
-            NeoWCCardBackgroundView *background = (NeoWCCardBackgroundView *)cell.selectedBackgroundView;
-            background.roundsBottom = isLast;
-            [background setNeedsDisplay];
-        }
+    CGPoint offset = self.tableView.contentOffset;
+    [UIView performWithoutAnimation:^{
+        [self.tableView reloadData];
+        [self.tableView setContentOffset:offset animated:NO];
     }];
 }
 
@@ -785,34 +738,17 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     NeoWCSettingSection *section = self.sections[sectionIndex];
     if (!section.isCollapsible) return;
     BOOL wasExpanded = [self.expandedCategoryIDs containsObject:section.identifier];
-    NSInteger rowCount = section.items.count;
     if (wasExpanded) {
         [self.expandedCategoryIDs removeObject:section.identifier];
     } else {
         [self.expandedCategoryIDs addObject:section.identifier];
     }
     [[NSUserDefaults standardUserDefaults] setObject:self.expandedCategoryIDs.allObjects forKey:NeoWCExpandedCategoriesKey];
-    NSMutableArray<NSIndexPath *> *paths = [NSMutableArray arrayWithCapacity:(NSUInteger)rowCount];
-    for (NSInteger row = 0; row < rowCount; row++) {
-        [paths addObject:[NSIndexPath indexPathForRow:row inSection:sectionIndex]];
-    }
-    UIView *header = [self.tableView headerViewForSection:sectionIndex];
-    UIImageView *chevron = (UIImageView *)[header viewWithTag:7401];
-    BOOL willExpand = !wasExpanded;
-    header.accessibilityHint = willExpand ? @"轻点折叠" : @"轻点展开";
-    [UIView animateWithDuration:0.20
-                          delay:0.0
-                        options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionCurveEaseInOut
-                     animations:^{
-        chevron.transform = willExpand ? CGAffineTransformIdentity : CGAffineTransformMakeRotation((CGFloat)-M_PI_2);
-    } completion:nil];
-    [self.tableView performBatchUpdates:^{
-        if (willExpand) {
-            [self.tableView insertRowsAtIndexPaths:paths withRowAnimation:UITableViewRowAnimationTop];
-        } else {
-            [self.tableView deleteRowsAtIndexPaths:paths withRowAnimation:UITableViewRowAnimationTop];
-        }
-    } completion:nil];
+    CGPoint offset = self.tableView.contentOffset;
+    [UIView performWithoutAnimation:^{
+        [self.tableView reloadData];
+        [self.tableView setContentOffset:offset animated:NO];
+    }];
 }
 
 - (void)sectionHeaderTapped:(UIControl *)sender {
