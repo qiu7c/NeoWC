@@ -1,7 +1,7 @@
 # NeoWC 项目交接文档
 
 更新时间：2026-07-23
-项目版本：0.1.1
+项目版本：0.1.2
 仓库：`git@github.com:qiu7c/NeoWC.git`
 主分支：`main`
 
@@ -43,7 +43,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 当 `WCPluginsMgr` 存在时注册：
 
 - 标题：NeoWC
-- 版本：0.1.1
+- 版本：0.1.2
 - Controller：`NeoWCSettingsViewController`
 
 注册调用：
@@ -51,7 +51,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 ```objc
 [[objc_getClass("WCPluginsMgr") sharedInstance]
     registerControllerWithTitle:@"NeoWC"
-                         version:@"0.1.1"
+                         version:@"0.1.2"
                       controller:@"NeoWCSettingsViewController"];
 ```
 
@@ -138,7 +138,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | 多选导出 | `BaseMsgContentViewController`、`MMScrollActionSheet` | 只在多选“更多”菜单构建期间插入项目 |
 | 朋友圈 | `WCTimeLineCellView`、`WCTimeLineOperateButtonView` | 所有逻辑必须受开关控制 |
 | 游戏选择 | `CMessageMgr AddEmoticonMsg:MsgWrap:` | 非游戏消息和关闭状态直接 `%orig` |
-| 聊天记录小丑 | `TextMessageCellView`、`AppMessageCellView`、`WCPayTransferMessageCellView` 的 `operationMenuItems`/`canPerformAction:withSender:` | 仅在开关开启时插入“小丑”菜单；引用消息分别编辑回复文字与 `refermsg/content`，空项跳过；只做当前页面本机显示修改 |
+| 聊天记录小丑 | `TextMessageCellView`、`AppMessageCellView`、`WCPayTransferMessageCellView` 的 `operationMenuItems`/`canPerformAction:withSender:` | 仅在开关开启时插入“小丑”菜单；引用消息只修改回复文字，不修改被引用原文；只做当前页面本机显示修改 |
 | 钱包余额显示 | `TimeoutNumber updateNumber:/didMoveToSuperview`、`WCPayWalletEntryHeaderView didMoveToSuperview` | 当前 `updateNumber:` 参数替换方案会阻断钱包余额页面，修复前必须核对参考 dylib 的真实参数类型和调用顺序；禁止恢复通过 `MMUILabel` 猜测所有数字的方案 |
 | 好友数量显示 | `MMUILabel setText:` | 必须匹配“个朋友”等明确文案，禁止无条件全局替换 |
 | 广告 | `WCDataItem`、`WAAppTaskSplashADConfig` | 关闭状态返回微信原值 |
@@ -278,5 +278,5 @@ ssh://git@ssh.github.com:443/qiu7c/NeoWC.git
 
 必须保留已经修好的防撤回气泡方案：禁止给 CommonMessageCellView 恢复 layoutSubviews Hook，禁止主动调用 setNeedsLayout/layoutIfNeeded，提示刷新必须弱引用且合并执行。保留图片编辑快捷发送与微信官方转发完全隔离的逻辑，保留设置页最新无动画 reloadData 与滚动位置保持方案。不要恢复长截图、Markdown 导出或已删除的诊断提示方案。
 
-修改后先执行 git status --short、git diff --check、git diff --stat 和约束扫描。本机没有 Theos，说明无法本地完成 iOS 私有 API 编译。未经用户明确要求不要提交或推送；推送 main 后不要查询云端构建结果。项目版本为 0.1.1，远程仓库为 git@github.com:qiu7c/NeoWC.git。
+修改后先执行 git status --short、git diff --check、git diff --stat 和约束扫描。本机没有 Theos，说明无法本地完成 iOS 私有 API 编译。未经用户明确要求不要提交或推送；推送 main 后不要查询云端构建结果。项目版本为 0.1.2，远程仓库为 git@github.com:qiu7c/NeoWC.git。
 ```

@@ -81,13 +81,13 @@ void NeoWCRegisterPluginShortcuts(id manager) {
         if (NeoWCShortcutOptionEnabled(defaults, NeoWCPluginShortcutDebugCenterKey, YES) &&
             ![registered containsObject:@"debug-center"] && [manager respondsToSelector:controllerSelector]) {
             ((void (*)(id, SEL, NSString *, NSString *, NSString *))objc_msgSend)(manager, controllerSelector,
-                @"NeoWC · 调试中心", @"0.1.1", @"NeoWCDebugShortcutViewController");
+                @"NeoWC · 调试中心", @"0.1.2", @"NeoWCDebugShortcutViewController");
             [registered addObject:@"debug-center"];
         }
         if (NeoWCShortcutOptionEnabled(defaults, NeoWCPluginShortcutRevokeRecordsKey, NO) &&
             ![registered containsObject:@"revoke-records"] && [manager respondsToSelector:controllerSelector]) {
             ((void (*)(id, SEL, NSString *, NSString *, NSString *))objc_msgSend)(manager, controllerSelector,
-                @"NeoWC · 防撤回记录", @"0.1.1", @"NeoWCAntiRevokeRecordsViewController");
+                @"NeoWC · 防撤回记录", @"0.1.2", @"NeoWCAntiRevokeRecordsViewController");
             [registered addObject:@"revoke-records"];
         }
         if (NeoWCShortcutOptionEnabled(defaults, NeoWCPluginShortcutCustomPageKey, NO) &&

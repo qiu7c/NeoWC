@@ -8,7 +8,7 @@
 #import "NeoWCPluginShortcuts.h"
 #import "NeoWCInterfaceTweaks.h"
 
-static NSString *const NeoWCVersion = @"0.1.1";
+static NSString *const NeoWCVersion = @"0.1.2";
 static NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 static NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
