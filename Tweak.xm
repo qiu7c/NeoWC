@@ -30,6 +30,10 @@
 - (BOOL)isContainButtonTitle:(NSString *)title;
 @end
 
+@interface MMMenuItem : NSObject
+- (instancetype)initWithTitle:(NSString *)title icon:(UIImage *)icon target:(id)target action:(SEL)action;
+@end
+
 @interface SharePreConfirmSheetView : UIView
 @end
 
@@ -85,11 +89,13 @@
 
 @interface WCDeviceStepObject : NSObject
 - (unsigned int)m7StepCount;
+- (unsigned int)hkStepCount;
 @end
 
 @interface WCDataItem : NSObject
 - (BOOL)isAd;
 - (BOOL)isVideoAd;
+- (unsigned int)stepCount;
 @end
 
 @interface WAAppTaskSplashADConfig : NSObject
@@ -113,6 +119,7 @@ static char NeoWCEditPresenterControllerKey;
 static char NeoWCQuickSendPendingImageKey;
 static char NeoWCInputSwipeLeftRecognizerKey;
 static char NeoWCInputSwipeRightRecognizerKey;
+static char NeoWCWalletGestureRecognizerKey;
 static __weak id NeoWCCurrentEditImageLogicController;
 
 static NSMutableSet *NeoWCActiveQuickSendSessions(void) {
@@ -142,6 +149,122 @@ static void NeoWCTweakSetValue(id object, NSString *key, id value) {
         [object setValue:value forKey:key];
     } @catch (__unused NSException *exception) {
     }
+}
+
+static BOOL NeoWCTextLooksLikeAmount(NSString *text) {
+    if (![text isKindOfClass:[NSString class]] || text.length == 0) return NO;
+    NSString *value = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if ([value hasPrefix:@"¥"] || [value hasPrefix:@"￥"]) value = [value substringFromIndex:1];
+    if (value.length == 0 || value.length > 18) return NO;
+    NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"0123456789,."];
+    return [value rangeOfCharacterFromSet:allowed.invertedSet].location == NSNotFound &&
+           [value rangeOfCharacterFromSet:NSCharacterSet.decimalDigitCharacterSet].location != NSNotFound;
+}
+
+static NSString *NeoWCWalletBalanceText(void) {
+    if (!NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey)) return nil;
+    long long fen = [[NSUserDefaults standardUserDefaults] longLongForKey:NeoWCWalletBalanceFenKey];
+    if (fen <= 0) return nil;
+    return [NSString stringWithFormat:@"¥%.2f", fen / 100.0];
+}
+
+static NSString *NeoWCContactsCountTextForOriginal(NSString *original) {
+    if (!NeoWCEnhancementEnabled(NeoWCContactsCountEnabledKey)) return nil;
+    NSInteger count = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCContactsCountKey];
+    if (count <= 0 || ![original isKindOfClass:[NSString class]]) return nil;
+    NSString *trimmed = [original stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if ([trimmed hasSuffix:@"个朋友"]) return [NSString stringWithFormat:@"%ld个朋友", (long)count];
+    if ([trimmed hasSuffix:@" 个朋友"]) return [NSString stringWithFormat:@"%ld 个朋友", (long)count];
+    if ([trimmed hasSuffix:@"个"] && [trimmed rangeOfString:@"朋友"].location == NSNotFound) {
+        NSString *number = [trimmed substringToIndex:trimmed.length - 1];
+        if ([number rangeOfCharacterFromSet:NSCharacterSet.decimalDigitCharacterSet].location != NSNotFound) {
+            return [NSString stringWithFormat:@"%ld 个", (long)count];
+        }
+    }
+    return nil;
+}
+
+static NSString *NeoWCLabelReplacementText(NSString *text) {
+    NSString *contactsText = NeoWCContactsCountTextForOriginal(text);
+    if (contactsText.length > 0) return contactsText;
+    NSString *balanceText = NeoWCWalletBalanceText();
+    if (balanceText.length > 0 && NeoWCTextLooksLikeAmount(text)) {
+        NSString *trimmed = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if ([trimmed hasPrefix:@"¥"] || [trimmed hasPrefix:@"￥"]) return balanceText;
+    }
+    if (NeoWCEnhancementEnabled(NeoWCGlobalTextReplaceEnabledKey) && [text isKindOfClass:[NSString class]]) {
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        NSString *source = [[defaults stringForKey:NeoWCGlobalTextReplaceSourceKey] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        NSString *target = [defaults stringForKey:NeoWCGlobalTextReplaceTargetKey] ?: @"";
+        if (source.length > 0 && target.length > 0 && [text isEqualToString:source]) return target;
+    }
+    return nil;
+}
+
+static id NeoWCMessageWrapForCell(id cell) {
+    id viewModel = NeoWCTweakSafeValue(cell, @"viewModel") ?: NeoWCTweakSafeValue(cell, @"m_viewModel");
+    id message = NeoWCTweakSafeValue(viewModel, @"messageWrap") ?: NeoWCTweakSafeValue(viewModel, @"m_messageWrap");
+    if (!message) message = NeoWCTweakSafeValue(cell, @"messageWrap");
+    if (!message) message = NeoWCTweakSafeValue(cell, @"m_messageWrap");
+    return message;
+}
+
+static NSString *NeoWCDisplayTextForJokerCell(id cell, id message) {
+    SEL contentSelector = NSSelectorFromString(@"GetDisplayContent");
+    if ([cell respondsToSelector:contentSelector]) {
+        id value = ((id (*)(id, SEL))objc_msgSend)(cell, contentSelector);
+        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
+    }
+    for (NSString *key in @[@"m_nsContent", @"m_nsTitle", @"m_nsFeeDesc", @"content", @"title"]) {
+        id value = NeoWCTweakSafeValue(message, key);
+        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
+    }
+    id payItem = NeoWCTweakSafeValue(message, @"m_oWCPayInfoItem");
+    for (NSString *key in @[@"m_nsFeeDesc", @"m_nsTitle", @"m_receiverDesc", @"m_senderDesc"]) {
+        id value = NeoWCTweakSafeValue(payItem, key);
+        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
+    }
+    return @"";
+}
+
+static void NeoWCReloadJokerCell(id cell, id message) {
+    UIResponder *responder = [cell isKindOfClass:[UIResponder class]] ? (UIResponder *)cell : nil;
+    while (responder) {
+        SEL reloadCellSelector = NSSelectorFromString(@"reloadVisibleNodeWithCellView:");
+        if ([responder respondsToSelector:reloadCellSelector]) {
+            ((void (*)(id, SEL, id))objc_msgSend)(responder, reloadCellSelector, cell);
+            return;
+        }
+        SEL reloadWrapSelector = NSSelectorFromString(@"reloadNodeWithMessageWrap:");
+        if (message && [responder respondsToSelector:reloadWrapSelector]) {
+            ((void (*)(id, SEL, id))objc_msgSend)(responder, reloadWrapSelector, message);
+            return;
+        }
+        responder = responder.nextResponder;
+    }
+    id tableView = nil;
+    SEL tableSelector = NSSelectorFromString(@"getMsgTableView");
+    if ([cell respondsToSelector:tableSelector]) tableView = ((id (*)(id, SEL))objc_msgSend)(cell, tableSelector);
+    if ([tableView isKindOfClass:[UITableView class]]) [(UITableView *)tableView reloadData];
+}
+
+static void NeoWCApplyJokerText(id cell, NSString *text) {
+    if (text.length == 0) return;
+    id message = NeoWCMessageWrapForCell(cell);
+    if (!message) return;
+    SEL parsePaySelector = NSSelectorFromString(@"parseWCPayInfoItemIfNeed");
+    if ([message respondsToSelector:parsePaySelector]) ((void (*)(id, SEL))objc_msgSend)(message, parsePaySelector);
+    id payItem = NeoWCTweakSafeValue(message, @"m_oWCPayInfoItem");
+    if (payItem) {
+        NeoWCTweakSetValue(payItem, @"m_nsFeeDesc", text);
+        NeoWCTweakSetValue(payItem, @"m_senderDesc", text);
+        NeoWCTweakSetValue(payItem, @"m_receiverDesc", text);
+    }
+    NeoWCTweakSetValue(message, @"m_nsContent", text);
+    NeoWCTweakSetValue(message, @"m_nsTitle", text);
+    NeoWCTweakSetValue(message, @"m_nsFeeDesc", text);
+    NeoWCReloadJokerCell(cell, message);
+    NeoWCLog(@"聊天记录小丑已修改当前页面显示");
 }
 
 static UITextView *NeoWCInnerTextView(id growTextView) {
@@ -644,13 +767,101 @@ static void NeoWCRefreshAntiRevokeCellsInView(UIView *view) {
         }
     }
     Class systemCellClass = NSClassFromString(@"SystemMessageCellView");
-    if (systemCellClass && [view isKindOfClass:systemCellClass]) [view setNeedsLayout];
+    if (systemCellClass && [view isKindOfClass:systemCellClass]) {
+        SEL colorSelector = NSSelectorFromString(@"neowc_applyAntiRevokeTextColor");
+        if ([view respondsToSelector:colorSelector]) {
+            ((void (*)(id, SEL))objc_msgSend)(view, colorSelector);
+        }
+    }
     for (UIView *subview in view.subviews) NeoWCRefreshAntiRevokeCellsInView(subview);
 }
 
 static void NeoWCRefreshVisibleAntiRevokeCells(void) {
     UIWindow *window = NeoWCActiveApplicationWindow();
     if (window) NeoWCRefreshAntiRevokeCellsInView(window);
+}
+
+static void NeoWCPresentJokerEditorForCell(id cell) {
+    if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return;
+    id message = NeoWCMessageWrapForCell(cell);
+    NSString *current = NeoWCDisplayTextForJokerCell(cell, message);
+    UIWindow *window = NeoWCActiveApplicationWindow();
+    UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
+    if (!presenter.view.window) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"聊天记录小丑"
+                                                                   message:@"仅修改当前页面的本机显示，离开页面后可能恢复"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = current;
+        textField.placeholder = @"输入新的显示文字或金额";
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak id weakCell = cell;
+    [alert addAction:[UIAlertAction actionWithTitle:@"应用" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *text = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        id strongCell = weakCell;
+        if (strongCell && text.length > 0) NeoWCApplyJokerText(strongCell, text);
+    }]];
+    [presenter presentViewController:alert animated:YES completion:nil];
+}
+
+static MMMenuItem *NeoWCJokerMenuItem(id target) {
+    if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return nil;
+    Class itemClass = NSClassFromString(@"MMMenuItem");
+    if (!itemClass) return nil;
+    if (![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) return nil;
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightRegular];
+    UIImage *icon = [UIImage systemImageNamed:@"face.smiling" withConfiguration:configuration];
+    return [[itemClass alloc] initWithTitle:@"小丑" icon:icon target:target action:@selector(neowc_jokerHandleMenuItem:)];
+}
+
+static NSArray *NeoWCOperationMenuItemsWithJoker(id target, NSArray *originalItems) {
+    if (![originalItems isKindOfClass:[NSArray class]] || !NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return originalItems;
+    for (id item in originalItems) {
+        if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"小丑"]) return originalItems;
+    }
+    MMMenuItem *jokerItem = NeoWCJokerMenuItem(target);
+    if (!jokerItem) return originalItems;
+    NSMutableArray *items = [originalItems mutableCopy];
+    [items addObject:jokerItem];
+    return items;
+}
+
+static void NeoWCPresentWalletBalanceEditor(void) {
+    UIWindow *window = NeoWCActiveApplicationWindow();
+    UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
+    if (!presenter.view.window) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"钱包余额本地显示"
+                                                                   message:@"仅修改本机界面文字；留空或输入 0 恢复真实显示"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        long long fen = [[NSUserDefaults standardUserDefaults] longLongForKey:NeoWCWalletBalanceFenKey];
+        textField.text = fen > 0 ? [NSString stringWithFormat:@"%.2f", fen / 100.0] : nil;
+        textField.placeholder = @"例如 888.88";
+        textField.keyboardType = UIKeyboardTypeDecimalPad;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *text = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        long long fen = text.length > 0 ? (long long)llround(text.doubleValue * 100.0) : 0;
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setObject:@(MAX(0LL, fen)) forKey:NeoWCWalletBalanceFenKey];
+        [defaults setBool:fen > 0 forKey:NeoWCWalletBalanceEnabledKey];
+        NeoWCShowTransientMessage(fen > 0 ? @"钱包余额显示已更新" : @"钱包余额显示已恢复", YES);
+    }]];
+    [presenter presentViewController:alert animated:YES completion:nil];
+}
+
+static void NeoWCInstallWalletLongPressIfNeeded(UIView *view, id target, SEL action) {
+    if (!view || objc_getAssociatedObject(view, &NeoWCWalletGestureRecognizerKey)) return;
+    UILongPressGestureRecognizer *recognizer = [[UILongPressGestureRecognizer alloc] initWithTarget:target action:action];
+    recognizer.minimumPressDuration = 0.55;
+    recognizer.cancelsTouchesInView = NO;
+    [view addGestureRecognizer:recognizer];
+    view.userInteractionEnabled = YES;
+    objc_setAssociatedObject(view, &NeoWCWalletGestureRecognizerKey, recognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 @interface NeoWCGameSelectorViewController : UIViewController
@@ -1112,8 +1323,6 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
-%group NeoWCMuteIconHooks
-
 %hook UIImageView
 
 - (void)setAccessibilityLabel:(NSString *)label {
@@ -1136,10 +1345,6 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
-%end
-
-%group NeoWCRoundingHooks
-
 %hook MMInputToolView
 
 - (void)didMoveToWindow {
@@ -1148,10 +1353,6 @@ static void NeoWCRegisterPlugin(void) {
 }
 
 %end
-
-%end
-
-%group NeoWCInputSwipeHooks
 
 %hook MMGrowTextView
 
@@ -1188,8 +1389,6 @@ static void NeoWCRegisterPlugin(void) {
     if (![currentText isKindOfClass:[NSString class]]) currentText = @"";
     NeoWCTweakSetValue(self, @"text", [currentText stringByAppendingString:pasteText]);
 }
-
-%end
 
 %end
 
@@ -1268,6 +1467,63 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%hook TextMessageCellView
+
+- (NSArray *)operationMenuItems {
+    return NeoWCOperationMenuItemsWithJoker(self, %orig);
+}
+
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+    if (action == @selector(neowc_jokerHandleMenuItem:) && NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return YES;
+    return %orig;
+}
+
+%new
+- (void)neowc_jokerHandleMenuItem:(id)sender {
+    NeoWCCompatibilityMarkTriggered(@"chat-joker");
+    NeoWCPresentJokerEditorForCell(self);
+}
+
+%end
+
+%hook AppMessageCellView
+
+- (NSArray *)operationMenuItems {
+    return NeoWCOperationMenuItemsWithJoker(self, %orig);
+}
+
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+    if (action == @selector(neowc_jokerHandleMenuItem:) && NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return YES;
+    return %orig;
+}
+
+%new
+- (void)neowc_jokerHandleMenuItem:(id)sender {
+    NeoWCCompatibilityMarkTriggered(@"chat-joker");
+    NeoWCPresentJokerEditorForCell(self);
+}
+
+%end
+
+%hook WCPayTransferMessageCellView
+
+- (NSArray *)operationMenuItems {
+    return NeoWCOperationMenuItemsWithJoker(self, %orig);
+}
+
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+    if (action == @selector(neowc_jokerHandleMenuItem:) && NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return YES;
+    return %orig;
+}
+
+%new
+- (void)neowc_jokerHandleMenuItem:(id)sender {
+    NeoWCCompatibilityMarkTriggered(@"chat-joker");
+    NeoWCPresentJokerEditorForCell(self);
+}
+
+%end
+
 %hook WCTimeLineCellView
 
 - (void)initView {
@@ -1334,8 +1590,6 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
-%group NeoWCAntiRevokeCoreHooks
-
 %hook CMessageMgr
 
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap {
@@ -1348,12 +1602,6 @@ static void NeoWCRegisterPlugin(void) {
     }
     %orig;
 }
-
-%end
-
-%end
-
-%hook CMessageMgr
 
 - (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap {
     static dispatch_once_t compatibilityOnce;
@@ -1407,9 +1655,17 @@ static void NeoWCRegisterPlugin(void) {
     return configuredValue > 0 ? (unsigned int)MIN(100000, configuredValue) : originalValue;
 }
 
-%end
+- (unsigned int)hkStepCount {
+    unsigned int originalValue = %orig;
+    if (!NeoWCEnhancementEnabled(NeoWCStepOverrideEnabledKey)) return originalValue;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSDate *configuredDate = [defaults objectForKey:NeoWCStepCountDateKey];
+    if (![configuredDate isKindOfClass:[NSDate class]] || ![[NSCalendar currentCalendar] isDateInToday:configuredDate]) return originalValue;
+    NSInteger configuredValue = [defaults integerForKey:NeoWCStepCountKey];
+    return configuredValue > 0 ? (unsigned int)MIN(100000, configuredValue) : originalValue;
+}
 
-%group NeoWCAntiRevokeUIHooks
+%end
 
 %hook CommonMessageCellView
 
@@ -1565,9 +1821,17 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
-%end
-
 %hook WCDataItem
+
+- (unsigned int)stepCount {
+    unsigned int originalValue = %orig;
+    if (!NeoWCEnhancementEnabled(NeoWCStepOverrideEnabledKey)) return originalValue;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSDate *configuredDate = [defaults objectForKey:NeoWCStepCountDateKey];
+    if (![configuredDate isKindOfClass:[NSDate class]] || ![[NSCalendar currentCalendar] isDateInToday:configuredDate]) return originalValue;
+    NSInteger configuredValue = [defaults integerForKey:NeoWCStepCountKey];
+    return configuredValue > 0 ? (unsigned int)MIN(100000, configuredValue) : originalValue;
+}
 
 - (BOOL)isAd {
     static dispatch_once_t compatibilityOnce;
@@ -1579,6 +1843,62 @@ static void NeoWCRegisterPlugin(void) {
 - (BOOL)isVideoAd {
     if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
     return %orig;
+}
+
+%end
+
+%hook MMUILabel
+
+- (void)setText:(NSString *)text {
+    NSString *replacement = NeoWCLabelReplacementText(text);
+    if (replacement.length > 0 && ![replacement isEqualToString:text]) {
+        if ([replacement hasPrefix:@"¥"]) NeoWCCompatibilityMarkTriggered(@"wallet-balance");
+        else if (NeoWCContactsCountTextForOriginal(text).length > 0) NeoWCCompatibilityMarkTriggered(@"contacts-count");
+        else NeoWCCompatibilityMarkTriggered(@"global-text-replace");
+    }
+    %orig(replacement ?: text);
+}
+
+%end
+
+%hook TimeoutNumber
+
+- (void)didMoveToSuperview {
+    %orig;
+    NeoWCInstallWalletLongPressIfNeeded((UIView *)self, self, @selector(neowc_walletHandleLongPress:));
+}
+
+- (void)updateNumber:(id)number {
+    %orig;
+    NSString *balanceText = NeoWCWalletBalanceText();
+    if (balanceText.length > 0 && [self respondsToSelector:@selector(setText:)]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(self, @selector(setText:), balanceText);
+    }
+}
+
+%new
+- (void)neowc_walletHandleLongPress:(UILongPressGestureRecognizer *)recognizer {
+    if (recognizer.state == UIGestureRecognizerStateBegan) {
+        NeoWCCompatibilityMarkTriggered(@"wallet-balance");
+        NeoWCPresentWalletBalanceEditor();
+    }
+}
+
+%end
+
+%hook WCPayWalletEntryHeaderView
+
+- (void)didMoveToSuperview {
+    %orig;
+    NeoWCInstallWalletLongPressIfNeeded((UIView *)self, self, @selector(neowc_walletHeaderHandleLongPress:));
+}
+
+%new
+- (void)neowc_walletHeaderHandleLongPress:(UILongPressGestureRecognizer *)recognizer {
+    if (recognizer.state == UIGestureRecognizerStateBegan) {
+        NeoWCCompatibilityMarkTriggered(@"wallet-balance");
+        NeoWCPresentWalletBalanceEditor();
+    }
 }
 
 %end
@@ -1632,35 +1952,3 @@ static void NeoWCRegisterPlugin(void) {
 }
 
 %end
-
-%ctor {
-    @autoreleasepool {
-        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        [defaults registerDefaults:@{
-            @"com.qiu7c.neowc.enabled": @YES,
-            NeoWCAntiRevokeKey: @YES,
-            NeoWCInputSwipeActionsEnabledKey: @NO,
-            NeoWCChatInputRoundingEnabledKey: @NO,
-            NeoWCHideChatMuteIconKey: @NO,
-        }];
-
-        BOOL antiRevokeLoaded = NeoWCEnhancementEnabled(NeoWCAntiRevokeKey);
-        BOOL inputSwipeLoaded = NeoWCEnhancementEnabled(NeoWCInputSwipeActionsEnabledKey);
-        BOOL roundingLoaded = NeoWCEnhancementEnabled(NeoWCChatInputRoundingEnabledKey);
-        BOOL muteIconLoaded = NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey);
-
-        NeoWCRecordHookLoadedAtLaunch(NeoWCAntiRevokeKey, antiRevokeLoaded);
-        NeoWCRecordHookLoadedAtLaunch(NeoWCInputSwipeActionsEnabledKey, inputSwipeLoaded);
-        NeoWCRecordHookLoadedAtLaunch(NeoWCChatInputRoundingEnabledKey, roundingLoaded);
-        NeoWCRecordHookLoadedAtLaunch(NeoWCHideChatMuteIconKey, muteIconLoaded);
-
-        %init;
-        if (antiRevokeLoaded) {
-            %init(NeoWCAntiRevokeCoreHooks);
-            %init(NeoWCAntiRevokeUIHooks);
-        }
-        if (inputSwipeLoaded) %init(NeoWCInputSwipeHooks);
-        if (roundingLoaded) %init(NeoWCRoundingHooks);
-        if (muteIconLoaded) %init(NeoWCMuteIconHooks);
-    }
-}

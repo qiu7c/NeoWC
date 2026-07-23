@@ -5,3 +5,4 @@ packages/
 
 # Local third-party projects used only as implementation references.
 参考/
+.codex-analysis/

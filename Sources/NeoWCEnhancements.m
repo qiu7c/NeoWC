@@ -8,6 +8,14 @@ NSString *const NeoWCMomentsLikeHapticEnabledKey = @"com.qiu7c.neowc.moments.lik
 NSString *const NeoWCMomentsLikeHapticIntensityKey = @"com.qiu7c.neowc.moments.like-haptic-intensity";
 NSString *const NeoWCMomentsQuickCommentKey = @"com.qiu7c.neowc.moments.quick-comment";
 NSString *const NeoWCGameSelectorKey = @"com.qiu7c.neowc.enhance.game-selector";
+NSString *const NeoWCChatJokerEnabledKey = @"com.qiu7c.neowc.enhance.chat-joker";
+NSString *const NeoWCWalletBalanceEnabledKey = @"com.qiu7c.neowc.enhance.wallet-balance";
+NSString *const NeoWCWalletBalanceFenKey = @"com.qiu7c.neowc.enhance.wallet-balance-fen";
+NSString *const NeoWCContactsCountEnabledKey = @"com.qiu7c.neowc.enhance.contacts-count";
+NSString *const NeoWCContactsCountKey = @"com.qiu7c.neowc.enhance.contacts-count-value";
+NSString *const NeoWCGlobalTextReplaceEnabledKey = @"com.qiu7c.neowc.interface.global-text-replace";
+NSString *const NeoWCGlobalTextReplaceSourceKey = @"com.qiu7c.neowc.interface.global-text-replace-source";
+NSString *const NeoWCGlobalTextReplaceTargetKey = @"com.qiu7c.neowc.interface.global-text-replace-target";
 NSString *const NeoWCStepOverrideEnabledKey = @"com.qiu7c.neowc.enhance.step-override";
 NSString *const NeoWCStepCountKey = @"com.qiu7c.neowc.enhance.step-count";
 NSString *const NeoWCStepCountDateKey = @"com.qiu7c.neowc.enhance.step-count-date";
@@ -31,46 +39,6 @@ NSString *const NeoWCMultiSelectExportTextKey = @"com.qiu7c.neowc.enhance.multi-
 NSString *const NeoWCMultiSelectSaveImagesKey = @"com.qiu7c.neowc.enhance.multi-select-export.images";
 NSString *const NeoWCMultiSelectShareCardKey = @"com.qiu7c.neowc.enhance.multi-select-export.share-card";
 NSString *const NeoWCEnhancementDidChangeNotification = @"NeoWCEnhancementDidChangeNotification";
-
-static NSMutableDictionary<NSString *, NSNumber *> *NeoWCHookLaunchStates(void) {
-    static NSMutableDictionary<NSString *, NSNumber *> *states;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{ states = [NSMutableDictionary dictionary]; });
-    return states;
-}
-
-BOOL NeoWCHookUsesStartupIsolation(NSString *key) {
-    if (key.length == 0) return NO;
-    static NSSet<NSString *> *keys;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        keys = [NSSet setWithArray:@[
-            NeoWCAntiRevokeKey,
-            NeoWCInputSwipeActionsEnabledKey,
-            @"com.qiu7c.neowc.interface.chat-input-rounding",
-            @"com.qiu7c.neowc.interface.hide-chat-mute-icon",
-        ]];
-    });
-    return [keys containsObject:key];
-}
-
-void NeoWCRecordHookLoadedAtLaunch(NSString *key, BOOL loaded) {
-    if (!NeoWCHookUsesStartupIsolation(key)) return;
-    @synchronized (NeoWCHookLaunchStates()) {
-        NeoWCHookLaunchStates()[key] = @(loaded);
-    }
-}
-
-BOOL NeoWCHookLoadedAtLaunch(NSString *key) {
-    @synchronized (NeoWCHookLaunchStates()) {
-        return [NeoWCHookLaunchStates()[key] boolValue];
-    }
-}
-
-BOOL NeoWCHookSelectionNeedsRestart(NSString *key) {
-    if (!NeoWCHookUsesStartupIsolation(key)) return NO;
-    return NeoWCHookLoadedAtLaunch(key) != NeoWCEnhancementEnabled(key);
-}
 
 UIColor *NeoWCColorForDefaultsKey(NSString *key, UIColor *fallbackColor) {
     NSString *hex = [[NSUserDefaults standardUserDefaults] stringForKey:key];

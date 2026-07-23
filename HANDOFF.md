@@ -1,117 +1,260 @@
-# NeoWC 项目交接与实现记忆
-
-## 2026-07-22 反馈修复（本地未推送）
-
-- 图片编辑快捷发送取图修复：不再只等待 `getDisplayImage:`；主动读取 `EditImageForwardAndEditLogicController.getEditImageAttr`、`_editImageAttr` 与编辑视图，解析 `EditImageAttr.editedImage/editedImages/unCropImage`，并 Hook `setEditedImage:`、`setEditedImages:` 在微信写入最终结果时缓存真实全分辨率 `UIImage`。
-- 设置页折叠附件布局修复：为“箭头 + UISwitch”的 accessory stack 明确设置 72×32 pt 外层尺寸，避免 UITableView 不计算 accessoryView 自适应尺寸时整体跑到屏幕左侧并重叠。
-- 防撤回气泡旁提示恢复为消息 ViewModel 与气泡完成绑定后的主队列刷新，并在 Cell 重新进入窗口时补刷；同步刷新会在绑定未完成时把提示永久隐藏。提示层显式保持 alpha 与高 zPosition。
-- 功能子项折叠不再 `reloadSections` 带动整张分类卡片跳动，改为只淡入/淡出父开关紧随的子项，并无动画刷新父行圆角和箭头。
-- 新增插件管理快捷入口：可按需动态注册调试日志开关、调试悬浮窗开关、直达调试中心、直达防撤回记录；还可输入自定义入口名称与 Runtime 类名。`UIViewController` 子类直接注册，`UIView` 子类由 `NeoWCDynamicViewShortcutController` 承载。WCPluginsMgr 没有注销 API，因此关闭或更换已注册入口后需重启微信清理本次进程的旧入口。
-- 图片编辑快捷发送已能从 `EditImageAttr setEditedImage:` 取得最终编辑图；会话 ID 在编辑器存活时缓存。插件为快捷发送创建完全隔离的 `NeoWCQuickSendSession`，强持有编辑图、消息、联系人、转发实例、编辑逻辑和承载页面，避免确认页停留后资源释放；只有实际发送回调才转交微信编辑逻辑关闭编辑，取消回调保留编辑流程。
-- 快捷发送额外关联 `SharePreConfirmSheetView`：只有对应确认页实际执行 `onConfirmButtonClick`（或 `isClickedSend` 已置位）后，发送回调才允许结束编辑；`onCancelButtonClick` 只走取消回调并释放隔离会话。会话资源最多保留 300 秒，解决确认页停留约十秒后图片或代理失效。
-- 设置分类重新整理：小游戏结果、图片编辑快捷发送和多选导出归入“聊天增强”；登录授权、朋友圈、运动和广告归入“常用增强”；新增“界面优化”。输入栏圆角的实机目标已确认为 `MMInputToolView.subviews.firstObject`（外部工具栏）和 `MMGrowTextView` 本身（内部输入框），内外均支持 0–40 自定义并可恢复微信原始 layer 状态；插件显示管理也移至该分类。
-- 聊天输入框新增局部滑动操作开关：仅给 `MMGrowTextView` 安装左右 `UISwipeGestureRecognizer`，左滑通过微信输入组件的文本更新路径清空内容，右滑调用内部 `UITextView paste:` 在当前光标位置粘贴；关闭后移除手势，不监听全局页面。
-- 调试视图选择器不再常驻顶部说明和取消按钮，也不再屏蔽顶部 64pt；启动时仅在底部显示约 1.35 秒的无交互 Toast，任意位置均可选择，双指轻点取消。
-- 界面优化“隐藏免打扰图标”不再遍历聊天页面或导航栏；通过 `UIImageView` 的标签设置与入窗事件精确识别目标，只有已被 NeoWC 管理的图标才会拦截后续取消隐藏。保存原 hidden 状态，关闭功能或总开关后在重新入窗时恢复。
-- 设置页带子项开关关闭时，折叠箭头改为透明但保留布局占位，避免 UISwitch 因 Stack 重新排版向左跳动。
-- 输入栏圆角不再 Hook `MMInputToolView layoutSubviews`，也不在退出 Window 时改写 Layer；只在工具栏进入 Window 时同步应用一次，同一工具栏与同一配置不会重复查找子视图或改写 Layer。关闭且从未应用时为零遍历路径。
-- 聊天转场性能修复：输入框左右滑不再运行于 `layoutSubviews`；防撤回气泡旁提示彻底移除普通消息 Cell 的高频布局 Hook，改为绑定、状态更新或入窗后每个 Cell 最多排队一次弱引用刷新，不主动请求布局、不跨生命周期强持有 Cell；提示设置变化不再强制 `layoutIfNeeded`；系统提示颜色只在实际变化时重绘；消息、步数与广告兼容性标记改为每个入口仅记录一次。
-- Hook 启动隔离：防撤回、输入框左右滑、输入栏圆角和隐藏免打扰图标分别放入独立 Logos Group，微信启动时只初始化已开启的组。设置页显示“已加载 / 未加载 / 待重启启用 / 待重启停用”；运行中只立即停止功能逻辑，真正安装或卸载 Hook 均以重启后的启动状态为准，避免恢复 IMP 干扰其他插件。
-- 设置页子选项折叠：带子设置的功能开启时自动展开；主功能开启后可轻点该行卡片手动收起/展开，右侧使用方向箭头提示状态，折叠状态独立保存且不改变功能开关。
-- 防撤回提示外观：消息下方模板改为全宽多行编辑页并支持自定义文字颜色；气泡旁提示增加系统颜色选择器，位置既可拖动也可直接输入 X/Y 数值；设置卡片内部取消分割线。
-- 朋友圈双击点赞反馈：点赞后在双击触点显示约 0.52 秒的爱心弹出、轻微上浮和淡出动画；震动三档统一使用中等触感风格并压缩为 0.58 / 0.76 / 0.90，解决轻档无感和重档过猛。
-- 10:22 快速发送崩溃：已用安装 deb 的 arm64e UUID 和偏移确认，`processEditImage:` 参数是微信临时指针而非可持有对象；删除关联保存，改为只在该参数仍有效的 `processEditImage:` 调用栈内生成并缓存真实 `UIImage`。
-- 防撤回气泡提示二次修复：同时保存 server ID 和 local ID 两种键，Cell 复用或增量刷新时任一 ID 均可重新匹配；数值转换增加类型保护，异常时回退微信原撤回逻辑。
-- 防撤回刷新崩溃修复：已由崩溃 UUID `fde5525946243a538cbad8cafab7ff80` 和偏移 `0xD350` 定位到 `setViewModel:` 的延迟 block；取消跨生命周期捕获消息 Cell，改为 `%orig` 后同步刷新提示，避免 Cell 回收/复用后触发野指针。
-- 防撤回气泡旁提示：增加 Cell `setViewModel:`、`updateStatus`、`layoutSubviews` 三处刷新，并排除 `iConsoleWindow`，解决提示需要重进页面才出现、收到新消息后消失的问题。
-- 图片编辑快捷发送：保留 `processEditImage:` 的最终编辑结果；用户点击插件按钮时，在编辑器释放前按需调用一次官方 `getDisplayImage:`，不再回退原图，也不干预官方转发流程。
-- 多选导出：新增总开关和“纯文本 / 保存图片 / 分享卡片”三个子开关；删除 Markdown；纯文本只复制正文到剪贴板。
-- 分享卡片：联系人通过 `CContactMgr` 解析显示名称，禁止暴露 `wxid`；标题不再读取“已选择 N 条消息”；长文本自动换行；增加极简、对话、深色三种样式。
-- 朋友圈双击点赞：新增独立震动开关和轻/中/强三级力度。
-- 小游戏结果选择：取消系统 Present 动画并缩短自定义上移动画，减少点击后的等待感。
-- 微信运动：原逻辑只认手动设置当天；现改为每天首次启动或重新进入前台时，把已保存步数刷新为当天配置。
+# NeoWC 项目交接文档
 
 更新时间：2026-07-22
-当前版本：0.1.1
+项目版本：0.1.1
+仓库：`git@github.com:qiu7c/NeoWC.git`
+主分支：`main`
 
-## 项目约束
+## 1. 当前工作区状态
 
-- NeoWC 是注入微信的 Theos / Logos Tweak，Objective-C + ARC，架构 `arm64 arm64e`。
-- 插件入口通过 `WCPluginsMgr` 注册 `NeoWCSettingsViewController`。
-- 私有微信类使用 `NSClassFromString`、`objc_getClass` 和动态 `objc_msgSend`，避免链接期未定义符号。
-- Windows 本地通常没有 Theos；提交前做静态检查，推送 `main` 后由 GitHub Actions 构建。
-- 推送后不主动查询构建结果。
-- UI 偏好：纯白背景、舒展浅灰卡片、黑白灰线性图标、分类展开折叠，不使用绿色强调色。
+- 最近已推送提交：`1488432 Remove anti-revoke cell layout loop`。
+- 当前本地还有未推送修改：
+  - 保留防撤回气泡方案的弱引用合并刷新修复。
+  - 优化设置页分类和功能子项展开动画。
+- 提交前必须先执行 `git status --short` 和 `git diff --check`，不要覆盖用户已有修改。
+- 用户通常会明确说“推送”后再提交；推送后不主动查询 GitHub Actions 构建结果。
 
-## 0.1.1 阶段二：图片编辑快捷发送
+## 2. 项目定位与构建
 
-状态：已完成代码实现。
+NeoWC 是注入微信的 Theos / Logos Tweak，使用 Objective-C、ARC 和原生 UIKit。
 
-- 只在具有有效 `c2CUserName` 的聊天图片编辑流程显示“发送到当前会话”。
-- 使用微信官方 `getDisplayImage:` 的编辑结果，禁止回退发送原图。
-- 发送前再次校验编辑会话用户名和联系人用户名，避免群聊/私聊串会话。
-- 创建消息、联系人、Selector 或编辑结果失败时显示具体原因。
-- 点击确认发送后等待微信成功回调；20 秒无成功结果提示网络/接口超时。
-- 成功后显示“图片已发送”。
-- 快捷发送不再提供“发送后返回聊天”子开关；生命周期完全跟随微信官方编辑转发逻辑。
-- 2026-07-19 回归修复：移除对全局 `ForwardMessageLogicController` 的全部 Hook，避免干扰微信官方编辑图片转发。
-- 快速发送不使用 Window 扫描或页面重试；新转发实例仅处理指定联系人并由独立 `NeoWCQuickSendSession` 承担代理，官方“转发给朋友”的实例和代理不被修改。
-- 点击“发送到当前会话”时同步调用官方确认页；只有确认发送成功后才退出编辑模式。
-- 根因修复：禁止在 `processEditImage:` 前后主动调用 `getDisplayImage:`；改为 Hook 微信自身对 `getDisplayImage:` 的正常调用并旁路保存返回图片，避免重复消费编辑结果导致官方转发也失效。
-- 2026-07-22 再次确认官方转发隔离：已完全移除 `processEditImage:`、`getDisplayImage:`、`getEditImageAttr` Hook；只在功能开启时监听编辑完成入口与 `EditImageAttr setEditedImage:` / `setEditedImages:` 写入。若点击时图片尚未生成，则在 setter 写入后续接一次官方确认流程；官方图片生成、联系人选择和确认页逻辑不再经过 NeoWC。
+- 包名：`com.qiu7c.neowc`
+- 注入目标：`com.tencent.xin`
+- 多开兼容注入：`com.tencent.xin`、`com.tencent.wx`、`com.tencent.qy.xin`
+- 架构：`arm64 arm64e`
+- 最低目标：iOS 14
+- 安装进程：`WeChat`
+- 源文件入口：`Tweak.xm`
+- 其他源文件：`Sources/*.m`
+- 图标源文件：`Assets/NeoWCIcon.svg`
 
-关键文件：`Tweak.xm`。
+本机 Windows 通常没有 Theos，最终编译由 GitHub Actions 完成。Makefile 会自动包含 `Sources/*.m`。
 
-## 0.1.1 阶段三：防撤回与兼容性
-
-状态：已完成代码实现。
-
-- 防撤回记录中心保存本次微信运行期间的记录，支持联系人、会话和内容搜索。
-- 记录区分文字、图片、文件/分享和其他消息类型。
-- 默认只保存在内存；用户开启后才把摘要持久化。关闭持久化会删除本地归档。
-- 只保存摘要、类型、会话和时间，不复制图片或文件，降低隐私风险。
-- 气泡旁提示改为独立外观预览页，可修改文字并拖动定位。
-- 推荐位置按钮恢复 X=0 / Y=10，修改会通知当前可见聊天 Cell 刷新。
-- 功能兼容性中心显示微信版本，并区分“可用 / 类不存在 / Selector 变化 / 尚未触发”。
-- 兼容性检查只读取 Runtime，不主动执行功能。
-
-关键文件：`Sources/NeoWCAntiRevoke.m`、`Sources/NeoWCCompatibility.m`。
-
-## 0.1.1 阶段四：多选消息扩展
-
-状态：已完成代码实现；按用户要求不实现批量保存文件。
-
-- 微信多选消息“更多”菜单可按子开关显示：纯文本、保存图片、分享卡片。
-- 纯文本仅复制消息正文到剪贴板，不包含时间、发送者、wxid 或格式标记；Markdown 已移除。
-- 批量保存仅处理已经下载到本地的图片；不处理文件附件。
-- 分享卡片按正文高度动态布局并自动换行，提供极简、对话和深色三种高倍率样式。
-- 所有入口复用微信当前 `getSelectedMsgs`，不持续监听聊天页面。
-
-关键文件：`Sources/NeoWCChatExport.m`、`Tweak.xm`。
-
-## 现有其他功能
-
-- 防撤回与两种提示模式、可选回复撤回者。
-- 设备扫码自动登录、游戏扫码自动授权。
-- 朋友圈双击点赞、操作按钮快捷评论。
-- 小游戏结果选择及跨类型彩蛋。
-- 微信运动步数、广告净化。
-- 插件显示管理。
-- 开发者调试中心、可移动悬浮按钮、View 层级和 Runtime 检查、可关闭日志。
-
-## 真机验证重点
-
-- 微信私有 UI 只能在真机注入后最终验证；编译通过不代表所有版本的 Selector 行为完全一致。
-- 微信可能不提供明确的发送失败回调，因此已提供准备阶段具体错误和确认发送后的超时提示。
-- 仅本地已下载的图片可批量保存；未下载图片会跳过并提示。
-
-## 提交检查
+本地静态检查：
 
 ```powershell
 $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\cmd\git.exe'
-& $git status -sb
+& $git status --short
 & $git diff --check
 & $git diff --stat
 ```
 
-远程：`ssh://git@ssh.github.com:443/qiu7c/NeoWC.git`，当前工作流直接提交并推送 `main`。
+## 3. 插件入口
+
+当 `WCPluginsMgr` 存在时注册：
+
+- 标题：NeoWC
+- 版本：0.1.1
+- Controller：`NeoWCSettingsViewController`
+
+注册调用：
+
+```objc
+[[objc_getClass("WCPluginsMgr") sharedInstance]
+    registerControllerWithTitle:@"NeoWC"
+                         version:@"0.1.1"
+                      controller:@"NeoWCSettingsViewController"];
+```
+
+不要在界面放项目链接。UI 风格为纯白背景、浅灰舒展卡片、黑白灰线性图标和系统蓝色开关，不使用绿色强调色。
+
+## 4. 文件职责
+
+| 文件 | 职责 |
+| --- | --- |
+| `Tweak.xm` | Logos Hook、插件注册、快捷发送流程、朋友圈/游戏/登录/广告入口、聊天 UI Hook |
+| `Sources/NeoWCSettingsViewController.m` | 设置页、分类和子项折叠、开关及编辑器入口 |
+| `Sources/NeoWCAntiRevoke.m` | 防撤回解析、消息查询、本地提示、回复、记录中心和配置 |
+| `Sources/NeoWCAntiRevokeTemplateEditor.m` | 防撤回模板编辑 |
+| `Sources/NeoWCChatExport.m` | 多选纯文本、图片保存和分享卡片 |
+| `Sources/NeoWCInterfaceTweaks.m` | 输入栏圆角、免打扰图标隐藏与原状态恢复 |
+| `Sources/NeoWCEnhancements.m` | 功能键、颜色工具和总开关判断 |
+| `Sources/NeoWCDebug.m` | 日志、悬浮按钮、调试中心和 View 选择器 |
+| `Sources/NeoWCCompatibility.m` | Runtime 类/Selector/触发状态检查 |
+| `Sources/NeoWCPluginVisibility.m` | 记录插件注册并隐藏指定插件入口 |
+| `Sources/NeoWCPluginShortcuts.m` | 动态注册日志、悬浮窗、调试中心及自定义页面入口 |
+
+`参考/` 下的源码、dylib 和分析目录只用于对照，不要把分析脚本或反编译临时产物加入主工程。
+
+## 5. 当前设置分类
+
+### 聊天增强
+
+- 防撤回
+  - 消息下方提示
+  - 气泡旁提示
+  - 自定义文字、颜色和 X/Y
+  - 推荐位置：X=0、Y=10
+  - 回复撤回者与时间限制
+  - 运行期记录中心与可选本地摘要
+- 小游戏结果选择及骰子/猜拳跨类型彩蛋
+- 聊天记录小丑：长按文字、应用或转账消息，仅修改当前页面本机显示
+- 输入框左滑清空、右滑粘贴
+- 官方图片编辑后快速发送到当前会话
+- 多选消息导出
+  - 复制纯消息正文
+  - 批量保存已下载图片
+  - 极简、对话、深色分享卡片
+
+### 常用增强
+
+- 设备扫码自动登录
+- 游戏扫码授权自动允许
+- 朋友圈双击点赞、爱心动画和震动强度
+- 朋友圈操作按钮直接评论
+- 自定义微信运动步数，每日启动或回前台刷新日期
+- 钱包余额本地显示：长按钱包入口或余额数字设置，仅替换本机界面文字
+- 好友数量本地显示：仅替换“个朋友”等明确好友数量文案
+- 朋友圈与小程序启动广告净化
+
+### 界面优化
+
+- 输入框内部圆角
+- 外部工具栏圆角
+- 内外圆角 0–40 自定义
+- 隐藏聊天标题旁“免打扰”图片
+- 全局文字替换风险开关：通过 `MMUILabel setText:` 完全匹配原文字后替换
+- 插件显示管理
+
+### 开发者功能
+
+- 可移动调试悬浮按钮；不使用全局激活手势
+- 可关闭调试日志
+- 调试中心、View 选择器、Runtime 搜索
+- 功能兼容性中心
+- 插件管理快捷入口和自定义 UIViewController/UIView Runtime 类入口
+
+## 6. 关键 Hook 与约束
+
+| 功能 | 类与方法 | 约束 |
+| --- | --- | --- |
+| 防撤回核心 | `CMessageMgr onNewSyncNotAddDBMessage:` | 开关关闭时立即回到 `%orig` |
+| 气泡旁提示 | `CommonMessageCellView setViewModel:`、`updateStatus`、`didMoveToWindow` | 禁止重新加入 `layoutSubviews` Hook；禁止主动 `setNeedsLayout/layoutIfNeeded` |
+| 消息下方颜色 | `SystemMessageCellView layoutSubviews` | 只在颜色变化时重绘，并保存原色用于恢复 |
+| 图片编辑结果 | `EditImageAttr setEditedImage:`、`setEditedImages:` | 只被动接收微信最终图，不 Hook `processEditImage:` 或 `getDisplayImage:` |
+| 快捷发送菜单 | `WCActionSheet showInView:` | 只在聊天编辑上下文和有效会话中增加按钮 |
+| 快捷发送确认 | `SharePreConfirmSheetView onConfirmButtonClick/onCancelButtonClick` | 不干扰微信官方转发实例和代理 |
+| 输入栏圆角 | `MMInputToolView didMoveToWindow` | 不 Hook `layoutSubviews`；相同配置只应用一次 |
+| 输入框滑动 | `MMGrowTextView didMoveToWindow` | 手势只安装一次，`cancelsTouchesInView=NO` |
+| 免打扰图标 | `UIImageView setAccessibilityLabel:/didMoveToWindow/setHidden:` | 仅处理标签严格等于“免打扰”的已管理图片 |
+| 多选导出 | `BaseMsgContentViewController`、`MMScrollActionSheet` | 只在多选“更多”菜单构建期间插入项目 |
+| 朋友圈 | `WCTimeLineCellView`、`WCTimeLineOperateButtonView` | 所有逻辑必须受开关控制 |
+| 游戏选择 | `CMessageMgr AddEmoticonMsg:MsgWrap:` | 非游戏消息和关闭状态直接 `%orig` |
+| 聊天记录小丑 | `TextMessageCellView`、`AppMessageCellView`、`WCPayTransferMessageCellView` 的 `operationMenuItems`/`canPerformAction:withSender:` | 仅在开关开启时插入“小丑”菜单；只做当前页面本机显示修改 |
+| 钱包余额显示 | `TimeoutNumber updateNumber:/didMoveToSuperview`、`WCPayWalletEntryHeaderView didMoveToSuperview`、`MMUILabel setText:` | 仅替换本机 UI 文本，不触碰支付动作、交易状态或网络请求 |
+| 好友数量显示 | `MMUILabel setText:` | 必须匹配“个朋友”等明确文案，禁止无条件全局替换 |
+| 全局文字替换 | `MMUILabel setText:` | 风险开关默认关闭；必须配置原文字和替换文字；只做完全匹配，不做模糊/正则替换 |
+| 广告 | `WCDataItem`、`WAAppTaskSplashADConfig` | 关闭状态返回微信原值 |
+
+私有类不要以强链接符号方式引用。优先使用 `NSClassFromString`、`objc_getClass`、`sel_registerName` 和类型明确的 `objc_msgSend`。
+
+## 7. 防撤回当前实现
+
+### 核心逻辑
+
+- 解析 `revokemsg` XML。
+- 查询原消息并拦截好友撤回。
+- 群聊和私聊分别处理。
+- 自己撤回的消息保留微信原逻辑。
+- 可创建 type-10000 本地提示。
+- 提示记录同时使用 server ID 和 local ID，适配 Cell 复用和增量刷新。
+- 运行时异常必须回退 `%orig`，不能阻断微信收消息。
+
+### 气泡旁方案
+
+这是近期卡顿修复的重点：
+
+- 普通消息 Cell 不再 Hook `layoutSubviews`。
+- `setViewModel:`、`updateStatus`、`didMoveToWindow` 只调用合并调度器。
+- 每个 Cell 同一时刻最多存在一个刷新任务。
+- 异步任务只弱引用 Cell，Cell 释放或离开 Window 后直接结束。
+- 不主动请求布局，不强制同步布局。
+- 文字、颜色和 frame 只有变化时才写入。
+- label 使用高 `zPosition`，不在每次刷新调用 `bringSubviewToFront:`。
+
+不要重新采用“每次布局刷新”的旧方案，否则搜索消息跳转、进入聊天和返回可能卡住。
+
+## 8. 图片编辑快捷发送
+
+- 用户在微信官方图片编辑完成菜单点击“发送到当前会话”。
+- 最终图片从微信对 `EditImageAttr` 的 setter 写入中取得。
+- `NeoWCQuickSendSession` 独立强持有图片、消息、联系人、转发逻辑和来源编辑逻辑。
+- 只有用户在确认页真正点击发送并收到发送回调后，才允许结束编辑。
+- 点击取消必须保留编辑流程。
+- 官方“转发给朋友”不得使用 NeoWC 的 session 或代理。
+- 不允许回退发送原图。
+
+真机重点验证：
+
+1. 编辑后的图片而不是原图进入确认页。
+2. “发送到当前会话”确认后能发送。
+3. 取消后编辑内容仍在。
+4. 停留确认页十秒后仍能发送。
+5. 官方转发联系人列表和确认页不受影响。
+6. 朋友圈图片编辑不应错误发送到聊天联系人。
+
+## 9. 设置页 UI
+
+- 分类支持展开/折叠并保存状态。
+- 带子项的功能支持轻点父卡片收起或展开。
+- 关闭主开关时箭头透明但保留占位，避免 UISwitch 左移。
+- 当前本地动画优化：
+  - 分类标题不 reload，只插入/删除内部行。
+  - 父功能行不 reload。
+  - 子项使用顶部轻滑动画。
+  - 箭头独立进行 0.2 秒旋转。
+  - 父卡片圆角原位更新。
+- 不要恢复整段 `reloadSections` 或父行 reload 动画，否则会造成整张卡片跳动。
+
+## 10. 已删除或明确不做
+
+- 长截图功能已完全移除，不要恢复相关 Controller、菜单和渲染代码。
+- Markdown 导出已移除。
+- 多选批量保存文件附件不实现，只保存已下载图片。
+- View 选择器不提供“复制 Hook”。
+- 不使用全局手势启动调试悬浮窗。
+
+## 11. 已知限制
+
+- 微信私有类和 Selector 会随版本变化，必须依赖兼容性中心和真机日志确认。
+- `WCPluginsMgr` 没有注销 API；动态快捷入口关闭或改名后，旧入口可能要重启微信才消失。
+- 多开微信可能更改 Bundle ID、容器和运行环境；主 plist 当前只注入官方 `com.tencent.xin`。
+- 本地 Windows 无法完整验证 Theos/iOS 私有 API 编译，推送后由云端构建。
+- 调试日志默认开启；排查性能时可先关闭。
+
+## 12. 下一轮真机验证顺序
+
+1. 开启防撤回气泡方案，进入普通聊天。
+2. 搜索聊天记录并跳转到目标消息，再返回。
+3. 快速切换多个聊天并接收新消息。
+4. 撤回后确认提示立即出现且不会消失。
+5. 关闭防撤回后重复上述流程。
+6. 测试输入栏圆角开启/关闭、搜索跳转和返回。
+7. 测试图片编辑快捷发送与官方转发。
+8. 测试设置页分类和子项展开动画。
+
+若只有气泡方案开启时卡顿，优先检查 `CommonMessageCellView` 的三处低频入口和合并调度器，禁止先恢复布局 Hook。
+
+## 13. Git 提交流程
+
+远程使用 SSH 443：
+
+```text
+ssh://git@ssh.github.com:443/qiu7c/NeoWC.git
+```
+
+提交前：
+
+```powershell
+& $git status --short
+& $git diff --check
+& $git diff --stat
+```
+
+提交只包含当前任务文件，不修改 `参考/` 中的分析材料，不覆盖无关用户改动。用户要求推送时推送 `main`，不主动等待或查询云构建结果。
+
+## 14. 新窗口接手提示词
+
+```text
+继续维护 D:\Vibe\NeoWC。先完整阅读 HANDOFF.md，再查看 git status、最近提交和当前 diff。不要恢复长截图或 Markdown 导出。当前最重要的是保持防撤回气泡方案不使用 CommonMessageCellView layoutSubviews，不主动 setNeedsLayout/layoutIfNeeded；刷新必须弱引用并合并。保留图片编辑快捷发送与官方转发隔离。未经我明确要求不要推送，推送后不要查询构建结果。
+```
