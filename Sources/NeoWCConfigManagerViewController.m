@@ -1,6 +1,7 @@
 #import "NeoWCConfigManagerViewController.h"
 #import "NeoWCAntiRevoke.h"
 #import "NeoWCEnhancements.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 static NSString *const NeoWCDefaultsPrefix = @"com.qiu7c.neowc.";
 static BOOL NeoWCIsManagedDefaultsKey(NSString *key) {
@@ -196,8 +197,8 @@ static id NeoWCDefaultsValueFromJSONValue(id value) {
 
 - (void)importConfiguration {
     UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
-        initWithDocumentTypes:@[@"public.json", @"public.data"]
-                       inMode:UIDocumentPickerModeImport];
+        initForOpeningContentTypes:@[UTTypeJSON, UTTypeData]
+                            asCopy:YES];
     picker.delegate = self;
     picker.allowsMultipleSelection = NO;
     [self presentViewController:picker animated:YES completion:nil];
