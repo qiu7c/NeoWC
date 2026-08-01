@@ -2718,7 +2718,8 @@ didReceiveNotificationResponse:(id)response
 %hook ImageMessageCellView
 
 - (NSArray *)operationMenuItems {
-    return NeoWCOperationMenuItemsWithImageJoker(self, %orig);
+    NSArray *items = %orig;
+    return NeoWCOperationMenuItemsWithImageJoker(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
@@ -2751,7 +2752,8 @@ didReceiveNotificationResponse:(id)response
 }
 
 %new
-- (void)joker_handleImageMenuItem:(__unused id)sender {
+- (void)joker_handleImageMenuItem:(id)sender {
+    (void)sender;
     NeoWCPresentImageJokerPickerForCell(self);
 }
 
@@ -3021,7 +3023,8 @@ didReceiveNotificationResponse:(id)response
 }
 
 %new
-- (void)neowc_handleMomentsForward:(__unused id)sender {
+- (void)neowc_handleMomentsForward:(id)sender {
+    (void)sender;
     id dataItem = NeoWCMomentsObjectForSelector(self, @"m_dataItem");
     UIViewController *presenter = NeoWCJokerPresenterForCell(self);
     if (!NeoWCMomentCanForward(dataItem) || !presenter) return;
@@ -3077,7 +3080,8 @@ didReceiveNotificationResponse:(id)response
 }
 
 %new
-- (void)neowc_handleMomentsForward:(__unused id)sender {
+- (void)neowc_handleMomentsForward:(id)sender {
+    (void)sender;
     id dataItem = NeoWCMomentsObjectForSelector(self, @"m_item");
     UIViewController *presenter = NeoWCJokerPresenterForCell(self);
     if (!NeoWCMomentCanForward(dataItem) || !presenter) return;
