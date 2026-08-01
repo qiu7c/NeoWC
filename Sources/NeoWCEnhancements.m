@@ -7,8 +7,26 @@ NSString *const NeoWCMomentsDoubleTapLikeKey = @"com.qiu7c.neowc.moments.double-
 NSString *const NeoWCMomentsLikeHapticEnabledKey = @"com.qiu7c.neowc.moments.like-haptic";
 NSString *const NeoWCMomentsLikeHapticIntensityKey = @"com.qiu7c.neowc.moments.like-haptic-intensity";
 NSString *const NeoWCMomentsQuickCommentKey = @"com.qiu7c.neowc.moments.quick-comment";
+NSString *const NeoWCMomentsForwardEnabledKey = @"com.qiu7c.neowc.moments.forward";
+NSString *const NeoWCMomentsQuickPermissionsKey = @"com.qiu7c.neowc.moments.quick-permissions";
+NSString *const NeoWCMomentsPreciseTimeKey = @"com.qiu7c.neowc.moments.precise-time";
+NSString *const NeoWCMomentsPreciseTimeFormatKey = @"com.qiu7c.neowc.moments.precise-time-format";
+NSString *const NeoWCMomentsPreciseTimeDefaultFormat = @"yyyy-MM-dd HH:mm:ss";
 NSString *const NeoWCGameSelectorKey = @"com.qiu7c.neowc.enhance.game-selector";
 NSString *const NeoWCChatJokerEnabledKey = @"com.qiu7c.neowc.enhance.chat-joker";
+NSString *const NeoWCReplySwipeEnabledKey = @"com.qiu7c.neowc.chat.reply-swipe";
+NSString *const NeoWCMessageBlockEnabledKey = @"com.qiu7c.neowc.message.block";
+NSString *const NeoWCMessageBlockUsersKey = @"com.qiu7c.neowc.message.block.users";
+NSString *const NeoWCMessageBlockKeywordsKey = @"com.qiu7c.neowc.message.block.keywords";
+NSString *const NeoWCLongPressMenuEnabledKey = @"com.qiu7c.neowc.chat.long-press-menu";
+NSString *const NeoWCLongPressMenuHiddenTitlesKey = @"com.qiu7c.neowc.chat.long-press-menu.hidden";
+NSString *const NeoWCLongPressMenuPreferredOrderKey = @"com.qiu7c.neowc.chat.long-press-menu.order";
+NSString *const NeoWCLongPressMenuTitleMapKey = @"com.qiu7c.neowc.chat.long-press-menu.rename";
+NSString *const NeoWCGroupMemberReminderEnabledKey = @"com.qiu7c.neowc.message.group-member-reminder";
+NSString *const NeoWCKeywordReminderEnabledKey = @"com.qiu7c.neowc.message.keyword-reminder";
+NSString *const NeoWCKeywordReminderKeywordsKey = @"com.qiu7c.neowc.message.keyword-reminder.keywords";
+NSString *const NeoWCAutoOriginalImageEnabledKey = @"com.qiu7c.neowc.enhance.auto-original-image";
+NSString *const NeoWCNotificationDirectChatEnabledKey = @"com.qiu7c.neowc.enhance.notification-direct-chat";
 NSString *const NeoWCWalletBalanceEnabledKey = @"com.qiu7c.neowc.enhance.wallet-balance";
 NSString *const NeoWCWalletBalanceFenKey = @"com.qiu7c.neowc.enhance.wallet-balance-fen";
 NSString *const NeoWCContactsCountEnabledKey = @"com.qiu7c.neowc.enhance.contacts-count";
@@ -16,6 +34,9 @@ NSString *const NeoWCContactsCountKey = @"com.qiu7c.neowc.enhance.contacts-count
 NSString *const NeoWCStepOverrideEnabledKey = @"com.qiu7c.neowc.enhance.step-override";
 NSString *const NeoWCStepCountKey = @"com.qiu7c.neowc.enhance.step-count";
 NSString *const NeoWCStepCountDateKey = @"com.qiu7c.neowc.enhance.step-count-date";
+NSString *const NeoWCPageScaleEnabledKey = @"com.qiu7c.neowc.interface.page-scale";
+NSString *const NeoWCPageScaleGlobalPercentKey = @"com.qiu7c.neowc.interface.page-scale.global-percent";
+NSString *const NeoWCSettingsPageScalePercentKey = @"com.qiu7c.neowc.interface.page-scale.settings-percent";
 NSString *const NeoWCAdBlockerKey = @"com.qiu7c.neowc.enhance.ad-blocker";
 NSString *const NeoWCAntiRevokeKey = @"com.qiu7c.neowc.message.anti-revoke";
 NSString *const NeoWCAntiRevokeNotifySenderKey = @"com.qiu7c.neowc.message.anti-revoke.notify-sender";
@@ -36,6 +57,57 @@ NSString *const NeoWCMultiSelectExportTextKey = @"com.qiu7c.neowc.enhance.multi-
 NSString *const NeoWCMultiSelectSaveImagesKey = @"com.qiu7c.neowc.enhance.multi-select-export.images";
 NSString *const NeoWCMultiSelectShareCardKey = @"com.qiu7c.neowc.enhance.multi-select-export.share-card";
 NSString *const NeoWCEnhancementDidChangeNotification = @"NeoWCEnhancementDidChangeNotification";
+
+CGFloat NeoWCScalePercentForDefaultsKey(NSString *key, CGFloat defaultValue) {
+    id stored = key.length > 0 ? [[NSUserDefaults standardUserDefaults] objectForKey:key] : nil;
+    CGFloat value = [stored respondsToSelector:@selector(doubleValue)] ? [stored doubleValue] : defaultValue;
+    if (!isfinite(value)) value = defaultValue;
+    return MIN(100.0, MAX(70.0, value));
+}
+
+NSString *NeoWCNormalizedMomentsDateFormat(NSString *format) {
+    if (![format isKindOfClass:[NSString class]]) return nil;
+    NSString *normalized = [format stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    normalized = [normalized stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\\n"];
+    normalized = [normalized stringByReplacingOccurrencesOfString:@"\r" withString:@"\\n"];
+    normalized = [normalized stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"];
+    if (normalized.length == 0 || normalized.length > 64) return nil;
+
+    static NSArray<NSString *> *tokens;
+    static NSCharacterSet *letters;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        tokens = @[@"yyyy", @"MM", @"dd", @"E", @"HH", @"mm", @"ss"];
+        letters = [NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"];
+    });
+
+    NSUInteger index = 0;
+    while (index < normalized.length) {
+        if ([normalized characterAtIndex:index] == '\\' &&
+            index + 1 < normalized.length &&
+            [normalized characterAtIndex:index + 1] == 'n') {
+            index += 2;
+            continue;
+        }
+        NSRange characterRange = [normalized rangeOfComposedCharacterSequenceAtIndex:index];
+        NSString *character = [normalized substringWithRange:characterRange];
+        if ([character rangeOfCharacterFromSet:letters].location == NSNotFound) {
+            index = NSMaxRange(characterRange);
+            continue;
+        }
+        BOOL matched = NO;
+        for (NSString *token in tokens) {
+            if (index + token.length <= normalized.length &&
+                [[normalized substringWithRange:NSMakeRange(index, token.length)] isEqualToString:token]) {
+                index += token.length;
+                matched = YES;
+                break;
+            }
+        }
+        if (!matched) return nil;
+    }
+    return normalized;
+}
 
 UIColor *NeoWCColorForDefaultsKey(NSString *key, UIColor *fallbackColor) {
     NSString *hex = [[NSUserDefaults standardUserDefaults] stringForKey:key];

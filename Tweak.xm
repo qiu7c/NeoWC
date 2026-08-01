@@ -11,6 +11,7 @@
 #import "Sources/NeoWCDebug.h"
 #import "Sources/NeoWCEnhancements.h"
 #import "Sources/NeoWCPluginVisibility.h"
+#import "Sources/NeoWCRuntimeFeatures.h"
 #import "Sources/NeoWCPluginShortcuts.h"
 #import "Sources/NeoWCInterfaceTweaks.h"
 
@@ -28,6 +29,13 @@
 @interface WCActionSheet : NSObject
 - (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
 - (BOOL)isContainButtonTitle:(NSString *)title;
+@end
+
+@interface WCActionSheetItem : NSObject
+- (instancetype)initWithTitle:(NSString *)title;
+- (void)setBEnable:(BOOL)enabled;
+- (void)setBDestructiveButton:(BOOL)destructive;
+- (void)setEventAction:(void (^)(void))eventAction;
 @end
 
 @interface MMMenuItem : NSObject
@@ -48,18 +56,29 @@
 @end
 
 @interface WCTimeLineCellView : UIView
+- (void)editBlackList;
+- (void)initTimeLabel;
+- (void)updateWithDataItem:(id)dataItem actionAreaVM:(id)actionAreaVM;
 - (void)onAccessibilityLike;
 - (void)onAccessibilityComment;
 - (id)operateBtnImage:(BOOL)spring isSpringStyle:(BOOL)springStyle;
 - (void)neowc_handleMomentsDoubleTap;
+- (void)neowc_handleMomentsForward:(id)sender;
 @end
 
 @interface WCTimeLineOperateButtonView : UIButton
 @end
 
+@interface WCOperateFloatView : UIView
+- (void)showWithItemData:(id)item tipPoint:(CGPoint)tipPoint;
+- (void)hide;
+- (void)neowc_handleMomentsForward:(id)sender;
+@end
+
 @interface CommonMessageCellView : UIView
 - (void)neowc_refreshAntiRevokeSidePrompt;
 - (void)neowc_scheduleAntiRevokeSidePromptRefresh;
+- (void)neowc_handleReplyPan:(UIPanGestureRecognizer *)recognizer;
 @end
 
 @interface SystemMessageCellView : UIView
@@ -85,11 +104,27 @@
 @interface CMessageMgr : NSObject
 - (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap;
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap;
+- (void)AsyncOnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap;
+@end
+
+@interface CContactMgr : NSObject
+- (void)printContactImportantChangeData:(id)newContact oldContact:(id)oldContact;
 @end
 
 @interface WCDeviceStepObject : NSObject
 - (unsigned int)m7StepCount;
 - (unsigned int)hkStepCount;
+- (void)setM7StepCount:(unsigned int)value;
+- (void)setHkStepCount:(unsigned int)value;
+@end
+
+@interface UploadDeviceStepReq : NSObject
+- (unsigned int)stepCount;
+- (unsigned int)m7StepCount;
+- (unsigned int)hkStepCount;
+- (void)setStepCount:(unsigned int)value;
+- (void)setM7StepCount:(unsigned int)value;
+- (void)setHkStepCount:(unsigned int)value;
 @end
 
 @interface WCDataItem : NSObject
@@ -107,6 +142,14 @@ static BOOL NeoWCDidRegister = NO;
 static char NeoWCDeviceCardDidConfirmKey;
 static char NeoWCGameDidAuthorizeKey;
 static char NeoWCMomentsDoubleTapRecognizerKey;
+static char NeoWCMomentsForwardButtonKey;
+static char NeoWCMomentsFloatForwardButtonKey;
+static char NeoWCMomentsForwardTaskKey;
+static char NeoWCImageJokerPickerDelegateKey;
+static char NeoWCMomentsOriginalTimeTextKey;
+static char NeoWCMomentsOriginalTimeLinesKey;
+static char NeoWCMomentsPreciseTimeAppliedKey;
+static id NeoWCPendingMomentsPermissionDataItem;
 static char NeoWCGameSelectorPresentedKey;
 static char NeoWCChatExportBuildingMenuKey;
 static char NeoWCAntiRevokeSideLabelKey;
@@ -120,7 +163,50 @@ static char NeoWCQuickSendPendingImageKey;
 static char NeoWCInputSwipeLeftRecognizerKey;
 static char NeoWCInputSwipeRightRecognizerKey;
 static char NeoWCWalletGestureRecognizerKey;
+static char NeoWCReplyPanRecognizerKey;
+static char NeoWCReplyPanDelegateKey;
 static __weak id NeoWCCurrentEditImageLogicController;
+
+@interface NeoWCReplyPanGestureDelegate : NSObject <UIGestureRecognizerDelegate>
+@property (nonatomic, weak) UIView *cell;
+@end
+
+@implementation NeoWCReplyPanGestureDelegate
+
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)recognizer {
+    if (!NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey) ||
+        !self.cell.window ||
+        ![recognizer isKindOfClass:[UIPanGestureRecognizer class]]) return NO;
+    UIPanGestureRecognizer *pan = (UIPanGestureRecognizer *)recognizer;
+    CGPoint velocity = [pan velocityInView:self.cell];
+    if (fabs(velocity.x) <= fabs(velocity.y)) return NO;
+    CGPoint location = [pan locationInView:self.cell];
+    CGFloat width = CGRectGetWidth(self.cell.bounds);
+    return location.x >= 24.0 && location.x <= MAX(24.0, width - 24.0);
+}
+
+@end
+
+static void NeoWCSynchronizeReplyGesture(CommonMessageCellView *cell) {
+    if (!cell) return;
+    UIPanGestureRecognizer *recognizer = objc_getAssociatedObject(cell, &NeoWCReplyPanRecognizerKey);
+    if (!NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey)) {
+        if (recognizer) [cell removeGestureRecognizer:recognizer];
+        objc_setAssociatedObject(cell, &NeoWCReplyPanRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &NeoWCReplyPanDelegateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return;
+    }
+    if (recognizer || !cell.window) return;
+    NeoWCReplyPanGestureDelegate *delegate = [NeoWCReplyPanGestureDelegate new];
+    delegate.cell = cell;
+    recognizer = [[UIPanGestureRecognizer alloc] initWithTarget:cell action:@selector(neowc_handleReplyPan:)];
+    recognizer.delegate = delegate;
+    recognizer.maximumNumberOfTouches = 1;
+    recognizer.cancelsTouchesInView = NO;
+    [cell addGestureRecognizer:recognizer];
+    objc_setAssociatedObject(cell, &NeoWCReplyPanRecognizerKey, recognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(cell, &NeoWCReplyPanDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
 
 static NSMutableSet *NeoWCActiveQuickSendSessions(void) {
     static NSMutableSet *sessions;
@@ -149,6 +235,253 @@ static void NeoWCTweakSetValue(id object, NSString *key, id value) {
         [object setValue:value forKey:key];
     } @catch (__unused NSException *exception) {
     }
+}
+
+static unsigned int NeoWCConfiguredDailyStepCount(void) {
+    if (!NeoWCEnhancementEnabled(NeoWCStepOverrideEnabledKey)) return 0;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSDate *configuredDate = [defaults objectForKey:NeoWCStepCountDateKey];
+    if (![configuredDate isKindOfClass:[NSDate class]] ||
+        ![[NSCalendar currentCalendar] isDateInToday:configuredDate]) return 0;
+    NSInteger value = [defaults integerForKey:NeoWCStepCountKey];
+    return value > 0 ? (unsigned int)MIN(100000, value) : 0;
+}
+
+static CGFloat NeoWCGlobalPageScaleFactor(void) {
+    return NeoWCScalePercentForDefaultsKey(NeoWCPageScaleGlobalPercentKey, 100.0) / 100.0;
+}
+
+static BOOL NeoWCThemeValueShouldScale(id property, id ruleSet) {
+    if (!NeoWCEnhancementEnabled(NeoWCPageScaleEnabledKey) ||
+        ![property isKindOfClass:[NSString class]] ||
+        ![ruleSet isKindOfClass:[NSString class]]) return NO;
+    if (![(NSString *)ruleSet isEqualToString:@"#font_set"]) return NO;
+    return [(NSString *)property isEqualToString:@"alllevel"] ||
+           [(NSString *)property isEqualToString:@"chatLevel"];
+}
+
+static id NeoWCScaledThemeValue(id originalValue, id property, id ruleSet) {
+    if (!NeoWCThemeValueShouldScale(property, ruleSet) ||
+        ![originalValue isKindOfClass:[NSArray class]] ||
+        [(NSArray *)originalValue count] == 0) return originalValue;
+    id firstValue = [(NSArray *)originalValue firstObject];
+    id scaledValue = nil;
+    CGFloat scale = NeoWCGlobalPageScaleFactor();
+    if ([firstValue isKindOfClass:[NSNumber class]]) {
+        scaledValue = @([(NSNumber *)firstValue doubleValue] * scale);
+    } else if ([firstValue isKindOfClass:[NSString class]]) {
+        NSScanner *scanner = [NSScanner scannerWithString:firstValue];
+        double ignored = 0.0;
+        if (![scanner scanDouble:&ignored] || !scanner.isAtEnd) return originalValue;
+        NSDecimalNumber *value = [NSDecimalNumber decimalNumberWithString:firstValue];
+        NSDecimalNumber *factor = [NSDecimalNumber decimalNumberWithString:[NSString stringWithFormat:@"%.4f", scale]];
+        NSDecimalNumber *result = [value decimalNumberByMultiplyingBy:factor];
+        if (![result isEqualToNumber:[NSDecimalNumber notANumber]]) scaledValue = result.stringValue;
+    }
+    if (!scaledValue) return originalValue;
+    NSMutableArray *values = [(NSArray *)originalValue mutableCopy];
+    values[0] = scaledValue;
+    NeoWCCompatibilityMarkTriggered(@"page-scale");
+    return values;
+}
+
+static void NeoWCApplyWebViewTextScale(id webView) {
+    if (!NeoWCEnhancementEnabled(NeoWCPageScaleEnabledKey) || !webView) return;
+    SEL selector = NSSelectorFromString(@"_setTextZoomFactor:");
+    if (![webView respondsToSelector:selector]) return;
+    ((void (*)(id, SEL, CGFloat))objc_msgSend)(webView, selector, NeoWCGlobalPageScaleFactor());
+    NeoWCCompatibilityMarkTriggered(@"page-scale");
+}
+
+static NSString *NeoWCMomentsUserNameForDataItem(id dataItem) {
+    SEL selector = NSSelectorFromString(@"username");
+    if (!dataItem || ![dataItem respondsToSelector:selector]) return nil;
+    @try {
+        id value = ((id (*)(id, SEL))objc_msgSend)(dataItem, selector);
+        return [value isKindOfClass:[NSString class]] ? value : nil;
+    } @catch (__unused NSException *exception) {
+        return nil;
+    }
+}
+
+static NSMutableDictionary<NSString *, id> *NeoWCMomentsPermissionsControllerCache(void) {
+    static NSMutableDictionary<NSString *, id> *cache;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ cache = [NSMutableDictionary dictionary]; });
+    return cache;
+}
+
+static id NeoWCMomentsPermissionsController(NSString *userName, id delegate) {
+    if (userName.length == 0) return nil;
+    Class controllerClass = NSClassFromString(@"WCSetPermissionsViewController");
+    SEL initSelector = NSSelectorFromString(@"initWithUserName:");
+    SEL viewSelector = NSSelectorFromString(@"view");
+    SEL delegateSelector = NSSelectorFromString(@"setDelegate:");
+    SEL viewDelegateSelector = NSSelectorFromString(@"setViewDelegate:");
+    if (!controllerClass || ![controllerClass instancesRespondToSelector:initSelector]) return nil;
+
+    id controller = nil;
+    @try {
+        id allocated = [controllerClass alloc];
+        controller = ((id (*)(id, SEL, id))objc_msgSend)(allocated, initSelector, userName);
+        if (!controller ||
+            ![controller respondsToSelector:viewSelector] ||
+            ![controller respondsToSelector:delegateSelector] ||
+            ![controller respondsToSelector:viewDelegateSelector]) return nil;
+        (void)((id (*)(id, SEL))objc_msgSend)(controller, viewSelector);
+        ((void (*)(id, SEL, id))objc_msgSend)(controller, delegateSelector, delegate);
+        ((void (*)(id, SEL, id))objc_msgSend)(controller, viewDelegateSelector, delegate);
+    } @catch (__unused NSException *exception) {
+        return nil;
+    }
+
+    NSMutableDictionary<NSString *, id> *cache = NeoWCMomentsPermissionsControllerCache();
+    cache[userName] = controller;
+    NSString *cacheKey = [userName copy];
+    __weak id weakController = controller;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        id strongController = weakController;
+        if (strongController && cache[cacheKey] == strongController) [cache removeObjectForKey:cacheKey];
+    });
+    return controller;
+}
+
+static NSString *NeoWCMomentsCheckedPermissionTitle(NSString *title, BOOL checked) {
+    return checked ? [NSString stringWithFormat:@"✓ %@", title] : title;
+}
+
+static WCActionSheetItem *NeoWCMomentsPermissionItem(NSString *title,
+                                                     BOOL enabled,
+                                                     BOOL destructive,
+                                                     void (^eventAction)(void)) {
+    Class itemClass = NSClassFromString(@"WCActionSheetItem");
+    if (!itemClass || title.length == 0 || !eventAction) return nil;
+    id allocated = [itemClass alloc];
+    SEL initSelector = NSSelectorFromString(@"initWithTitle:");
+    if (![allocated respondsToSelector:initSelector]) return nil;
+    WCActionSheetItem *item = [(WCActionSheetItem *)allocated initWithTitle:title];
+    if (!item ||
+        ![item respondsToSelector:@selector(setBEnable:)] ||
+        ![item respondsToSelector:@selector(setBDestructiveButton:)] ||
+        ![item respondsToSelector:@selector(setEventAction:)]) return nil;
+    [item setBEnable:enabled];
+    [item setBDestructiveButton:destructive];
+    [item setEventAction:eventAction];
+    return item;
+}
+
+static void NeoWCPerformMomentsPermissionAction(NSString *userName,
+                                                id delegate,
+                                                NSString *selectorName,
+                                                NSNumber *switchState) {
+    id controller = NeoWCMomentsPermissionsController(userName, delegate);
+    SEL selector = NSSelectorFromString(selectorName);
+    if (!controller || ![controller respondsToSelector:selector]) return;
+    @try {
+        if (switchState) {
+            UISwitch *permissionSwitch = [[UISwitch alloc] initWithFrame:CGRectZero];
+            permissionSwitch.on = switchState.boolValue;
+            ((void (*)(id, SEL, id))objc_msgSend)(controller, selector, permissionSwitch);
+        } else {
+            ((void (*)(id, SEL))objc_msgSend)(controller, selector);
+        }
+    } @catch (__unused NSException *exception) {
+    }
+}
+
+static BOOL NeoWCConfigureMomentsPermissionsActionSheet(WCActionSheet *sheet, id dataItem) {
+    if (!sheet || !dataItem || !NeoWCEnhancementEnabled(NeoWCMomentsQuickPermissionsKey)) return NO;
+    NSArray *buttonTitleList = NeoWCTweakSafeValue(sheet, @"buttonTitleList");
+    if (![buttonTitleList isKindOfClass:[NSArray class]] || buttonTitleList.count != 2) return NO;
+    NSString *firstTitle = NeoWCTweakSafeValue(buttonTitleList.firstObject, @"title");
+    NSString *lastTitle = NeoWCTweakSafeValue(buttonTitleList.lastObject, @"title");
+    if ((! [firstTitle isEqualToString:@"设置权限"] && ![firstTitle isEqualToString:@"设置"]) ||
+        ![lastTitle isEqualToString:@"投诉"]) return NO;
+
+    NSString *userName = NeoWCMomentsUserNameForDataItem(dataItem);
+    id delegate = NeoWCTweakSafeValue(sheet, @"delegate");
+    id controller = NeoWCMomentsPermissionsController(userName, delegate);
+    SEL contactSelector = NSSelectorFromString(@"m_contact");
+    if (userName.length == 0 || !delegate || !controller || ![controller respondsToSelector:contactSelector]) return NO;
+    id contact = ((id (*)(id, SEL))objc_msgSend)(controller, contactSelector);
+    SEL onlyChatSelector = NSSelectorFromString(@"isSocialBlack");
+    if (!contact || ![contact respondsToSelector:onlyChatSelector]) return NO;
+    BOOL onlyChat = ((BOOL (*)(id, SEL))objc_msgSend)(contact, onlyChatSelector);
+
+    SEL allSelector = NSSelectorFromString(@"opAllPermission");
+    SEL onlyChatActionSelector = NSSelectorFromString(@"opSocialBlackPermission");
+    SEL outsiderActionSelector = NSSelectorFromString(@"opOutsider:");
+    SEL blacklistActionSelector = NSSelectorFromString(@"opWCBlacklist:");
+    if (![controller respondsToSelector:allSelector] ||
+        ![controller respondsToSelector:onlyChatActionSelector] ||
+        ![controller respondsToSelector:outsiderActionSelector] ||
+        ![controller respondsToSelector:blacklistActionSelector]) return NO;
+
+    BOOL outsider = NO;
+    BOOL blacklist = NO;
+    Class stateControllerClass = NSClassFromString(@"ContactSetPermissionsViewController");
+    id stateController = stateControllerClass ? [stateControllerClass new] : nil;
+    SEL setContactSelector = NSSelectorFromString(@"setM_contact:");
+    SEL outsiderStateSelector = NSSelectorFromString(@"getIsOutsiderSwitchOn:");
+    SEL blacklistStateSelector = NSSelectorFromString(@"getIsWCBlackSwitchOn:");
+    if (stateController &&
+        [stateController respondsToSelector:setContactSelector] &&
+        [stateController respondsToSelector:outsiderStateSelector] &&
+        [stateController respondsToSelector:blacklistStateSelector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(stateController, setContactSelector, contact);
+        outsider = ((BOOL (*)(id, SEL, id))objc_msgSend)(stateController, outsiderStateSelector, contact);
+        blacklist = ((BOOL (*)(id, SEL, id))objc_msgSend)(stateController, blacklistStateSelector, contact);
+    }
+
+    unsigned int sex = 0;
+    SEL sexSelector = NSSelectorFromString(@"m_uiSex");
+    if ([contact respondsToSelector:sexSelector]) sex = ((unsigned int (*)(id, SEL))objc_msgSend)(contact, sexSelector);
+    NSString *pronoun = sex == 1 ? @"他" : (sex == 2 ? @"她" : @"TA");
+
+    __weak id weakDelegate = delegate;
+    __weak WCActionSheet *weakSheet = sheet;
+    NSString *capturedUserName = [userName copy];
+    WCActionSheetItem *allItem = NeoWCMomentsPermissionItem(
+        NeoWCMomentsCheckedPermissionTitle(@"聊天、朋友圈、微信运动等", !onlyChat), YES, NO, ^{
+            NeoWCPerformMomentsPermissionAction(capturedUserName, weakDelegate, @"opAllPermission", nil);
+        });
+    WCActionSheetItem *onlyChatItem = NeoWCMomentsPermissionItem(
+        NeoWCMomentsCheckedPermissionTitle(@"仅聊天", onlyChat), YES, NO, ^{
+            NeoWCPerformMomentsPermissionAction(capturedUserName, weakDelegate, @"opSocialBlackPermission", nil);
+        });
+    WCActionSheetItem *outsiderItem = NeoWCMomentsPermissionItem(
+        NeoWCMomentsCheckedPermissionTitle([NSString stringWithFormat:@"不让%@看", pronoun], outsider), !onlyChat, NO, ^{
+            NeoWCPerformMomentsPermissionAction(capturedUserName, weakDelegate, @"opOutsider:", @(!outsider));
+        });
+    WCActionSheetItem *blacklistItem = NeoWCMomentsPermissionItem(
+        NeoWCMomentsCheckedPermissionTitle([NSString stringWithFormat:@"不看%@", pronoun], blacklist), !onlyChat, NO, ^{
+            NeoWCPerformMomentsPermissionAction(capturedUserName, weakDelegate, @"opWCBlacklist:", @(!blacklist));
+        });
+    WCActionSheetItem *complaintItem = NeoWCMomentsPermissionItem(@"投诉", YES, YES, ^{
+        id strongDelegate = weakDelegate;
+        WCActionSheet *strongSheet = weakSheet;
+        SEL selector = NSSelectorFromString(@"actionSheet:clickedButtonAtIndex:");
+        if (strongDelegate && strongSheet && [strongDelegate respondsToSelector:selector]) {
+            ((void (*)(id, SEL, id, NSInteger))objc_msgSend)(strongDelegate, selector, strongSheet, 1);
+        }
+    });
+    if (!allItem || !onlyChatItem || !outsiderItem || !blacklistItem || !complaintItem) return NO;
+
+    SEL listSelector = NSSelectorFromString(@"setButtonTitleList:");
+    SEL countSelector = NSSelectorFromString(@"setNumberOfButtons:");
+    SEL firstSelector = NSSelectorFromString(@"setFirstOtherButtonIndex:");
+    SEL destructiveSelector = NSSelectorFromString(@"setDestructiveButtonIndex:");
+    if (![sheet respondsToSelector:listSelector] ||
+        ![sheet respondsToSelector:countSelector] ||
+        ![sheet respondsToSelector:firstSelector] ||
+        ![sheet respondsToSelector:destructiveSelector]) return NO;
+    NSMutableArray *items = [@[allItem, onlyChatItem, outsiderItem, blacklistItem, complaintItem] mutableCopy];
+    ((void (*)(id, SEL, id))objc_msgSend)(sheet, listSelector, items);
+    ((void (*)(id, SEL, NSInteger))objc_msgSend)(sheet, countSelector, 5);
+    ((void (*)(id, SEL, NSInteger))objc_msgSend)(sheet, firstSelector, 0);
+    ((void (*)(id, SEL, NSInteger))objc_msgSend)(sheet, destructiveSelector, 4);
+    NeoWCCompatibilityMarkTriggered(@"moments-quick-permissions");
+    return YES;
 }
 
 static id NeoWCTweakValueForSelectorNames(id object, NSArray<NSString *> *selectorNames) {
@@ -303,10 +636,11 @@ static NSString *NeoWCJokerSanitizedAmountText(NSString *text) {
 static void NeoWCApplyJokerText(id cell,
                                 id message,
                                 UIViewController *controller,
-                                NSString *text) {
-    BOOL isText = NeoWCMessageIsText(message);
-    BOOL isRefer = !isText && NeoWCMessageIsRefer(message);
-    BOOL isTransfer = !isText && !isRefer && NeoWCMessageIsTransfer(message);
+                                NSString *text,
+                                BOOL transferContext) {
+    BOOL isText = !transferContext && NeoWCMessageIsText(message);
+    BOOL isRefer = !transferContext && !isText && NeoWCMessageIsRefer(message);
+    BOOL isTransfer = transferContext || (!isText && !isRefer && NeoWCMessageIsTransfer(message));
     if (!message || (!isText && !isRefer && !isTransfer)) return;
     BOOL changed = NO;
     if (isText) {
@@ -342,6 +676,212 @@ static void NeoWCApplyJokerText(id cell,
     if (!changed) return;
     NeoWCReloadJokerCell(cell, message, controller);
     NeoWCLog(@"聊天记录小丑已修改当前页面显示");
+}
+
+static NSObject *NeoWCImageJokerCacheLock(void) {
+    static NSObject *lock;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ lock = [NSObject new]; });
+    return lock;
+}
+
+static NSMutableDictionary<NSString *, UIImage *> *NeoWCImageJokerImages(void) {
+    static NSMutableDictionary<NSString *, UIImage *> *images;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ images = [NSMutableDictionary dictionary]; });
+    return images;
+}
+
+static NSMutableDictionary<NSString *, NSData *> *NeoWCImageJokerData(void) {
+    static NSMutableDictionary<NSString *, NSData *> *data;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ data = [NSMutableDictionary dictionary]; });
+    return data;
+}
+
+static NSMutableDictionary<NSString *, NSString *> *NeoWCImageJokerPaths(void) {
+    static NSMutableDictionary<NSString *, NSString *> *paths;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ paths = [NSMutableDictionary dictionary]; });
+    return paths;
+}
+
+static NSString *NeoWCImageJokerKeyForMessage(id message) {
+    if (!message) return nil;
+    SEL combinedSelector = NSSelectorFromString(@"combineChatNameWithLocalId");
+    if ([message respondsToSelector:combinedSelector]) {
+        id combined = ((id (*)(id, SEL))objc_msgSend)(message, combinedSelector);
+        if ([combined isKindOfClass:[NSString class]] && [combined length] > 0) return combined;
+    }
+    SEL chatSelector = NSSelectorFromString(@"GetChatName");
+    SEL localIDSelector = NSSelectorFromString(@"m_uiMesLocalID");
+    if (![message respondsToSelector:chatSelector] || ![message respondsToSelector:localIDSelector]) return nil;
+    id chatName = ((id (*)(id, SEL))objc_msgSend)(message, chatSelector);
+    if (![chatName isKindOfClass:[NSString class]] || [chatName length] == 0) return nil;
+    unsigned int localID = ((unsigned int (*)(id, SEL))objc_msgSend)(message, localIDSelector);
+    return localID > 0 ? [NSString stringWithFormat:@"%@_%u", chatName, localID] : nil;
+}
+
+static id NeoWCImageJokerMessageForObject(id object) {
+    if (!object) return nil;
+    Class messageClass = NSClassFromString(@"CMessageWrap");
+    if (messageClass && [object isKindOfClass:messageClass]) return object;
+    id message = NeoWCTweakValueForSelectorNames(object, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap", @"message"]);
+    if (message) return message;
+    id viewModel = NeoWCTweakValueForSelectorNames(object, @[@"viewModel", @"m_viewModel"]);
+    return NeoWCTweakValueForSelectorNames(viewModel, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
+}
+
+static UIImage *NeoWCImageJokerImageForMessage(id message) {
+    if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return nil;
+    NSString *key = NeoWCImageJokerKeyForMessage(message);
+    if (key.length == 0) return nil;
+    @synchronized (NeoWCImageJokerCacheLock()) {
+        return NeoWCImageJokerImages()[key];
+    }
+}
+
+static NSData *NeoWCImageJokerDataForMessage(id message) {
+    if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return nil;
+    NSString *key = NeoWCImageJokerKeyForMessage(message);
+    if (key.length == 0) return nil;
+    @synchronized (NeoWCImageJokerCacheLock()) {
+        return NeoWCImageJokerData()[key];
+    }
+}
+
+static NSString *NeoWCImageJokerPathForMessage(id message) {
+    if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return nil;
+    NSString *key = NeoWCImageJokerKeyForMessage(message);
+    if (key.length == 0) return nil;
+    @synchronized (NeoWCImageJokerCacheLock()) {
+        return NeoWCImageJokerPaths()[key];
+    }
+}
+
+static UIImage *NeoWCImageJokerImageForObject(id object) {
+    return NeoWCImageJokerImageForMessage(NeoWCImageJokerMessageForObject(object));
+}
+
+static NSString *NeoWCImageJokerTemporaryDirectory(void) {
+    return [NSTemporaryDirectory() stringByAppendingPathComponent:@"wxi_image_joker"];
+}
+
+static NSString *NeoWCImageJokerSafeFilename(NSString *key) {
+    NSMutableString *name = [NSMutableString stringWithCapacity:MIN((NSUInteger)80, key.length)];
+    NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"];
+    for (NSUInteger index = 0; index < key.length && name.length < 80; index++) {
+        unichar character = [key characterAtIndex:index];
+        if ([allowed characterIsMember:character]) [name appendFormat:@"%C", character];
+        else [name appendString:@"_"];
+    }
+    return [(name.length > 0 ? name : [@"image" mutableCopy]) stringByAppendingPathExtension:@"jpg"];
+}
+
+static BOOL NeoWCStoreImageJokerOverride(id message, UIImage *image) {
+    NSString *key = NeoWCImageJokerKeyForMessage(message);
+    if (key.length == 0 || ![image isKindOfClass:[UIImage class]]) return NO;
+    NSData *data = UIImageJPEGRepresentation(image, 0.95);
+    if (data.length == 0) data = UIImagePNGRepresentation(image);
+    if (data.length == 0) return NO;
+    NSString *directory = NeoWCImageJokerTemporaryDirectory();
+    [[NSFileManager defaultManager] createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
+    NSString *path = [directory stringByAppendingPathComponent:NeoWCImageJokerSafeFilename(key)];
+    if (![data writeToFile:path options:NSDataWritingAtomic error:nil]) path = nil;
+    @synchronized (NeoWCImageJokerCacheLock()) {
+        NeoWCImageJokerImages()[key] = image;
+        NeoWCImageJokerData()[key] = data;
+        if (path.length > 0) NeoWCImageJokerPaths()[key] = path;
+        else [NeoWCImageJokerPaths() removeObjectForKey:key];
+    }
+    return YES;
+}
+
+static void NeoWCClearImageJokerOverrides(void) {
+    @synchronized (NeoWCImageJokerCacheLock()) {
+        [NeoWCImageJokerImages() removeAllObjects];
+        [NeoWCImageJokerData() removeAllObjects];
+        [NeoWCImageJokerPaths() removeAllObjects];
+    }
+    [[NSFileManager defaultManager] removeItemAtPath:NeoWCImageJokerTemporaryDirectory() error:nil];
+}
+
+static void NeoWCApplyImageJokerToCell(id cell, id message, UIImage *image) {
+    id imageView = NeoWCTweakSafeValue(cell, @"m_imageView");
+    if ([imageView isKindOfClass:[UIImageView class]]) ((UIImageView *)imageView).image = image;
+    id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel", @"m_viewModel"]);
+    SEL resetSelector = NSSelectorFromString(@"resetLayoutCache");
+    if ([viewModel respondsToSelector:resetSelector]) ((void (*)(id, SEL))objc_msgSend)(viewModel, resetSelector);
+    NeoWCReloadJokerCell(cell, message, NeoWCJokerPresenterForCell(cell));
+}
+
+@interface NeoWCImageJokerPickerDelegate : NSObject <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@property (nonatomic, weak) id cell;
+@property (nonatomic, weak) UIViewController *presenter;
+@property (nonatomic, strong) id message;
+@end
+
+@implementation NeoWCImageJokerPickerDelegate
+
+- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey, id> *)info {
+    UIImage *image = info[UIImagePickerControllerEditedImage];
+    if (![image isKindOfClass:[UIImage class]]) image = info[UIImagePickerControllerOriginalImage];
+    id cell = self.cell;
+    id message = self.message;
+    if (image && message && NeoWCStoreImageJokerOverride(message, image)) {
+        if (cell) NeoWCApplyImageJokerToCell(cell, message, image);
+        NeoWCCompatibilityMarkTriggered(@"image-joker");
+        NeoWCCompatibilityMarkTriggered(@"chat-joker");
+        NeoWCLog(@"聊天图片已在当前页面伪装");
+    }
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
+@end
+
+static void NeoWCPresentImageJokerPickerForCell(id cell) {
+    if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return;
+    id message = NeoWCMessageWrapForCell(cell);
+    UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
+    if (!message || !presenter.view.window ||
+        ![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) return;
+    UIImagePickerController *picker = [UIImagePickerController new];
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    picker.allowsEditing = YES;
+    NeoWCImageJokerPickerDelegate *delegate = [NeoWCImageJokerPickerDelegate new];
+    delegate.cell = cell;
+    delegate.presenter = presenter;
+    delegate.message = message;
+    picker.delegate = delegate;
+    objc_setAssociatedObject(picker, &NeoWCImageJokerPickerDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [presenter presentViewController:picker animated:YES completion:nil];
+}
+
+static NSArray *NeoWCOperationMenuItemsWithImageJoker(id target, NSArray *originalItems) {
+    if (![originalItems isKindOfClass:[NSArray class]]) return originalItems;
+    NSMutableArray *items = [originalItems mutableCopy];
+    if (NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageWrapForCell(target)) {
+        BOOL exists = NO;
+        for (id item in items) {
+            if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"修改图片"]) { exists = YES; break; }
+        }
+        if (!exists) {
+            Class itemClass = NSClassFromString(@"MMMenuItem");
+            if ([itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) {
+                UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightRegular];
+                UIImage *icon = [UIImage systemImageNamed:@"photo.badge.pencil" withConfiguration:configuration];
+                if (!icon) icon = [UIImage systemImageNamed:@"square.and.pencil" withConfiguration:configuration];
+                icon = [icon imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
+                MMMenuItem *menuItem = [[itemClass alloc] initWithTitle:@"修改图片" icon:icon target:target action:@selector(joker_handleImageMenuItem:)];
+                if (menuItem) [items insertObject:menuItem atIndex:0];
+            }
+        }
+    }
+    return NeoWCManagedLongPressMenuItems(items);
 }
 
 static UITextView *NeoWCInnerTextView(id growTextView) {
@@ -707,6 +1247,498 @@ static void NeoWCRefreshDailyStepOverride(void) {
     }
 }
 
+static id NeoWCMomentsObjectForSelector(id object, NSString *selectorName) {
+    SEL selector = NSSelectorFromString(selectorName);
+    if (!object || ![object respondsToSelector:selector]) return nil;
+    @try {
+        return ((id (*)(id, SEL))objc_msgSend)(object, selector);
+    } @catch (__unused NSException *exception) {
+        return nil;
+    }
+}
+
+static BOOL NeoWCMomentsBoolForSelector(id object, NSString *selectorName) {
+    SEL selector = NSSelectorFromString(selectorName);
+    if (!object || ![object respondsToSelector:selector]) return NO;
+    @try {
+        return ((BOOL (*)(id, SEL))objc_msgSend)(object, selector);
+    } @catch (__unused NSException *exception) {
+        return NO;
+    }
+}
+
+static unsigned int NeoWCMomentsUnsignedForSelector(id object, NSString *selectorName) {
+    SEL selector = NSSelectorFromString(selectorName);
+    if (!object || ![object respondsToSelector:selector]) return 0;
+    @try {
+        return ((unsigned int (*)(id, SEL))objc_msgSend)(object, selector);
+    } @catch (__unused NSException *exception) {
+        return 0;
+    }
+}
+
+static id NeoWCMomentsContentObject(id dataItem) {
+    return NeoWCMomentsObjectForSelector(dataItem, @"contentObj");
+}
+
+static NSArray *NeoWCMomentsMediaItems(id dataItem) {
+    id mediaList = NeoWCMomentsObjectForSelector(NeoWCMomentsContentObject(dataItem), @"mediaList");
+    return [mediaList isKindOfClass:[NSArray class]] ? mediaList : @[];
+}
+
+static NSString *NeoWCMomentsBodyText(id dataItem) {
+    id text = NeoWCMomentsObjectForSelector(dataItem, @"contentDesc");
+    return [text isKindOfClass:[NSString class]] ? text : @"";
+}
+
+static BOOL NeoWCMomentsHasStructuredContent(id contentObject) {
+    static NSArray<NSString *> *selectors;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        selectors = @[@"noteInfo", @"musicShareItem", @"musicInfo", @"finderLiveShareItem",
+                      @"finderThemeLiveShareItem", @"finderShareToMomentsItem", @"finderLongVideoShareItem",
+                      @"finderShareItem", @"weappInfo", @"snsWeAppInfo", @"tingListenItem",
+                      @"tingCategoryItem", @"tingChatRoomItem", @"tingLyricsItem"];
+    });
+    for (NSString *selectorName in selectors) {
+        if (NeoWCMomentsObjectForSelector(contentObject, selectorName)) return YES;
+    }
+    return NO;
+}
+
+static BOOL NeoWCMomentCanForward(id dataItem) {
+    if (!dataItem) return NO;
+    id contentObject = NeoWCMomentsContentObject(dataItem);
+    if (!contentObject) return NO;
+    if (NeoWCMomentsHasStructuredContent(contentObject)) return YES;
+    NSArray *mediaItems = NeoWCMomentsMediaItems(dataItem);
+    if ((NeoWCMomentsBoolForSelector(contentObject, @"isPhotoType") ||
+         NeoWCMomentsBoolForSelector(contentObject, @"isVideoType")) && mediaItems.count > 0) return YES;
+    if (NeoWCMomentsUnsignedForSelector(contentObject, @"type") != 2 ||
+        mediaItems.count > 0 || NeoWCMomentsBodyText(dataItem).length == 0) return NO;
+    id linkURL = NeoWCMomentsObjectForSelector(contentObject, @"linkUrl");
+    return ![linkURL isKindOfClass:[NSString class]] || [linkURL length] == 0;
+}
+
+static NSString *NeoWCMomentsExistingMediaPath(id mediaItem, NSArray<NSString *> *selectors) {
+    for (NSString *selectorName in selectors) {
+        id value = NeoWCMomentsObjectForSelector(mediaItem, selectorName);
+        NSString *path = [value isKindOfClass:[NSURL class]] ? [value path] : ([value isKindOfClass:[NSString class]] ? value : nil);
+        if (path.length > 0 && [[NSFileManager defaultManager] fileExistsAtPath:path]) return path;
+    }
+    return nil;
+}
+
+@interface NeoWCMomentsForwardTask : NSObject
+@property (nonatomic, strong) id dataItem;
+@property (nonatomic, weak) UIViewController *presenter;
+@property (nonatomic, strong) NSArray *mediaItems;
+@property (nonatomic, strong) NSMutableArray *resolvedPaths;
+@property (nonatomic, strong) NSMutableArray *downloaders;
+@property (nonatomic, assign) NSUInteger remainingDownloads;
+@property (nonatomic, assign) BOOL video;
+@property (nonatomic, assign) BOOL failed;
+- (void)start;
+@end
+
+@implementation NeoWCMomentsForwardTask
+
+- (void)releasePresenterRetention {
+    UIViewController *presenter = self.presenter;
+    if (presenter && objc_getAssociatedObject(presenter, &NeoWCMomentsForwardTaskKey) == self) {
+        objc_setAssociatedObject(presenter, &NeoWCMomentsForwardTaskKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
+- (void)applyBodyTextToController:(id)controller attempt:(NSUInteger)attempt {
+    NSString *body = NeoWCMomentsBodyText(self.dataItem);
+    if (body.length == 0 || !controller) return;
+    id textView = NeoWCMomentsObjectForSelector(controller, @"textView");
+    SEL setTextSelector = NSSelectorFromString(@"setText:");
+    if (!textView || ![textView respondsToSelector:setTextSelector]) {
+        if (attempt < 3) {
+            __weak typeof(self) weakSelf = self;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [weakSelf applyBodyTextToController:controller attempt:attempt + 1];
+            });
+        }
+        return;
+    }
+    ((void (*)(id, SEL, id))objc_msgSend)(textView, setTextSelector, body);
+    for (NSString *selectorName in @[@"changeContentSize", @"adjustRect"]) {
+        SEL selector = NSSelectorFromString(selectorName);
+        if ([textView respondsToSelector:selector]) ((void (*)(id, SEL))objc_msgSend)(textView, selector);
+    }
+    SEL changedSelector = NSSelectorFromString(@"textViewTextDidChange");
+    if ([controller respondsToSelector:changedSelector]) ((void (*)(id, SEL))objc_msgSend)(controller, changedSelector);
+    SEL heightSelector = NSSelectorFromString(@"MMGrowTextViewHeightDidChanged:");
+    if ([controller respondsToSelector:heightSelector]) ((void (*)(id, SEL, id))objc_msgSend)(controller, heightSelector, textView);
+}
+
+- (void)presentController:(id)controller applyBody:(BOOL)applyBody {
+    UIViewController *presenter = self.presenter;
+    if (![controller isKindOfClass:[UIViewController class]] || !presenter.view.window) {
+        NeoWCShowTransientMessage(@"朋友圈转发失败：当前页面不可用", NO);
+        [self releasePresenterRetention];
+        return;
+    }
+    SEL delegateSelector = NSSelectorFromString(@"setDelegate:");
+    if ([controller respondsToSelector:delegateSelector]) ((void (*)(id, SEL, id))objc_msgSend)(controller, delegateSelector, presenter);
+    SEL fromListSelector = NSSelectorFromString(@"setM_bFromWCList:");
+    if ([controller respondsToSelector:fromListSelector]) ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, fromListSelector, YES);
+    Class navigationClass = NSClassFromString(@"MMUINavigationController");
+    if (!navigationClass) navigationClass = [UINavigationController class];
+    id navigation = [[navigationClass alloc] initWithRootViewController:controller];
+    objc_setAssociatedObject(navigation, &NeoWCMomentsForwardTaskKey, self, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [self releasePresenterRetention];
+    if ([navigation isKindOfClass:[UIViewController class]]) ((UIViewController *)navigation).modalPresentationStyle = UIModalPresentationFullScreen;
+    __weak typeof(self) weakSelf = self;
+    [presenter presentViewController:navigation animated:YES completion:^{
+        if (applyBody) [weakSelf applyBodyTextToController:controller attempt:0];
+    }];
+    NeoWCCompatibilityMarkTriggered(@"moments-forward");
+}
+
+- (void)presentStructuredForward {
+    Class controllerClass = NSClassFromString(@"WCForwardViewController");
+    SEL initializer = NSSelectorFromString(@"initWithDataItem:");
+    if (!controllerClass || ![controllerClass instancesRespondToSelector:initializer]) {
+        NeoWCShowTransientMessage(@"当前微信版本不支持此类朋友圈转发", NO);
+        [self releasePresenterRetention];
+        return;
+    }
+    id controller = ((id (*)(id, SEL, id))objc_msgSend)([controllerClass alloc], initializer, self.dataItem);
+    [self presentController:controller applyBody:NO];
+}
+
+- (void)presentTextCommit {
+    Class controllerClass = NSClassFromString(@"WCNewCommitViewController");
+    SEL initializer = NSSelectorFromString(@"initWithTextType");
+    if (!controllerClass || ![controllerClass instancesRespondToSelector:initializer]) {
+        NeoWCShowTransientMessage(@"当前微信版本不支持文字朋友圈转发", NO);
+        [self releasePresenterRetention];
+        return;
+    }
+    id controller = ((id (*)(id, SEL))objc_msgSend)([controllerClass alloc], initializer);
+    [self presentController:controller applyBody:YES];
+}
+
+- (void)presentImageCommit {
+    NSMutableArray *images = [NSMutableArray arrayWithCapacity:self.resolvedPaths.count];
+    Class imageClass = NSClassFromString(@"MMImage");
+    SEL initializer = NSSelectorFromString(@"initWithImage:");
+    for (id value in self.resolvedPaths) {
+        NSString *path = [value isKindOfClass:[NSString class]] ? value : nil;
+        UIImage *image = path.length > 0 ? [UIImage imageWithContentsOfFile:path] : nil;
+        if (!image || !imageClass || ![imageClass instancesRespondToSelector:initializer]) continue;
+        id wrappedImage = ((id (*)(id, SEL, id))objc_msgSend)([imageClass alloc], initializer, image);
+        SEL dataPathSelector = NSSelectorFromString(@"setDataPath:");
+        if ([wrappedImage respondsToSelector:dataPathSelector]) ((void (*)(id, SEL, id))objc_msgSend)(wrappedImage, dataPathSelector, path);
+        if (wrappedImage) [images addObject:wrappedImage];
+    }
+    Class controllerClass = NSClassFromString(@"WCNewCommitViewController");
+    SEL controllerInitializer = NSSelectorFromString(@"initWithImages:contacts:");
+    if (images.count == 0 || !controllerClass || ![controllerClass instancesRespondToSelector:controllerInitializer]) {
+        NeoWCShowTransientMessage(@"朋友圈图片读取失败", NO);
+        [self releasePresenterRetention];
+        return;
+    }
+    id controller = ((id (*)(id, SEL, id, id))objc_msgSend)([controllerClass alloc], controllerInitializer, images, nil);
+    SEL loadingSelector = NSSelectorFromString(@"setLoadingOKStr:");
+    if ([controller respondsToSelector:loadingSelector]) ((void (*)(id, SEL, id))objc_msgSend)(controller, loadingSelector, nil);
+    [self presentController:controller applyBody:YES];
+}
+
+- (void)presentVideoCommit {
+    NSString *path = [self.resolvedPaths.firstObject isKindOfClass:[NSString class]] ? self.resolvedPaths.firstObject : nil;
+    Class draftClass = NSClassFromString(@"SightDraft");
+    SEL draftSelector = NSSelectorFromString(@"draftWithVideoURL:");
+    id draft = path.length > 0 && [draftClass respondsToSelector:draftSelector]
+        ? ((id (*)(id, SEL, id))objc_msgSend)(draftClass, draftSelector, [NSURL fileURLWithPath:path]) : nil;
+    Class controllerClass = NSClassFromString(@"WCNewCommitViewController");
+    SEL initializer = NSSelectorFromString(@"initWithSightDraft:");
+    if (!draft || !controllerClass || ![controllerClass instancesRespondToSelector:initializer]) {
+        NeoWCShowTransientMessage(@"朋友圈视频读取失败", NO);
+        [self releasePresenterRetention];
+        return;
+    }
+    id controller = ((id (*)(id, SEL, id))objc_msgSend)([controllerClass alloc], initializer, draft);
+    [self presentController:controller applyBody:YES];
+}
+
+- (void)finishMediaResolutionIfNeeded {
+    if (self.remainingDownloads > 0) return;
+    if (self.failed) {
+        NeoWCShowTransientMessage(@"朋友圈媒体下载失败，请稍后重试", NO);
+        [self releasePresenterRetention];
+        return;
+    }
+    if (self.video) [self presentVideoCommit];
+    else [self presentImageCommit];
+}
+
+- (void)resolveMediaItem:(id)mediaItem index:(NSUInteger)index {
+    NSArray *pathSelectors = self.video
+        ? @[@"pathForSightData"]
+        : @[@"pathForUhdData", @"pathForHdData", @"pathForData", @"pathForExistData"];
+    NSString *path = NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
+    if (path.length > 0) {
+        self.resolvedPaths[index] = path;
+        self.remainingDownloads--;
+        [self finishMediaResolutionIfNeeded];
+        return;
+    }
+    Class downloaderClass = NSClassFromString(@"WCMediaDownloader");
+    SEL initializer = NSSelectorFromString(@"initWithDataItem:mediaItem:");
+    SEL startSelector = NSSelectorFromString(@"startDownloadWithCompletionHandler:");
+    id downloader = downloaderClass && [downloaderClass instancesRespondToSelector:initializer]
+        ? ((id (*)(id, SEL, id, id))objc_msgSend)([downloaderClass alloc], initializer, self.dataItem, mediaItem) : nil;
+    if (!downloader || ![downloader respondsToSelector:startSelector]) {
+        self.failed = YES;
+        self.remainingDownloads--;
+        [self finishMediaResolutionIfNeeded];
+        return;
+    }
+    [self.downloaders addObject:downloader];
+    __weak typeof(self) weakSelf = self;
+    void (^completion)(BOOL, NSError *) = ^(__unused BOOL success, __unused NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            NSString *resolvedPath = NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
+            if (resolvedPath.length > 0) strongSelf.resolvedPaths[index] = resolvedPath;
+            else strongSelf.failed = YES;
+            [strongSelf.downloaders removeObject:downloader];
+            strongSelf.remainingDownloads--;
+            [strongSelf finishMediaResolutionIfNeeded];
+        });
+    };
+    ((void (*)(id, SEL, id))objc_msgSend)(downloader, startSelector, completion);
+}
+
+- (void)startMediaResolution:(NSArray *)mediaItems video:(BOOL)video {
+    self.video = video;
+    self.mediaItems = video ? [mediaItems subarrayWithRange:NSMakeRange(0, 1)]
+                            : [mediaItems subarrayWithRange:NSMakeRange(0, MIN((NSUInteger)9, mediaItems.count))];
+    self.resolvedPaths = [NSMutableArray arrayWithCapacity:self.mediaItems.count];
+    for (__unused id item in self.mediaItems) [self.resolvedPaths addObject:NSNull.null];
+    self.downloaders = [NSMutableArray array];
+    self.remainingDownloads = self.mediaItems.count;
+    [self.mediaItems enumerateObjectsUsingBlock:^(id mediaItem, NSUInteger index, __unused BOOL *stop) {
+        [self resolveMediaItem:mediaItem index:index];
+    }];
+}
+
+- (void)start {
+    id contentObject = NeoWCMomentsContentObject(self.dataItem);
+    NSArray *mediaItems = NeoWCMomentsMediaItems(self.dataItem);
+    if (NeoWCMomentsHasStructuredContent(contentObject)) {
+        [self presentStructuredForward];
+    } else if (NeoWCMomentsBoolForSelector(contentObject, @"isVideoType") && mediaItems.count > 0) {
+        [self startMediaResolution:mediaItems video:YES];
+    } else if (NeoWCMomentsBoolForSelector(contentObject, @"isPhotoType") && mediaItems.count > 0) {
+        [self startMediaResolution:mediaItems video:NO];
+    } else if (NeoWCMomentCanForward(self.dataItem)) {
+        [self presentTextCommit];
+    } else {
+        NeoWCShowTransientMessage(@"当前朋友圈类型暂不支持转发", NO);
+        [self releasePresenterRetention];
+    }
+}
+
+@end
+
+static void NeoWCForwardMoment(id dataItem, UIViewController *presenter) {
+    if (!NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey) ||
+        !NeoWCMomentCanForward(dataItem) || !presenter.view.window) return;
+    NeoWCMomentsForwardTask *task = [NeoWCMomentsForwardTask new];
+    task.dataItem = dataItem;
+    task.presenter = presenter;
+    objc_setAssociatedObject(presenter, &NeoWCMomentsForwardTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [task start];
+}
+
+static UIButton *NeoWCMomentsForwardButton(id target, SEL action) {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:16.0 weight:UIImageSymbolWeightMedium];
+    UIImage *icon = [[UIImage systemImageNamed:@"arrowshape.turn.up.right" withConfiguration:configuration] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    [button setImage:icon forState:UIControlStateNormal];
+    button.tintColor = UIColor.darkGrayColor;
+    button.accessibilityLabel = @"转发";
+    [button addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
+    return button;
+}
+
+static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
+    UIButton *button = objc_getAssociatedObject(cell, &NeoWCMomentsForwardButtonKey);
+    BOOL shouldShow = NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey) &&
+                      NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey);
+    id dataItem = NeoWCMomentsObjectForSelector(cell, @"m_dataItem");
+    UIView *operateButton = NeoWCMomentsObjectForSelector(cell, @"m_operateBtn");
+    UIView *parent = [operateButton isKindOfClass:[UIView class]] ? operateButton.superview : nil;
+    if (!shouldShow || !NeoWCMomentCanForward(dataItem) || !parent) {
+        [button removeFromSuperview];
+        objc_setAssociatedObject(cell, &NeoWCMomentsForwardButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return;
+    }
+    if (!button || button.superview != parent) {
+        [button removeFromSuperview];
+        button = NeoWCMomentsForwardButton(cell, @selector(neowc_handleMomentsForward:));
+        button.translatesAutoresizingMaskIntoConstraints = NO;
+        [parent addSubview:button];
+        [NSLayoutConstraint activateConstraints:@[
+            [button.trailingAnchor constraintEqualToAnchor:operateButton.leadingAnchor constant:-8.0],
+            [button.centerYAnchor constraintEqualToAnchor:operateButton.centerYAnchor],
+            [button.widthAnchor constraintEqualToConstant:32.0],
+            [button.heightAnchor constraintEqualToConstant:32.0],
+        ]];
+        objc_setAssociatedObject(cell, &NeoWCMomentsForwardButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    button.hidden = NO;
+}
+
+static void NeoWCSynchronizeMomentsFloatForwardButton(WCOperateFloatView *floatView) {
+    UIButton *button = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey);
+    id dataItem = NeoWCMomentsObjectForSelector(floatView, @"m_item");
+    BOOL shouldShow = NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey) &&
+                      !NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) &&
+                      NeoWCMomentCanForward(dataItem);
+    UIButton *likeButton = NeoWCMomentsObjectForSelector(floatView, @"m_likeBtn");
+    UIButton *commentButton = NeoWCMomentsObjectForSelector(floatView, @"m_commentBtn");
+    if (!shouldShow || ![likeButton isKindOfClass:[UIButton class]] || ![commentButton isKindOfClass:[UIButton class]]) {
+        [button removeFromSuperview];
+        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return;
+    }
+    if (!button) {
+        button = [UIButton buttonWithType:UIButtonTypeCustom];
+        [button setTitle:@"转发" forState:UIControlStateNormal];
+        [button setTitleColor:[commentButton titleColorForState:UIControlStateNormal] ?: UIColor.whiteColor forState:UIControlStateNormal];
+        button.titleLabel.font = commentButton.titleLabel.font ?: [UIFont systemFontOfSize:14.0];
+        [button addTarget:floatView action:@selector(neowc_handleMomentsForward:) forControlEvents:UIControlEventTouchUpInside];
+        [floatView addSubview:button];
+        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    CGRect unionFrame = CGRectUnion(likeButton.frame, commentButton.frame);
+    if (CGRectGetWidth(unionFrame) > 0.0 && CGRectGetHeight(unionFrame) > 0.0) {
+        CGFloat slotWidth = CGRectGetWidth(unionFrame) / 3.0;
+        UIButton *firstButton = CGRectGetMinX(likeButton.frame) <= CGRectGetMinX(commentButton.frame) ? likeButton : commentButton;
+        UIButton *secondButton = firstButton == likeButton ? commentButton : likeButton;
+        firstButton.frame = CGRectMake(CGRectGetMinX(unionFrame), CGRectGetMinY(unionFrame), slotWidth, CGRectGetHeight(unionFrame));
+        secondButton.frame = CGRectMake(CGRectGetMinX(unionFrame) + slotWidth, CGRectGetMinY(unionFrame), slotWidth, CGRectGetHeight(unionFrame));
+        button.frame = CGRectMake(CGRectGetMinX(unionFrame) + slotWidth * 2.0, CGRectGetMinY(unionFrame), slotWidth, CGRectGetHeight(unionFrame));
+    }
+    button.hidden = NO;
+}
+
+static NSDateFormatter *NeoWCMomentsPreciseDateFormatter(void) {
+    static NSDateFormatter *formatter;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        formatter = [NSDateFormatter new];
+        formatter.locale = [NSLocale localeWithLocaleIdentifier:@"zh_CN"];
+        formatter.calendar = [[NSCalendar alloc] initWithCalendarIdentifier:NSCalendarIdentifierGregorian];
+    });
+    return formatter;
+}
+
+static id NeoWCMomentsValueForExactSelector(id object, NSString *selectorName) {
+    SEL selector = NSSelectorFromString(selectorName);
+    if (!object || ![object respondsToSelector:selector]) return nil;
+    @try {
+        return ((id (*)(id, SEL))objc_msgSend)(object, selector);
+    } @catch (__unused NSException *exception) {
+        return nil;
+    }
+}
+
+static void NeoWCRestoreMomentsTimeLabel(WCTimeLineCellView *cell, id label) {
+    if (![objc_getAssociatedObject(cell, &NeoWCMomentsPreciseTimeAppliedKey) boolValue]) return;
+    SEL setTextSelector = NSSelectorFromString(@"setText:");
+    if ([label respondsToSelector:setTextSelector]) {
+        id original = objc_getAssociatedObject(cell, &NeoWCMomentsOriginalTimeTextKey);
+        ((void (*)(id, SEL, id))objc_msgSend)(label, setTextSelector, original == NSNull.null ? nil : original);
+    }
+    NSNumber *originalLines = objc_getAssociatedObject(cell, &NeoWCMomentsOriginalTimeLinesKey);
+    SEL linesSelector = NSSelectorFromString(@"setNumberOfLines:");
+    if (originalLines && [label respondsToSelector:linesSelector]) {
+        ((void (*)(id, SEL, NSInteger))objc_msgSend)(label, linesSelector, originalLines.integerValue);
+    }
+    objc_setAssociatedObject(cell, &NeoWCMomentsPreciseTimeAppliedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+static NSString *NeoWCMomentsPreciseTimeText(unsigned int createTime) {
+    if (createTime == 0) return nil;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *format = NeoWCNormalizedMomentsDateFormat([defaults stringForKey:NeoWCMomentsPreciseTimeFormatKey]);
+    if (!format) format = NeoWCMomentsPreciseTimeDefaultFormat;
+    NSDate *date = [NSDate dateWithTimeIntervalSince1970:(NSTimeInterval)createTime];
+    NSDateFormatter *formatter = NeoWCMomentsPreciseDateFormatter();
+    @synchronized (formatter) {
+        formatter.timeZone = NSTimeZone.localTimeZone;
+        if (![formatter.dateFormat isEqualToString:format]) formatter.dateFormat = format;
+        return [formatter stringFromDate:date];
+    }
+}
+
+static void NeoWCApplyMomentsPreciseTime(WCTimeLineCellView *cell, BOOL nativeTimeRefreshed) {
+    if (!cell) return;
+    id label = NeoWCMomentsValueForExactSelector(cell, @"m_timeLabel");
+    if (!label) return;
+    SEL textSelector = NSSelectorFromString(@"text");
+    SEL setTextSelector = NSSelectorFromString(@"setText:");
+    if (![label respondsToSelector:textSelector] || ![label respondsToSelector:setTextSelector]) return;
+
+    if (nativeTimeRefreshed) {
+        id originalText = ((id (*)(id, SEL))objc_msgSend)(label, textSelector);
+        objc_setAssociatedObject(cell, &NeoWCMomentsOriginalTimeTextKey,
+                                 originalText ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        SEL numberOfLinesSelector = NSSelectorFromString(@"numberOfLines");
+        if ([label respondsToSelector:numberOfLinesSelector]) {
+            NSInteger lines = ((NSInteger (*)(id, SEL))objc_msgSend)(label, numberOfLinesSelector);
+            objc_setAssociatedObject(cell, &NeoWCMomentsOriginalTimeLinesKey,
+                                     @(lines), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        objc_setAssociatedObject(cell, &NeoWCMomentsPreciseTimeAppliedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    } else if (!objc_getAssociatedObject(cell, &NeoWCMomentsOriginalTimeTextKey)) {
+        id currentText = ((id (*)(id, SEL))objc_msgSend)(label, textSelector);
+        objc_setAssociatedObject(cell, &NeoWCMomentsOriginalTimeTextKey,
+                                 currentText ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+
+    if (!NeoWCEnhancementEnabled(NeoWCMomentsPreciseTimeKey)) {
+        NeoWCRestoreMomentsTimeLabel(cell, label);
+        return;
+    }
+    id dataItem = NeoWCMomentsValueForExactSelector(cell, @"m_dataItem");
+    SEL createTimeSelector = NSSelectorFromString(@"createtime");
+    if (!dataItem || ![dataItem respondsToSelector:createTimeSelector]) {
+        NeoWCRestoreMomentsTimeLabel(cell, label);
+        return;
+    }
+    unsigned int createTime = 0;
+    @try {
+        createTime = ((unsigned int (*)(id, SEL))objc_msgSend)(dataItem, createTimeSelector);
+    } @catch (__unused NSException *exception) {
+        NeoWCRestoreMomentsTimeLabel(cell, label);
+        return;
+    }
+    NSString *preciseText = NeoWCMomentsPreciseTimeText(createTime);
+    if (preciseText.length == 0) {
+        NeoWCRestoreMomentsTimeLabel(cell, label);
+        return;
+    }
+    NSString *currentText = ((id (*)(id, SEL))objc_msgSend)(label, textSelector);
+    if (![currentText isEqualToString:preciseText]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(label, setTextSelector, preciseText);
+    }
+    SEL linesSelector = NSSelectorFromString(@"setNumberOfLines:");
+    if ([label respondsToSelector:linesSelector]) {
+        ((void (*)(id, SEL, NSInteger))objc_msgSend)(label, linesSelector, 1);
+    }
+    objc_setAssociatedObject(cell, &NeoWCMomentsPreciseTimeAppliedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 static void NeoWCSynchronizeMomentsCell(WCTimeLineCellView *cell) {
     if (!cell) return;
     UITapGestureRecognizer *recognizer = objc_getAssociatedObject(cell, &NeoWCMomentsDoubleTapRecognizerKey);
@@ -721,12 +1753,18 @@ static void NeoWCSynchronizeMomentsCell(WCTimeLineCellView *cell) {
         [cell removeGestureRecognizer:recognizer];
         objc_setAssociatedObject(cell, &NeoWCMomentsDoubleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
+    NeoWCApplyMomentsPreciseTime(cell, NO);
+    NeoWCSynchronizeMomentsForwardButton(cell);
 }
 
 static void NeoWCSynchronizeMomentsCellsInView(UIView *view) {
     if (!view) return;
     Class cellClass = NSClassFromString(@"WCTimeLineCellView");
     if (cellClass && [view isKindOfClass:cellClass]) NeoWCSynchronizeMomentsCell((WCTimeLineCellView *)view);
+    Class floatClass = NSClassFromString(@"WCOperateFloatView");
+    if (floatClass && [view isKindOfClass:floatClass]) {
+        NeoWCSynchronizeMomentsFloatForwardButton((WCOperateFloatView *)view);
+    }
     for (UIView *subview in view.subviews) NeoWCSynchronizeMomentsCellsInView(subview);
 }
 
@@ -858,16 +1896,38 @@ static void NeoWCRefreshVisibleAntiRevokeCells(void) {
     if (window) NeoWCRefreshAntiRevokeCellsInView(window);
 }
 
-static void NeoWCPresentJokerEditorForCell(id cell) {
+static void NeoWCSynchronizeReplyGesturesInView(UIView *view) {
+    if (!view) return;
+    Class cellClass = NSClassFromString(@"CommonMessageCellView");
+    if (cellClass && [view isKindOfClass:cellClass]) {
+        NeoWCSynchronizeReplyGesture((CommonMessageCellView *)view);
+    }
+    for (UIView *subview in view.subviews) NeoWCSynchronizeReplyGesturesInView(subview);
+}
+
+static void NeoWCSynchronizeVisibleReplyGestures(void) {
+    UIWindow *window = NeoWCActiveApplicationWindow();
+    if (window) NeoWCSynchronizeReplyGesturesInView(window);
+}
+
+static void NeoWCApplyAutoOriginalSelection(id controller) {
+    if (!NeoWCEnhancementEnabled(NeoWCAutoOriginalImageEnabledKey)) return;
+    SEL selector = NSSelectorFromString(@"setIsOriginSelected:");
+    if (![controller respondsToSelector:selector]) return;
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, selector, YES);
+    NeoWCCompatibilityMarkTriggered(@"auto-original-image");
+}
+
+static void NeoWCPresentJokerEditorForCell(id cell, BOOL transferContext) {
     if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return;
     id message = NeoWCMessageWrapForCell(cell);
-    if (!message || !NeoWCMessageCanJokerEdit(message)) return;
+    if (!message || (!transferContext && !NeoWCMessageCanJokerEdit(message))) return;
     UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
     if (!presenter.view.window) return;
-    BOOL isText = NeoWCMessageIsText(message);
-    BOOL isRefer = !isText && NeoWCMessageIsRefer(message);
-    BOOL isTransfer = !isText && !isRefer && NeoWCMessageIsTransfer(message);
-    NSString *current = NeoWCDisplayTextForJokerMessage(message);
+    BOOL isText = !transferContext && NeoWCMessageIsText(message);
+    BOOL isRefer = !transferContext && !isText && NeoWCMessageIsRefer(message);
+    BOOL isTransfer = transferContext || (!isText && !isRefer && NeoWCMessageIsTransfer(message));
+    NSString *current = transferContext ? NeoWCTransferDisplayText(message) : NeoWCDisplayTextForJokerMessage(message);
     if (isTransfer && ([current hasPrefix:@"¥"] || [current hasPrefix:@"￥"])) current = [current substringFromIndex:1];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"聊天记录小丑"
                                                                    message:@"仅修改当前页面的本机显示，离开页面后可能恢复"
@@ -886,16 +1946,16 @@ static void NeoWCPresentJokerEditorForCell(id cell) {
     [alert addAction:[UIAlertAction actionWithTitle:@"应用" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         NSString *text = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
         if (targetCell && text.length > 0) {
-            NeoWCApplyJokerText(targetCell, targetMessage, targetController, text);
+            NeoWCApplyJokerText(targetCell, targetMessage, targetController, text, transferContext);
         }
     }]];
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
-static MMMenuItem *NeoWCJokerMenuItem(id target) {
+static MMMenuItem *NeoWCJokerMenuItem(id target, BOOL transferContext) {
     if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return nil;
     id message = NeoWCMessageWrapForCell(target);
-    if (!message || !NeoWCMessageCanJokerEdit(message)) return nil;
+    if (!message || (!transferContext && !NeoWCMessageCanJokerEdit(message))) return nil;
     Class itemClass = NSClassFromString(@"MMMenuItem");
     if (!itemClass) return nil;
     if (![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) return nil;
@@ -906,19 +1966,31 @@ static MMMenuItem *NeoWCJokerMenuItem(id target) {
     return [[itemClass alloc] initWithTitle:@"小丑" icon:icon target:target action:@selector(joker_handleMenuItem:)];
 }
 
-static NSArray *NeoWCOperationMenuItemsWithJoker(id target, NSArray *originalItems) {
-    if (![originalItems isKindOfClass:[NSArray class]] || !NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return originalItems;
-    for (id item in originalItems) {
-        if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"小丑"]) return originalItems;
+static NSArray *NeoWCOperationMenuItemsWithJoker(id target, NSArray *originalItems, BOOL transferContext) {
+    if (![originalItems isKindOfClass:[NSArray class]]) return originalItems;
+    NSArray *items = originalItems;
+    if (NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) {
+        BOOL containsJoker = NO;
+        for (id item in originalItems) {
+            if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"小丑"]) {
+                containsJoker = YES;
+                break;
+            }
+        }
+        if (!containsJoker) {
+            MMMenuItem *jokerItem = NeoWCJokerMenuItem(target, transferContext);
+            if (jokerItem) {
+                NSMutableArray *mutableItems = [originalItems mutableCopy];
+                [mutableItems insertObject:jokerItem atIndex:0];
+                items = mutableItems;
+            }
+        }
     }
-    MMMenuItem *jokerItem = NeoWCJokerMenuItem(target);
-    if (!jokerItem) return originalItems;
-    NSMutableArray *items = [originalItems mutableCopy];
-    [items insertObject:jokerItem atIndex:0];
-    return items;
+    if (NeoWCEnhancementEnabled(NeoWCLongPressMenuEnabledKey)) NeoWCCompatibilityMarkTriggered(@"long-press-menu");
+    return NeoWCManagedLongPressMenuItems(items);
 }
 
-static void NeoWCPresentWalletBalanceEditor(void) {
+static void NeoWCPresentWalletBalanceEditor(id headerView) {
     UIWindow *window = NeoWCActiveApplicationWindow();
     UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
     if (!presenter.view.window) return;
@@ -933,12 +2005,22 @@ static void NeoWCPresentWalletBalanceEditor(void) {
         textField.clearButtonMode = UITextFieldViewModeWhileEditing;
     }];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak id weakHeaderView = headerView;
     [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         NSString *text = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
         long long fen = text.length > 0 ? (long long)llround(text.doubleValue * 100.0) : 0;
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         [defaults setObject:@(MAX(0LL, fen)) forKey:NeoWCWalletBalanceFenKey];
         [defaults setBool:fen > 0 forKey:NeoWCWalletBalanceEnabledKey];
+        id currentHeaderView = weakHeaderView;
+        if (fen > 0 && currentHeaderView) {
+            NeoWCRefreshWalletHeaderBalance(currentHeaderView);
+        } else if (currentHeaderView) {
+            SEL refreshSelector = NSSelectorFromString(@"updateBalanceEntryView");
+            if ([currentHeaderView respondsToSelector:refreshSelector]) {
+                ((void (*)(id, SEL))objc_msgSend)(currentHeaderView, refreshSelector);
+            }
+        }
         NeoWCShowTransientMessage(fen > 0 ? @"钱包余额显示已更新" : @"钱包余额显示已恢复", YES);
     }]];
     [presenter presentViewController:alert animated:YES completion:nil];
@@ -952,6 +2034,14 @@ static void NeoWCInstallWalletLongPressIfNeeded(UIView *view, id target, SEL act
     [view addGestureRecognizer:recognizer];
     view.userInteractionEnabled = YES;
     objc_setAssociatedObject(view, &NeoWCWalletGestureRecognizerKey, recognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+static void NeoWCRemoveWalletLongPressIfNeeded(UIView *view) {
+    if (!view) return;
+    UIGestureRecognizer *recognizer = objc_getAssociatedObject(view, &NeoWCWalletGestureRecognizerKey);
+    if (!recognizer) return;
+    [view removeGestureRecognizer:recognizer];
+    objc_setAssociatedObject(view, &NeoWCWalletGestureRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 @interface NeoWCGameSelectorViewController : UIViewController
@@ -1248,6 +2338,7 @@ static void NeoWCRegisterPlugin(void) {
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(__unused NSNotification *note) {
                         NeoWCSynchronizeVisibleMomentsCells();
+                        NeoWCSynchronizeVisibleReplyGestures();
                     }];
 
         __block BOOL lastFloatingDebugState = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCDebugFloatingEnabledKey];
@@ -1318,6 +2409,52 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%hook MMAssetPickerController
+
+- (void)viewDidLoad {
+    %orig;
+    NeoWCApplyAutoOriginalSelection(self);
+}
+
+%end
+
+%hook MMImagePreviewBrowserController
+
+- (void)viewDidLoad {
+    %orig;
+    NeoWCApplyAutoOriginalSelection(self);
+}
+
+%end
+
+%hook NotificationActionsMgr
+
+- (void)userNotificationCenter:(id)center
+didReceiveNotificationResponse:(id)response
+         withCompletionHandler:(void (^)(void))completionHandler {
+    if (NeoWCHandleNotificationResponse(response, completionHandler)) {
+        NeoWCCompatibilityMarkTriggered(@"notification-direct-chat");
+        return;
+    }
+    %orig;
+}
+
+%end
+
+%hook MicroMessengerAppDelegate
+
+- (void)userNotificationCenter:(id)center
+didReceiveNotificationResponse:(id)response
+         withCompletionHandler:(void (^)(void))completionHandler {
+    if (NeoWCHandleNotificationResponse(response, completionHandler)) {
+        NeoWCCompatibilityMarkTriggered(@"notification-direct-chat");
+        return;
+    }
+    %orig;
+}
+
+%end
+
 %hook EditImageForwardAndEditLogicController
 
 - (void)OnClickEditImageDoneBarButton {
@@ -1362,6 +2499,13 @@ static void NeoWCRegisterPlugin(void) {
 %hook WCActionSheet
 
 - (void)showInView:(UIView *)view {
+    id permissionsDataItem = NeoWCPendingMomentsPermissionDataItem;
+    if (permissionsDataItem) {
+        @try {
+            (void)NeoWCConfigureMomentsPermissionsActionSheet(self, permissionsDataItem);
+        } @catch (__unused NSException *exception) {
+        }
+    }
     BOOL hasForward = [self isContainButtonTitle:@"转发给朋友"] || [self isContainButtonTitle:@"发送给朋友"];
     BOOL isEditedImageMenu = hasForward &&
                              [self isContainButtonTitle:@"收藏"] &&
@@ -1386,6 +2530,7 @@ static void NeoWCRegisterPlugin(void) {
         }
     }
     %orig;
+    if (NeoWCPendingMomentsPermissionDataItem == permissionsDataItem) NeoWCPendingMomentsPermissionDataItem = nil;
 }
 
 %end
@@ -1514,6 +2659,19 @@ static void NeoWCRegisterPlugin(void) {
     %orig;
 }
 
+- (void)viewWillDisappear:(BOOL)animated {
+    %orig(animated);
+    UIViewController *controller = (UIViewController *)self;
+    if (controller.isMovingFromParentViewController || controller.isBeingDismissed) {
+        NeoWCClearImageJokerOverrides();
+    }
+}
+
+- (void)dealloc {
+    NeoWCClearImageJokerOverrides();
+    %orig;
+}
+
 %end
 
 %hook MMScrollActionSheet
@@ -1557,11 +2715,176 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%hook ImageMessageCellView
+
+- (NSArray *)operationMenuItems {
+    return NeoWCOperationMenuItemsWithImageJoker(self, %orig);
+}
+
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+    if (action == @selector(joker_handleImageMenuItem:)) {
+        return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageWrapForCell(self) != nil;
+    }
+    return %orig;
+}
+
+- (id)getCoverImage {
+    UIImage *image = NeoWCImageJokerImageForMessage(NeoWCMessageWrapForCell(self));
+    return image ?: %orig;
+}
+
+- (id)displayViewForImageBrowser {
+    id displayView = %orig;
+    UIImage *image = NeoWCImageJokerImageForMessage(NeoWCMessageWrapForCell(self));
+    SEL imageSelector = NSSelectorFromString(@"setImage:");
+    if (image && [displayView respondsToSelector:imageSelector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(displayView, imageSelector, image);
+    }
+    return displayView;
+}
+
+- (void)layoutContentView {
+    %orig;
+    UIImage *image = NeoWCImageJokerImageForMessage(NeoWCMessageWrapForCell(self));
+    id imageView = NeoWCTweakSafeValue(self, @"m_imageView");
+    if (image && [imageView isKindOfClass:[UIImageView class]]) ((UIImageView *)imageView).image = image;
+}
+
+%new
+- (void)joker_handleImageMenuItem:(__unused id)sender {
+    NeoWCPresentImageJokerPickerForCell(self);
+}
+
+%end
+
+%hook ImageMessageViewModel
+
+- (UIImage *)thumbImage {
+    UIImage *image = NeoWCImageJokerImageForObject(self);
+    return image ?: %orig;
+}
+
+- (UIImage *)maskedThumbImage {
+    UIImage *image = NeoWCImageJokerImageForObject(self);
+    return image ?: %orig;
+}
+
+- (NSData *)imageData {
+    NSData *data = NeoWCImageJokerDataForMessage(NeoWCImageJokerMessageForObject(self));
+    return data ?: %orig;
+}
+
+- (BOOL)isImageExists {
+    return NeoWCImageJokerImageForObject(self) ? YES : %orig;
+}
+
+- (CGSize)thumbImageSize {
+    UIImage *image = NeoWCImageJokerImageForObject(self);
+    return image ? image.size : %orig;
+}
+
+- (CGSize)measureContentViewSize:(CGSize)size {
+    UIImage *image = NeoWCImageJokerImageForObject(self);
+    return image ? image.size : %orig(size);
+}
+
+%end
+
+%hook MMImgDataItem_Message
+
+- (NSData *)imageData {
+    NSData *data = NeoWCImageJokerDataForMessage(NeoWCImageJokerMessageForObject(self));
+    return data ?: %orig;
+}
+
+- (UIImage *)image {
+    UIImage *image = NeoWCImageJokerImageForObject(self);
+    return image ?: %orig;
+}
+
+- (UIImage *)hdImage {
+    UIImage *image = NeoWCImageJokerImageForObject(self);
+    return image ?: %orig;
+}
+
+- (NSString *)imagePath {
+    NSString *path = NeoWCImageJokerPathForMessage(NeoWCImageJokerMessageForObject(self));
+    return path ?: %orig;
+}
+
+- (NSString *)hdImagePath {
+    NSString *path = NeoWCImageJokerPathForMessage(NeoWCImageJokerMessageForObject(self));
+    return path ?: %orig;
+}
+
+- (BOOL)isHDImage {
+    return NeoWCImageJokerImageForObject(self) ? YES : %orig;
+}
+
+- (CGSize)hdImageSize {
+    UIImage *image = NeoWCImageJokerImageForObject(self);
+    return image ? image.size : %orig;
+}
+
+%end
+
+%hook CMessageWrap
+
++ (NSString *)getJpgPathOfMsgMiddleImg:(id)message {
+    return NeoWCImageJokerPathForMessage(message) ?: %orig(message);
+}
+
++ (NSString *)getJpgPathOfMsgHDImg:(id)message {
+    return NeoWCImageJokerPathForMessage(message) ?: %orig(message);
+}
+
++ (NSString *)getJpgPathOfMsgHdOrMiddleImg:(id)message {
+    return NeoWCImageJokerPathForMessage(message) ?: %orig(message);
+}
+
++ (NSString *)getPathOfMsgImg:(id)message {
+    return NeoWCImageJokerPathForMessage(message) ?: %orig(message);
+}
+
++ (UIImage *)getMsgMiddleImg:(id)message {
+    return NeoWCImageJokerImageForMessage(message) ?: %orig(message);
+}
+
++ (UIImage *)getMsgHDImg:(id)message {
+    return NeoWCImageJokerImageForMessage(message) ?: %orig(message);
+}
+
++ (UIImage *)getMsgHdOrMiddleImg:(id)message {
+    return NeoWCImageJokerImageForMessage(message) ?: %orig(message);
+}
+
++ (NSData *)getMsgMiddleImgData:(id)message {
+    return NeoWCImageJokerDataForMessage(message) ?: %orig(message);
+}
+
++ (NSData *)getMsgMiddleImgData:(id)message canUseHeif:(BOOL)canUseHeif {
+    return NeoWCImageJokerDataForMessage(message) ?: %orig(message, canUseHeif);
+}
+
++ (NSData *)getMsgHDImgData:(id)message {
+    return NeoWCImageJokerDataForMessage(message) ?: %orig(message);
+}
+
++ (NSData *)getMsgHdOrMiddleImgData:(id)message {
+    return NeoWCImageJokerDataForMessage(message) ?: %orig(message);
+}
+
++ (NSData *)getMsgHdOrMiddleImgData:(id)message canUseHeif:(BOOL)canUseHeif {
+    return NeoWCImageJokerDataForMessage(message) ?: %orig(message, canUseHeif);
+}
+
+%end
+
 %hook TextMessageCellView
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    return NeoWCOperationMenuItemsWithJoker(self, items);
+    return NeoWCOperationMenuItemsWithJoker(self, items, NO);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
@@ -1574,7 +2897,7 @@ static void NeoWCRegisterPlugin(void) {
 %new
 - (void)joker_handleMenuItem:(id)sender {
     NeoWCCompatibilityMarkTriggered(@"chat-joker");
-    NeoWCPresentJokerEditorForCell(self);
+    NeoWCPresentJokerEditorForCell(self, NO);
 }
 
 %end
@@ -1583,7 +2906,7 @@ static void NeoWCRegisterPlugin(void) {
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    return NeoWCOperationMenuItemsWithJoker(self, items);
+    return NeoWCOperationMenuItemsWithJoker(self, items, NO);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
@@ -1596,7 +2919,7 @@ static void NeoWCRegisterPlugin(void) {
 %new
 - (void)joker_handleMenuItem:(id)sender {
     NeoWCCompatibilityMarkTriggered(@"chat-joker");
-    NeoWCPresentJokerEditorForCell(self);
+    NeoWCPresentJokerEditorForCell(self, NO);
 }
 
 %end
@@ -1605,12 +2928,12 @@ static void NeoWCRegisterPlugin(void) {
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    return NeoWCOperationMenuItemsWithJoker(self, items);
+    return NeoWCOperationMenuItemsWithJoker(self, items, YES);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
     if (action == @selector(joker_handleMenuItem:)) {
-        return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageCanJokerEdit(NeoWCMessageWrapForCell(self));
+        return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey);
     }
     return %orig;
 }
@@ -1618,12 +2941,43 @@ static void NeoWCRegisterPlugin(void) {
 %new
 - (void)joker_handleMenuItem:(id)sender {
     NeoWCCompatibilityMarkTriggered(@"chat-joker");
-    NeoWCPresentJokerEditorForCell(self);
+    NeoWCPresentJokerEditorForCell(self, YES);
 }
 
 %end
 
 %hook WCTimeLineCellView
+
+- (void)editBlackList {
+    if (!NeoWCEnhancementEnabled(NeoWCMomentsQuickPermissionsKey)) {
+        %orig;
+        return;
+    }
+    id dataItem = NeoWCMomentsValueForExactSelector(self, @"m_dataItem");
+    if (NeoWCMomentsUserNameForDataItem(dataItem).length == 0) {
+        %orig;
+        return;
+    }
+    NeoWCCompatibilityMarkTriggered(@"moments-quick-permissions");
+    NeoWCPendingMomentsPermissionDataItem = dataItem;
+    %orig;
+    id capturedDataItem = dataItem;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (NeoWCPendingMomentsPermissionDataItem == capturedDataItem) NeoWCPendingMomentsPermissionDataItem = nil;
+    });
+}
+
+- (void)initTimeLabel {
+    %orig;
+    NeoWCApplyMomentsPreciseTime(self, YES);
+}
+
+- (void)updateWithDataItem:(id)dataItem actionAreaVM:(id)actionAreaVM {
+    %orig(dataItem, actionAreaVM);
+    NeoWCCompatibilityMarkTriggered(@"moments-precise-time");
+    NeoWCApplyMomentsPreciseTime(self, YES);
+    NeoWCSynchronizeMomentsForwardButton(self);
+}
 
 - (void)initView {
     %orig;
@@ -1641,6 +2995,13 @@ static void NeoWCRegisterPlugin(void) {
         } @catch (__unused NSException *exception) {
             NeoWCLog(@"当前微信版本无法调整朋友圈操作按钮外观");
         }
+    } else {
+        id operateButton = NeoWCMomentsObjectForSelector(self, @"m_operateBtn");
+        if ([operateButton isKindOfClass:[UIView class]]) {
+            for (UIView *subview in [(UIView *)operateButton subviews]) {
+                if ([subview isKindOfClass:[UIImageView class]]) subview.hidden = NO;
+            }
+        }
     }
 }
 
@@ -1657,6 +3018,14 @@ static void NeoWCRegisterPlugin(void) {
     NeoWCShowMomentsHeart(self);
     NeoWCPlayMomentsLikeHaptic(defaults);
     NeoWCLog(@"已通过双击点赞朋友圈");
+}
+
+%new
+- (void)neowc_handleMomentsForward:(__unused id)sender {
+    id dataItem = NeoWCMomentsObjectForSelector(self, @"m_dataItem");
+    UIViewController *presenter = NeoWCJokerPresenterForCell(self);
+    if (!NeoWCMomentCanForward(dataItem) || !presenter) return;
+    NeoWCForwardMoment(dataItem, presenter);
 }
 
 - (id)operateBtnImage:(BOOL)spring isSpringStyle:(BOOL)springStyle {
@@ -1689,7 +3058,110 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%hook WCOperateFloatView
+
+- (void)layoutSubviews {
+    %orig;
+    NeoWCSynchronizeMomentsFloatForwardButton(self);
+}
+
+- (void)showWithItemData:(id)item tipPoint:(CGPoint)tipPoint {
+    %orig(item, tipPoint);
+    NeoWCSynchronizeMomentsFloatForwardButton(self);
+}
+
+- (void)hide {
+    UIButton *button = objc_getAssociatedObject(self, &NeoWCMomentsFloatForwardButtonKey);
+    button.hidden = YES;
+    %orig;
+}
+
+%new
+- (void)neowc_handleMomentsForward:(__unused id)sender {
+    id dataItem = NeoWCMomentsObjectForSelector(self, @"m_item");
+    UIViewController *presenter = NeoWCJokerPresenterForCell(self);
+    if (!NeoWCMomentCanForward(dataItem) || !presenter) return;
+    [self hide];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        NeoWCForwardMoment(dataItem, presenter);
+    });
+}
+
+%end
+
+%hook MMThemeManager
+
+- (id)getValueOfProperty:(id)property inRuleSet:(id)ruleSet {
+    id value = %orig(property, ruleSet);
+    return NeoWCScaledThemeValue(value, property, ruleSet);
+}
+
+- (id)getValueOfProperty:(id)property inRuleSet:(id)ruleSet isAdapt:(BOOL)isAdapt {
+    id value = %orig(property, ruleSet, isAdapt);
+    return NeoWCScaledThemeValue(value, property, ruleSet);
+}
+
+%end
+
+%hook CLocalInfo
+
+- (unsigned int)m_uiGlobalFontLevel {
+    unsigned int value = %orig;
+    return NeoWCEnhancementEnabled(NeoWCPageScaleEnabledKey) ? 1 : value;
+}
+
+- (unsigned int)m_uiWebviewFontLevel {
+    unsigned int value = %orig;
+    return NeoWCEnhancementEnabled(NeoWCPageScaleEnabledKey) ? 1 : value;
+}
+
+%end
+
+%hook WKWebView
+
+- (id)initWithFrame:(CGRect)frame configuration:(id)configuration {
+    id webView = %orig(frame, configuration);
+    NeoWCApplyWebViewTextScale(webView);
+    return webView;
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    NeoWCApplyWebViewTextScale(self);
+}
+
+- (void)_setTextZoomFactor:(CGFloat)factor {
+    if (NeoWCEnhancementEnabled(NeoWCPageScaleEnabledKey)) {
+        factor = NeoWCGlobalPageScaleFactor();
+        NeoWCCompatibilityMarkTriggered(@"page-scale");
+    }
+    %orig(factor);
+}
+
+%end
+
+%hook WAThemeProxy
+
++ (id)getValueOfProperty:(id)property inRuleSet:(id)ruleSet {
+    id value = %orig(property, ruleSet);
+    return NeoWCScaledThemeValue(value, property, ruleSet);
+}
+
+%end
+
 %hook CMessageMgr
+
+- (void)AsyncOnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
+    if (NeoWCShouldBlockIncomingMessage(sessionUserName, wrap)) {
+        NeoWCCompatibilityMarkTriggered(@"message-block");
+        return;
+    }
+    %orig;
+    if (NeoWCEnhancementEnabled(NeoWCKeywordReminderEnabledKey)) {
+        NeoWCCompatibilityMarkTriggered(@"keyword-reminder");
+        NeoWCHandleIncomingKeywordReminder(sessionUserName, wrap);
+    }
+}
 
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap {
     static dispatch_once_t compatibilityOnce;
@@ -1740,28 +3212,80 @@ static void NeoWCRegisterPlugin(void) {
 
 %end
 
+%hook CContactMgr
+
+- (void)printContactImportantChangeData:(id)newContact oldContact:(id)oldContact {
+    id snapshot = NeoWCCaptureGroupMemberChange(newContact, oldContact);
+    if (snapshot) NeoWCCompatibilityMarkTriggered(@"group-member-reminder");
+    %orig;
+    if (snapshot) NeoWCCompleteGroupMemberChange(snapshot, self, newContact);
+}
+
+%end
+
 %hook WCDeviceStepObject
 
 - (unsigned int)m7StepCount {
     static dispatch_once_t compatibilityOnce;
     dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"steps"); });
     unsigned int originalValue = %orig;
-    if (!NeoWCEnhancementEnabled(NeoWCStepOverrideEnabledKey)) return originalValue;
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSDate *configuredDate = [defaults objectForKey:NeoWCStepCountDateKey];
-    if (![configuredDate isKindOfClass:[NSDate class]] || ![[NSCalendar currentCalendar] isDateInToday:configuredDate]) return originalValue;
-    NSInteger configuredValue = [defaults integerForKey:NeoWCStepCountKey];
-    return configuredValue > 0 ? (unsigned int)MIN(100000, configuredValue) : originalValue;
+    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    return configuredValue > 0 ? configuredValue : originalValue;
 }
 
 - (unsigned int)hkStepCount {
     unsigned int originalValue = %orig;
-    if (!NeoWCEnhancementEnabled(NeoWCStepOverrideEnabledKey)) return originalValue;
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSDate *configuredDate = [defaults objectForKey:NeoWCStepCountDateKey];
-    if (![configuredDate isKindOfClass:[NSDate class]] || ![[NSCalendar currentCalendar] isDateInToday:configuredDate]) return originalValue;
-    NSInteger configuredValue = [defaults integerForKey:NeoWCStepCountKey];
-    return configuredValue > 0 ? (unsigned int)MIN(100000, configuredValue) : originalValue;
+    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    return configuredValue > 0 ? configuredValue : originalValue;
+}
+
+- (void)setM7StepCount:(unsigned int)value {
+    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    %orig(configuredValue > 0 ? configuredValue : value);
+}
+
+- (void)setHkStepCount:(unsigned int)value {
+    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    %orig(configuredValue > 0 ? configuredValue : value);
+}
+
+%end
+
+%hook UploadDeviceStepReq
+
+- (unsigned int)stepCount {
+    static dispatch_once_t compatibilityOnce;
+    dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"steps-upload"); });
+    unsigned int originalValue = %orig;
+    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    return configuredValue > 0 ? configuredValue : originalValue;
+}
+
+- (unsigned int)m7StepCount {
+    unsigned int originalValue = %orig;
+    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    return configuredValue > 0 ? configuredValue : originalValue;
+}
+
+- (unsigned int)hkStepCount {
+    unsigned int originalValue = %orig;
+    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    return configuredValue > 0 ? configuredValue : originalValue;
+}
+
+- (void)setStepCount:(unsigned int)value {
+    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    %orig(configuredValue > 0 ? configuredValue : value);
+}
+
+- (void)setM7StepCount:(unsigned int)value {
+    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    %orig(configuredValue > 0 ? configuredValue : value);
+}
+
+- (void)setHkStepCount:(unsigned int)value {
+    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    %orig(configuredValue > 0 ? configuredValue : value);
 }
 
 %end
@@ -1770,6 +3294,7 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)setViewModel:(id)viewModel {
     %orig;
+    NeoWCSynchronizeReplyGesture(self);
     [self neowc_scheduleAntiRevokeSidePromptRefresh];
 }
 
@@ -1780,12 +3305,25 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)didMoveToWindow {
     %orig;
+    NeoWCSynchronizeReplyGesture(self);
     if (self.window) {
         [self neowc_scheduleAntiRevokeSidePromptRefresh];
     } else {
         UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
         if (label && !label.hidden) label.hidden = YES;
     }
+}
+
+%new
+- (void)neowc_handleReplyPan:(UIPanGestureRecognizer *)recognizer {
+    if (recognizer.state != UIGestureRecognizerStateEnded ||
+        !NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey)) return;
+    CGPoint translation = [recognizer translationInView:self];
+    if (fabs(translation.x) < 64.0 || fabs(translation.x) <= fabs(translation.y)) return;
+    SEL selector = NSSelectorFromString(@"onShowMsgReplyMenuItem:");
+    if (![self respondsToSelector:selector]) return;
+    NeoWCCompatibilityMarkTriggered(@"reply-swipe");
+    ((void (*)(id, SEL, id))objc_msgSend)(self, selector, nil);
 }
 
 %new
@@ -1924,12 +3462,8 @@ static void NeoWCRegisterPlugin(void) {
 
 - (unsigned int)stepCount {
     unsigned int originalValue = %orig;
-    if (!NeoWCEnhancementEnabled(NeoWCStepOverrideEnabledKey)) return originalValue;
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSDate *configuredDate = [defaults objectForKey:NeoWCStepCountDateKey];
-    if (![configuredDate isKindOfClass:[NSDate class]] || ![[NSCalendar currentCalendar] isDateInToday:configuredDate]) return originalValue;
-    NSInteger configuredValue = [defaults integerForKey:NeoWCStepCountKey];
-    return configuredValue > 0 ? (unsigned int)MIN(100000, configuredValue) : originalValue;
+    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    return configuredValue > 0 ? configuredValue : originalValue;
 }
 
 - (BOOL)isAd {
@@ -1962,24 +3496,40 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)didMoveToSuperview {
     %orig;
-    NeoWCInstallWalletLongPressIfNeeded((UIView *)self, self, @selector(neowc_walletHandleLongPress:));
+    if (NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey) &&
+        NeoWCViewIsInsideWalletHeader((UIView *)self)) {
+        NeoWCInstallWalletLongPressIfNeeded((UIView *)self, self, @selector(neowc_walletHandleLongPress:));
+    } else {
+        NeoWCRemoveWalletLongPressIfNeeded((UIView *)self);
+    }
 }
 
 - (void)updateNumber:(unsigned long long)number {
-    unsigned long long balanceFen = NeoWCWalletBalanceFenOverride();
+    unsigned long long balanceFen = NeoWCViewIsInsideWalletHeader((UIView *)self)
+        ? NeoWCWalletBalanceFenOverride()
+        : 0;
     if (balanceFen > 0) {
         NeoWCCompatibilityMarkTriggered(@"wallet-balance");
         %orig(balanceFen);
         return;
     }
-    %orig;
+    %orig(number);
+}
+
+- (void)defaultNumber:(unsigned long long)number {
+    unsigned long long balanceFen = NeoWCViewIsInsideWalletHeader((UIView *)self)
+        ? NeoWCWalletBalanceFenOverride()
+        : 0;
+    %orig(balanceFen > 0 ? balanceFen : number);
 }
 
 %new
 - (void)neowc_walletHandleLongPress:(UILongPressGestureRecognizer *)recognizer {
-    if (recognizer.state == UIGestureRecognizerStateBegan) {
+    if (recognizer.state == UIGestureRecognizerStateBegan &&
+        NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey)) {
         NeoWCCompatibilityMarkTriggered(@"wallet-balance");
-        NeoWCPresentWalletBalanceEditor();
+        id headerView = NeoWCWalletHeaderForView((UIView *)self);
+        NeoWCPresentWalletBalanceEditor(headerView);
     }
 }
 
@@ -1989,14 +3539,40 @@ static void NeoWCRegisterPlugin(void) {
 
 - (void)didMoveToSuperview {
     %orig;
-    NeoWCInstallWalletLongPressIfNeeded((UIView *)self, self, @selector(neowc_walletHeaderHandleLongPress:));
+    if (NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey)) {
+        NeoWCInstallWalletLongPressIfNeeded((UIView *)self, self, @selector(neowc_walletHeaderHandleLongPress:));
+    } else {
+        NeoWCRemoveWalletLongPressIfNeeded((UIView *)self);
+    }
+    NeoWCRefreshWalletHeaderBalance(self);
+}
+
+- (void)handleUpdateWalletBalance {
+    %orig;
+    NeoWCRefreshWalletHeaderBalance(self);
+}
+
+- (void)setupTimeoutNumber {
+    %orig;
+    NeoWCRefreshWalletHeaderBalance(self);
+}
+
+- (void)updateBalanceEntryView {
+    %orig;
+    NeoWCRefreshWalletHeaderBalance(self);
+}
+
+- (void)updateBalanceAndRefreshView {
+    %orig;
+    NeoWCRefreshWalletHeaderBalance(self);
 }
 
 %new
 - (void)neowc_walletHeaderHandleLongPress:(UILongPressGestureRecognizer *)recognizer {
-    if (recognizer.state == UIGestureRecognizerStateBegan) {
+    if (recognizer.state == UIGestureRecognizerStateBegan &&
+        NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey)) {
         NeoWCCompatibilityMarkTriggered(@"wallet-balance");
-        NeoWCPresentWalletBalanceEditor();
+        NeoWCPresentWalletBalanceEditor(self);
     }
 }
 

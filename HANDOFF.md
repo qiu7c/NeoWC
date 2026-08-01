@@ -1,6 +1,6 @@
 # NeoWC 项目交接文档
 
-更新时间：2026-07-23
+更新时间：2026-08-01
 项目版本：0.1.2
 仓库：`git@github.com:qiu7c/NeoWC.git`
 主分支：`main`
@@ -28,6 +28,7 @@ NeoWC 是注入微信的 Theos / Logos Tweak，使用 Objective-C、ARC 和原�
 - 图标源文件：`Assets/NeoWCIcon.svg`
 
 本机 Windows 通常没有 Theos，最终编译由 GitHub Actions 完成。Makefile 会自动包含 `Sources/*.m`。
+本地 `.env` 已被 Git 忽略，并将大小写两套 `HTTP_PROXY/HTTPS_PROXY/ALL_PROXY` 清空、`NO_PROXY` 设为 `*`。并非所有工具都会自动读取 dotenv，执行网络命令时仍应显式加载或清空代理环境变量。
 
 本地静态检查：
 
@@ -88,7 +89,12 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
   - 回复撤回者与时间限制
   - 运行期记录中心与可选本地摘要
 - 小游戏结果选择及骰子/猜拳跨类型彩蛋
-- 聊天记录小丑：长按文字、应用或转账消息，仅修改当前页面本机显示
+- 聊天记录显示修改：长按文字、应用、图片或转账消息，仅修改当前页面本机显示
+- 引用回复手势复用微信原生回复入口
+- 普通文字消息屏蔽、长按菜单管理
+- 群成员进退群提醒与关键词提醒
+- 自动选择原图
+- 通知点击直接进入对应聊天
 - 输入框左滑清空、右滑粘贴
 - 官方图片编辑后快速发送到当前会话
 - 多选消息导出
@@ -102,7 +108,10 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 - 游戏扫码授权自动允许
 - 朋友圈双击点赞、爱心动画和震动强度
 - 朋友圈操作按钮直接评论
-- 自定义微信运动步数，每日启动或回前台刷新日期
+- 朋友圈转发：快捷评论开启时独立按钮，关闭时加入微信原操作菜单
+- 长按朋友圈头像，将微信原“设置权限/投诉”菜单替换为 4 个原生权限快捷项和投诉
+- 朋友圈显示精确发布时间，可展开设置 `yyyy-MM-dd HH:mm:ss` 等自定义格式
+- 自定义微信运动步数，同时覆盖设备对象与上传请求的三个精确步数字段
 - 钱包余额本地显示：设置页只提供开关，余额必须在钱包页长按入口或余额数字设置，仅替换本机界面文字
 - 好友数量本地显示：仅替换“个朋友”等明确好友数量文案
 - 朋友圈与小程序启动广告净化
@@ -114,6 +123,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 - 内外圆角 0–40 自定义
 - 隐藏聊天标题旁“免打扰”图片
 - 插件显示管理
+- 页面缩放：全局字体规则/网页文字与 NeoWC 设置页比例分别配置
 
 ### 开发者功能
 
@@ -138,9 +148,20 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | 免打扰图标 | `UIImageView setAccessibilityLabel:/didMoveToWindow/setHidden:` | 仅处理标签严格等于“免打扰”的已管理图片 |
 | 多选导出 | `BaseMsgContentViewController`、`MMScrollActionSheet` | 只在多选“更多”菜单构建期间插入项目 |
 | 朋友圈 | `WCTimeLineCellView`、`WCTimeLineOperateButtonView` | 所有逻辑必须受开关控制 |
+| 朋友圈转发 | `WCTimeLineCellView`、`WCOperateFloatView` | 快捷评论开启时显示独立转发按钮；关闭时在原浮动菜单中增加“转发”；媒体仅使用参考插件确认的下载器、路径和发布控制器 |
+| 朋友圈头像快捷权限 | `WCTimeLineCellView editBlackList`、`WCActionSheet showInView:` | 只识别原生“设置权限/设置 + 投诉”两项菜单；失败时完整保留原菜单；权限动作仅调用已从参考插件确认的 `opAllPermission`、`opSocialBlackPermission`、`opOutsider:`、`opWCBlacklist:` |
+| 朋友圈精确时间 | `WCTimeLineCellView initTimeLabel/updateWithDataItem:actionAreaVM:` | 时间源严格使用 `m_dataItem.createtime` 的 Unix 秒并只写 `m_timeLabel`；禁止增加 `layoutSubviews` Hook，禁止调用 `setNeedsLayout/layoutIfNeeded` |
 | 游戏选择 | `CMessageMgr AddEmoticonMsg:MsgWrap:` | 非游戏消息和关闭状态直接 `%orig` |
-| 聊天记录小丑 | `TextMessageCellView`、`AppMessageCellView`、`WCPayTransferMessageCellView` 的 `operationMenuItems`/`canPerformAction:withSender:` | 仅在开关开启时插入“小丑”菜单；引用消息只修改回复文字，不修改被引用原文；转账按参考插件直接修改当前消息的 pay item；只做当前页面本机显示修改 |
-| 钱包余额显示 | `TimeoutNumber updateNumber:/didMoveToSuperview`、`WCPayWalletEntryHeaderView didMoveToSuperview` | 当前 `updateNumber:` 参数替换方案会阻断钱包余额页面，修复前必须核对参考 dylib 的真实参数类型和调用顺序；禁止恢复通过 `MMUILabel` 猜测所有数字的方案 |
+| 聊天记录显示修改 | `TextMessageCellView`、`AppMessageCellView`、`ImageMessageCellView`、`WCPayTransferMessageCellView` | 文字/应用/转账沿用参考插件确认的消息对象、setter 与节点刷新；图片使用当前聊天页缓存并覆盖图片 Cell、ViewModel、数据项和 `CMessageWrap` 精确读取入口 |
+| 引用回复手势 | `CommonMessageCellView onShowMsgReplyMenuItem:` | 仅横向滑动结束且超过阈值时调用微信原生回复入口；手势关闭后移除 |
+| 消息屏蔽/关键词提醒 | `CMessageMgr AsyncOnAddMsg:MsgWrap:` | 只处理新收到的普通文字；关闭或不命中时完整执行 `%orig` |
+| 长按菜单管理 | 各消息 Cell 的 `operationMenuItems` | 只管理已存在菜单项；关闭时恢复原始标题 |
+| 群成员提醒 | `CContactMgr printContactImportantChangeData:oldContact:` | 原调用前后比较群成员列表，本地提醒不写回联系人 |
+| 自动原图 | `MMAssetPickerController`、`MMImagePreviewBrowserController viewDidLoad` | 只调用已确认的 `setIsOriginSelected:` |
+| 通知直达聊天 | `NotificationActionsMgr`、`MicroMessengerAppDelegate` 通知回调 | 只接管含有效会话字段 `u` 的通知，其他通知完整回退微信 |
+| 钱包余额显示 | `TimeoutNumber updateNumber:/defaultNumber:`、`WCPayWalletEntryHeaderView` | 已确认参数为 `unsigned long long` 且单位为分；仅钱包头部替换后调用原 IMP，禁止恢复 `MMUILabel` 全局数字猜测 |
+| 微信运动步数 | `WCDeviceStepObject`、`UploadDeviceStepReq`、`WCDataItem` | Getter/Setter 均使用当天配置值；关闭、未配置或跨日时返回原值 |
+| 页面缩放 | `MMThemeManager`、`CLocalInfo`、`WKWebView`、`WAThemeProxy` | 只缩放 `#font_set` 的 `alllevel/chatLevel` 与网页文字，不修改窗口 transform，不按账号硬编码 |
 | 好友数量显示 | `MMUILabel setText:` | 必须匹配“个朋友”等明确文案，禁止无条件全局替换 |
 | 广告 | `WCDataItem`、`WAAppTaskSplashADConfig` | 关闭状态返回微信原值 |
 
@@ -220,35 +241,38 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 - 本地 Windows 无法完整验证 Theos/iOS 私有 API 编译，推送后由云端构建。
 - 调试日志默认开启；排查性能时可先关闭。
 
-### 当前阻断问题
+### 已完成静态修复，待真机验证
 
 参考插件：`2DD小丑助手-arm64.deb`。本地提取目录为 `.codex-analysis/2dd-joker/`，该目录已被 Git 忽略，只用于分析。用户已确认参考 dylib 在同一真机环境中余额修改和聊天文字修改都完全生效。
 
-1. 钱包余额页面无法进入
-   - 出现在提交 `65c75aa` 后。
-   - 该提交移除了钱包对全局 `MMUILabel setText:` 的金额猜测，解决了插件管理页版本号被误改的问题。
-   - 但当前 `TimeoutNumber updateNumber:` 在开关开启且配置余额后直接执行 `%orig(balanceText)`，其中 `balanceText` 是带货币符号的 `NSString`。真机表现说明原方法参数类型或内部调用契约与此不符，可能在进入余额页面时触发异常或破坏初始化。
-   - 修复时不得继续猜测参数类型。必须反编译参考 dylib 中 `TimeoutNumber updateNumber:` 的替换函数，确认传给原 IMP 的对象类型、金额单位、格式及调用前后顺序。
-   - 在精确实现完成前，最小安全回退是让 `updateNumber:` 原样 `%orig`，确保钱包页面可进入；不得再次用全局数字匹配替换余额。
+1. 钱包余额
+   - 已从参考 dylib 的替换函数确认 `TimeoutNumber updateNumber:` 接收 `unsigned long long`，金额单位为分，并将替换后的整数交给原 IMP。
+   - 当前实现只在 `TimeoutNumber` 位于 `WCPayWalletEntryHeaderView` 内时替换 `updateNumber:/defaultNumber:`；其他实例原样回退。
+   - 钱包页长按编辑后仍按分保存并通过头部 `_timeoutNumber` 的精确入口刷新。
+   - 全局 `MMUILabel` 金额/数字猜测保持删除，版本号不会再因余额功能被匹配。
 
-2. 聊天记录文字修改仍不生效
-   - 菜单和编辑弹窗可以出现，但确认后真机显示不改变。
-   - `65c75aa` 已尝试扩展 `messageWrap/msgWrap/getMessageWrap/getMsgWrap` 获取方式、显式调用 `setM_nsContent:` 等 setter、强持有目标 Cell、刷新消息节点及递归替换 `UILabel`，仍然无效。
-   - 这说明实际消息对象入口、正文控件类型或刷新调用与推测不一致；正文也可能不是普通 `UILabel`。
-   - 下一轮必须逐个反编译参考 dylib 对 `TextMessageCellView`、`AppMessageCellView`、`WCPayTransferMessageCellView` 新增的 `joker_handleMenuItem:` 及相关辅助函数，记录它取得消息对象、判断类型、修改字段和刷新 Cell 的完整顺序。
-   - 不要继续叠加宽泛 KVC、遍历全局窗口或无目标的 UI 文本替换。只迁移参考 dylib 已验证的调用路径，并保留“仅修改当前页面本机显示”的边界。
-   - 2026-07-23 最新未提交修复已移除转账专用强制分支、`WCPayTransferMessageViewModel` 覆盖和 `updateStatus/updateTitleLabel/updateDescLabel` 额外刷新。三个 Cell 统一从 `viewModel.messageWrap` 分类；转账确认后按 `m_nsFeeDesc`、`m_receiverDesc`、`m_senderDesc` 的顺序写入当前 pay item，再执行 `clearNodeLayoutCache`、`reloadNodeWithMessageWrap:`、`reloadVisibleNodeWithCellView:` 和异步 table begin/end；等待真机验证。
+2. 聊天记录显示修改
+   - 文字、应用与转账已按参考插件确认的消息对象来源、字段 setter 和消息节点刷新顺序还原，不再遍历全局窗口或递归猜测正文控件。
+   - 图片伪装使用 `ImageMessageCellView`、`ImageMessageViewModel`、`MMImgDataItem_Message` 与 `CMessageWrap` 的精确读取入口，仅缓存当前聊天页并在退出时清理。
+   - 转账菜单恢复明确的 `WCPayTransferMessageCellView` 上下文，依次写入 `m_nsFeeDesc`、`m_receiverDesc`、`m_senderDesc`；仍需真机确认当前微信版本的最终刷新效果。
+
+3. 新增参考功能
+   - 朋友圈转发、页面缩放、微信运动上传字段和图片伪装均按参考 dylib 的实际 Selector/控制器调用链接入。
+   - 朋友圈媒体转发任务在下载阶段由当前页面强持有，展示后转移给转发导航控制器，失败时释放。
+   - 参考插件的“去除分割线”依赖宽泛视图处理，当前未接入，避免给微信全局 UI 带来不可控副作用。
 
 ## 12. 下一轮真机验证顺序
 
-1. 先关闭钱包余额开关，确认钱包和余额页面可正常进入。
-2. 按参考 dylib 精确修复后再开启钱包余额，验证页面可进入、长按可设置、只修改真实余额位置且插件版本号不变。
-3. 分别测试文字、应用消息和转账消息的“小丑”菜单，确认提交后当前 Cell 立即改变。
-4. 退出并重新进入聊天，确认该功能仍保持“仅当前页面本机显示”的预期边界。
-5. 开启防撤回气泡方案，进入普通聊天，搜索并跳转到目标消息后返回。
-6. 快速切换多个聊天并接收新消息，确认撤回提示立即出现且不会消失。
-7. 测试图片编辑快捷发送与官方转发。
-8. 测试设置页分类和子项展开动画。
+1. 钱包余额开关关闭、开启且已配置两种状态下都进入钱包页；开启时验证长按设置、真实余额位置、金额单位及插件版本号。
+2. 分别测试文字、引用应用、普通应用、图片和转账消息的修改菜单，确认当前 Cell 立即改变。
+3. 退出并重新进入聊天，确认所有显示修改均保持“仅当前页面本机显示”的边界。
+4. 朋友圈快捷评论开启/关闭各测试转发入口，并覆盖文字、图片、视频和结构化内容。
+5. 页面缩放测试 70%、85%、100% 与关闭恢复，重点检查聊天、设置页和网页。
+6. 微信运动确认设备对象和实际上传请求都使用当天配置步数。
+7. 测试消息屏蔽、长按菜单、群成员/关键词提醒、自动原图和通知直达。
+8. 开启防撤回气泡方案，搜索跳转并快速切换聊天，确认提示不消失且无卡顿。
+9. 测试图片编辑快捷发送与微信官方转发完全隔离。
+10. 测试设置页分类、父功能子项展开、无动画刷新与滚动位置保持。
 
 若只有气泡方案开启时卡顿，优先检查 `CommonMessageCellView` 的三处低频入口和合并调度器，禁止先恢复布局 Hook。
 

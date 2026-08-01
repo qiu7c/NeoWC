@@ -2,9 +2,11 @@
 #import "NeoWCAccount.h"
 #import "NeoWCAntiRevoke.h"
 #import "NeoWCAntiRevokeTemplateEditor.h"
+#import "NeoWCConfigManagerViewController.h"
 #import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCCompatibility.h"
+#import "NeoWCListEditorViewController.h"
 #import "NeoWCPluginVisibility.h"
 #import "NeoWCPluginShortcuts.h"
 #import "NeoWCInterfaceTweaks.h"
@@ -17,6 +19,10 @@ static NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapse
 static long long NeoWCSettingsLongLongDefaultForKey(NSString *key) {
     id value = [[NSUserDefaults standardUserDefaults] objectForKey:key];
     return [value respondsToSelector:@selector(longLongValue)] ? [value longLongValue] : 0;
+}
+
+static NSString *NeoWCSettingsCountText(NSUInteger count) {
+    return count > 0 ? [NSString stringWithFormat:@"%lu 项", (unsigned long)count] : @"设置";
 }
 
 static UIImage *NeoWCSymbol(NSString *name) {
@@ -183,6 +189,20 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCAntiRevokePersistRecordsKey: @NO,
         NeoWCImageEditQuickSendEnabledKey: @NO,
         NeoWCChatJokerEnabledKey: @NO,
+        NeoWCMomentsForwardEnabledKey: @NO,
+        NeoWCReplySwipeEnabledKey: @NO,
+        NeoWCMessageBlockEnabledKey: @NO,
+        NeoWCMessageBlockUsersKey: @[],
+        NeoWCMessageBlockKeywordsKey: @[],
+        NeoWCLongPressMenuEnabledKey: @NO,
+        NeoWCLongPressMenuHiddenTitlesKey: @[],
+        NeoWCLongPressMenuPreferredOrderKey: @[],
+        NeoWCLongPressMenuTitleMapKey: @{},
+        NeoWCGroupMemberReminderEnabledKey: @NO,
+        NeoWCKeywordReminderEnabledKey: @NO,
+        NeoWCKeywordReminderKeywordsKey: @[],
+        NeoWCAutoOriginalImageEnabledKey: @NO,
+        NeoWCNotificationDirectChatEnabledKey: @NO,
         NeoWCWalletBalanceEnabledKey: @NO,
         NeoWCWalletBalanceFenKey: @0,
         NeoWCContactsCountEnabledKey: @NO,
@@ -190,6 +210,12 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCInputSwipeActionsEnabledKey: @NO,
         NeoWCMomentsLikeHapticEnabledKey: @NO,
         NeoWCMomentsLikeHapticIntensityKey: @0.65,
+        NeoWCMomentsQuickPermissionsKey: @NO,
+        NeoWCMomentsPreciseTimeKey: @NO,
+        NeoWCMomentsPreciseTimeFormatKey: NeoWCMomentsPreciseTimeDefaultFormat,
+        NeoWCPageScaleEnabledKey: @NO,
+        NeoWCPageScaleGlobalPercentKey: @100.0,
+        NeoWCSettingsPageScalePercentKey: @100.0,
         NeoWCMultiSelectExportEnabledKey: @NO,
         NeoWCMultiSelectExportTextKey: @YES,
         NeoWCMultiSelectSaveImagesKey: @YES,
@@ -232,12 +258,35 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     self.tableView.tableHeaderView = [self makeHeaderView];
     if (@available(iOS 15.0, *)) self.tableView.sectionHeaderTopPadding = 0.0;
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"NeoWCSettingCell"];
+    [self applySettingsPageScale];
+}
+
+- (void)applySettingsPageScale {
+    CGFloat percent = NeoWCEnhancementEnabled(NeoWCPageScaleEnabledKey)
+        ? NeoWCScalePercentForDefaultsKey(NeoWCSettingsPageScalePercentKey, 100.0)
+        : 100.0;
+    CGFloat scale = percent / 100.0;
+    self.tableView.rowHeight = MAX(48.0, 60.0 * scale);
+    self.tableView.estimatedRowHeight = self.tableView.rowHeight;
+    self.tableView.estimatedSectionHeaderHeight = MAX(44.0, 58.0 * scale);
+    self.tableView.estimatedSectionFooterHeight = MAX(34.0, 44.0 * scale);
+    self.tableView.tableHeaderView = [self makeHeaderView];
+}
+
+- (CGFloat)settingsPageScale {
+    if (!NeoWCEnhancementEnabled(NeoWCPageScaleEnabledKey)) return 1.0;
+    return NeoWCScalePercentForDefaultsKey(NeoWCSettingsPageScalePercentKey, 100.0) / 100.0;
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    CGPoint offset = self.tableView.contentOffset;
+    [self applySettingsPageScale];
     [self buildSections];
-    [self.tableView reloadData];
+    [UIView performWithoutAnimation:^{
+        [self.tableView reloadData];
+        [self.tableView setContentOffset:offset animated:NO];
+    }];
 }
 
 - (BOOL)featureHasChildrenForKey:(NSString *)key {
@@ -250,9 +299,15 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             NeoWCAntiRevokeNotifySenderKey,
             NeoWCMomentsDoubleTapLikeKey,
             NeoWCMomentsLikeHapticEnabledKey,
+            NeoWCMomentsPreciseTimeKey,
+            NeoWCPageScaleEnabledKey,
             NeoWCStepOverrideEnabledKey,
             NeoWCContactsCountEnabledKey,
             NeoWCMultiSelectExportEnabledKey,
+            NeoWCMessageBlockEnabledKey,
+            NeoWCKeywordReminderEnabledKey,
+            NeoWCLongPressMenuEnabledKey,
+            NeoWCWalletBalanceEnabledKey,
             NeoWCPluginShortcutsEnabledKey,
             NeoWCPluginShortcutCustomPageKey,
             NeoWCChatInputRoundingEnabledKey,
@@ -293,8 +348,23 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     BOOL stepOverrideEnabled = [defaults boolForKey:NeoWCStepOverrideEnabledKey];
     BOOL momentsLikeEnabled = [defaults boolForKey:NeoWCMomentsDoubleTapLikeKey];
     BOOL momentsHapticEnabled = [defaults boolForKey:NeoWCMomentsLikeHapticEnabledKey];
+    BOOL momentsPreciseTimeEnabled = [defaults boolForKey:NeoWCMomentsPreciseTimeKey];
+    NSString *momentsDateFormat = NeoWCNormalizedMomentsDateFormat([defaults stringForKey:NeoWCMomentsPreciseTimeFormatKey]) ?: NeoWCMomentsPreciseTimeDefaultFormat;
+    BOOL pageScaleEnabled = [defaults boolForKey:NeoWCPageScaleEnabledKey];
+    CGFloat globalScalePercent = NeoWCScalePercentForDefaultsKey(NeoWCPageScaleGlobalPercentKey, 100.0);
+    CGFloat settingsScalePercent = NeoWCScalePercentForDefaultsKey(NeoWCSettingsPageScalePercentKey, 100.0);
     BOOL multiSelectExportEnabled = [defaults boolForKey:NeoWCMultiSelectExportEnabledKey];
     BOOL contactsCountEnabled = [defaults boolForKey:NeoWCContactsCountEnabledKey];
+    BOOL messageBlockEnabled = [defaults boolForKey:NeoWCMessageBlockEnabledKey];
+    BOOL keywordReminderEnabled = [defaults boolForKey:NeoWCKeywordReminderEnabledKey];
+    BOOL longPressMenuEnabled = [defaults boolForKey:NeoWCLongPressMenuEnabledKey];
+    BOOL walletBalanceEnabled = [defaults boolForKey:NeoWCWalletBalanceEnabledKey];
+    NSUInteger blockedUserCount = [defaults arrayForKey:NeoWCMessageBlockUsersKey].count;
+    NSUInteger blockedKeywordCount = [defaults arrayForKey:NeoWCMessageBlockKeywordsKey].count;
+    NSUInteger reminderKeywordCount = [defaults arrayForKey:NeoWCKeywordReminderKeywordsKey].count;
+    NSUInteger hiddenMenuCount = [defaults arrayForKey:NeoWCLongPressMenuHiddenTitlesKey].count;
+    NSUInteger orderedMenuCount = [defaults arrayForKey:NeoWCLongPressMenuPreferredOrderKey].count;
+    NSUInteger renamedMenuCount = [defaults dictionaryForKey:NeoWCLongPressMenuTitleMapKey].count;
     BOOL pluginShortcutsEnabled = [defaults boolForKey:NeoWCPluginShortcutsEnabledKey];
     BOOL inputRoundingEnabled = [defaults boolForKey:NeoWCChatInputRoundingEnabledKey];
     NSString *revokePromptStyle = revokePromptStyleValue == 1 ? @"气泡旁" : @"消息下方";
@@ -324,9 +394,28 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [messageItems addObject:item(@"本地保存撤回记录", @"默认关闭；仅保存摘要和分类", @"internaldrive", NeoWCRowKindSwitch, NeoWCAntiRevokePersistRecordsKey, nil)];
     }
     [messageItems addObject:item(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCRowKindSwitch, NeoWCGameSelectorKey, nil)];
-    [messageItems addObject:item(@"聊天记录小丑", @"长按文字、应用或转账消息，本地修改当前页面显示", @"face.smiling", NeoWCRowKindSwitch, NeoWCChatJokerEnabledKey, nil)];
+    [messageItems addObject:item(@"聊天记录小丑", @"长按文字、应用、图片或转账消息，本地修改当前页面显示", @"square.and.pencil", NeoWCRowKindSwitch, NeoWCChatJokerEnabledKey, nil)];
+    [messageItems addObject:item(@"引用回复手势", @"横向滑动消息气泡直接进入微信原生引用回复", @"arrowshape.turn.up.left", NeoWCRowKindSwitch, NeoWCReplySwipeEnabledKey, nil)];
+    [messageItems addObject:item(@"消息屏蔽", @"按会话账号或关键词忽略新收到的普通文字消息", @"eye.slash", NeoWCRowKindSwitch, NeoWCMessageBlockEnabledKey, nil)];
+    if (messageBlockEnabled && [self isFeatureExpandedForKey:NeoWCMessageBlockEnabledKey]) {
+        [messageItems addObject:item(@"屏蔽会话账号", @"每行一个 wxid 或群聊账号", @"person.crop.circle.badge.xmark", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(blockedUserCount))];
+        [messageItems addObject:item(@"屏蔽关键词", @"命中后不加入本地聊天记录", @"text.badge.xmark", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(blockedKeywordCount))];
+    }
+    [messageItems addObject:item(@"长按菜单管理", @"管理文字、应用与转账消息的现有菜单项", @"list.bullet.rectangle", NeoWCRowKindSwitch, NeoWCLongPressMenuEnabledKey, nil)];
+    if (longPressMenuEnabled && [self isFeatureExpandedForKey:NeoWCLongPressMenuEnabledKey]) {
+        [messageItems addObject:item(@"隐藏菜单项", @"按原始名称隐藏菜单项", @"eye.slash.circle", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(hiddenMenuCount))];
+        [messageItems addObject:item(@"菜单排序", @"逐行填写希望优先显示的原始名称", @"arrow.up.arrow.down", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(orderedMenuCount))];
+        [messageItems addObject:item(@"菜单重命名", @"使用“原名称=新名称”配置显示文字", @"pencil.line", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(renamedMenuCount))];
+    }
+    [messageItems addObject:item(@"群成员进退群提醒", @"根据群成员列表变化显示本地提醒", @"person.2.badge.gearshape", NeoWCRowKindSwitch, NeoWCGroupMemberReminderEnabledKey, nil)];
+    [messageItems addObject:item(@"关键词提醒", @"新收到的普通文字命中关键词时提醒", @"bell.badge", NeoWCRowKindSwitch, NeoWCKeywordReminderEnabledKey, nil)];
+    if (keywordReminderEnabled && [self isFeatureExpandedForKey:NeoWCKeywordReminderEnabledKey]) {
+        [messageItems addObject:item(@"提醒关键词", @"每行一个关键词，不区分大小写", @"text.magnifyingglass", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(reminderKeywordCount))];
+    }
     [messageItems addObject:item(@"输入框滑动操作", @"左滑清空，右滑从剪贴板粘贴", @"hand.draw", NeoWCRowKindSwitch, NeoWCInputSwipeActionsEnabledKey, nil)];
     [messageItems addObject:item(@"图片编辑快捷发送", @"在官方图片编辑完成菜单中增加发送到当前会话", @"photo.badge.arrow.down", NeoWCRowKindSwitch, NeoWCImageEditQuickSendEnabledKey, nil)];
+    [messageItems addObject:item(@"自动选择原图", @"选择和预览图片时自动勾选微信原图", @"photo.badge.checkmark", NeoWCRowKindSwitch, NeoWCAutoOriginalImageEnabledKey, nil)];
+    [messageItems addObject:item(@"通知直达聊天", @"点击通知后直接进入通知对应的会话", @"bubble.left.and.arrow.forward", NeoWCRowKindSwitch, NeoWCNotificationDirectChatEnabledKey, nil)];
     [messageItems addObject:item(@"多选消息导出", @"控制多选菜单中的复制、保存和分享功能", @"square.and.arrow.up.on.square", NeoWCRowKindSwitch, NeoWCMultiSelectExportEnabledKey, nil)];
     if (multiSelectExportEnabled && [self isFeatureExpandedForKey:NeoWCMultiSelectExportEnabledKey]) {
         [messageItems addObject:item(@"复制纯文本", @"只复制消息正文到剪贴板", @"doc.on.clipboard", NeoWCRowKindSwitch, NeoWCMultiSelectExportTextKey, nil)];
@@ -339,10 +428,26 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         item(@"游戏授权自动允许", @"自动点击游戏扫码授权页面的允许按钮", @"gamecontroller", NeoWCRowKindSwitch, NeoWCAutoGameAuthorizeKey, nil),
         item(@"朋友圈双击点赞", @"双击好友朋友圈内容直接点赞", @"hand.thumbsup", NeoWCRowKindSwitch, NeoWCMomentsDoubleTapLikeKey, nil),
         item(@"朋友圈操作按钮替换为评论", @"点击后直接进入评论，不再展开操作菜单", @"bubble.middle.bottom", NeoWCRowKindSwitch, NeoWCMomentsQuickCommentKey, nil),
+        item(@"朋友圈转发", @"评论快捷按钮开启时独立显示，否则加入原操作菜单", @"arrowshape.turn.up.right", NeoWCRowKindSwitch, NeoWCMomentsForwardEnabledKey, nil),
+        item(@"朋友圈头像快捷权限", @"长按头像，在微信原菜单中直接切换朋友权限", @"person.crop.circle.badge.checkmark", NeoWCRowKindSwitch, NeoWCMomentsQuickPermissionsKey, nil),
+        item(@"朋友圈精确发布时间", @"显示完整发布时间，展开可自定义日期格式", @"calendar.badge.clock", NeoWCRowKindSwitch, NeoWCMomentsPreciseTimeKey, nil),
         item(@"自定义微信运动步数", @"每天启动微信时自动使用设定步数", @"figure.walk", NeoWCRowKindSwitch, NeoWCStepOverrideEnabledKey, nil),
         item(@"钱包余额本地显示", @"开启后长按钱包入口或余额数字设置，仅修改本机文字", @"creditcard", NeoWCRowKindSwitch, NeoWCWalletBalanceEnabledKey, nil),
         item(@"好友数量本地显示", @"替换“个朋友”等好友数量文案", @"person.2", NeoWCRowKindSwitch, NeoWCContactsCountEnabledKey, nil),
     ]];
+    if (momentsPreciseTimeEnabled && [self isFeatureExpandedForKey:NeoWCMomentsPreciseTimeKey]) {
+        NSUInteger preciseTimeIndex = [enhancementItems indexOfObjectPassingTest:^BOOL(NeoWCSettingItem *entry, NSUInteger index, BOOL *stop) {
+            return [entry.defaultsKey isEqualToString:NeoWCMomentsPreciseTimeKey];
+        }];
+        if (preciseTimeIndex != NSNotFound) [enhancementItems insertObject:item(@"朋友圈日期格式", @"支持 yyyy、MM、dd、E、HH、mm、ss，区分大小写", @"textformat", NeoWCRowKindDetail, nil, momentsDateFormat) atIndex:preciseTimeIndex + 1];
+    }
+    if (walletBalanceEnabled && [self isFeatureExpandedForKey:NeoWCWalletBalanceEnabledKey]) {
+        NSUInteger walletIndex = [enhancementItems indexOfObjectPassingTest:^BOOL(NeoWCSettingItem *entry, NSUInteger index, BOOL *stop) {
+            return [entry.defaultsKey isEqualToString:NeoWCWalletBalanceEnabledKey];
+        }];
+        NSString *walletValue = NeoWCSettingsLongLongDefaultForKey(NeoWCWalletBalanceFenKey) > 0 ? @"已设置" : @"设置";
+        if (walletIndex != NSNotFound) [enhancementItems insertObject:item(@"设置钱包余额", @"金额按分保存，仅作用于钱包余额组件", @"number", NeoWCRowKindDetail, nil, walletValue) atIndex:walletIndex + 1];
+    }
     if (momentsLikeEnabled && [self isFeatureExpandedForKey:NeoWCMomentsDoubleTapLikeKey]) {
         NSUInteger hapticIndex = MIN((NSUInteger)3, enhancementItems.count);
         [enhancementItems insertObject:item(@"点赞震动", @"双击点赞成功时提供触感反馈", @"waveform", NeoWCRowKindSwitch, NeoWCMomentsLikeHapticEnabledKey, nil) atIndex:hapticIndex];
@@ -357,8 +462,13 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [enhancementItems addObject:item(@"广告净化", @"隐藏朋友圈广告与小程序启动广告", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil)];
 
     NSMutableArray<NeoWCSettingItem *> *interfaceItems = [NSMutableArray arrayWithArray:@[
+        item(@"页面缩放", @"按微信字体规则缩放页面，不修改窗口 transform", @"textformat.size", NeoWCRowKindSwitch, NeoWCPageScaleEnabledKey, nil),
         item(@"聊天输入栏圆角", @"分别控制输入框内部与外部工具栏", @"rectangle.roundedtop", NeoWCRowKindSwitch, NeoWCChatInputRoundingEnabledKey, nil),
     ]];
+    if (pageScaleEnabled && [self isFeatureExpandedForKey:NeoWCPageScaleEnabledKey]) {
+        [interfaceItems insertObject:item(@"全局页面缩放比例", @"作用于微信字体规则与网页文字", @"rectangle.compress.vertical", NeoWCRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", globalScalePercent]) atIndex:1];
+        [interfaceItems insertObject:item(@"NeoWC 设置页缩放比例", @"仅调整本设置页的列表与页眉尺寸", @"list.bullet.rectangle", NeoWCRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", settingsScalePercent]) atIndex:2];
+    }
     if (inputRoundingEnabled && [self isFeatureExpandedForKey:NeoWCChatInputRoundingEnabledKey]) {
         [interfaceItems addObject:item(@"输入框内部圆角", @"调整文字输入区域的圆角", @"text.cursor", NeoWCRowKindSwitch, NeoWCChatInputInnerRoundingKey, nil)];
         if ([defaults boolForKey:NeoWCChatInputInnerRoundingKey]) {
@@ -406,6 +516,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             items;
         })],
         [NeoWCSettingSection sectionWithIdentifier:@"about" title:@"关于" subtitle:nil symbol:@"info.circle" footer:@"NeoWC · Designed for WeChat" collapsible:NO items:@[
+            item(@"配置管理", @"导入、导出或重置 NeoWC 配置", @"externaldrive", NeoWCRowKindDetail, nil, @"管理"),
             item(@"版本", @"NeoWC", @"shippingbox", NeoWCRowKindInfo, nil, NeoWCVersion),
             item(@"当前用户 wxid", currentWXID ?: @"未获取", @"person.crop.circle", NeoWCRowKindCopy, nil, currentWXID),
         ]],
@@ -413,8 +524,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 }
 
 - (UIView *)makeHeaderView {
+    CGFloat scale = [self settingsPageScale];
     CGFloat width = MAX(CGRectGetWidth(self.view.bounds), CGRectGetWidth([UIScreen mainScreen].bounds));
-    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 132.0)];
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 132.0 * scale)];
     container.backgroundColor = [UIColor systemBackgroundColor];
 
     NeoWCLogoView *logo = [NeoWCLogoView new];
@@ -446,18 +558,18 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [container addSubview:tagline];
 
     [NSLayoutConstraint activateConstraints:@[
-        [logo.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:24.0],
-        [logo.topAnchor constraintEqualToAnchor:container.topAnchor constant:12.0],
-        [logo.widthAnchor constraintEqualToConstant:62.0],
-        [logo.heightAnchor constraintEqualToConstant:62.0],
-        [name.leadingAnchor constraintEqualToAnchor:logo.trailingAnchor constant:12.0],
-        [name.trailingAnchor constraintLessThanOrEqualToAnchor:container.trailingAnchor constant:-24.0],
-        [name.topAnchor constraintEqualToAnchor:logo.topAnchor constant:3.0],
+        [logo.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:24.0 * scale],
+        [logo.topAnchor constraintEqualToAnchor:container.topAnchor constant:12.0 * scale],
+        [logo.widthAnchor constraintEqualToConstant:62.0 * scale],
+        [logo.heightAnchor constraintEqualToConstant:62.0 * scale],
+        [name.leadingAnchor constraintEqualToAnchor:logo.trailingAnchor constant:12.0 * scale],
+        [name.trailingAnchor constraintLessThanOrEqualToAnchor:container.trailingAnchor constant:-24.0 * scale],
+        [name.topAnchor constraintEqualToAnchor:logo.topAnchor constant:3.0 * scale],
         [version.leadingAnchor constraintEqualToAnchor:name.leadingAnchor],
-        [version.topAnchor constraintEqualToAnchor:name.bottomAnchor constant:4.0],
-        [tagline.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:24.0],
-        [tagline.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-24.0],
-        [tagline.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-18.0],
+        [version.topAnchor constraintEqualToAnchor:name.bottomAnchor constant:4.0 * scale],
+        [tagline.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:24.0 * scale],
+        [tagline.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-24.0 * scale],
+        [tagline.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-18.0 * scale],
     ]];
     return container;
 }
@@ -481,7 +593,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
 - (CGFloat)tableView:(__unused UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
     NeoWCSettingSection *model = self.sections[section];
-    return model.subtitle.length > 0 ? 62.0 : 46.0;
+    CGFloat scale = [self settingsPageScale];
+    return MAX(40.0, (model.subtitle.length > 0 ? 62.0 : 46.0) * scale);
 }
 
 - (UIView *)tableView:(__unused UITableView *)tableView viewForHeaderInSection:(NSInteger)sectionIndex {
@@ -551,7 +664,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
     NSString *footer = [self tableView:tableView titleForFooterInSection:section];
-    return footer.length > 0 ? UITableViewAutomaticDimension : 10.0;
+    return footer.length > 0 ? UITableViewAutomaticDimension : 10.0 * [self settingsPageScale];
 }
 
 - (NeoWCSettingItem *)itemAtIndexPath:(NSIndexPath *)indexPath {
@@ -562,7 +675,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return 60.0;
+    return MAX(48.0, 60.0 * [self settingsPageScale]);
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -689,9 +802,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [[NSUserDefaults standardUserDefaults] setObject:[NSDate date] forKey:NeoWCStepCountDateKey];
     }
     if ([item.defaultsKey isEqualToString:NeoWCAntiRevokePersistRecordsKey]) NeoWCAntiRevokeSetPersistenceEnabled(sender.isOn);
-    if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] ||
-        [item.defaultsKey isEqualToString:NeoWCMomentsDoubleTapLikeKey] ||
-        [item.defaultsKey isEqualToString:NeoWCMomentsQuickCommentKey]) {
+    if ([item.defaultsKey hasPrefix:@"com.qiu7c.neowc."]) {
         [[NSNotificationCenter defaultCenter] postNotificationName:NeoWCEnhancementDidChangeNotification object:item.defaultsKey];
     }
     if ([item.defaultsKey isEqualToString:NeoWCDebugFloatingEnabledKey]) {
@@ -709,14 +820,27 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
                               [item.defaultsKey isEqualToString:NeoWCContactsCountEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCMomentsDoubleTapLikeKey] ||
                               [item.defaultsKey isEqualToString:NeoWCMomentsLikeHapticEnabledKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCMomentsPreciseTimeKey] ||
                               [item.defaultsKey isEqualToString:NeoWCMultiSelectExportEnabledKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCMessageBlockEnabledKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCKeywordReminderEnabledKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCLongPressMenuEnabledKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCWalletBalanceEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCPluginShortcutsEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCPluginShortcutCustomPageKey] ||
+                              [item.defaultsKey isEqualToString:NeoWCPageScaleEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCChatInputRoundingEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCChatInputInnerRoundingKey] ||
                               [item.defaultsKey isEqualToString:NeoWCChatInputOuterRoundingKey];
+    if ([item.defaultsKey isEqualToString:NeoWCPageScaleEnabledKey]) [self applySettingsPageScale];
     if (changesVisibleRows) [self buildSections];
-    if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] || changesVisibleRows) [self.tableView reloadData];
+    if ([item.defaultsKey isEqualToString:NeoWCEnabledKey] || changesVisibleRows) {
+        CGPoint offset = self.tableView.contentOffset;
+        [UIView performWithoutAnimation:^{
+            [self.tableView reloadData];
+            [self.tableView setContentOffset:offset animated:NO];
+        }];
+    }
 }
 
 - (void)toggleFeatureAtIndexPath:(NSIndexPath *)indexPath item:(NeoWCSettingItem *)item {
@@ -907,6 +1031,79 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)presentScaleEditorForKey:(NSString *)key title:(NSString *)title {
+    CGFloat currentValue = NeoWCScalePercentForDefaultsKey(key, 100.0);
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                   message:@"请输入 70 到 100 之间的百分比"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = [NSString stringWithFormat:@"%.0f", currentValue];
+        textField.keyboardType = UIKeyboardTypeDecimalPad;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *rawValue = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        CGFloat value = rawValue.length > 0 ? rawValue.doubleValue : 100.0;
+        value = MIN(100.0, MAX(70.0, value));
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setDouble:value forKey:key];
+        [[NSNotificationCenter defaultCenter] postNotificationName:NeoWCEnhancementDidChangeNotification object:key];
+        CGPoint offset = weakSelf.tableView.contentOffset;
+        if ([key isEqualToString:NeoWCSettingsPageScalePercentKey]) [weakSelf applySettingsPageScale];
+        [weakSelf buildSections];
+        [UIView performWithoutAnimation:^{
+            [weakSelf.tableView reloadData];
+            [weakSelf.tableView setContentOffset:offset animated:NO];
+        }];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentMomentsDateFormatEditor {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *savedFormat = NeoWCNormalizedMomentsDateFormat([defaults stringForKey:NeoWCMomentsPreciseTimeFormatKey]) ?: NeoWCMomentsPreciseTimeDefaultFormat;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"朋友圈日期格式"
+                                                                   message:@"仅支持 yyyy、MM、dd、E、HH、mm、ss，区分大小写；留空恢复默认格式"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = savedFormat;
+        textField.placeholder = NeoWCMomentsPreciseTimeDefaultFormat;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *rawFormat = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        NSString *normalized = rawFormat.length == 0 ? NeoWCMomentsPreciseTimeDefaultFormat : NeoWCNormalizedMomentsDateFormat(rawFormat);
+        if (!normalized) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                UIViewController *controller = weakSelf;
+                if (!controller) return;
+                UIAlertController *error = [UIAlertController alertControllerWithTitle:@"日期格式不支持"
+                                                                               message:@"格式最长 64 个字符，只能使用 yyyy、MM、dd、E、HH、mm、ss 及普通分隔文字。"
+                                                                        preferredStyle:UIAlertControllerStyleAlert];
+                [error addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+                [controller presentViewController:error animated:YES completion:nil];
+            });
+            return;
+        }
+        [defaults setObject:normalized forKey:NeoWCMomentsPreciseTimeFormatKey];
+        [[NSNotificationCenter defaultCenter] postNotificationName:NeoWCEnhancementDidChangeNotification object:NeoWCMomentsPreciseTimeFormatKey];
+        [weakSelf buildSections];
+        CGPoint offset = weakSelf.tableView.contentOffset;
+        [UIView performWithoutAnimation:^{
+            [weakSelf.tableView reloadData];
+            [weakSelf.tableView setContentOffset:offset animated:NO];
+        }];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
@@ -925,6 +1122,43 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         return;
     }
     if (item.kind != NeoWCRowKindDetail) return;
+    if ([item.title isEqualToString:@"配置管理"]) {
+        [self.navigationController pushViewController:[NeoWCConfigManagerViewController new] animated:YES];
+        return;
+    }
+    if ([item.title isEqualToString:@"屏蔽会话账号"]) {
+        NeoWCListEditorViewController *editor = [[NeoWCListEditorViewController alloc]
+            initWithTitle:item.title subtitle:@"每行填写一个 wxid 或以 @chatroom 结尾的群聊账号"
+            defaultsKey:NeoWCMessageBlockUsersKey mode:NeoWCListEditorModeList];
+        [self.navigationController pushViewController:editor animated:YES];
+        return;
+    }
+    if ([item.title isEqualToString:@"屏蔽关键词"]) {
+        NeoWCListEditorViewController *editor = [[NeoWCListEditorViewController alloc]
+            initWithTitle:item.title subtitle:@"仅匹配新收到的普通文字消息，每行填写一个关键词"
+            defaultsKey:NeoWCMessageBlockKeywordsKey mode:NeoWCListEditorModeList];
+        [self.navigationController pushViewController:editor animated:YES];
+        return;
+    }
+    if ([item.title isEqualToString:@"提醒关键词"]) {
+        NeoWCListEditorViewController *editor = [[NeoWCListEditorViewController alloc]
+            initWithTitle:item.title subtitle:@"命中任意一项即提醒，每行填写一个关键词"
+            defaultsKey:NeoWCKeywordReminderKeywordsKey mode:NeoWCListEditorModeList];
+        [self.navigationController pushViewController:editor animated:YES];
+        return;
+    }
+    NSArray *menuEditor = (@{
+        @"隐藏菜单项": @[NeoWCLongPressMenuHiddenTitlesKey, @"每行填写一个菜单原始名称", @(NeoWCListEditorModeList)],
+        @"菜单排序": @[NeoWCLongPressMenuPreferredOrderKey, @"按从上到下的顺序优先排列，未填写项保持微信原顺序", @(NeoWCListEditorModeList)],
+        @"菜单重命名": @[NeoWCLongPressMenuTitleMapKey, @"每行一条“原名称=新名称”规则", @(NeoWCListEditorModeMapping)],
+    })[item.title];
+    if (menuEditor) {
+        NeoWCListEditorViewController *editor = [[NeoWCListEditorViewController alloc]
+            initWithTitle:item.title subtitle:menuEditor[1]
+            defaultsKey:menuEditor[0] mode:[menuEditor[2] integerValue]];
+        [self.navigationController pushViewController:editor animated:YES];
+        return;
+    }
     if ([item.title isEqualToString:@"防撤回提示方案"]) {
         [self presentRevokePromptStylePicker];
         return;
@@ -981,12 +1215,24 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [self presentPluginShortcutTextEditorForKey:NeoWCPluginShortcutCustomClassKey title:item.title placeholder:@"例如 NewSettingViewController"];
         return;
     }
+    if ([item.title isEqualToString:@"全局页面缩放比例"]) {
+        [self presentScaleEditorForKey:NeoWCPageScaleGlobalPercentKey title:item.title];
+        return;
+    }
+    if ([item.title isEqualToString:@"NeoWC 设置页缩放比例"]) {
+        [self presentScaleEditorForKey:NeoWCSettingsPageScalePercentKey title:item.title];
+        return;
+    }
     if ([item.title isEqualToString:@"内部圆角程度"]) {
         [self presentCornerRadiusEditorForKey:NeoWCChatInputInnerRadiusKey title:item.title];
         return;
     }
     if ([item.title isEqualToString:@"外部圆角程度"]) {
         [self presentCornerRadiusEditorForKey:NeoWCChatInputOuterRadiusKey title:item.title];
+        return;
+    }
+    if ([item.title isEqualToString:@"朋友圈日期格式"]) {
+        [self presentMomentsDateFormatEditor];
         return;
     }
     if ([item.title isEqualToString:@"插件显示管理"]) {
