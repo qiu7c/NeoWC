@@ -3107,14 +3107,16 @@ didReceiveNotificationResponse:(id)response
     UIImage *image = NeoWCImageJokerImageForObject(self);
     if (!image) return %orig;
     CGSize displaySize = NeoWCImageJokerDisplaySize(image);
-    return CGSizeEqualToSize(displaySize, CGSizeZero) ? %orig : displaySize;
+    if (CGSizeEqualToSize(displaySize, CGSizeZero)) return %orig;
+    return displaySize;
 }
 
 - (CGSize)measureContentViewSize:(CGSize)size {
     UIImage *image = NeoWCImageJokerImageForObject(self);
     if (!image) return %orig(size);
     CGSize displaySize = NeoWCImageJokerDisplaySize(image);
-    return CGSizeEqualToSize(displaySize, CGSizeZero) ? %orig(size) : displaySize;
+    if (CGSizeEqualToSize(displaySize, CGSizeZero)) return %orig(size);
+    return displaySize;
 }
 
 %end
