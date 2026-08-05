@@ -190,6 +190,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCAntiRevokePersistRecordsKey: @NO,
         NeoWCImageEditQuickSendEnabledKey: @NO,
         NeoWCChatJokerEnabledKey: @NO,
+        NeoWCEmoticonToSelfieEnabledKey: @NO,
         NeoWCMomentsForwardEnabledKey: @NO,
         NeoWCReplySwipeEnabledKey: @NO,
         NeoWCMessageBlockEnabledKey: @NO,
@@ -397,6 +398,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     }
     [messageItems addObject:item(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCRowKindSwitch, NeoWCGameSelectorKey, nil)];
     [messageItems addObject:item(@"聊天记录小丑", @"长按文字、应用、图片或转账消息，本地修改当前页面显示", @"square.and.pencil", NeoWCRowKindSwitch, NeoWCChatJokerEnabledKey, nil)];
+    [messageItems addObject:item(@"表情存入自拍", @"长按表情，在微信原生菜单中存入自拍表情", @"camera", NeoWCRowKindSwitch, NeoWCEmoticonToSelfieEnabledKey, nil)];
     [messageItems addObject:item(@"引用回复手势", @"左滑消息气泡直接进入微信原生引用回复", @"arrowshape.turn.up.left", NeoWCRowKindSwitch, NeoWCReplySwipeEnabledKey, nil)];
     [messageItems addObject:item(@"消息屏蔽", @"按会话账号或关键词忽略新收到的普通文字消息", @"eye.slash", NeoWCRowKindSwitch, NeoWCMessageBlockEnabledKey, nil)];
     if (messageBlockEnabled && [self isFeatureExpandedForKey:NeoWCMessageBlockEnabledKey]) {
@@ -459,7 +461,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     }
     if (stepOverrideEnabled && [self isFeatureExpandedForKey:NeoWCStepOverrideEnabledKey]) [enhancementItems addObject:item(@"设置运动步数", @"设定值会在每天首次启动或回到微信时刷新", @"number", NeoWCRowKindDetail, nil, stepValue)];
     if (contactsCountEnabled && [self isFeatureExpandedForKey:NeoWCContactsCountEnabledKey]) [enhancementItems addObject:item(@"设置好友数量", @"输入本机显示的好友数量", @"number", NeoWCRowKindDetail, nil, contactsValue)];
-    [enhancementItems addObject:item(@"广告净化", @"隐藏朋友圈广告与小程序启动广告", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil)];
+    [enhancementItems addObject:item(@"广告净化", @"完整拦截广告链路，并启用 Web 调试与环境检测绕过", @"rectangle.badge.xmark", NeoWCRowKindSwitch, NeoWCAdBlockerKey, nil)];
 
     NSMutableArray<NeoWCSettingItem *> *interfaceItems = [NSMutableArray arrayWithArray:@[
         item(@"页面缩放", @"按微信字体规则缩放页面，不修改窗口 transform", @"textformat.size", NeoWCRowKindSwitch, NeoWCPageScaleEnabledKey, nil),

@@ -42,6 +42,8 @@
 
 @interface MMMenuItem : NSObject
 - (instancetype)initWithTitle:(NSString *)title icon:(UIImage *)icon target:(id)target action:(SEL)action;
+- (instancetype)initWithTitle:(NSString *)title svgName:(NSString *)svgName target:(id)target action:(SEL)action;
+- (instancetype)initWithTitle:(NSString *)title svgName:(NSString *)svgName action:(SEL)action;
 @end
 
 @interface SharePreConfirmSheetView : UIView
@@ -148,12 +150,14 @@ static char NeoWCDeviceCardDidConfirmKey;
 static char NeoWCGameDidAuthorizeKey;
 static char NeoWCMomentsDoubleTapRecognizerKey;
 static char NeoWCMomentsForwardButtonKey;
+static char NeoWCMomentsOriginalOperateFrameKey;
 static char NeoWCMomentsFloatForwardButtonKey;
 static char NeoWCMomentsFloatSeparatorKey;
 static char NeoWCMomentsFloatDataItemKey;
 static char NeoWCMomentsFloatSnapshotKey;
 static char NeoWCMomentsForwardTaskKey;
 static char NeoWCImageJokerPickerDelegateKey;
+static char NeoWCEmoticonPreviewLongPressKey;
 static char NeoWCMomentsOriginalTimeTextKey;
 static char NeoWCMomentsOriginalTimeLinesKey;
 static char NeoWCMomentsPreciseTimeAppliedKey;
@@ -965,6 +969,161 @@ static NSArray *NeoWCOperationMenuItemsWithImageJoker(id target, NSArray *origin
     return items;
 }
 
+static id NeoWCEmoticonExtendInfoForCell(id cell, NSString *expectedClassName) {
+    id message = NeoWCMessageWrapForCell(cell);
+    id extendInfo = NeoWCTweakValueForSelectorNames(message, @[@"m_extendInfoWithMsgType"]);
+    Class expectedClass = NSClassFromString(expectedClassName);
+    if (!extendInfo || (expectedClass && ![extendInfo isKindOfClass:expectedClass])) return nil;
+    return extendInfo;
+}
+
+static NSData *NeoWCEmoticonDataForMD5(NSString *md5, BOOL needUpdateTime) {
+    if (![md5 isKindOfClass:[NSString class]] || md5.length == 0) return nil;
+    Class utilClass = NSClassFromString(@"EmoticonUtil");
+    SEL existsSelector = NSSelectorFromString(@"fileExistOfEmoticonForMd5:");
+    SEL dataSelector = NSSelectorFromString(@"dataOfEmoticonForMd5:needUpdateTime:ignoreWxAM:");
+    if (!utilClass || ![utilClass respondsToSelector:existsSelector] || ![utilClass respondsToSelector:dataSelector]) return nil;
+    if (!((BOOL (*)(id, SEL, id))objc_msgSend)(utilClass, existsSelector, md5)) return nil;
+    id data = ((id (*)(id, SEL, id, BOOL, BOOL))objc_msgSend)(utilClass, dataSelector, md5, needUpdateTime, NO);
+    return [data isKindOfClass:[NSData class]] && [data length] > 0 ? data : nil;
+}
+
+static id NeoWCEmoticonAddLogicController(void) {
+    static id controller;
+    @synchronized ([NSObject class]) {
+        if (!controller) {
+            Class controllerClass = NSClassFromString(@"EmoticonCustomAddLogicController");
+            if (controllerClass) controller = [controllerClass new];
+        }
+    }
+    return controller;
+}
+
+static BOOL NeoWCSaveDataAsSelfieEmoticon(NSData *data) {
+    if (![data isKindOfClass:[NSData class]] || data.length == 0) return NO;
+    Class fileClass = NSClassFromString(@"CBaseFile");
+    Class uploadClass = NSClassFromString(@"EmoticonUploadInfoObj");
+    Class utilClass = NSClassFromString(@"EmoticonUtil");
+    SEL md5Selector = NSSelectorFromString(@"GetDataMD5:");
+    if (!fileClass || !uploadClass || !utilClass || ![fileClass respondsToSelector:md5Selector]) return NO;
+
+    NSString *md5 = ((id (*)(id, SEL, id))objc_msgSend)(fileClass, md5Selector, data);
+    id uploadInfo = [uploadClass new];
+    if (![md5 isKindOfClass:[NSString class]] || md5.length == 0 || !uploadInfo) return NO;
+
+    SEL setUploadMD5 = NSSelectorFromString(@"setUploadImgMd5:");
+    SEL setIsSelfie = NSSelectorFromString(@"setIsSelfie:");
+    SEL setScene = NSSelectorFromString(@"setSelfieScene:");
+    SEL setWXAM = NSSelectorFromString(@"setIsUploadWxam:");
+    SEL setEnterTime = NSSelectorFromString(@"setSelfieEnterTime:");
+    SEL setLensID = NSSelectorFromString(@"setLensId:");
+    SEL saveTemp = NSSelectorFromString(@"saveImgDataToTempPathWithImgData:");
+    NSArray<NSString *> *requiredSelectors = @[
+        NSStringFromSelector(setUploadMD5), NSStringFromSelector(setIsSelfie), NSStringFromSelector(setScene),
+        NSStringFromSelector(setWXAM), NSStringFromSelector(setEnterTime), NSStringFromSelector(setLensID),
+        NSStringFromSelector(saveTemp),
+    ];
+    for (NSString *selectorName in requiredSelectors) {
+        if (![uploadInfo respondsToSelector:NSSelectorFromString(selectorName)]) return NO;
+    }
+
+    ((void (*)(id, SEL, id))objc_msgSend)(uploadInfo, setUploadMD5, md5);
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(uploadInfo, setIsSelfie, YES);
+    ((void (*)(id, SEL, NSUInteger))objc_msgSend)(uploadInfo, setScene, 2);
+    SEL isWXAMSelector = NSSelectorFromString(@"isWxAMData:");
+    BOOL isWXAM = [utilClass respondsToSelector:isWXAMSelector]
+        ? ((BOOL (*)(id, SEL, id))objc_msgSend)(utilClass, isWXAMSelector, data)
+        : NO;
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(uploadInfo, setWXAM, isWXAM);
+
+    NSTimeInterval timestamp = NSDate.date.timeIntervalSince1970;
+    ((void (*)(id, SEL, unsigned long long))objc_msgSend)(uploadInfo, setEnterTime, (unsigned long long)timestamp);
+    ((void (*)(id, SEL, id))objc_msgSend)(uploadInfo, setLensID, [NSString stringWithFormat:@"%.0f", timestamp]);
+    BOOL saved = ((BOOL (*)(id, SEL, id))objc_msgSend)(uploadInfo, saveTemp, data);
+    if (!saved) return NO;
+
+    id controller = NeoWCEmoticonAddLogicController();
+    SEL handleSelector = NSSelectorFromString(@"handleEmoticonUploadInfo:source:");
+    if (!controller || ![controller respondsToSelector:handleSelector]) return NO;
+    ((void (*)(id, SEL, id, NSUInteger))objc_msgSend)(controller, handleSelector, uploadInfo, 1);
+    NeoWCCompatibilityMarkTriggered(@"emoticon-to-selfie");
+    return YES;
+}
+
+static BOOL NeoWCSaveCellEmoticonAsSelfie(id cell, NSString *extendInfoClassName, BOOL needUpdateTime) {
+    id extendInfo = NeoWCEmoticonExtendInfoForCell(cell, extendInfoClassName);
+    NSString *md5 = NeoWCTweakValueForSelectorNames(extendInfo, @[@"m_nsEmoticonMD5"]);
+    NSData *data = NeoWCEmoticonDataForMD5(md5, needUpdateTime);
+    return NeoWCSaveDataAsSelfieEmoticon(data);
+}
+
+static NSArray *NeoWCMenuItemsWithEmoticonToSelfie(id target, NSArray *originalItems, NSString *extendInfoClassName) {
+    if (![originalItems isKindOfClass:[NSArray class]] || !NeoWCEnhancementEnabled(NeoWCEmoticonToSelfieEnabledKey)) return originalItems;
+    if (!NeoWCEmoticonExtendInfoForCell(target, extendInfoClassName)) return originalItems;
+    for (id item in originalItems) {
+        if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"存入自拍"]) return originalItems;
+    }
+
+    Class itemClass = NSClassFromString(@"MMMenuItem");
+    if (!itemClass) return originalItems;
+    id menuItem = nil;
+    SEL action = NSSelectorFromString(@"neowc_saveEmoticonAsSelfie");
+    SEL targetInitializer = NSSelectorFromString(@"initWithTitle:svgName:target:action:");
+    SEL initializer = NSSelectorFromString(@"initWithTitle:svgName:action:");
+    if ([itemClass instancesRespondToSelector:targetInitializer]) {
+        menuItem = ((id (*)(id, SEL, id, id, id, SEL))objc_msgSend)([itemClass alloc], targetInitializer,
+            @"存入自拍", @"icons_outlined_takephoto_nor", target, action);
+    } else if ([itemClass instancesRespondToSelector:initializer]) {
+        menuItem = ((id (*)(id, SEL, id, id, SEL))objc_msgSend)([itemClass alloc], initializer,
+            @"存入自拍", @"icons_outlined_takephoto_nor", action);
+    }
+    if (!menuItem) return originalItems;
+    NSMutableArray *items = [originalItems mutableCopy];
+    [items addObject:menuItem];
+    return items;
+}
+
+static NSData *NeoWCPreviewEmoticonData(id controller) {
+    id popoverView = NeoWCTweakValueForSelectorNames(controller, @[@"popoverView"]);
+    SEL downloadedSelector = NSSelectorFromString(@"checkIfEmojiDownloaded");
+    if ([popoverView respondsToSelector:downloadedSelector] &&
+        !((BOOL (*)(id, SEL))objc_msgSend)(popoverView, downloadedSelector)) return nil;
+    id model = NeoWCTweakValueForSelectorNames(popoverView, @[@"model"]);
+    id emoticonWrap = NeoWCTweakValueForSelectorNames(model, @[@"emoticonWrap"]);
+    SEL selfieSelector = NSSelectorFromString(@"isSelfieEmoticon");
+    if ([emoticonWrap respondsToSelector:selfieSelector] &&
+        ((BOOL (*)(id, SEL))objc_msgSend)(emoticonWrap, selfieSelector)) return nil;
+    id imageData = NeoWCTweakValueForSelectorNames(emoticonWrap, @[@"m_imageData"]);
+    if ([imageData isKindOfClass:[NSData class]] && [imageData length] > 0) return imageData;
+    NSString *md5 = NeoWCTweakValueForSelectorNames(emoticonWrap, @[@"m_nsEmoticonMD5"]);
+    return NeoWCEmoticonDataForMD5(md5, YES);
+}
+
+static NSString *NeoWCAdBlockerRewrittenURLString(NSString *URLString) {
+    if (!NeoWCEnhancementEnabled(NeoWCAdBlockerKey) ||
+        ![URLString isKindOfClass:[NSString class]]) return URLString;
+    static NSArray<NSString *> *blockedFragments;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        blockedFragments = @[
+            @"mp.weixin.qq.com/mp/getappmsgad",
+            @"wxsnsdy.wxs.qq.com",
+            @"wxsnsdy.tc.qq.com",
+            @"wxsnsdy.video.qq.com",
+            @"wxsnsdythumb.wxs.qq.com",
+            @"ad_data",
+            @"/wxfile://usr/ad/",
+            @"/ad.wx.com",
+            @"lib/WASplashadWorker.js",
+            @"lib/WAAppAd.js",
+        ];
+    });
+    for (NSString *fragment in blockedFragments) {
+        if ([URLString containsString:fragment]) return @"/t";
+    }
+    return URLString;
+}
+
 static UITextView *NeoWCInnerTextView(id growTextView) {
     id textView = NeoWCTweakSafeValue(growTextView, @"textView");
     if (![textView isKindOfClass:[UITextView class]]) textView = NeoWCTweakSafeValue(growTextView, @"_textView");
@@ -1725,10 +1884,17 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
                       NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey);
     id dataItem = NeoWCMomentsObjectForName(cell, @"m_dataItem");
     UIView *operateButton = NeoWCMomentsObjectForName(cell, @"m_operateBtn");
+    NSValue *storedFrameValue = [operateButton isKindOfClass:[UIView class]]
+        ? objc_getAssociatedObject(operateButton, &NeoWCMomentsOriginalOperateFrameKey)
+        : nil;
     BOOL hasLayout = cell.window && CGRectGetWidth(cell.bounds) > 0.0 &&
-                     [operateButton isKindOfClass:[UIView class]] &&
-                     CGRectGetWidth(operateButton.bounds) > 0.0;
+                      [operateButton isKindOfClass:[UIView class]] &&
+                      CGRectGetWidth(operateButton.bounds) > 0.0;
     if (!shouldShow || !dataItem || !hasLayout) {
+        if (storedFrameValue) {
+            operateButton.frame = storedFrameValue.CGRectValue;
+            objc_setAssociatedObject(operateButton, &NeoWCMomentsOriginalOperateFrameKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
         [button removeFromSuperview];
         objc_setAssociatedObject(cell, &NeoWCMomentsForwardButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
@@ -1742,9 +1908,23 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
         [cell addSubview:button];
     }
     button.tintColor = operateButton.tintColor ?: UIColor.darkGrayColor;
-    CGRect operateFrame = [operateButton convertRect:operateButton.bounds toView:cell];
-    button.frame = CGRectMake(MAX(4.0, CGRectGetMinX(operateFrame) - 36.0),
-                              CGRectGetMidY(operateFrame) - 16.0,
+    CGRect originalFrame = storedFrameValue ? storedFrameValue.CGRectValue : operateButton.frame;
+    CGRect shiftedFrame = CGRectOffset(originalFrame, -36.0, 0.0);
+    if (storedFrameValue &&
+        !CGRectEqualToRect(operateButton.frame, originalFrame) &&
+        !CGRectEqualToRect(operateButton.frame, shiftedFrame)) {
+        originalFrame = operateButton.frame;
+        shiftedFrame = CGRectOffset(originalFrame, -36.0, 0.0);
+    }
+    objc_setAssociatedObject(operateButton, &NeoWCMomentsOriginalOperateFrameKey,
+                             [NSValue valueWithCGRect:originalFrame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    UIView *operateSuperview = operateButton.superview;
+    CGRect originalFrameInCell = operateSuperview
+        ? [operateSuperview convertRect:originalFrame toView:cell]
+        : [operateButton convertRect:operateButton.bounds toView:cell];
+    operateButton.frame = shiftedFrame;
+    button.frame = CGRectMake(CGRectGetMidX(originalFrameInCell) - 16.0,
+                              CGRectGetMidY(originalFrameInCell) - 16.0,
                               32.0,
                               32.0);
     button.hidden = NO;
@@ -3160,6 +3340,61 @@ didReceiveNotificationResponse:(id)response
 
 %end
 
+%hook EmoticonPreviewWindowViewController
+
+- (void)viewDidLoad {
+    %orig;
+    if (!NeoWCEnhancementEnabled(NeoWCEmoticonToSelfieEnabledKey) ||
+        [objc_getAssociatedObject(self, &NeoWCEmoticonPreviewLongPressKey) boolValue]) return;
+    id popoverView = NeoWCTweakValueForSelectorNames(self, @[@"popoverView"]);
+    SEL addSelector = NSSelectorFromString(@"addLongPressTarget:action:");
+    if (![popoverView respondsToSelector:addSelector]) return;
+    ((void (*)(id, SEL, id, SEL))objc_msgSend)(popoverView, addSelector, self,
+        NSSelectorFromString(@"neowc_handleEmoticonToSelfie:"));
+    objc_setAssociatedObject(self, &NeoWCEmoticonPreviewLongPressKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+%new
+- (void)neowc_handleEmoticonToSelfie:(UILongPressGestureRecognizer *)recognizer {
+    if (recognizer.state != UIGestureRecognizerStateBegan ||
+        !NeoWCEnhancementEnabled(NeoWCEmoticonToSelfieEnabledKey)) return;
+    if (NeoWCSaveDataAsSelfieEmoticon(NeoWCPreviewEmoticonData(self))) {
+        NeoWCLog(@"表情已提交到自拍表情添加流程");
+    }
+}
+
+%end
+
+%hook EmoticonMessageCellView
+
+- (NSArray *)filteredMenuItems:(NSArray *)items {
+    return NeoWCMenuItemsWithEmoticonToSelfie(self, %orig(items), @"CExtendInfoOfEmoticon");
+}
+
+%new
+- (void)neowc_saveEmoticonAsSelfie {
+    if (NeoWCEnhancementEnabled(NeoWCEmoticonToSelfieEnabledKey)) {
+        (void)NeoWCSaveCellEmoticonAsSelfie(self, @"CExtendInfoOfEmoticon", YES);
+    }
+}
+
+%end
+
+%hook AppEmoticonMessageCellView
+
+- (NSArray *)filteredMenuItems:(NSArray *)items {
+    return NeoWCMenuItemsWithEmoticonToSelfie(self, %orig(items), @"CExtendInfoOfAPP");
+}
+
+%new
+- (void)neowc_saveEmoticonAsSelfie {
+    if (NeoWCEnhancementEnabled(NeoWCEmoticonToSelfieEnabledKey)) {
+        (void)NeoWCSaveCellEmoticonAsSelfie(self, @"CExtendInfoOfAPP", NO);
+    }
+}
+
+%end
+
 %hook ImageMessageCellView
 
 - (NSArray *)operationMenuItems {
@@ -4146,6 +4381,106 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 
 %end
 
+%hook MMWebViewConfig
+
++ (BOOL)isEnableWebDebugFunctions {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return YES;
+    return %orig;
+}
+
+%end
+
+%hook NSURL
+
++ (instancetype)URLWithString:(NSString *)URLString {
+    return %orig(NeoWCAdBlockerRewrittenURLString(URLString));
+}
+
+%end
+
+%hook WebviewJSEventHandler_adDataReport
+
+- (void)handleJSEvent:(id)event HandlerFacade:(id)facade ExtraData:(id)extraData {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(event, facade, extraData);
+}
+
+%end
+
+%hook WCAdvertiseStatMgr
+
+- (id)getAdvertiseInfoForItem:(id)item {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return %orig(nil);
+    return %orig(item);
+}
+
+- (void)logSphereViewWithSphereReportInfo:(id)reportInfo dataItem:(id)dataItem scene:(unsigned int)scene {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(reportInfo, dataItem, scene);
+}
+
+- (void)logSphereViewInDetailWithWrapInfo:(id)wrapInfo dataItem:(id)dataItem {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(wrapInfo, dataItem);
+}
+
+- (void)logSphereViewInTimeLineWithWrapInfo:(id)wrapInfo dataItem:(id)dataItem {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(wrapInfo, dataItem);
+}
+
+- (void)logHeadImageH5:(id)value {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(value);
+}
+
+- (void)logADBrandProfile:(id)value {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(value);
+}
+
+- (void)logADFloatView:(id)value {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(value);
+}
+
+- (void)logADPoiH5:(id)value {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(value);
+}
+
+- (void)logADH5:(id)value withUserInfo:(id)userInfo reportType:(unsigned int)reportType {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(value, userInfo, reportType);
+}
+
+- (void)logADH5:(id)value {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(value);
+}
+
+- (void)logADDetail:(id)detail dataItem:(id)dataItem {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(detail, dataItem);
+}
+
+- (void)logADCommentLog:(id)value {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(value);
+}
+
+- (void)logADBodyLog:(id)value {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(value);
+}
+
+- (void)reportAllFeedsADLog {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig;
+}
+
+%end
+
 %hook WAAppTaskSplashADConfig
 
 - (BOOL)canShowSplashADWindow {
@@ -4156,6 +4491,194 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 - (BOOL)launchShow {
     if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
     return %orig;
+}
+
+%end
+
+%hook WAJSEventHandler_showSplashAd
+
+- (void)handleJSEvent:(id)event {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(event);
+}
+
+%end
+
+%hook WAJSEventHandler_showSplashAdMenu
+
+- (void)handleJSEvent:(id)event {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(event);
+}
+
+%end
+
+%hook BrandTLExptConfig
+
+- (BOOL)isExptNotShowAd {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return YES;
+    return %orig;
+}
+
+%end
+
+%hook BrandTLFlutterViewController
+
+- (BOOL)enableAd {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+%end
+
+%hook _TtC6WeChat19MagicAdBrandService
+
+- (BOOL)isBrandTimelineOpen {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+%end
+
+%hook MagicAdPushMgrService
+
+- (void)handleAdMsg:(id)message {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(message);
+}
+
+- (void)OnGetNewXmlMsg:(id)xml Type:(unsigned int)type MsgWrap:(id)message {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(xml, type, message);
+}
+
+%end
+
+%hook BrandTLCanvasCardMgr
+
++ (BOOL)isAdRequestOpen {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
++ (BOOL)isAdCardOpen {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+- (void)handleBizAdNotifyNewXml:(id)xml {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(xml);
+}
+
+%end
+
+
+%hook JailBreakHelper
+
++ (id)loadSetting {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return nil;
+    return %orig;
+}
+
+- (instancetype)init {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return nil;
+    return %orig;
+}
+
++ (NSString *)getJailbreakPath {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return nil;
+    return %orig;
+}
+
++ (NSString *)getJailbreakRootDir {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return nil;
+    return %orig;
+}
+
++ (BOOL)JailBroken {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+- (BOOL)HasInstallJailbreakPluginInvalidIAPPurchase {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+- (BOOL)HasInstallJailbreakPlugin:(id)plugin {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig(plugin);
+}
+
+- (BOOL)IsJailBreak {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+- (BOOL)isOverADay {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+%end
+
+%hook CUtility
+
++ (BOOL)isBeingDebugged {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+%end
+
+%hook TSEnvironment
+
++ (BOOL)isBeingDebugged {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    return %orig;
+}
+
+%end
+
+%hook ClientCheckMgr
+
+- (void)reportAppList:(id)appList {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(appList);
+}
+
+- (void)checkHookWithSeq:(id)sequence {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(sequence);
+}
+
+- (void)checkHook:(id)value {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(value);
+}
+
+- (void)reportFileConsistency:(id)consistency
+                     fileName:(id)fileName
+                       offset:(unsigned long long)offset
+                   bufferSize:(unsigned int)bufferSize
+                          seq:(unsigned int)sequence {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(consistency, fileName, offset, bufferSize, sequence);
+}
+
+- (void)checkConsistency:(id)value {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig(value);
+}
+
+%end
+
+%hook WCCrashBlockExtensionHandler
+
+- (void)renewInfoForReport {
+    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    %orig;
 }
 
 %end

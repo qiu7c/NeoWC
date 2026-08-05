@@ -13,6 +13,7 @@ FOUNDATION_EXPORT NSString *const NeoWCMomentsPreciseTimeFormatKey;
 FOUNDATION_EXPORT NSString *const NeoWCMomentsPreciseTimeDefaultFormat;
 FOUNDATION_EXPORT NSString *const NeoWCGameSelectorKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatJokerEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCEmoticonToSelfieEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCReplySwipeEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageBlockEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageBlockUsersKey;

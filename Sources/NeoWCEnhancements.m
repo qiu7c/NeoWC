@@ -14,6 +14,7 @@ NSString *const NeoWCMomentsPreciseTimeFormatKey = @"com.qiu7c.neowc.moments.pre
 NSString *const NeoWCMomentsPreciseTimeDefaultFormat = @"yyyy-MM-dd HH:mm:ss";
 NSString *const NeoWCGameSelectorKey = @"com.qiu7c.neowc.enhance.game-selector";
 NSString *const NeoWCChatJokerEnabledKey = @"com.qiu7c.neowc.enhance.chat-joker";
+NSString *const NeoWCEmoticonToSelfieEnabledKey = @"com.qiu7c.neowc.enhance.emoticon-to-selfie";
 NSString *const NeoWCReplySwipeEnabledKey = @"com.qiu7c.neowc.chat.reply-swipe";
 NSString *const NeoWCMessageBlockEnabledKey = @"com.qiu7c.neowc.message.block";
 NSString *const NeoWCMessageBlockUsersKey = @"com.qiu7c.neowc.message.block.users";

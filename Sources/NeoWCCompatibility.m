@@ -34,6 +34,7 @@ static NSArray<NSDictionary *> *NeoWCCompatibilityDefinitions(void) {
             @{ @"id": @"game-selector", @"title": @"小游戏结果选择", @"class": @"CMessageMgr", @"selector": @"AddEmoticonMsg:MsgWrap:" },
             @{ @"id": @"chat-joker", @"title": @"聊天记录小丑", @"class": @"TextMessageCellView", @"selector": @"operationMenuItems" },
             @{ @"id": @"image-joker", @"title": @"图片记录伪装", @"class": @"ImageMessageCellView", @"selector": @"operationMenuItems" },
+            @{ @"id": @"emoticon-to-selfie", @"title": @"表情存入自拍", @"class": @"EmoticonMessageCellView", @"selector": @"filteredMenuItems:" },
             @{ @"id": @"reply-swipe", @"title": @"引用回复手势", @"class": @"CommonMessageCellView", @"selector": @"onShowMsgReplyMenuItem:" },
             @{ @"id": @"message-block", @"title": @"消息屏蔽", @"class": @"CMessageMgr", @"selector": @"AsyncOnAddMsg:MsgWrap:" },
             @{ @"id": @"keyword-reminder", @"title": @"关键词提醒", @"class": @"CMessageMgr", @"selector": @"AsyncOnAddMsg:MsgWrap:" },
