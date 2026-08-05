@@ -1757,7 +1757,7 @@ static void NeoWCRestoreMomentsFloatMenu(WCOperateFloatView *floatView) {
     snapshot.applying = YES;
     [snapshot.expandedLayerMask removeAllAnimations];
     UIButton *button = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey);
-    UIView *separator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey);
+    UIImageView *separator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey);
     floatView.frame = snapshot.baseFrame;
     if (snapshot.container != floatView) snapshot.container.frame = snapshot.baseContainerFrame;
     NSUInteger count = MIN(snapshot.baseViews.count, snapshot.baseFrames.count);
@@ -1943,7 +1943,7 @@ static void NeoWCPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
     NeoWCMomentsNativeFloatControls(floatView, &likeButton, &commentButton);
     UIControl *anchor = commentButton ?: likeButton;
     UIButton *button = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey);
-    UIView *separator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey);
+    UIImageView *separator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey);
     if (!shouldShow || ![anchor isKindOfClass:[UIControl class]]) {
         NeoWCRestoreMomentsFloatMenu(floatView);
         [button removeFromSuperview];
