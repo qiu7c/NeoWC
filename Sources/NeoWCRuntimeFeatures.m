@@ -74,6 +74,21 @@ static NSString *NeoWCMenuSourceTitle(id item) {
 
 NSArray *NeoWCManagedLongPressMenuItems(NSArray *items) {
     if (![items isKindOfClass:[NSArray class]]) return items;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSMutableArray<NSString *> *knownTitles = [[defaults arrayForKey:NeoWCLongPressMenuKnownTitlesKey] mutableCopy] ?: [NSMutableArray array];
+    BOOL discoveredNewTitle = NO;
+    for (id item in items) {
+        NSString *sourceTitle = NeoWCMenuSourceTitle(item);
+        if (sourceTitle.length > 0 && ![knownTitles containsObject:sourceTitle]) {
+            [knownTitles addObject:sourceTitle];
+            discoveredNewTitle = YES;
+        }
+    }
+    if (discoveredNewTitle) {
+        [defaults setObject:knownTitles forKey:NeoWCLongPressMenuKnownTitlesKey];
+        [[NSNotificationCenter defaultCenter] postNotificationName:NeoWCEnhancementDidChangeNotification
+                                                            object:NeoWCLongPressMenuKnownTitlesKey];
+    }
     BOOL enabled = NeoWCEnhancementEnabled(NeoWCLongPressMenuEnabledKey);
     for (id item in items) {
         NSString *sourceTitle = NeoWCMenuSourceTitle(item);
@@ -99,7 +114,7 @@ NSArray *NeoWCManagedLongPressMenuItems(NSArray *items) {
     }
     [ordered addObjectsFromArray:remaining];
 
-    NSDictionary *mapping = [[NSUserDefaults standardUserDefaults] dictionaryForKey:NeoWCLongPressMenuTitleMapKey];
+    NSDictionary *mapping = [defaults dictionaryForKey:NeoWCLongPressMenuTitleMapKey];
     for (id item in ordered) {
         NSString *sourceTitle = NeoWCMenuSourceTitle(item);
         id renamedTitle = sourceTitle.length > 0 ? mapping[sourceTitle] : nil;
@@ -254,11 +269,7 @@ id NeoWCCaptureGroupMemberChange(id newContact, id oldContact) {
 }
 
 static NSString *NeoWCGroupMemberDisplayName(id groupContact, id contactManager, NSString *memberUserName) {
-    SEL selector = sel_registerName("getChatRoomMemberDisplayName:");
-    if ([groupContact respondsToSelector:selector]) {
-        id value = ((id (*)(id, SEL, id))objc_msgSend)(groupContact, selector, memberUserName);
-        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
-    }
+    (void)groupContact;
     return NeoWCContactDisplayName(NeoWCContactForUserNameWithManager(contactManager, memberUserName), memberUserName);
 }
 

@@ -4,6 +4,7 @@
 #import <objc/message.h>
 
 #import "NeoWCDebug.h"
+#import "NeoWCPluginVisibility.h"
 
 NSString *const NeoWCPluginShortcutsEnabledKey = @"com.qiu7c.neowc.plugin-shortcuts.enabled";
 NSString *const NeoWCPluginShortcutLoggingKey = @"com.qiu7c.neowc.plugin-shortcuts.logging";
@@ -70,24 +71,28 @@ void NeoWCRegisterPluginShortcuts(id manager) {
             ![registered containsObject:@"logging"] && [manager respondsToSelector:switchSelector]) {
             ((void (*)(id, SEL, NSString *, NSString *))objc_msgSend)(manager, switchSelector,
                 @"NeoWC · 调试日志", NeoWCDebugLoggingEnabledKey);
+            [[NeoWCPluginVisibilityManager sharedManager] recordSwitchWithTitle:@"NeoWC · 调试日志" key:NeoWCDebugLoggingEnabledKey];
             [registered addObject:@"logging"];
         }
         if (NeoWCShortcutOptionEnabled(defaults, NeoWCPluginShortcutFloatingDebugKey, NO) &&
             ![registered containsObject:@"floating"] && [manager respondsToSelector:switchSelector]) {
             ((void (*)(id, SEL, NSString *, NSString *))objc_msgSend)(manager, switchSelector,
                 @"NeoWC · 调试悬浮窗", NeoWCDebugFloatingEnabledKey);
+            [[NeoWCPluginVisibilityManager sharedManager] recordSwitchWithTitle:@"NeoWC · 调试悬浮窗" key:NeoWCDebugFloatingEnabledKey];
             [registered addObject:@"floating"];
         }
         if (NeoWCShortcutOptionEnabled(defaults, NeoWCPluginShortcutDebugCenterKey, YES) &&
             ![registered containsObject:@"debug-center"] && [manager respondsToSelector:controllerSelector]) {
             ((void (*)(id, SEL, NSString *, NSString *, NSString *))objc_msgSend)(manager, controllerSelector,
                 @"NeoWC · 调试中心", @"0.1.2", @"NeoWCDebugShortcutViewController");
+            [[NeoWCPluginVisibilityManager sharedManager] recordControllerWithTitle:@"NeoWC · 调试中心" version:@"0.1.2" controller:@"NeoWCDebugShortcutViewController"];
             [registered addObject:@"debug-center"];
         }
         if (NeoWCShortcutOptionEnabled(defaults, NeoWCPluginShortcutRevokeRecordsKey, NO) &&
             ![registered containsObject:@"revoke-records"] && [manager respondsToSelector:controllerSelector]) {
             ((void (*)(id, SEL, NSString *, NSString *, NSString *))objc_msgSend)(manager, controllerSelector,
                 @"NeoWC · 防撤回记录", @"0.1.2", @"NeoWCAntiRevokeRecordsViewController");
+            [[NeoWCPluginVisibilityManager sharedManager] recordControllerWithTitle:@"NeoWC · 防撤回记录" version:@"0.1.2" controller:@"NeoWCAntiRevokeRecordsViewController"];
             [registered addObject:@"revoke-records"];
         }
         if (NeoWCShortcutOptionEnabled(defaults, NeoWCPluginShortcutCustomPageKey, NO) &&
@@ -107,6 +112,10 @@ void NeoWCRegisterPluginShortcuts(id manager) {
             if (marker.length > 0 && ![registered containsObject:marker]) {
                 ((void (*)(id, SEL, NSString *, NSString *, NSString *))objc_msgSend)(manager, controllerSelector,
                     title.length > 0 ? title : className, @"快捷入口", registrationClass);
+                [[NeoWCPluginVisibilityManager sharedManager]
+                    recordControllerWithTitle:title.length > 0 ? title : className
+                                      version:@"快捷入口"
+                                   controller:registrationClass];
                 [registered addObject:marker];
             } else if (className.length > 0 && registrationClass.length == 0) {
                 NeoWCLog(@"自定义快捷入口未注册：类 %@ 不存在或不是 UIViewController / UIView", className);

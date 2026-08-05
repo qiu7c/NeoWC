@@ -10,7 +10,6 @@ NSString *NeoWCCurrentUserWXID(void) {
     SEL defaultCenterSelector = sel_registerName("defaultCenter");
     SEL getServiceSelector = sel_registerName("getService:");
     SEL selfContactSelector = sel_registerName("getSelfContact");
-    SEL userNameSelector = sel_registerName("userName");
     if (![centerClass respondsToSelector:defaultCenterSelector]) return nil;
 
     id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, defaultCenterSelector);
@@ -18,8 +17,10 @@ NSString *NeoWCCurrentUserWXID(void) {
     id manager = ((id (*)(id, SEL, Class))objc_msgSend)(center, getServiceSelector, contactManagerClass);
     if (!manager || ![manager respondsToSelector:selfContactSelector]) return nil;
     id contact = ((id (*)(id, SEL))objc_msgSend)(manager, selfContactSelector);
-    if (!contact || ![contact respondsToSelector:userNameSelector]) return nil;
+    if (!contact) return nil;
 
+    SEL userNameSelector = sel_registerName("m_nsUsrName");
+    if (![contact respondsToSelector:userNameSelector]) return nil;
     id value = ((id (*)(id, SEL))objc_msgSend)(contact, userNameSelector);
     if (![value isKindOfClass:[NSString class]]) return nil;
     NSString *wxid = [(NSString *)value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];

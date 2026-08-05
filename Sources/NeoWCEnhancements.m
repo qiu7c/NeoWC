@@ -22,6 +22,8 @@ NSString *const NeoWCLongPressMenuEnabledKey = @"com.qiu7c.neowc.chat.long-press
 NSString *const NeoWCLongPressMenuHiddenTitlesKey = @"com.qiu7c.neowc.chat.long-press-menu.hidden";
 NSString *const NeoWCLongPressMenuPreferredOrderKey = @"com.qiu7c.neowc.chat.long-press-menu.order";
 NSString *const NeoWCLongPressMenuTitleMapKey = @"com.qiu7c.neowc.chat.long-press-menu.rename";
+NSString *const NeoWCLongPressMenuKnownTitlesKey = @"com.qiu7c.neowc.chat.long-press-menu.known";
+NSString *const NeoWCHideSeparatorLinesKey = @"com.qiu7c.neowc.interface.hide-separator-lines";
 NSString *const NeoWCGroupMemberReminderEnabledKey = @"com.qiu7c.neowc.message.group-member-reminder";
 NSString *const NeoWCKeywordReminderEnabledKey = @"com.qiu7c.neowc.message.keyword-reminder";
 NSString *const NeoWCKeywordReminderKeywordsKey = @"com.qiu7c.neowc.message.keyword-reminder.keywords";
@@ -135,5 +137,7 @@ BOOL NeoWCEnhancementEnabled(NSString *key) {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     id masterValue = [defaults objectForKey:@"com.qiu7c.neowc.enabled"];
     BOOL masterEnabled = masterValue ? [masterValue boolValue] : YES;
-    return masterEnabled && [defaults boolForKey:key];
+    id featureValue = [defaults objectForKey:key];
+    BOOL featureEnabled = featureValue ? [featureValue boolValue] : [key isEqualToString:NeoWCAntiRevokeKey];
+    return masterEnabled && featureEnabled;
 }

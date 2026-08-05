@@ -7,6 +7,7 @@
 #import "NeoWCEnhancements.h"
 #import "NeoWCCompatibility.h"
 #import "NeoWCListEditorViewController.h"
+#import "NeoWCLongPressMenuViewController.h"
 #import "NeoWCPluginVisibility.h"
 #import "NeoWCPluginShortcuts.h"
 #import "NeoWCInterfaceTweaks.h"
@@ -362,9 +363,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     NSUInteger blockedUserCount = [defaults arrayForKey:NeoWCMessageBlockUsersKey].count;
     NSUInteger blockedKeywordCount = [defaults arrayForKey:NeoWCMessageBlockKeywordsKey].count;
     NSUInteger reminderKeywordCount = [defaults arrayForKey:NeoWCKeywordReminderKeywordsKey].count;
-    NSUInteger hiddenMenuCount = [defaults arrayForKey:NeoWCLongPressMenuHiddenTitlesKey].count;
-    NSUInteger orderedMenuCount = [defaults arrayForKey:NeoWCLongPressMenuPreferredOrderKey].count;
-    NSUInteger renamedMenuCount = [defaults dictionaryForKey:NeoWCLongPressMenuTitleMapKey].count;
+    NSUInteger discoveredMenuCount = [defaults arrayForKey:NeoWCLongPressMenuKnownTitlesKey].count;
     BOOL pluginShortcutsEnabled = [defaults boolForKey:NeoWCPluginShortcutsEnabledKey];
     BOOL inputRoundingEnabled = [defaults boolForKey:NeoWCChatInputRoundingEnabledKey];
     NSString *revokePromptStyle = revokePromptStyleValue == 1 ? @"气泡旁" : @"消息下方";
@@ -403,9 +402,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     }
     [messageItems addObject:item(@"长按菜单管理", @"管理文字、应用与转账消息的现有菜单项", @"list.bullet.rectangle", NeoWCRowKindSwitch, NeoWCLongPressMenuEnabledKey, nil)];
     if (longPressMenuEnabled && [self isFeatureExpandedForKey:NeoWCLongPressMenuEnabledKey]) {
-        [messageItems addObject:item(@"隐藏菜单项", @"按原始名称隐藏菜单项", @"eye.slash.circle", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(hiddenMenuCount))];
-        [messageItems addObject:item(@"菜单排序", @"逐行填写希望优先显示的原始名称", @"arrow.up.arrow.down", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(orderedMenuCount))];
-        [messageItems addObject:item(@"菜单重命名", @"使用“原名称=新名称”配置显示文字", @"pencil.line", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(renamedMenuCount))];
+        [messageItems addObject:item(@"管理已发现菜单", @"自动发现原生菜单，可隐藏、排序和重命名", @"slider.horizontal.3", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(discoveredMenuCount))];
     }
     [messageItems addObject:item(@"群成员进退群提醒", @"根据群成员列表变化显示本地提醒", @"person.2.badge.gearshape", NeoWCRowKindSwitch, NeoWCGroupMemberReminderEnabledKey, nil)];
     [messageItems addObject:item(@"关键词提醒", @"新收到的普通文字命中关键词时提醒", @"bell.badge", NeoWCRowKindSwitch, NeoWCKeywordReminderEnabledKey, nil)];
@@ -482,6 +479,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         }
     }
     [interfaceItems addObject:item(@"隐藏免打扰图标", @"隐藏聊天标题旁的免打扰标记", @"bell.slash", NeoWCRowKindSwitch, NeoWCHideChatMuteIconKey, nil)];
+    [interfaceItems addObject:item(@"全局去除分割线", @"隐藏列表与页面细线，朋友圈、订阅号和联系人界面保持原样", @"rectangle.split.1x2", NeoWCRowKindSwitch, NeoWCHideSeparatorLinesKey, nil)];
     [interfaceItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];
 
     self.sections = @[
@@ -1147,16 +1145,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [self.navigationController pushViewController:editor animated:YES];
         return;
     }
-    NSArray *menuEditor = (@{
-        @"隐藏菜单项": @[NeoWCLongPressMenuHiddenTitlesKey, @"每行填写一个菜单原始名称", @(NeoWCListEditorModeList)],
-        @"菜单排序": @[NeoWCLongPressMenuPreferredOrderKey, @"按从上到下的顺序优先排列，未填写项保持微信原顺序", @(NeoWCListEditorModeList)],
-        @"菜单重命名": @[NeoWCLongPressMenuTitleMapKey, @"每行一条“原名称=新名称”规则", @(NeoWCListEditorModeMapping)],
-    })[item.title];
-    if (menuEditor) {
-        NeoWCListEditorViewController *editor = [[NeoWCListEditorViewController alloc]
-            initWithTitle:item.title subtitle:menuEditor[1]
-            defaultsKey:menuEditor[0] mode:[menuEditor[2] integerValue]];
-        [self.navigationController pushViewController:editor animated:YES];
+    if ([item.title isEqualToString:@"管理已发现菜单"]) {
+        [self.navigationController pushViewController:[NeoWCLongPressMenuViewController new] animated:YES];
         return;
     }
     if ([item.title isEqualToString:@"防撤回提示方案"]) {

@@ -17,6 +17,7 @@ static char NeoWCPluginIdentifierAssociationKey;
 - (BOOL)isActiveIdentifier:(NSString *)identifier;
 - (BOOL)isHiddenIdentifier:(NSString *)identifier;
 - (void)setHidden:(BOOL)hidden identifier:(NSString *)identifier;
+- (void)removeInactiveIdentifier:(NSString *)identifier;
 - (NSSet<NSString *> *)hiddenTitles;
 @end
 
@@ -108,6 +109,19 @@ static char NeoWCPluginIdentifierAssociationKey;
     return titles;
 }
 
+- (void)removeInactiveIdentifier:(NSString *)identifier {
+    if (identifier.length == 0) return;
+    @synchronized (self) {
+        if ([self.activeIdentifiers containsObject:identifier]) return;
+        [self.records removeObjectForKey:identifier];
+        [self.hiddenIdentifiers removeObject:identifier];
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setObject:self.records.allValues forKey:NeoWCKnownPluginsKey];
+        [defaults setObject:self.hiddenIdentifiers.allObjects forKey:NeoWCHiddenPluginIdentifiersKey];
+    }
+    [[NSNotificationCenter defaultCenter] postNotificationName:NeoWCPluginListDidChangeNotification object:nil];
+}
+
 @end
 
 static NSString *NeoWCPluginModelTitle(id model) {
@@ -194,6 +208,19 @@ void NeoWCFilterPluginListController(id controller) {
 - (void)visibilityChanged:(UISwitch *)sender {
     NSString *identifier = objc_getAssociatedObject(sender, &NeoWCPluginIdentifierAssociationKey);
     [[NeoWCPluginVisibilityManager sharedManager] setHidden:!sender.isOn identifier:identifier];
+}
+
+- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
+    NSString *identifier = self.plugins[indexPath.row][@"identifier"];
+    return ![[NeoWCPluginVisibilityManager sharedManager] isActiveIdentifier:identifier];
+}
+
+- (void)tableView:(UITableView *)tableView
+commitEditingStyle:(UITableViewCellEditingStyle)editingStyle
+forRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (editingStyle != UITableViewCellEditingStyleDelete) return;
+    NSString *identifier = self.plugins[indexPath.row][@"identifier"];
+    [[NeoWCPluginVisibilityManager sharedManager] removeInactiveIdentifier:identifier];
 }
 
 @end

@@ -262,7 +262,10 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
     if (!NeoWCEnhancementEnabled(NeoWCAntiRevokeKey) || !incomingMessage) return NO;
 
     NSString *xml = NeoWCStringValue(incomingMessage, @"m_nsContent");
-    if (![xml containsString:@"<sysmsg type=\"revokemsg\"><revokemsg>"]) return NO;
+    BOOL isRevokeXML = [xml containsString:@"<sysmsg type=\"revokemsg\""] ||
+                       [xml containsString:@"<sysmsg type='revokemsg'"] ||
+                       [xml containsString:@"<revokemsg>"];
+    if (!isRevokeXML) return NO;
 
     NSString *session = NeoWCTextBetween(xml, @"<session>", @"</session>");
     NSString *serverIDText = NeoWCTextBetween(xml, @"<newmsgid>", @"</newmsgid>");
