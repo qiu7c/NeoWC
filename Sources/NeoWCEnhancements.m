@@ -23,6 +23,7 @@ NSString *const NeoWCLongPressMenuHiddenTitlesKey = @"com.qiu7c.neowc.chat.long-
 NSString *const NeoWCLongPressMenuPreferredOrderKey = @"com.qiu7c.neowc.chat.long-press-menu.order";
 NSString *const NeoWCLongPressMenuTitleMapKey = @"com.qiu7c.neowc.chat.long-press-menu.rename";
 NSString *const NeoWCLongPressMenuKnownTitlesKey = @"com.qiu7c.neowc.chat.long-press-menu.known";
+NSString *const NeoWCLongPressMenuManualTitlesKey = @"com.qiu7c.neowc.chat.long-press-menu.manual";
 NSString *const NeoWCHideSeparatorLinesKey = @"com.qiu7c.neowc.interface.hide-separator-lines";
 NSString *const NeoWCGroupMemberReminderEnabledKey = @"com.qiu7c.neowc.message.group-member-reminder";
 NSString *const NeoWCKeywordReminderEnabledKey = @"com.qiu7c.neowc.message.keyword-reminder";

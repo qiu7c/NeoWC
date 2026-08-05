@@ -65,11 +65,27 @@ static NSString *NeoWCRuntimeMatchedTerm(NSString *text, NSString *defaultsKey) 
 static NSString *NeoWCMenuSourceTitle(id item) {
     NSString *stored = objc_getAssociatedObject(item, &NeoWCMenuOriginalTitleKey);
     if (stored.length > 0) return stored;
-    id value = NeoWCRuntimeSafeValue(item, @"title");
+    SEL titleSelector = sel_registerName("title");
+    id value = nil;
+    if ([item respondsToSelector:titleSelector]) {
+        value = ((id (*)(id, SEL))objc_msgSend)(item, titleSelector);
+    } else {
+        value = NeoWCRuntimeSafeValue(item, @"title");
+    }
     if (![value isKindOfClass:[NSString class]] || [value length] == 0) return nil;
     stored = [value copy];
     objc_setAssociatedObject(item, &NeoWCMenuOriginalTitleKey, stored, OBJC_ASSOCIATION_COPY_NONATOMIC);
     return stored;
+}
+
+static void NeoWCSetMenuTitle(id item, NSString *title) {
+    if (!item || title.length == 0) return;
+    SEL selector = sel_registerName("setTitle:");
+    if ([item respondsToSelector:selector]) {
+        ((void (*)(id, SEL, NSString *))objc_msgSend)(item, selector, title);
+    } else {
+        NeoWCRuntimeSetValue(item, @"title", title);
+    }
 }
 
 NSArray *NeoWCManagedLongPressMenuItems(NSArray *items) {
@@ -92,7 +108,7 @@ NSArray *NeoWCManagedLongPressMenuItems(NSArray *items) {
     BOOL enabled = NeoWCEnhancementEnabled(NeoWCLongPressMenuEnabledKey);
     for (id item in items) {
         NSString *sourceTitle = NeoWCMenuSourceTitle(item);
-        if (!enabled && sourceTitle.length > 0) NeoWCRuntimeSetValue(item, @"title", sourceTitle);
+        if (!enabled && sourceTitle.length > 0) NeoWCSetMenuTitle(item, sourceTitle);
     }
     if (!enabled) return items;
 
@@ -118,10 +134,10 @@ NSArray *NeoWCManagedLongPressMenuItems(NSArray *items) {
     for (id item in ordered) {
         NSString *sourceTitle = NeoWCMenuSourceTitle(item);
         id renamedTitle = sourceTitle.length > 0 ? mapping[sourceTitle] : nil;
-        NeoWCRuntimeSetValue(item, @"title",
-                             [renamedTitle isKindOfClass:[NSString class]] && [renamedTitle length] > 0
-                                 ? renamedTitle
-                                 : sourceTitle);
+        NeoWCSetMenuTitle(item,
+                          [renamedTitle isKindOfClass:[NSString class]] && [renamedTitle length] > 0
+                              ? renamedTitle
+                              : sourceTitle);
     }
     return ordered;
 }
@@ -161,14 +177,8 @@ static NSString *NeoWCMessageDisplayContent(id message, NSString *sessionUserNam
 }
 
 static id NeoWCContactManager(void) {
-    Class centerClass = objc_getClass("MMServiceCenter");
     Class managerClass = objc_getClass("CContactMgr");
-    SEL defaultCenterSelector = sel_registerName("defaultCenter");
-    SEL getServiceSelector = sel_registerName("getService:");
-    if (!centerClass || !managerClass || ![centerClass respondsToSelector:defaultCenterSelector]) return nil;
-    id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, defaultCenterSelector);
-    if (!center || ![center respondsToSelector:getServiceSelector]) return nil;
-    return ((id (*)(id, SEL, Class))objc_msgSend)(center, getServiceSelector, managerClass);
+    return managerClass ? NeoWCServiceForClass(managerClass) : nil;
 }
 
 static id NeoWCContactForUserNameWithManager(id manager, NSString *userName) {
@@ -287,6 +297,33 @@ static NSString *NeoWCGroupMemberNames(NSSet<NSString *> *members, id groupConta
     return joined;
 }
 
+static BOOL NeoWCInsertGroupMemberSystemMessage(NSString *sessionUserName, NSString *content) {
+    if (sessionUserName.length == 0 || content.length == 0) return NO;
+
+    Class wrapClass = objc_getClass("CMessageWrap");
+    SEL initSelector = sel_registerName("initWithMsgType:");
+    if (!wrapClass || ![wrapClass instancesRespondToSelector:initSelector]) return NO;
+
+    id messageManager = NeoWCServiceForClass(objc_getClass("CMessageMgr"));
+    SEL addSelector = sel_registerName("AddLocalMsg:MsgWrap:fixTime:NewMsgArriveNotify:");
+    if (!messageManager || ![messageManager respondsToSelector:addSelector]) return NO;
+
+    id message = ((id (*)(id, SEL, NSUInteger))objc_msgSend)([wrapClass alloc], initSelector, 10000);
+    if (!message) return NO;
+    NeoWCRuntimeSetValue(message, @"m_nsFromUsr", sessionUserName);
+    NeoWCRuntimeSetValue(message, @"m_nsToUsr", NeoWCCurrentUserWXID() ?: @"");
+    NeoWCRuntimeSetValue(message, @"m_uiStatus", @4);
+    NeoWCRuntimeSetValue(message, @"m_nsContent", content);
+    NeoWCRuntimeSetValue(message, @"m_uiCreateTime", @((NSUInteger)NSDate.date.timeIntervalSince1970));
+    ((void (*)(id, SEL, NSString *, id, BOOL, BOOL))objc_msgSend)(messageManager,
+                                                                 addSelector,
+                                                                 sessionUserName,
+                                                                 message,
+                                                                 YES,
+                                                                 NO);
+    return YES;
+}
+
 void NeoWCCompleteGroupMemberChange(id value, id contactManager, id newContact) {
     if (![value isKindOfClass:[NeoWCGroupMemberChangeSnapshot class]]) return;
     NeoWCGroupMemberChangeSnapshot *snapshot = value;
@@ -311,19 +348,19 @@ void NeoWCCompleteGroupMemberChange(id value, id contactManager, id newContact) 
     [left minusSet:afterMembers];
     if (joined.count == 0 && left.count == 0) return;
 
-    NSString *groupName = NeoWCContactDisplayName(groupContact, snapshot.sessionUserName);
     NSMutableArray *changes = [NSMutableArray array];
     if (joined.count > 0) {
-        [changes addObject:[NSString stringWithFormat:@"加入：%@",
+        [changes addObject:[NSString stringWithFormat:@"「%@」加入了群聊",
                             NeoWCGroupMemberNames(joined, groupContact, contactManager)]];
     }
     if (left.count > 0) {
-        [changes addObject:[NSString stringWithFormat:@"退出：%@",
+        [changes addObject:[NSString stringWithFormat:@"「%@」退出了群聊",
                             NeoWCGroupMemberNames(left, groupContact, contactManager)]];
     }
-    NeoWCDeliverReminder([NSString stringWithFormat:@"群成员变动 · %@", groupName],
-                         [changes componentsJoinedByString:@"\n"],
-                         snapshot.sessionUserName);
+    NSString *content = [changes componentsJoinedByString:@"；"];
+    if (!NeoWCInsertGroupMemberSystemMessage(snapshot.sessionUserName, content)) {
+        NeoWCLog(@"群成员变动提示写入失败：%@", snapshot.sessionUserName);
+    }
 }
 
 static UINavigationController *NeoWCCurrentNavigationController(void) {

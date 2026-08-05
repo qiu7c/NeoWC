@@ -2,6 +2,7 @@
 
 #import <objc/message.h>
 
+#import "NeoWCAccount.h"
 #import "NeoWCEnhancements.h"
 
 static NSString *const NeoWCExportTextAction = @"com.qiu7c.neowc.chat-export.text";
@@ -73,15 +74,10 @@ static NSString *NeoWCMessageBody(id wrap) {
 
 static id NeoWCContactForUsername(NSString *username) {
     if (username.length == 0) return nil;
-    Class centerClass = NSClassFromString(@"MMServiceCenter");
     Class managerClass = NSClassFromString(@"CContactMgr");
-    SEL defaultSelector = NSSelectorFromString(@"defaultCenter");
-    SEL serviceSelector = NSSelectorFromString(@"getService:");
     SEL contactSelector = NSSelectorFromString(@"getContactByName:");
-    if (!centerClass || !managerClass || ![centerClass respondsToSelector:defaultSelector]) return nil;
-    id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, defaultSelector);
-    if (!center || ![center respondsToSelector:serviceSelector]) return nil;
-    id manager = ((id (*)(id, SEL, Class))objc_msgSend)(center, serviceSelector, managerClass);
+    if (!managerClass) return nil;
+    id manager = NeoWCServiceForClass(managerClass);
     if (!manager || ![manager respondsToSelector:contactSelector]) return nil;
     return ((id (*)(id, SEL, id))objc_msgSend)(manager, contactSelector, username);
 }

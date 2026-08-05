@@ -37,7 +37,7 @@ static NSArray<NSDictionary *> *NeoWCCompatibilityDefinitions(void) {
             @{ @"id": @"reply-swipe", @"title": @"引用回复手势", @"class": @"CommonMessageCellView", @"selector": @"onShowMsgReplyMenuItem:" },
             @{ @"id": @"message-block", @"title": @"消息屏蔽", @"class": @"CMessageMgr", @"selector": @"AsyncOnAddMsg:MsgWrap:" },
             @{ @"id": @"keyword-reminder", @"title": @"关键词提醒", @"class": @"CMessageMgr", @"selector": @"AsyncOnAddMsg:MsgWrap:" },
-            @{ @"id": @"long-press-menu", @"title": @"长按菜单管理", @"class": @"TextMessageCellView", @"selector": @"operationMenuItems" },
+            @{ @"id": @"long-press-menu", @"title": @"长按菜单管理", @"class": @"BaseMessageCellView", @"selector": @"filteredMenuItems:" },
             @{ @"id": @"group-member-reminder", @"title": @"群成员进退群提醒", @"class": @"CContactMgr", @"selector": @"printContactImportantChangeData:oldContact:" },
             @{ @"id": @"auto-original-image", @"title": @"自动选择原图", @"class": @"MMAssetPickerController", @"selector": @"viewDidLoad" },
             @{ @"id": @"notification-direct-chat", @"title": @"通知直达聊天", @"class": @"NotificationActionsMgr", @"selector": @"userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:" },

@@ -4,6 +4,7 @@
 #import <objc/runtime.h>
 
 #import "NeoWCDebug.h"
+#import "NeoWCAccount.h"
 #import "NeoWCEnhancements.h"
 
 static NSUInteger NeoWCUIntegerValue(id object, NSString *key);
@@ -228,17 +229,6 @@ static id NeoWCNewMessageWrap(NSUInteger type) {
     return ((id (*)(id, SEL, NSUInteger))objc_msgSend)(allocated, initSelector, type);
 }
 
-static id NeoWCSelfContact(void) {
-    Class centerClass = objc_getClass("MMServiceCenter");
-    Class contactManagerClass = objc_getClass("CContactMgr");
-    if (!centerClass || !contactManagerClass) return nil;
-    id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, sel_registerName("defaultCenter"));
-    if (!center) return nil;
-    id contactManager = ((id (*)(id, SEL, Class))objc_msgSend)(center, sel_registerName("getService:"), contactManagerClass);
-    if (!contactManager || ![contactManager respondsToSelector:sel_registerName("getSelfContact")]) return nil;
-    return ((id (*)(id, SEL))objc_msgSend)(contactManager, sel_registerName("getSelfContact"));
-}
-
 static id NeoWCOriginalMessage(id manager, NSString *session, long long serverID) {
     SEL selector = sel_registerName("GetMsg:n64SvrID:");
     if (!manager || ![manager respondsToSelector:selector]) return nil;
@@ -276,8 +266,7 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
     // Own-message revoke notifications must keep WeChat's original behavior.
     if ([replaceMessage hasPrefix:@"你"] || [replaceMessage containsString:@"你撤回了一条消息"]) return NO;
 
-    id selfContact = NeoWCSelfContact();
-    NSString *selfUsername = NeoWCStringValue(selfContact, @"m_nsUsrName");
+    NSString *selfUsername = NeoWCCurrentUserWXID();
     if (selfUsername.length == 0) return NO;
     id original = NeoWCOriginalMessage(messageManager, session, serverID);
     NSString *originalFrom = NeoWCStringValue(original, @"m_nsFromUsr");

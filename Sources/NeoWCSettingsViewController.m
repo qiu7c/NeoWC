@@ -199,6 +199,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCLongPressMenuHiddenTitlesKey: @[],
         NeoWCLongPressMenuPreferredOrderKey: @[],
         NeoWCLongPressMenuTitleMapKey: @{},
+        NeoWCLongPressMenuManualTitlesKey: @[],
         NeoWCGroupMemberReminderEnabledKey: @NO,
         NeoWCKeywordReminderEnabledKey: @NO,
         NeoWCKeywordReminderKeywordsKey: @[],
@@ -363,7 +364,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     NSUInteger blockedUserCount = [defaults arrayForKey:NeoWCMessageBlockUsersKey].count;
     NSUInteger blockedKeywordCount = [defaults arrayForKey:NeoWCMessageBlockKeywordsKey].count;
     NSUInteger reminderKeywordCount = [defaults arrayForKey:NeoWCKeywordReminderKeywordsKey].count;
-    NSUInteger discoveredMenuCount = [defaults arrayForKey:NeoWCLongPressMenuKnownTitlesKey].count;
+    NSMutableSet<NSString *> *managedMenuTitles = [NSMutableSet setWithArray:[defaults arrayForKey:NeoWCLongPressMenuKnownTitlesKey] ?: @[]];
+    [managedMenuTitles addObjectsFromArray:[defaults arrayForKey:NeoWCLongPressMenuManualTitlesKey] ?: @[]];
+    NSUInteger discoveredMenuCount = managedMenuTitles.count;
     BOOL pluginShortcutsEnabled = [defaults boolForKey:NeoWCPluginShortcutsEnabledKey];
     BOOL inputRoundingEnabled = [defaults boolForKey:NeoWCChatInputRoundingEnabledKey];
     NSString *revokePromptStyle = revokePromptStyleValue == 1 ? @"气泡旁" : @"消息下方";
@@ -394,15 +397,15 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     }
     [messageItems addObject:item(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCRowKindSwitch, NeoWCGameSelectorKey, nil)];
     [messageItems addObject:item(@"聊天记录小丑", @"长按文字、应用、图片或转账消息，本地修改当前页面显示", @"square.and.pencil", NeoWCRowKindSwitch, NeoWCChatJokerEnabledKey, nil)];
-    [messageItems addObject:item(@"引用回复手势", @"横向滑动消息气泡直接进入微信原生引用回复", @"arrowshape.turn.up.left", NeoWCRowKindSwitch, NeoWCReplySwipeEnabledKey, nil)];
+    [messageItems addObject:item(@"引用回复手势", @"左滑消息气泡直接进入微信原生引用回复", @"arrowshape.turn.up.left", NeoWCRowKindSwitch, NeoWCReplySwipeEnabledKey, nil)];
     [messageItems addObject:item(@"消息屏蔽", @"按会话账号或关键词忽略新收到的普通文字消息", @"eye.slash", NeoWCRowKindSwitch, NeoWCMessageBlockEnabledKey, nil)];
     if (messageBlockEnabled && [self isFeatureExpandedForKey:NeoWCMessageBlockEnabledKey]) {
         [messageItems addObject:item(@"屏蔽会话账号", @"每行一个 wxid 或群聊账号", @"person.crop.circle.badge.xmark", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(blockedUserCount))];
         [messageItems addObject:item(@"屏蔽关键词", @"命中后不加入本地聊天记录", @"text.badge.xmark", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(blockedKeywordCount))];
     }
-    [messageItems addObject:item(@"长按菜单管理", @"管理文字、应用与转账消息的现有菜单项", @"list.bullet.rectangle", NeoWCRowKindSwitch, NeoWCLongPressMenuEnabledKey, nil)];
+    [messageItems addObject:item(@"长按菜单管理", @"统一管理聊天消息的原生长按菜单", @"list.bullet.rectangle", NeoWCRowKindSwitch, NeoWCLongPressMenuEnabledKey, nil)];
     if (longPressMenuEnabled && [self isFeatureExpandedForKey:NeoWCLongPressMenuEnabledKey]) {
-        [messageItems addObject:item(@"管理已发现菜单", @"自动发现原生菜单，可隐藏、排序和重命名", @"slider.horizontal.3", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(discoveredMenuCount))];
+        [messageItems addObject:item(@"管理已发现菜单", @"自动获取或手动添加，可隐藏、排序和重命名", @"slider.horizontal.3", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(discoveredMenuCount))];
     }
     [messageItems addObject:item(@"群成员进退群提醒", @"根据群成员列表变化显示本地提醒", @"person.2.badge.gearshape", NeoWCRowKindSwitch, NeoWCGroupMemberReminderEnabledKey, nil)];
     [messageItems addObject:item(@"关键词提醒", @"新收到的普通文字命中关键词时提醒", @"bell.badge", NeoWCRowKindSwitch, NeoWCKeywordReminderEnabledKey, nil)];
@@ -479,7 +482,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         }
     }
     [interfaceItems addObject:item(@"隐藏免打扰图标", @"隐藏聊天标题旁的免打扰标记", @"bell.slash", NeoWCRowKindSwitch, NeoWCHideChatMuteIconKey, nil)];
-    [interfaceItems addObject:item(@"全局去除分割线", @"隐藏列表与页面细线，朋友圈、订阅号和联系人界面保持原样", @"rectangle.split.1x2", NeoWCRowKindSwitch, NeoWCHideSeparatorLinesKey, nil)];
+    [interfaceItems addObject:item(@"全局去除分割线", @"按参考插件规则隐藏列表分割线与页面细线", @"rectangle.split.1x2", NeoWCRowKindSwitch, NeoWCHideSeparatorLinesKey, nil)];
     [interfaceItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];
 
     self.sections = @[
