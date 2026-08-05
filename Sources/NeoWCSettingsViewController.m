@@ -290,6 +290,19 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCExpandedCategoriesKey: @[@"messages"],
         NeoWCCollapsedFeaturesKey: @[],
     }];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults boolForKey:NeoWCChatMessageTimeBelowAvatarKey] &&
+        [defaults boolForKey:NeoWCChatMessageTimeBubbleSideKey]) {
+        [defaults setBool:NO forKey:NeoWCChatMessageTimeBubbleSideKey];
+    }
+    NSSet<NSString *> *supportedMeTitles = [NSSet setWithArray:@[@"作品", @"小店与卡包", @"表情"]];
+    NSArray<NSString *> *hiddenMeTitles = [defaults arrayForKey:NeoWCMeMenuHiddenTitlesKey] ?: @[];
+    NSArray<NSString *> *filteredMeTitles = [hiddenMeTitles filteredArrayUsingPredicate:
+        [NSPredicate predicateWithBlock:^BOOL(NSString *title, NSDictionary *bindings) {
+            (void)bindings;
+            return [supportedMeTitles containsObject:title];
+        }]];
+    if (![filteredMeTitles isEqualToArray:hiddenMeTitles]) [defaults setObject:filteredMeTitles forKey:NeoWCMeMenuHiddenTitlesKey];
     NSArray *savedCategories = [[NSUserDefaults standardUserDefaults] arrayForKey:NeoWCExpandedCategoriesKey];
     self.expandedCategoryIDs = [NSMutableSet setWithArray:savedCategories ?: @[]];
     NSArray *collapsedFeatures = [[NSUserDefaults standardUserDefaults] arrayForKey:NeoWCCollapsedFeaturesKey];
@@ -367,7 +380,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             NeoWCMultiSelectExportEnabledKey,
             NeoWCMessageBlockEnabledKey,
             NeoWCKeywordReminderEnabledKey,
-            NeoWCQuoteJumpEnabledKey,
             NeoWCChatMessageTimeEnabledKey,
             NeoWCRedEnvelopeDetailEnabledKey,
             NeoWCLongPressMenuEnabledKey,
@@ -475,11 +487,7 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         [messageItems addObject:item(@"忽略自己发送", @"不自动转换自己发出的语音", @"person.crop.circle", NeoWCRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnoreSelfKey, nil)];
     }
     [messageItems addObject:item(@"引用回复手势", @"左滑消息气泡直接进入微信原生引用回复", @"arrowshape.turn.up.left", NeoWCRowKindSwitch, NeoWCReplySwipeEnabledKey, nil)];
-    [messageItems addObject:item(@"引用消息定位", @"点击引用内容跳回对应的原消息位置", @"arrow.up.and.down.text.horizontal", NeoWCRowKindSwitch, NeoWCQuoteJumpEnabledKey, nil)];
-    if ([defaults boolForKey:NeoWCQuoteJumpEnabledKey] && [self isFeatureExpandedForKey:NeoWCQuoteJumpEnabledKey]) {
-        [messageItems addObject:item(@"图片引用定位", @"图片引用沿用同一条原消息定位链路", @"photo", NeoWCRowKindSwitch, NeoWCQuoteJumpImageEnabledKey, nil)];
-        [messageItems addObject:item(@"视频引用定位", @"视频引用沿用同一条原消息定位链路", @"video", NeoWCRowKindSwitch, NeoWCQuoteJumpVideoEnabledKey, nil)];
-    }
+    [messageItems addObject:item(@"引用消息定位", @"点击文字、图片或视频引用，调用微信原生定位入口", @"arrow.up.and.down.text.horizontal", NeoWCRowKindSwitch, NeoWCQuoteJumpEnabledKey, nil)];
     [messageItems addObject:item(@"聊天搜索按钮", @"在聊天页右上角加入微信原生聊天记录搜索", @"magnifyingglass", NeoWCRowKindSwitch, NeoWCChatSearchButtonEnabledKey, nil)];
     [messageItems addObject:item(@"消息时间标签", @"按消息创建时间显示在头像下方或气泡旁", @"clock", NeoWCRowKindSwitch, NeoWCChatMessageTimeEnabledKey, nil)];
     if ([defaults boolForKey:NeoWCChatMessageTimeEnabledKey] && [self isFeatureExpandedForKey:NeoWCChatMessageTimeEnabledKey]) {
@@ -593,9 +601,9 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             [interfaceItems addObject:item(@"外部圆角程度", @"输入 0 到 40，数值越大越圆", @"slider.horizontal.3", NeoWCRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", outerRadius])];
         }
     }
-    [interfaceItems addObject:item(@"隐藏免打扰与群人数", @"同时隐藏群聊标题旁的人数和免打扰标记", @"bell.slash", NeoWCRowKindSwitch, NeoWCHideChatMuteIconKey, nil)];
+    [interfaceItems addObject:item(@"隐藏群标题尾部", @"隐藏群人数和免打扰标记，并让群名称自动居中", @"bell.slash", NeoWCRowKindSwitch, NeoWCHideChatMuteIconKey, nil)];
     NSUInteger hiddenMeCount = [[defaults arrayForKey:NeoWCMeMenuHiddenTitlesKey] count];
-    [interfaceItems addObject:item(@"我的页面入口管理", @"选择隐藏服务、收藏、朋友圈等原生入口", @"person.crop.rectangle.stack", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(hiddenMeCount))];
+    [interfaceItems addObject:item(@"我的页面入口管理", @"选择隐藏作品、小店与卡包或表情入口", @"person.crop.rectangle.stack", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(hiddenMeCount))];
     [interfaceItems addObject:item(@"隐藏截屏分享按钮", @"不显示微信右下角的截图转发浮层", @"rectangle.on.rectangle.slash", NeoWCRowKindSwitch, NeoWCHideScreenshotForwardKey, nil)];
     [interfaceItems addObject:item(@"全局去除分割线", @"按参考插件规则隐藏列表分割线与页面细线", @"rectangle.split.1x2", NeoWCRowKindSwitch, NeoWCHideSeparatorLinesKey, nil)];
     [interfaceItems addObject:item(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCRowKindDetail, nil, @"管理")];
@@ -909,7 +917,16 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     NSIndexPath *indexPath = [NSIndexPath indexPathForRow:sender.tag % 1000 inSection:sender.tag / 1000];
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
     if (item.defaultsKey.length == 0) return;
-    [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:item.defaultsKey];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setBool:sender.isOn forKey:item.defaultsKey];
+    BOOL timePositionChanged = [item.defaultsKey isEqualToString:NeoWCChatMessageTimeBelowAvatarKey] ||
+                               [item.defaultsKey isEqualToString:NeoWCChatMessageTimeBubbleSideKey];
+    if (timePositionChanged) {
+        NSString *otherKey = [item.defaultsKey isEqualToString:NeoWCChatMessageTimeBelowAvatarKey]
+            ? NeoWCChatMessageTimeBubbleSideKey
+            : NeoWCChatMessageTimeBelowAvatarKey;
+        [defaults setBool:!sender.isOn forKey:otherKey];
+    }
     if (sender.isOn && [self featureHasChildrenForKey:item.defaultsKey]) {
         [self.collapsedFeatureKeys removeObject:item.defaultsKey];
         [self saveCollapsedFeatureKeys];
@@ -940,8 +957,8 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
                               [item.defaultsKey isEqualToString:NeoWCMultiSelectExportEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCMessageBlockEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCKeywordReminderEnabledKey] ||
-                              [item.defaultsKey isEqualToString:NeoWCQuoteJumpEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCChatMessageTimeEnabledKey] ||
+                              timePositionChanged ||
                               [item.defaultsKey isEqualToString:NeoWCRedEnvelopeDetailEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCLongPressMenuEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCAutoVoiceTranscriptionEnabledKey] ||

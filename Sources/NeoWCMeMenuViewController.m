@@ -25,14 +25,7 @@ static char NeoWCMeMenuTitleAssociationKey;
 - (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
 
 - (void)reloadTitles {
-    NSArray<NSString *> *builtIn = @[@"服务", @"收藏", @"朋友圈", @"作品", @"小店与卡包", @"表情"];
-    NSArray<NSString *> *known = [[NSUserDefaults standardUserDefaults] arrayForKey:NeoWCMeMenuKnownTitlesKey] ?: @[];
-    NSMutableArray<NSString *> *titles = [builtIn mutableCopy];
-    for (NSString *title in known) {
-        if ([title isKindOfClass:[NSString class]] && title.length > 0 &&
-            ![title isEqualToString:@"插件"] && ![titles containsObject:title]) [titles addObject:title];
-    }
-    self.titles = titles;
+    self.titles = @[@"作品", @"小店与卡包", @"表情"];
     [self.tableView reloadData];
 }
 
