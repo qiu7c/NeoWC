@@ -73,6 +73,9 @@
 @interface WCTimeLineOperateButtonView : UIButton
 @end
 
+@interface MMUILabel : UILabel
+@end
+
 @interface WCOperateFloatView : UIView
 - (void)showWithItemData:(id)item tipPoint:(CGPoint)tipPoint;
 - (void)hide;
@@ -92,8 +95,8 @@
 - (void)neowc_openNativeChatSearch:(id)sender;
 - (void)neowc_openAtTip:(id)sender;
 - (void)neowc_openKeywordTip:(id)sender;
-- (void)neowc_dismissAtTip:(id)sender;
-- (void)neowc_dismissKeywordTip:(id)sender;
+- (void)neowc_dismissAtTip:(UIGestureRecognizer *)sender;
+- (void)neowc_dismissKeywordTip:(UIGestureRecognizer *)sender;
 - (void)returnToOriginalMsg:(id)message;
 @end
 
@@ -4013,14 +4016,14 @@ static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const
 }
 
 %new
-- (void)neowc_dismissAtTip:(id)sender {
+- (void)neowc_dismissAtTip:(UIGestureRecognizer *)sender {
     if ([sender isKindOfClass:[UILongPressGestureRecognizer class]] &&
         [sender state] != UIGestureRecognizerStateBegan) return;
     NeoWCHideEdgeTip(self, &NeoWCAtTipsViewKey, YES);
 }
 
 %new
-- (void)neowc_dismissKeywordTip:(id)sender {
+- (void)neowc_dismissKeywordTip:(UIGestureRecognizer *)sender {
     if ([sender isKindOfClass:[UILongPressGestureRecognizer class]] &&
         [sender state] != UIGestureRecognizerStateBegan) return;
     NeoWCHideEdgeTip(self, &NeoWCKeywordTipsViewKey, YES);
