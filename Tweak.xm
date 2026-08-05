@@ -1707,7 +1707,8 @@ static UIButton *NeoWCMomentsForwardButton(id target, SEL action) {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:16.0 weight:UIImageSymbolWeightMedium];
     UIImage *icon = [UIImage systemImageNamed:@"arrowshape.turn.up.right.fill" withConfiguration:configuration] ?:
-                    [UIImage systemImageNamed:@"arrowshape.turn.up.right" withConfiguration:configuration];
+                    [UIImage systemImageNamed:@"arrowshape.turn.up.right" withConfiguration:configuration] ?:
+                    [UIImage systemImageNamed:@"square.and.arrow.up" withConfiguration:configuration];
     icon = [icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     [button setImage:icon forState:UIControlStateNormal];
     button.tintColor = UIColor.darkGrayColor;
@@ -1723,14 +1724,10 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
                       NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey);
     id dataItem = NeoWCMomentsObjectForName(cell, @"m_dataItem");
     UIView *operateButton = NeoWCMomentsObjectForName(cell, @"m_operateBtn");
-    UIView *container = [operateButton isKindOfClass:[UIView class]] ? operateButton.superview : nil;
-    while (container && container != cell) {
-        CGRect frame = [operateButton convertRect:operateButton.bounds toView:container];
-        if (CGRectGetMinX(frame) >= 36.0) break;
-        container = container.superview;
-    }
-    if (!container && [operateButton isKindOfClass:[UIView class]]) container = cell;
-    if (!shouldShow || !dataItem || !container) {
+    BOOL hasLayout = cell.window && CGRectGetWidth(cell.bounds) > 0.0 &&
+                     [operateButton isKindOfClass:[UIView class]] &&
+                     CGRectGetWidth(operateButton.bounds) > 0.0;
+    if (!shouldShow || !dataItem || !hasLayout) {
         [button removeFromSuperview];
         objc_setAssociatedObject(cell, &NeoWCMomentsForwardButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
@@ -1739,19 +1736,19 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
         button = NeoWCMomentsForwardButton(cell, @selector(neowc_handleMomentsForward:));
         objc_setAssociatedObject(cell, &NeoWCMomentsForwardButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (button.superview != container) {
+    if (button.superview != cell) {
         [button removeFromSuperview];
-        [container addSubview:button];
+        [cell addSubview:button];
     }
     button.tintColor = operateButton.tintColor ?: UIColor.darkGrayColor;
-    CGRect operateFrame = [operateButton convertRect:operateButton.bounds toView:container];
-    button.frame = CGRectMake(CGRectGetMinX(operateFrame) - 36.0,
+    CGRect operateFrame = [operateButton convertRect:operateButton.bounds toView:cell];
+    button.frame = CGRectMake(MAX(4.0, CGRectGetMinX(operateFrame) - 36.0),
                               CGRectGetMidY(operateFrame) - 16.0,
                               32.0,
                               32.0);
     button.hidden = NO;
     button.alpha = 1.0;
-    [container bringSubviewToFront:button];
+    [cell bringSubviewToFront:button];
 }
 
 static void NeoWCRestoreMomentsFloatMenu(WCOperateFloatView *floatView) {
@@ -1759,19 +1756,19 @@ static void NeoWCRestoreMomentsFloatMenu(WCOperateFloatView *floatView) {
     if (![snapshot isKindOfClass:[NeoWCMomentsFloatMenuSnapshot class]] || snapshot.applying) return;
     snapshot.applying = YES;
     [snapshot.expandedLayerMask removeAllAnimations];
-    floatView.frame = snapshot.baseFrame;
-    NSUInteger count = MIN(snapshot.baseViews.count, snapshot.baseFrames.count);
-    for (NSUInteger index = 0; index < count; index++) {
-        snapshot.baseViews[index].frame = snapshot.baseFrames[index].CGRectValue;
-    }
-    if (!snapshot.containerIsDirectChild && snapshot.container != floatView) {
-        snapshot.container.frame = snapshot.baseContainerFrame;
-    }
     UIButton *button = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey);
     UIView *separator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey);
-    button.hidden = YES;
-    separator.hidden = YES;
-    floatView.layer.mask = snapshot.originalLayerMask;
+    [UIView performWithoutAnimation:^{
+        floatView.frame = snapshot.baseFrame;
+        if (snapshot.container != floatView) snapshot.container.frame = snapshot.baseContainerFrame;
+        NSUInteger count = MIN(snapshot.baseViews.count, snapshot.baseFrames.count);
+        for (NSUInteger index = 0; index < count; index++) {
+            snapshot.baseViews[index].frame = snapshot.baseFrames[index].CGRectValue;
+        }
+        button.hidden = YES;
+        separator.hidden = YES;
+        floatView.layer.mask = snapshot.originalLayerMask;
+    }];
     snapshot.applying = NO;
     objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSnapshotKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
@@ -1807,15 +1804,16 @@ static NeoWCMomentsFloatMenuSnapshot *NeoWCCaptureMomentsFloatMenu(WCOperateFloa
     snapshot.baseViews = baseViews;
     snapshot.baseFrames = baseFrames;
 
-    CGFloat maxX = CGRectGetMaxX(anchor.frame);
-    if (likeButton.superview == container) maxX = MAX(maxX, CGRectGetMaxX(likeButton.frame));
-    if (commentButton.superview == container) maxX = MAX(maxX, CGRectGetMaxX(commentButton.frame));
-    CGFloat separatorHeight = CGRectGetHeight(anchor.frame) >= 12.0 ? CGRectGetHeight(anchor.frame) : 24.0;
-    CGFloat separatorY = CGRectGetHeight(anchor.frame) >= 12.0
-        ? CGRectGetMinY(anchor.frame)
-        : CGRectGetMidY(snapshot.baseFrame) - separatorHeight * 0.5;
-    snapshot.forwardFrame = CGRectMake(maxX, CGRectGetMinY(snapshot.baseFrame), slotWidth, CGRectGetHeight(snapshot.baseFrame));
-    snapshot.separatorFrame = CGRectMake(maxX - 1.0, separatorY, 1.0, separatorHeight);
+    CGFloat slotHeight = CGRectGetHeight(anchor.frame);
+    CGFloat slotY = CGRectGetMinY(anchor.frame);
+    if (slotHeight < 24.0) {
+        slotHeight = CGRectGetHeight(container.bounds);
+        slotY = 0.0;
+    }
+    CGFloat separatorHeight = MAX(12.0, slotHeight - 16.0);
+    CGFloat separatorY = slotY + (slotHeight - separatorHeight) * 0.5;
+    snapshot.forwardFrame = CGRectMake(0.0, slotY, slotWidth, slotHeight);
+    snapshot.separatorFrame = CGRectMake(slotWidth - 1.0, separatorY, 1.0, separatorHeight);
     return snapshot;
 }
 
@@ -1825,36 +1823,44 @@ static void NeoWCApplyMomentsFloatMenuSnapshot(WCOperateFloatView *floatView) {
         snapshot.addedWidth <= 0.0 || snapshot.applying) return;
     snapshot.applying = YES;
 
-    CGRect expandedFrame = snapshot.baseFrame;
-    expandedFrame.origin.x -= snapshot.addedWidth;
-    expandedFrame.size.width += snapshot.addedWidth;
-    floatView.frame = expandedFrame;
-
-    NSUInteger count = MIN(snapshot.baseViews.count, snapshot.baseFrames.count);
-    for (NSUInteger index = 0; index < count; index++) {
-        UIView *view = snapshot.baseViews[index];
-        CGRect frame = snapshot.baseFrames[index].CGRectValue;
-        BOOL expandsWithMenu = view == snapshot.container ||
-            (CGRectGetMinX(frame) <= 1.0 && CGRectGetWidth(frame) >= CGRectGetWidth(snapshot.baseFrame) - 2.0);
-        if (expandsWithMenu) frame.size.width += snapshot.addedWidth;
-        view.frame = frame;
-    }
-    if (!snapshot.containerIsDirectChild && snapshot.container != floatView) {
-        CGRect containerFrame = snapshot.baseContainerFrame;
-        containerFrame.size.width += snapshot.addedWidth;
-        snapshot.container.frame = containerFrame;
-    }
-
     UIButton *button = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey);
     UIView *separator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey);
-    button.frame = snapshot.forwardFrame;
-    separator.frame = snapshot.separatorFrame;
-    button.hidden = NO;
-    separator.hidden = NO;
-    button.alpha = 1.0;
-    separator.alpha = 1.0;
-    [snapshot.container bringSubviewToFront:button];
-    [snapshot.container bringSubviewToFront:separator];
+    [UIView performWithoutAnimation:^{
+        CGRect expandedFrame = snapshot.baseFrame;
+        expandedFrame.origin.x -= snapshot.addedWidth;
+        expandedFrame.size.width += snapshot.addedWidth;
+        floatView.frame = expandedFrame;
+
+        if (snapshot.container != floatView) {
+            CGRect containerFrame = snapshot.baseContainerFrame;
+            containerFrame.size.width += snapshot.addedWidth;
+            snapshot.container.frame = containerFrame;
+        }
+
+        NSUInteger count = MIN(snapshot.baseViews.count, snapshot.baseFrames.count);
+        CGFloat containerWidth = CGRectGetWidth(snapshot.baseContainerFrame);
+        for (NSUInteger index = 0; index < count; index++) {
+            UIView *view = snapshot.baseViews[index];
+            CGRect frame = snapshot.baseFrames[index].CGRectValue;
+            BOOL fillsContainer = CGRectGetMinX(frame) <= 1.0 &&
+                                  CGRectGetWidth(frame) >= containerWidth - 2.0;
+            if (fillsContainer) {
+                frame.size.width += snapshot.addedWidth;
+            } else {
+                frame.origin.x += snapshot.addedWidth;
+            }
+            view.frame = frame;
+        }
+
+        button.frame = snapshot.forwardFrame;
+        separator.frame = snapshot.separatorFrame;
+        button.hidden = NO;
+        separator.hidden = NO;
+        button.alpha = 1.0;
+        separator.alpha = 1.0;
+        [snapshot.container bringSubviewToFront:separator];
+        [snapshot.container bringSubviewToFront:button];
+    }];
 
     if (!snapshot.expandedLayerMask) {
         snapshot.expandedLayerMask = [CAShapeLayer layer];
@@ -1896,15 +1902,18 @@ static void NeoWCPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
         [button setTitle:@"转发" forState:UIControlStateNormal];
         UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:13.0 weight:UIImageSymbolWeightSemibold];
         UIImage *icon = [UIImage systemImageNamed:@"arrowshape.turn.up.right.fill" withConfiguration:configuration] ?:
-                        [UIImage systemImageNamed:@"arrowshape.turn.up.right" withConfiguration:configuration];
+                        [UIImage systemImageNamed:@"arrowshape.turn.up.right" withConfiguration:configuration] ?:
+                        [UIImage systemImageNamed:@"square.and.arrow.up" withConfiguration:configuration];
         [button setImage:[icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] forState:UIControlStateNormal];
+        button.accessibilityIdentifier = @"moments_forward";
+        button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
         button.imageEdgeInsets = UIEdgeInsetsMake(0.0, -2.0, 0.0, 2.0);
         button.titleEdgeInsets = UIEdgeInsetsMake(0.0, 2.0, 0.0, -2.0);
         [button addTarget:floatView action:@selector(neowc_handleMomentsForward:) forControlEvents:UIControlEventTouchUpInside];
         objc_setAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     UIButton *anchorButton = [anchor isKindOfClass:[UIButton class]] ? (UIButton *)anchor : nil;
-    UIColor *contentColor = [anchorButton titleColorForState:UIControlStateNormal] ?: anchor.tintColor ?: UIColor.whiteColor;
+    UIColor *contentColor = UIColor.whiteColor;
     [button setTitleColor:contentColor forState:UIControlStateNormal];
     button.tintColor = contentColor;
     button.titleLabel.font = anchorButton.titleLabel.font ?: [UIFont systemFontOfSize:14.0];
@@ -3015,6 +3024,15 @@ didReceiveNotificationResponse:(id)response
     }
 }
 
+- (void)viewDidAppear:(BOOL)animated {
+    %orig(animated);
+    __weak UIViewController *weakController = (UIViewController *)self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIViewController *controller = weakController;
+        if (controller.view.window) NeoWCRefreshVisibleAntiRevokeCells();
+    });
+}
+
 - (void)dealloc {
     NeoWCClearImageJokerOverrides();
     %orig;
@@ -3315,6 +3333,11 @@ didReceiveNotificationResponse:(id)response
 %end
 
 %hook WCTimeLineCellView
+
+- (void)layoutSubviews {
+    %orig;
+    NeoWCSynchronizeMomentsForwardButton(self);
+}
 
 - (void)editBlackList {
     if (!NeoWCEnhancementEnabled(NeoWCMomentsQuickPermissionsKey)) {
@@ -3687,14 +3710,6 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     id parentModel = NeoWCTweakSafeValue(viewModel, @"parentModel");
     message = NeoWCDirectMessageForViewModel(parentModel);
     if (message) return message;
-
-    id subViewModels = NeoWCTweakSafeValue(viewModel, @"subViewModels");
-    if ([subViewModels isKindOfClass:[NSArray class]]) {
-        for (id subViewModel in (NSArray *)subViewModels) {
-            message = NeoWCDirectMessageForViewModel(subViewModel);
-            if (message) return message;
-        }
-    }
     return nil;
 }
 
@@ -3774,6 +3789,16 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
                          fabs(translation.x) > fabs(translation.y) &&
                          (translation.x <= -triggerDistance || velocity.x <= -700.0);
     __weak CommonMessageCellView *weakCell = self;
+    if (shouldTrigger && self.window && NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey)) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            CommonMessageCellView *cell = weakCell;
+            if (!cell.window || !NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey)) return;
+            SEL selector = NSSelectorFromString(@"onShowMsgReplyMenuItem:");
+            if (![cell respondsToSelector:selector]) return;
+            NeoWCCompatibilityMarkTriggered(@"reply-swipe");
+            ((void (*)(id, SEL, id))objc_msgSend)(cell, selector, nil);
+        });
+    }
     [UIView animateWithDuration:0.22
                           delay:0.0
          usingSpringWithDamping:0.82
@@ -3784,18 +3809,12 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
                      }
                      completion:^(BOOL finished) {
                          (void)finished;
-                         CommonMessageCellView *cell = weakCell;
-                         if (!cell) return;
-                         objc_setAssociatedObject(cell, &NeoWCReplyOriginalTransformKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                         objc_setAssociatedObject(cell, &NeoWCReplyFeedbackGeneratorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                         objc_setAssociatedObject(cell, &NeoWCReplyFeedbackTriggeredKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                         if (!shouldTrigger || !cell.window ||
-                             !NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey)) return;
-                         SEL selector = NSSelectorFromString(@"onShowMsgReplyMenuItem:");
-                         if (![cell respondsToSelector:selector]) return;
-                         NeoWCCompatibilityMarkTriggered(@"reply-swipe");
-                         ((void (*)(id, SEL, id))objc_msgSend)(cell, selector, nil);
-                     }];
+                          CommonMessageCellView *cell = weakCell;
+                          if (!cell) return;
+                          objc_setAssociatedObject(cell, &NeoWCReplyOriginalTransformKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                          objc_setAssociatedObject(cell, &NeoWCReplyFeedbackGeneratorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                          objc_setAssociatedObject(cell, &NeoWCReplyFeedbackTriggeredKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                      }];
 }
 
 %new
@@ -3811,9 +3830,14 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     dispatch_async(dispatch_get_main_queue(), ^{
         CommonMessageCellView *cell = weakCell;
         if (!cell) return;
-        objc_setAssociatedObject(cell, &NeoWCAntiRevokeSideRefreshScheduledKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        if (!cell.window) return;
-        [cell neowc_refreshAntiRevokeSidePrompt];
+        if (cell.window) [cell neowc_refreshAntiRevokeSidePrompt];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            CommonMessageCellView *delayedCell = weakCell;
+            if (!delayedCell) return;
+            objc_setAssociatedObject(delayedCell, &NeoWCAntiRevokeSideRefreshScheduledKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            if (delayedCell.window) [delayedCell neowc_refreshAntiRevokeSidePrompt];
+        });
     });
 }
 
@@ -3846,6 +3870,7 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
         [self addSubview:label];
         objc_setAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey, label, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
+    if (label.superview != self) [self addSubview:label];
     if (label.hidden) label.hidden = NO;
     if (label.alpha != 1.0) label.alpha = 1.0;
     if (![label.text isEqualToString:prompt]) label.text = prompt;
@@ -3880,6 +3905,7 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     CGFloat y = CGRectGetMidY(bubbleFrame) - labelHeight * 0.5 + offsetY;
     CGRect targetFrame = CGRectIntegral(CGRectMake(x, y, labelWidth, labelHeight));
     if (!CGRectEqualToRect(label.frame, targetFrame)) label.frame = targetFrame;
+    [self bringSubviewToFront:label];
 }
 
 - (void)prepareForReuse {

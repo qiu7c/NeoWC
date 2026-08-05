@@ -96,9 +96,19 @@ static unsigned long long NeoWCUInt64Value(id object, NSString *key) {
 static NSArray<NSString *> *NeoWCSidePromptRecordKeys(id message) {
     unsigned long long serverID = NeoWCUInt64Value(message, @"m_n64MesSvrID");
     unsigned long long localID = NeoWCUInt64Value(message, @"m_uiMesLocalID");
-    NSMutableArray<NSString *> *keys = [NSMutableArray arrayWithCapacity:2];
-    if (serverID > 0) [keys addObject:[NSString stringWithFormat:@"server:%llu", serverID]];
-    if (localID > 0) [keys addObject:[NSString stringWithFormat:@"local:%llu", localID]];
+    NSMutableArray<NSString *> *keys = [NSMutableArray arrayWithCapacity:1];
+    if (serverID > 0) {
+        [keys addObject:[NSString stringWithFormat:@"server:%llu", serverID]];
+        return keys;
+    }
+    if (localID > 0) {
+        NSString *account = NeoWCCurrentUserWXID() ?: @"";
+        NSString *fromUser = NeoWCStringValue(message, @"m_nsFromUsr") ?: @"";
+        NSString *toUser = NeoWCStringValue(message, @"m_nsToUsr") ?: @"";
+        NSUInteger createTime = NeoWCUIntegerValue(message, @"m_uiCreateTime");
+        [keys addObject:[NSString stringWithFormat:@"local:%@:%@:%@:%llu:%lu",
+                         account, fromUser, toUser, localID, (unsigned long)createTime]];
+    }
     return keys;
 }
 
@@ -133,8 +143,12 @@ static void NeoWCRememberLocalPromptContent(NSString *content) {
     [defaults setObject:knownContents forKey:NeoWCAntiRevokeLocalPromptContentsKey];
 }
 
-static void NeoWCRememberSidePrompt(id message, NSString *text) {
-    NSArray<NSString *> *recordKeys = NeoWCSidePromptRecordKeys(message);
+static void NeoWCRememberSidePrompt(id message, NSString *text, unsigned long long explicitServerID) {
+    NSMutableArray<NSString *> *recordKeys = [NeoWCSidePromptRecordKeys(message) mutableCopy];
+    if (explicitServerID > 0) {
+        NSString *serverKey = [NSString stringWithFormat:@"server:%llu", explicitServerID];
+        if (![recordKeys containsObject:serverKey]) [recordKeys addObject:serverKey];
+    }
     if (recordKeys.count == 0 || text.length == 0) return;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     @synchronized (defaults) {
@@ -285,7 +299,7 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
 
     NSInteger promptStyle = [defaults integerForKey:NeoWCAntiRevokePromptStyleKey];
     if (promptStyle == 1) {
-        NeoWCRememberSidePrompt(original, @"已拦截撤回");
+        NeoWCRememberSidePrompt(original, @"已拦截撤回", (unsigned long long)serverID);
     } else {
         id localMessage = NeoWCNewMessageWrap(10000);
         if (!localMessage) return NO;
