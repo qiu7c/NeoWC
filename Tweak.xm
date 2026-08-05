@@ -1705,8 +1705,9 @@ static void NeoWCForwardMoment(id dataItem, UIViewController *presenter) {
 
 static UIButton *NeoWCMomentsForwardButton(id target, SEL action) {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:15.0 weight:UIImageSymbolWeightMedium];
-    UIImage *icon = [UIImage systemImageNamed:@"arrowshape.turn.up.right" withConfiguration:configuration] ?:
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:13.0 weight:UIImageSymbolWeightRegular];
+    UIImage *icon = [UIImage systemImageNamed:@"arrow.turn.up.right" withConfiguration:configuration] ?:
+                    [UIImage systemImageNamed:@"arrowshape.turn.up.right" withConfiguration:configuration] ?:
                     [UIImage systemImageNamed:@"square.and.arrow.up" withConfiguration:configuration];
     icon = [icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     [button setImage:icon forState:UIControlStateNormal];
@@ -1958,8 +1959,9 @@ static void NeoWCPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
     if (!button) {
         button = [UIButton buttonWithType:UIButtonTypeCustom];
         [button setTitle:@"转发" forState:UIControlStateNormal];
-        UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:15.0 weight:UIImageSymbolWeightMedium];
-        UIImage *icon = [UIImage systemImageNamed:@"arrowshape.turn.up.right" withConfiguration:configuration] ?:
+        UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:14.0 weight:UIImageSymbolWeightRegular];
+        UIImage *icon = [UIImage systemImageNamed:@"arrow.turn.up.right" withConfiguration:configuration] ?:
+                        [UIImage systemImageNamed:@"arrowshape.turn.up.right" withConfiguration:configuration] ?:
                         [UIImage systemImageNamed:@"square.and.arrow.up" withConfiguration:configuration];
         [button setImage:[icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] forState:UIControlStateNormal];
         button.accessibilityIdentifier = @"moments_forward";
