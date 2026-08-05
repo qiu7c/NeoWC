@@ -2,6 +2,7 @@
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import <math.h>
+#import <stdlib.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 
@@ -82,10 +83,59 @@
 - (void)neowc_refreshAntiRevokeSidePrompt;
 - (void)neowc_scheduleAntiRevokeSidePromptRefresh;
 - (void)neowc_handleReplyPan:(UIPanGestureRecognizer *)recognizer;
+- (void)neowc_scheduleMessageTimeRefresh;
+- (void)handleTapReferMessage;
+- (void)handleTapForReferMsg:(id)sender;
+@end
+
+@interface BaseMsgContentViewController : UIViewController
+- (void)neowc_openNativeChatSearch:(id)sender;
+- (void)neowc_openAtTip:(id)sender;
+- (void)neowc_openKeywordTip:(id)sender;
+- (void)neowc_dismissAtTip:(id)sender;
+- (void)neowc_dismissKeywordTip:(id)sender;
+- (void)returnToOriginalMsg:(id)message;
+@end
+
+@interface VoIPBubbleMessageCellView : UIView
+- (void)startVoiceVoip;
+- (void)startVideoVoip;
+@end
+
+@interface ScanQRCodeLogicController : NSObject
+- (void)onDetectCodesWithMarkDotInfoList:(id)list isCameraScan:(BOOL)isCameraScan;
+- (BOOL)isInScanSceneAndUseCameraScan;
+- (NSInteger)fromScene;
+- (NSInteger)m_sourceType;
+- (NSInteger)fromRawScene;
+- (NSInteger)picFrom;
+- (void)setIsFromAlbum:(BOOL)isFromAlbum;
+@end
+
+@interface WCRedEnvelopesRedEnvelopesDetailViewController : UIViewController
 @end
 
 @interface BaseMessageCellView : UIView
 - (NSArray *)filteredMenuItems:(NSArray *)items;
+@end
+
+@interface VoiceMessageCellView : UIView
+- (void)onVoiceTrans:(id)sender;
+@end
+
+@interface MoreViewController : UIViewController
+- (void)addCardsIfNeededToSection:(id)section;
+- (void)addEmoticonsIfNeededToSection:(id)section;
+- (id)createFinderEntranceCellConfig:(CGRect)frame;
+@end
+
+@interface WCTableViewSectionManager : NSObject
+- (void)addCell:(id)cell;
+- (void)insertCell:(id)cell At:(NSUInteger)index;
+@end
+
+@interface MMScreenShotViewController : UIViewController
+- (void)show;
 @end
 
 @interface SystemMessageCellView : UIView
@@ -181,6 +231,22 @@ static char NeoWCReplyOriginalTransformKey;
 static char NeoWCReplyFeedbackGeneratorKey;
 static char NeoWCReplyFeedbackTriggeredKey;
 static char NeoWCSeparatorOriginalHiddenKey;
+static char NeoWCMeMenuManagerKey;
+static char NeoWCVoiceTranscriptionMessageKey;
+static char NeoWCVoiceTranscriptionScheduledKey;
+static char NeoWCMessageTimeLabelKey;
+static char NeoWCMessageTimeBubbleLabelKey;
+static char NeoWCMessageTimeRefreshScheduledKey;
+static char NeoWCChatSearchHelperKey;
+static char NeoWCChatSearchButtonKey;
+static char NeoWCAtTipsViewKey;
+static char NeoWCKeywordTipsViewKey;
+static char NeoWCAtTipsMessagesKey;
+static char NeoWCKeywordTipsMessagesKey;
+static char NeoWCRedEnvelopeOriginalTextKey;
+static char NeoWCCallVoiceConfirmedKey;
+static char NeoWCCallVideoConfirmedKey;
+static __weak BaseMsgContentViewController *NeoWCVisibleChatController;
 static __weak id NeoWCCurrentEditImageLogicController;
 static BOOL NeoWCMomentsDispatchingQuickComment = NO;
 
@@ -288,14 +354,57 @@ static void NeoWCTweakSetValue(id object, NSString *key, id value) {
     }
 }
 
+static unsigned int NeoWCGradualStepCountForTarget(NSInteger target, NSDate *date) {
+    NSDateComponents *components = [[NSCalendar currentCalendar]
+        components:(NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond)
+          fromDate:date];
+    CGFloat hour = components.hour + components.minute / 60.0 + components.second / 3600.0;
+    static const CGFloat hours[] = {0.0, 6.0, 9.0, 12.0, 14.0, 18.0, 21.0, 24.0};
+    static const CGFloat progress[] = {0.0, 0.0, 0.18, 0.30, 0.45, 0.65, 0.90, 1.0};
+    CGFloat fraction = 1.0;
+    for (NSUInteger index = 0; index < 7; index++) {
+        if (hour <= hours[index + 1]) {
+            CGFloat segment = (hour - hours[index]) / (hours[index + 1] - hours[index]);
+            fraction = progress[index] + MAX(0.0, segment) * (progress[index + 1] - progress[index]);
+            break;
+        }
+    }
+    NSInteger value = (NSInteger)floor(target * MIN(1.0, MAX(0.0, fraction)));
+    return (unsigned int)MIN(100000, MAX(1, value));
+}
+
 static unsigned int NeoWCConfiguredDailyStepCount(void) {
     if (!NeoWCEnhancementEnabled(NeoWCStepOverrideEnabledKey)) return 0;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSDate *configuredDate = [defaults objectForKey:NeoWCStepCountDateKey];
-    if (![configuredDate isKindOfClass:[NSDate class]] ||
-        ![[NSCalendar currentCalendar] isDateInToday:configuredDate]) return 0;
-    NSInteger value = [defaults integerForKey:NeoWCStepCountKey];
-    return value > 0 ? (unsigned int)MIN(100000, value) : 0;
+    NeoWCStepMode mode = (NeoWCStepMode)[defaults integerForKey:NeoWCStepModeKey];
+    if (mode != NeoWCStepModeDailyRandom) mode = NeoWCStepModeDailyFixed;
+    NSCalendar *calendar = [NSCalendar currentCalendar];
+    NSDate *now = [NSDate date];
+    NSInteger dailyTarget = 0;
+    @synchronized (defaults) {
+        NSDate *configuredDate = [defaults objectForKey:NeoWCStepCountDateKey];
+        dailyTarget = [defaults integerForKey:NeoWCStepDailyTargetKey];
+        BOOL targetIsCurrent = [configuredDate isKindOfClass:[NSDate class]] &&
+                               [calendar isDateInToday:configuredDate] && dailyTarget > 0;
+        if (!targetIsCurrent) {
+            if (mode == NeoWCStepModeDailyRandom) {
+                NSInteger minimum = MIN(100000, MAX(1, [defaults integerForKey:NeoWCStepRandomMinimumKey]));
+                NSInteger maximum = MIN(100000, MAX(minimum, [defaults integerForKey:NeoWCStepRandomMaximumKey]));
+                dailyTarget = minimum + (NSInteger)arc4random_uniform((uint32_t)(maximum - minimum + 1));
+            } else {
+                dailyTarget = MIN(100000, MAX(0, [defaults integerForKey:NeoWCStepCountKey]));
+            }
+            if (dailyTarget > 0) {
+                [defaults setInteger:dailyTarget forKey:NeoWCStepDailyTargetKey];
+                [defaults setObject:now forKey:NeoWCStepCountDateKey];
+            }
+        }
+    }
+    if (dailyTarget <= 0) return 0;
+    if ([defaults boolForKey:NeoWCStepGradualEnabledKey]) {
+        return NeoWCGradualStepCountForTarget(dailyTarget, now);
+    }
+    return (unsigned int)MIN(100000, dailyTarget);
 }
 
 static CGFloat NeoWCGlobalPageScaleFactor(void) {
@@ -572,9 +681,159 @@ static NSString *NeoWCContactsCountTextForOriginal(NSString *original) {
     return nil;
 }
 
+static BOOL NeoWCResponderIsInsideControllerClass(UIResponder *responder, NSString *className) {
+    Class controllerClass = NSClassFromString(className);
+    if (!controllerClass) return NO;
+    while (responder) {
+        if ([responder isKindOfClass:controllerClass]) return YES;
+        responder = responder.nextResponder;
+    }
+    return NO;
+}
+
 static id NeoWCMessageWrapForCell(id cell) {
     id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel"]);
     return NeoWCTweakValueForSelectorNames(viewModel, @[@"messageWrap"]);
+}
+
+static NSString *NeoWCImageJokerKeyForMessage(id message);
+static id NeoWCImageJokerMessageForObject(id object);
+
+static NSArray<NSString *> *NeoWCNativeMeMenuTitles(void) {
+    return @[@"服务", @"收藏", @"朋友圈", @"作品", @"小店与卡包", @"表情"];
+}
+
+static NSString *NeoWCCanonicalMeMenuTitle(NSString *title) {
+    if (![title isKindOfClass:[NSString class]]) return nil;
+    NSString *value = [title stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if ([value isEqualToString:@"卡包"] || [value isEqualToString:@"订单与卡包"]) return @"小店与卡包";
+    return [NeoWCNativeMeMenuTitles() containsObject:value] ? value : nil;
+}
+
+static NSString *NeoWCMeMenuDirectTitleFromObject(id object) {
+    if (!object) return nil;
+    for (NSString *key in @[@"title", @"cellTitle", @"text", @"name", @"m_title"]) {
+        id value = NeoWCTweakValueForSelectorNames(object, @[key]);
+        if ([value isKindOfClass:[NSAttributedString class]]) value = [value string];
+        NSString *title = NeoWCCanonicalMeMenuTitle(value);
+        if (title.length > 0) return title;
+    }
+    return nil;
+}
+
+static NSString *NeoWCMeMenuTitleFromObject(id object) {
+    NSString *title = NeoWCMeMenuDirectTitleFromObject(object);
+    if (title.length > 0) return title;
+    for (NSString *key in @[@"cellInfo", @"cellConfig", @"config", @"viewModel"]) {
+        id nested = NeoWCTweakValueForSelectorNames(object, @[key]);
+        title = nested != object ? NeoWCMeMenuDirectTitleFromObject(nested) : nil;
+        if (title.length > 0) return title;
+    }
+    return nil;
+}
+
+static BOOL NeoWCObjectReferencesMoreViewController(id object) {
+    Class moreClass = NSClassFromString(@"MoreViewController");
+    if (!object || !moreClass) return NO;
+    if ([object isKindOfClass:moreClass]) return YES;
+    for (NSString *key in @[@"delegate", @"m_delegate", @"target", @"m_target",
+                              @"viewController", @"m_viewController", @"controller", @"owner"]) {
+        id candidate = NeoWCTweakValueForSelectorNames(object, @[key]);
+        if ([candidate isKindOfClass:moreClass]) return YES;
+    }
+    return NO;
+}
+
+static void NeoWCRecordMeMenuTitle(NSString *title) {
+    if (title.length == 0 || [title isEqualToString:@"插件"]) return;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    @synchronized (defaults) {
+        NSMutableArray<NSString *> *known = [[defaults arrayForKey:NeoWCMeMenuKnownTitlesKey] mutableCopy] ?: [NSMutableArray array];
+        if (![known containsObject:title]) {
+            [known addObject:title];
+            [defaults setObject:known forKey:NeoWCMeMenuKnownTitlesKey];
+        }
+    }
+}
+
+static BOOL NeoWCHidesMeMenuTitle(NSString *title) {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    id master = [defaults objectForKey:@"com.qiu7c.neowc.enabled"];
+    return title.length > 0 && (!master || [master boolValue]) &&
+           [[defaults arrayForKey:NeoWCMeMenuHiddenTitlesKey] containsObject:title];
+}
+
+static BOOL NeoWCShouldHideMeMenuCell(id manager, id cell) {
+    NSString *title = NeoWCMeMenuTitleFromObject(cell);
+    if (title.length == 0) return NO;
+    BOOL isMeMenu = [objc_getAssociatedObject(manager, &NeoWCMeMenuManagerKey) boolValue] ||
+                    NeoWCObjectReferencesMoreViewController(manager) ||
+                    NeoWCObjectReferencesMoreViewController(cell);
+    if (!isMeMenu) return NO;
+    objc_setAssociatedObject(manager, &NeoWCMeMenuManagerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NeoWCRecordMeMenuTitle(title);
+    NeoWCCompatibilityMarkTriggered(@"me-menu-visibility");
+    return NeoWCHidesMeMenuTitle(title);
+}
+
+static void NeoWCMarkAndFilterMeMenuSection(id section) {
+    if (!section) return;
+    objc_setAssociatedObject(section, &NeoWCMeMenuManagerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    id cells = NeoWCTweakValueForSelectorNames(section, @[@"cells", @"cellArray", @"m_arrCells", @"items"]);
+    if (![cells isKindOfClass:[NSMutableArray class]]) return;
+    NSIndexSet *hiddenIndexes = [(NSMutableArray *)cells indexesOfObjectsPassingTest:^BOOL(id cell, NSUInteger idx, BOOL *stop) {
+        (void)idx; (void)stop;
+        NSString *title = NeoWCMeMenuTitleFromObject(cell);
+        if (title.length > 0) NeoWCRecordMeMenuTitle(title);
+        return NeoWCHidesMeMenuTitle(title);
+    }];
+    if (hiddenIndexes.count > 0) [(NSMutableArray *)cells removeObjectsAtIndexes:hiddenIndexes];
+}
+
+static BOOL NeoWCVoiceMessageIsGroup(id message) {
+    NSString *from = NeoWCTweakValueForSelectorNames(message, @[@"m_nsFromUsr", @"fromUser"]);
+    NSString *to = NeoWCTweakValueForSelectorNames(message, @[@"m_nsToUsr", @"toUser"]);
+    return [from hasSuffix:@"@chatroom"] || [to hasSuffix:@"@chatroom"];
+}
+
+static BOOL NeoWCShouldAutoTranscribeVoiceCell(id cell, id message) {
+    if (!NeoWCEnhancementEnabled(NeoWCAutoVoiceTranscriptionEnabledKey) || !message) return NO;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    BOOL group = NeoWCVoiceMessageIsGroup(message);
+    if (group && [defaults boolForKey:NeoWCAutoVoiceTranscriptionIgnoreGroupKey]) return NO;
+    if (!group && [defaults boolForKey:NeoWCAutoVoiceTranscriptionIgnorePrivateKey]) return NO;
+    id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel", @"m_viewModel"]);
+    BOOL isSender = [NeoWCTweakValueForSelectorNames(viewModel, @[@"isSender"]) boolValue] ||
+                    [NeoWCTweakValueForSelectorNames(message, @[@"isSender"]) boolValue];
+    if (isSender && [defaults boolForKey:NeoWCAutoVoiceTranscriptionIgnoreSelfKey]) return NO;
+    if ([message respondsToSelector:NSSelectorFromString(@"hasLocalTranslateResult")] &&
+        ((BOOL (*)(id, SEL))objc_msgSend)(message, NSSelectorFromString(@"hasLocalTranslateResult"))) return NO;
+    return ![NeoWCTweakValueForSelectorNames(cell, @[@"m_isTranslating"]) boolValue];
+}
+
+static void NeoWCScheduleVoiceTranscription(VoiceMessageCellView *cell, id message) {
+    if (!cell.window || !NeoWCShouldAutoTranscribeVoiceCell(cell, message)) return;
+    NSString *identifier = NeoWCImageJokerKeyForMessage(message) ?: [NSString stringWithFormat:@"%p", message];
+    if ([objc_getAssociatedObject(cell, &NeoWCVoiceTranscriptionMessageKey) isEqualToString:identifier] ||
+        [objc_getAssociatedObject(cell, &NeoWCVoiceTranscriptionScheduledKey) boolValue]) return;
+    objc_setAssociatedObject(cell, &NeoWCVoiceTranscriptionScheduledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    __weak VoiceMessageCellView *weakCell = cell;
+    __weak id weakMessage = message;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        VoiceMessageCellView *strongCell = weakCell;
+        id strongMessage = weakMessage;
+        if (!strongCell) return;
+        objc_setAssociatedObject(strongCell, &NeoWCVoiceTranscriptionScheduledKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        id currentMessage = NeoWCImageJokerMessageForObject(strongCell);
+        if (currentMessage != strongMessage || !NeoWCShouldAutoTranscribeVoiceCell(strongCell, strongMessage)) return;
+        SEL selector = NSSelectorFromString(@"onVoiceTrans:");
+        if (![strongCell respondsToSelector:selector]) return;
+        id button = NeoWCTweakValueForSelectorNames(strongCell, @[@"m_quickTransTipButton"]);
+        objc_setAssociatedObject(strongCell, &NeoWCVoiceTranscriptionMessageKey,
+                                 identifier, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        ((void (*)(id, SEL, id))objc_msgSend)(strongCell, selector, button);
+        NeoWCCompatibilityMarkTriggered(@"auto-voice-transcription");
+    });
 }
 
 static BOOL NeoWCMessageIsText(id message) {
@@ -1045,7 +1304,7 @@ static BOOL NeoWCSaveDataAsSelfieEmoticon(NSData *data) {
     id controller = NeoWCEmoticonAddLogicController();
     SEL handleSelector = NSSelectorFromString(@"handleEmoticonUploadInfo:source:");
     if (!controller || ![controller respondsToSelector:handleSelector]) return NO;
-    ((void (*)(id, SEL, id, NSUInteger))objc_msgSend)(controller, handleSelector, uploadInfo, 1);
+    ((void (*)(id, SEL, id, NSUInteger))objc_msgSend)(controller, handleSelector, uploadInfo, 7);
     NeoWCCompatibilityMarkTriggered(@"emoticon-to-selfie");
     return YES;
 }
@@ -1473,15 +1732,8 @@ static NSString *NeoWCGameMD5ForContent(NSUInteger content) {
 }
 
 static void NeoWCRefreshDailyStepOverride(void) {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    if (![defaults boolForKey:NeoWCStepOverrideEnabledKey]) return;
-    NSInteger stepCount = [defaults integerForKey:NeoWCStepCountKey];
-    if (stepCount <= 0) return;
-    NSDate *configuredDate = [defaults objectForKey:NeoWCStepCountDateKey];
-    if (![configuredDate isKindOfClass:[NSDate class]] || ![[NSCalendar currentCalendar] isDateInToday:configuredDate]) {
-        [defaults setObject:[NSDate date] forKey:NeoWCStepCountDateKey];
-        NeoWCLog(@"微信运动已按每日配置刷新为 %ld 步", (long)stepCount);
-    }
+    unsigned int stepCount = NeoWCConfiguredDailyStepCount();
+    if (stepCount > 0) NeoWCLog(@"微信运动今日配置为 %u 步", stepCount);
 }
 
 static id NeoWCMomentsObjectForSelector(id object, NSString *selectorName) {
@@ -3162,6 +3414,66 @@ didReceiveNotificationResponse:(id)response
 
 %end
 
+%hook WCTableViewSectionManager
+
+- (void)addCell:(id)cell {
+    if (NeoWCShouldHideMeMenuCell(self, cell)) return;
+    %orig;
+}
+
+- (void)insertCell:(id)cell At:(NSUInteger)index {
+    if (NeoWCShouldHideMeMenuCell(self, cell)) return;
+    %orig(cell, index);
+}
+
+%end
+
+%hook MoreViewController
+
+- (void)addCardsIfNeededToSection:(id)section {
+    NeoWCMarkAndFilterMeMenuSection(section);
+    NeoWCRecordMeMenuTitle(@"小店与卡包");
+    if (NeoWCHidesMeMenuTitle(@"小店与卡包")) return;
+    %orig;
+}
+
+- (void)addEmoticonsIfNeededToSection:(id)section {
+    NeoWCMarkAndFilterMeMenuSection(section);
+    NeoWCRecordMeMenuTitle(@"表情");
+    if (NeoWCHidesMeMenuTitle(@"表情")) return;
+    %orig;
+}
+
+- (id)createFinderEntranceCellConfig:(CGRect)frame {
+    NeoWCRecordMeMenuTitle(@"作品");
+    if (NeoWCHidesMeMenuTitle(@"作品")) return nil;
+    return %orig(frame);
+}
+
+%end
+
+%hook VoiceMessageCellView
+
+- (void)layoutSubviews {
+    %orig;
+    id message = NeoWCImageJokerMessageForObject(self);
+    NeoWCScheduleVoiceTranscription(self, message);
+}
+
+%end
+
+%hook MMScreenShotViewController
+
+- (void)show {
+    if (NeoWCEnhancementEnabled(NeoWCHideScreenshotForwardKey)) {
+        NeoWCCompatibilityMarkTriggered(@"hide-screenshot-forward");
+        return;
+    }
+    %orig;
+}
+
+%end
+
 %hook UIImageView
 
 - (void)setAccessibilityLabel:(NSString *)label {
@@ -3231,7 +3543,402 @@ didReceiveNotificationResponse:(id)response
 
 %end
 
+static UIView *NeoWCFirstDescendantMatching(UIView *view, BOOL (^predicate)(UIView *candidate)) {
+    if (!view || !predicate) return nil;
+    for (UIView *subview in view.subviews) {
+        if (predicate(subview)) return subview;
+        UIView *nested = NeoWCFirstDescendantMatching(subview, predicate);
+        if (nested) return nested;
+    }
+    return nil;
+}
+
+static UIView *NeoWCMessageAvatarView(UIView *cell) {
+    return NeoWCFirstDescendantMatching(cell, ^BOOL(UIView *candidate) {
+        return [NSStringFromClass(candidate.class) containsString:@"MMHeadImageView"];
+    });
+}
+
+static UIView *NeoWCMessageBubbleView(UIView *cell) {
+    id content = NeoWCTweakValueForSelectorNames(cell, @[@"m_contentView", @"contentView"]);
+    for (id object in @[content ?: NSNull.null, cell]) {
+        if (object == NSNull.null) continue;
+        SEL selector = NSSelectorFromString(@"getBgImageView");
+        if ([object respondsToSelector:selector]) {
+            id value = ((id (*)(id, SEL))objc_msgSend)(object, selector);
+            if ([value isKindOfClass:[UIView class]]) return value;
+        }
+        id value = NeoWCTweakValueForSelectorNames(object, @[@"m_bgImageView", @"bgImageView"]);
+        if ([value isKindOfClass:[UIView class]]) return value;
+    }
+    return nil;
+}
+
+static NSTimeInterval NeoWCMessageCreateTime(id message, id viewModel) {
+    for (id object in @[message ?: NSNull.null, viewModel ?: NSNull.null]) {
+        if (object == NSNull.null) continue;
+        for (NSString *key in @[@"m_uiCreateTime", @"createTime"]) {
+            id value = NeoWCTweakValueForSelectorNames(object, @[key]);
+            NSTimeInterval time = [value doubleValue];
+            if (time > 0) return time;
+        }
+    }
+    return 0;
+}
+
+static UILabel *NeoWCMessageTimeLabel(CommonMessageCellView *cell, const void *key) {
+    UILabel *label = objc_getAssociatedObject(cell, key);
+    if (label) return label;
+    label = [[UILabel alloc] initWithFrame:CGRectZero];
+    label.numberOfLines = 1;
+    label.textAlignment = NSTextAlignmentCenter;
+    label.userInteractionEnabled = NO;
+    label.layer.zPosition = 900.0;
+    [cell addSubview:label];
+    objc_setAssociatedObject(cell, key, label, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return label;
+}
+
+static void NeoWCRefreshMessageTimeLabel(CommonMessageCellView *cell) {
+    UILabel *avatarLabel = objc_getAssociatedObject(cell, &NeoWCMessageTimeLabelKey);
+    UILabel *bubbleLabel = objc_getAssociatedObject(cell, &NeoWCMessageTimeBubbleLabelKey);
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    BOOL enabled = NeoWCEnhancementEnabled(NeoWCChatMessageTimeEnabledKey);
+    BOOL belowAvatar = [defaults boolForKey:NeoWCChatMessageTimeBelowAvatarKey];
+    BOOL bubbleSide = [defaults boolForKey:NeoWCChatMessageTimeBubbleSideKey];
+    if (!enabled || !cell.window || (!belowAvatar && !bubbleSide)) {
+        avatarLabel.hidden = YES;
+        bubbleLabel.hidden = YES;
+        return;
+    }
+
+    id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel", @"_viewModel"]);
+    id message = NeoWCImageJokerMessageForObject(cell);
+    NSTimeInterval createTime = NeoWCMessageCreateTime(message, viewModel);
+    if (createTime <= 0) {
+        avatarLabel.hidden = YES;
+        bubbleLabel.hidden = YES;
+        return;
+    }
+    NSString *format = [defaults stringForKey:NeoWCChatMessageTimeFormatKey] ?: @"MM-dd HH:mm:ss";
+    NSDateFormatter *formatter = [NSDateFormatter new];
+    formatter.dateFormat = format;
+    NSString *text = [formatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:createTime]];
+    CGFloat fontSize = [defaults doubleForKey:NeoWCChatMessageTimeFontSizeKey];
+    UIFont *font = [UIFont systemFontOfSize:fontSize >= 8.0 && fontSize <= 18.0 ? fontSize : 10.0];
+    UIColor *color = NeoWCColorForDefaultsKey(NeoWCChatMessageTimeColorKey, UIColor.secondaryLabelColor);
+    BOOL isSender = [NeoWCTweakValueForSelectorNames(viewModel, @[@"isSender"]) boolValue];
+    if (belowAvatar) {
+        UIView *anchor = NeoWCMessageAvatarView(cell);
+        if (anchor) {
+            avatarLabel = NeoWCMessageTimeLabel(cell, &NeoWCMessageTimeLabelKey);
+            CGRect frame = [anchor.superview convertRect:anchor.frame toView:cell];
+            avatarLabel.text = text;
+            avatarLabel.font = font;
+            avatarLabel.textColor = color;
+            avatarLabel.frame = CGRectMake(CGRectGetMidX(frame) - 46.0, CGRectGetMaxY(frame) + 2.0, 92.0, 14.0);
+            avatarLabel.hidden = NO;
+        } else {
+            avatarLabel.hidden = YES;
+        }
+    } else {
+        avatarLabel.hidden = YES;
+    }
+    if (bubbleSide) {
+        UIView *anchor = NeoWCMessageBubbleView(cell);
+        if (anchor) {
+            bubbleLabel = NeoWCMessageTimeLabel(cell, &NeoWCMessageTimeBubbleLabelKey);
+            CGRect frame = [anchor.superview convertRect:anchor.frame toView:cell];
+            CGFloat x = isSender ? CGRectGetMinX(frame) - 86.0 : CGRectGetMaxX(frame) + 4.0;
+            bubbleLabel.text = text;
+            bubbleLabel.font = font;
+            bubbleLabel.textColor = color;
+            bubbleLabel.frame = CGRectMake(x, CGRectGetMidY(frame) - 7.0, 82.0, 14.0);
+            bubbleLabel.hidden = NO;
+        } else {
+            bubbleLabel.hidden = YES;
+        }
+    } else {
+        bubbleLabel.hidden = YES;
+    }
+    NeoWCCompatibilityMarkTriggered(@"chat-message-time");
+}
+
+static void NeoWCScheduleMessageTimeRefresh(CommonMessageCellView *cell) {
+    if ([objc_getAssociatedObject(cell, &NeoWCMessageTimeRefreshScheduledKey) boolValue]) return;
+    objc_setAssociatedObject(cell, &NeoWCMessageTimeRefreshScheduledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    __weak CommonMessageCellView *weakCell = cell;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        CommonMessageCellView *strongCell = weakCell;
+        if (!strongCell) return;
+        objc_setAssociatedObject(strongCell, &NeoWCMessageTimeRefreshScheduledKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NeoWCRefreshMessageTimeLabel(strongCell);
+    });
+}
+
+static NSString *NeoWCChatUserName(id controller) {
+    id contact = NeoWCTweakValueForSelectorNames(controller, @[@"m_contact", @"chatContact", @"contact"]);
+    NSString *userName = NeoWCTweakValueForSelectorNames(contact, @[@"m_nsUsrName", @"userName"]);
+    if (userName.length == 0) userName = NeoWCTweakValueForSelectorNames(controller, @[@"m_nsUsrName", @"sessionUserName"]);
+    return userName;
+}
+
+static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) {
+    Class helperClass = NSClassFromString(@"MsgSearchHelper");
+    if (!helperClass) return;
+    id helper = objc_getAssociatedObject(controller, &NeoWCChatSearchHelperKey);
+    if (!helper) {
+        SEL initSelector = NSSelectorFromString(@"initWithContentsController:");
+        helper = [helperClass alloc];
+        if ([helper respondsToSelector:initSelector]) helper = ((id (*)(id, SEL, id))objc_msgSend)(helper, initSelector, controller);
+        else helper = [helper init];
+        if (!helper) return;
+        objc_setAssociatedObject(controller, &NeoWCChatSearchHelperKey, helper, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    id contact = NeoWCTweakValueForSelectorNames(controller, @[@"m_contact", @"chatContact", @"contact"]);
+    NeoWCTweakSetValue(helper, @"m_delegate", controller);
+    NeoWCTweakSetValue(helper, @"m_eMsgSearchHelperScene", @0);
+    if (contact) NeoWCTweakSetValue(helper, @"m_contact", contact);
+    NeoWCTweakSetValue(helper, @"m_bShowSearchByName", @YES);
+    NeoWCTweakSetValue(helper, @"m_bShowSearchByTime", @YES);
+    NeoWCTweakSetValue(helper, @"m_searchParentVC", controller);
+    id searcher = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcher"]);
+    SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
+    if ([searcher respondsToSelector:pushSelector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
+        NeoWCCompatibilityMarkTriggered(@"chat-search-button");
+        return;
+    }
+    id searchController = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcherViewController"]);
+    if ([searchController isKindOfClass:[UIViewController class]]) {
+        [controller.navigationController pushViewController:searchController animated:YES];
+        NeoWCCompatibilityMarkTriggered(@"chat-search-button");
+    }
+}
+
+static void NeoWCInstallChatSearchButton(BaseMsgContentViewController *controller) {
+    UIBarButtonItem *button = objc_getAssociatedObject(controller, &NeoWCChatSearchButtonKey);
+    BOOL enabled = NeoWCEnhancementEnabled(NeoWCChatSearchButtonEnabledKey);
+    if (!enabled) {
+        if (button && [controller.navigationItem.rightBarButtonItems containsObject:button]) {
+            NSMutableArray *items = [controller.navigationItem.rightBarButtonItems mutableCopy];
+            [items removeObject:button];
+            controller.navigationItem.rightBarButtonItems = items;
+        }
+        return;
+    }
+    if (!button) {
+        UIImage *image = [UIImage systemImageNamed:@"magnifyingglass"];
+        button = [[UIBarButtonItem alloc] initWithImage:image style:UIBarButtonItemStylePlain target:controller action:@selector(neowc_openNativeChatSearch:)];
+        button.accessibilityLabel = @"聊天记录搜索";
+        objc_setAssociatedObject(controller, &NeoWCChatSearchButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    NSMutableArray *items = [controller.navigationItem.rightBarButtonItems mutableCopy] ?: [NSMutableArray array];
+    if (![items containsObject:button]) {
+        [items addObject:button];
+        controller.navigationItem.rightBarButtonItems = items;
+    }
+}
+
+static unsigned int NeoWCReferencedLocalID(id cell) {
+    id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel", @"_viewModel"]);
+    NSArray *keys = @[@"referMessage", @"referMsg", @"referMessageWrap", @"m_referMessage",
+                      @"referViewModel", @"referMessageViewModel", @"displayViewForRefer", @"getReferView"];
+    NSMutableArray *objects = [NSMutableArray array];
+    if (viewModel) [objects addObject:viewModel];
+    for (NSString *key in keys) {
+        id value = NeoWCTweakValueForSelectorNames(viewModel, @[key]);
+        if (value) [objects addObject:value];
+    }
+    for (id object in [objects copy]) {
+        id wrap = NeoWCTweakValueForSelectorNames(object, @[@"messageWrap", @"m_messageWrap", @"msgWrap"]);
+        if (wrap) [objects addObject:wrap];
+    }
+    for (id object in objects) {
+        unsigned int localID = [NeoWCTweakValueForSelectorNames(object, @[@"m_uiMesLocalID", @"localId", @"localID"]) unsignedIntValue];
+        if (localID > 0) return localID;
+    }
+    return 0;
+}
+
+static BOOL NeoWCJumpToReferencedMessage(CommonMessageCellView *cell) {
+    if (!NeoWCEnhancementEnabled(NeoWCQuoteJumpEnabledKey)) return NO;
+    unsigned int localID = NeoWCReferencedLocalID(cell);
+    BaseMsgContentViewController *controller = NeoWCVisibleChatController;
+    NSString *session = NeoWCChatUserName(controller);
+    if (!controller || session.length == 0 || localID == 0) return NO;
+    id manager = NeoWCServiceForClass(NSClassFromString(@"CMessageMgr"));
+    SEL selector = NSSelectorFromString(@"GetMsg:LocalID:");
+    if (![manager respondsToSelector:selector]) return NO;
+    id message = ((id (*)(id, SEL, id, unsigned int))objc_msgSend)(manager, selector, session, localID);
+    if (!message) return NO;
+    NSUInteger type = [NeoWCTweakValueForSelectorNames(message, @[@"m_uiMessageType"]) unsignedIntegerValue];
+    if (type == 3 && !NeoWCEnhancementEnabled(NeoWCQuoteJumpImageEnabledKey)) return NO;
+    if ((type == 43 || type == 62) && !NeoWCEnhancementEnabled(NeoWCQuoteJumpVideoEnabledKey)) return NO;
+    if (![controller respondsToSelector:@selector(returnToOriginalMsg:)]) return NO;
+    [controller returnToOriginalMsg:message];
+    NeoWCCompatibilityMarkTriggered(@"quote-jump");
+    return YES;
+}
+
+static UIImage *NeoWCEdgeTipImage(void) {
+    Class colorClass = NSClassFromString(@"WCColor");
+    id color = nil;
+    SEL brandSelector = NSSelectorFromString(@"Brand_100");
+    if ([colorClass respondsToSelector:brandSelector]) {
+        color = ((id (*)(id, SEL))objc_msgSend)(colorClass, brandSelector);
+    }
+    Class themeClass = NSClassFromString(@"MMThemeManager");
+    SEL imageSelector = NSSelectorFromString(@"svgImageNamed:size:color:");
+    if ([themeClass respondsToSelector:imageSelector]) {
+        id image = ((id (*)(id, SEL, id, CGFloat, id))objc_msgSend)(themeClass,
+                                                                    imageSelector,
+                                                                    @"arrow_double_regular",
+                                                                    20.0,
+                                                                    color ?: UIColor.systemGreenColor);
+        if ([image isKindOfClass:[UIImage class]]) return image;
+    }
+    return [UIImage systemImageNamed:@"arrow.up.arrow.down"];
+}
+
+static NSMutableArray *NeoWCEdgeTipMessages(BaseMsgContentViewController *controller, const void *key) {
+    NSMutableArray *messages = objc_getAssociatedObject(controller, key);
+    if (!messages) {
+        messages = [NSMutableArray array];
+        objc_setAssociatedObject(controller, key, messages, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return messages;
+}
+
+static void NeoWCHideEdgeTip(BaseMsgContentViewController *controller, const void *viewKey, BOOL clearMessages) {
+    UIView *tip = objc_getAssociatedObject(controller, viewKey);
+    if (tip) {
+        SEL hideSelector = NSSelectorFromString(@"hideAnimate:parentView:finishBlock:");
+        if ([tip respondsToSelector:hideSelector]) {
+            ((void (*)(id, SEL, BOOL, id, id))objc_msgSend)(tip, hideSelector, YES, controller.view, nil);
+        } else {
+            [tip removeFromSuperview];
+        }
+    }
+    if (clearMessages) {
+        const void *messagesKey = viewKey == &NeoWCAtTipsViewKey ? &NeoWCAtTipsMessagesKey : &NeoWCKeywordTipsMessagesKey;
+        [NeoWCEdgeTipMessages(controller, messagesKey) removeAllObjects];
+    }
+}
+
+static UIView *NeoWCCreateEdgeTip(BaseMsgContentViewController *controller, BOOL keyword) {
+    Class tipClass = NSClassFromString(@"MMEdgeTipsView");
+    SEL initSelector = NSSelectorFromString(@"initWithTitle:image:");
+    if (!tipClass || ![tipClass instancesRespondToSelector:initSelector]) return nil;
+    NSString *title = keyword ? @"关键词提醒" : @"有人提到我";
+    id tip = [tipClass alloc];
+    tip = ((id (*)(id, SEL, id, id))objc_msgSend)(tip, initSelector, title, NeoWCEdgeTipImage());
+    if (![tip isKindOfClass:[UIView class]]) return nil;
+    ((UIView *)tip).tag = keyword ? 0x98c : 0x91d;
+    SEL delegateSelector = NSSelectorFromString(@"setDelegate:");
+    if ([tip respondsToSelector:delegateSelector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(tip, delegateSelector, controller);
+    }
+    SEL tapAction = keyword ? @selector(neowc_openKeywordTip:) : @selector(neowc_openAtTip:);
+    SEL dismissAction = keyword ? @selector(neowc_dismissKeywordTip:) : @selector(neowc_dismissAtTip:);
+    [tip addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:controller action:tapAction]];
+    UISwipeGestureRecognizer *swipe = [[UISwipeGestureRecognizer alloc] initWithTarget:controller action:dismissAction];
+    swipe.direction = UISwipeGestureRecognizerDirectionLeft;
+    [tip addGestureRecognizer:swipe];
+    [tip addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:controller action:dismissAction]];
+    return tip;
+}
+
+static void NeoWCShowEdgeTip(BaseMsgContentViewController *controller, id message, BOOL keyword) {
+    if (!controller.view.window || !message) return;
+    const void *viewKey = keyword ? &NeoWCKeywordTipsViewKey : &NeoWCAtTipsViewKey;
+    const void *messagesKey = keyword ? &NeoWCKeywordTipsMessagesKey : &NeoWCAtTipsMessagesKey;
+    NSMutableArray *messages = NeoWCEdgeTipMessages(controller, messagesKey);
+    [messages addObject:message];
+    UIView *tip = objc_getAssociatedObject(controller, viewKey);
+    if (!tip) {
+        tip = NeoWCCreateEdgeTip(controller, keyword);
+        if (!tip) return;
+        objc_setAssociatedObject(controller, viewKey, tip, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    SEL countSelector = NSSelectorFromString(@"setAtTipsRemainingCount:");
+    if ([tip respondsToSelector:countSelector]) {
+        ((void (*)(id, SEL, NSUInteger))objc_msgSend)(tip, countSelector, messages.count);
+    }
+    if (!tip.superview) {
+        SEL showSelector = NSSelectorFromString(@"showAnimate:parentView:finishBlock:");
+        if ([tip respondsToSelector:showSelector]) {
+            ((void (*)(id, SEL, BOOL, id, id))objc_msgSend)(tip, showSelector, YES, controller.view, nil);
+        }
+    }
+    NeoWCCompatibilityMarkTriggered(keyword ? @"keyword-edge-tip" : @"group-at-tip");
+}
+
+static NSString *NeoWCIncomingMessageContent(id message) {
+    NSString *content = NeoWCTweakValueForSelectorNames(message, @[@"m_nsContent", @"content"]);
+    return [content isKindOfClass:[NSString class]] ? content : @"";
+}
+
+static BOOL NeoWCIncomingMessageMentionsCurrentUser(NSString *session, id message) {
+    if (!NeoWCEnhancementEnabled(NeoWCGroupAtTipsEnabledKey) || ![session hasSuffix:@"@chatroom"]) return NO;
+    NSString *selfUser = NeoWCCurrentUserWXID();
+    if (selfUser.length == 0) return NO;
+    id atUsers = NeoWCTweakValueForSelectorNames(message, @[@"m_nsAtUserList", @"atUserList"]);
+    if ([atUsers isKindOfClass:[NSArray class]] && [atUsers containsObject:selfUser]) return YES;
+    NSString *atText = [atUsers isKindOfClass:[NSString class]] ? atUsers : [atUsers description];
+    if ([atText containsString:selfUser]) return YES;
+    NSString *source = NeoWCTweakValueForSelectorNames(message, @[@"m_nsMsgSource", @"msgSource"]);
+    return [source isKindOfClass:[NSString class]] && [source containsString:selfUser];
+}
+
+static BOOL NeoWCIncomingMessageMatchesKeyword(id message) {
+    if (!NeoWCEnhancementEnabled(NeoWCKeywordReminderEnabledKey)) return NO;
+    NSString *content = NeoWCIncomingMessageContent(message);
+    for (id item in [[NSUserDefaults standardUserDefaults] arrayForKey:NeoWCKeywordReminderKeywordsKey]) {
+        NSString *keyword = [item isKindOfClass:[NSString class]] ? [item stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] : nil;
+        if (keyword.length > 0 && [content rangeOfString:keyword options:NSCaseInsensitiveSearch].location != NSNotFound) return YES;
+    }
+    return NO;
+}
+
+static void NeoWCHandleIncomingEdgeTips(NSString *session, id message) {
+    BaseMsgContentViewController *controller = NeoWCVisibleChatController;
+    if (!controller || ![NeoWCChatUserName(controller) isEqualToString:session]) return;
+    NSString *selfUser = NeoWCCurrentUserWXID();
+    NSString *fromUser = NeoWCTweakValueForSelectorNames(message, @[@"m_nsFromUsr", @"fromUser"]);
+    NSString *realUser = NeoWCTweakValueForSelectorNames(message, @[@"m_nsRealChatUsr", @"realChatUser"]);
+    if ((selfUser.length > 0 && [fromUser isEqualToString:selfUser]) ||
+        (selfUser.length > 0 && [realUser isEqualToString:selfUser])) return;
+    if (NeoWCIncomingMessageMentionsCurrentUser(session, message)) NeoWCShowEdgeTip(controller, message, NO);
+    if (NeoWCIncomingMessageMatchesKeyword(message)) NeoWCShowEdgeTip(controller, message, YES);
+}
+
+static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const void *viewKey, const void *messagesKey) {
+    NSMutableArray *messages = NeoWCEdgeTipMessages(controller, messagesKey);
+    id message = messages.firstObject;
+    if (!message) {
+        NeoWCHideEdgeTip(controller, viewKey, YES);
+        return;
+    }
+    [messages removeObjectAtIndex:0];
+    if ([controller respondsToSelector:@selector(returnToOriginalMsg:)]) {
+        [controller returnToOriginalMsg:message];
+    }
+    UIView *tip = objc_getAssociatedObject(controller, viewKey);
+    SEL countSelector = NSSelectorFromString(@"setAtTipsRemainingCount:");
+    if (messages.count > 0 && [tip respondsToSelector:countSelector]) {
+        ((void (*)(id, SEL, NSUInteger))objc_msgSend)(tip, countSelector, messages.count);
+    } else if (messages.count == 0) {
+        NeoWCHideEdgeTip(controller, viewKey, NO);
+    }
+}
+
 %hook BaseMsgContentViewController
+
+- (void)viewDidLoad {
+    %orig;
+    NeoWCInstallChatSearchButton(self);
+}
 
 - (void)ShowMultiSelectMoreOperation:(id)argument {
     NeoWCCompatibilityMarkTriggered(@"multi-select-export");
@@ -3273,11 +3980,50 @@ didReceiveNotificationResponse:(id)response
 
 - (void)viewDidAppear:(BOOL)animated {
     %orig(animated);
+    NeoWCVisibleChatController = self;
+    NeoWCInstallChatSearchButton(self);
     __weak UIViewController *weakController = (UIViewController *)self;
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *controller = weakController;
         if (controller.view.window) NeoWCRefreshVisibleAntiRevokeCells();
     });
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    %orig(animated);
+    if (NeoWCVisibleChatController == self) NeoWCVisibleChatController = nil;
+}
+
+%new
+- (void)neowc_openNativeChatSearch:(id)sender {
+    (void)sender;
+    NeoWCOpenNativeChatSearch(self);
+}
+
+%new
+- (void)neowc_openAtTip:(id)sender {
+    (void)sender;
+    NeoWCOpenNextEdgeTip(self, &NeoWCAtTipsViewKey, &NeoWCAtTipsMessagesKey);
+}
+
+%new
+- (void)neowc_openKeywordTip:(id)sender {
+    (void)sender;
+    NeoWCOpenNextEdgeTip(self, &NeoWCKeywordTipsViewKey, &NeoWCKeywordTipsMessagesKey);
+}
+
+%new
+- (void)neowc_dismissAtTip:(id)sender {
+    if ([sender isKindOfClass:[UILongPressGestureRecognizer class]] &&
+        [sender state] != UIGestureRecognizerStateBegan) return;
+    NeoWCHideEdgeTip(self, &NeoWCAtTipsViewKey, YES);
+}
+
+%new
+- (void)neowc_dismissKeywordTip:(id)sender {
+    if ([sender isKindOfClass:[UILongPressGestureRecognizer class]] &&
+        [sender state] != UIGestureRecognizerStateBegan) return;
+    NeoWCHideEdgeTip(self, &NeoWCKeywordTipsViewKey, YES);
 }
 
 - (void)dealloc {
@@ -3867,6 +4613,14 @@ didReceiveNotificationResponse:(id)response
         NeoWCCompatibilityMarkTriggered(@"keyword-reminder");
         NeoWCHandleIncomingKeywordReminder(sessionUserName, wrap);
     }
+    if (NeoWCEnhancementEnabled(NeoWCGroupAtTipsEnabledKey) ||
+        NeoWCEnhancementEnabled(NeoWCKeywordReminderEnabledKey)) {
+        NSString *session = [sessionUserName copy];
+        __strong CMessageWrap *message = wrap;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NeoWCHandleIncomingEdgeTips(session, message);
+        });
+    }
 }
 
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap {
@@ -4021,16 +4775,19 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     %orig;
     NeoWCSynchronizeReplyGesture(self);
     [self neowc_scheduleAntiRevokeSidePromptRefresh];
+    [self neowc_scheduleMessageTimeRefresh];
 }
 
 - (void)updateStatus {
     %orig;
     [self neowc_scheduleAntiRevokeSidePromptRefresh];
+    [self neowc_scheduleMessageTimeRefresh];
 }
 
 - (void)updateNodeStatus {
     %orig;
     [self neowc_scheduleAntiRevokeSidePromptRefresh];
+    [self neowc_scheduleMessageTimeRefresh];
 }
 
 - (void)didMoveToWindow {
@@ -4038,10 +4795,30 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     NeoWCSynchronizeReplyGesture(self);
     if (self.window) {
         [self neowc_scheduleAntiRevokeSidePromptRefresh];
+        [self neowc_scheduleMessageTimeRefresh];
     } else {
         UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
         if (label && !label.hidden) label.hidden = YES;
+        UILabel *timeLabel = objc_getAssociatedObject(self, &NeoWCMessageTimeLabelKey);
+        if (timeLabel && !timeLabel.hidden) timeLabel.hidden = YES;
+        UILabel *bubbleTimeLabel = objc_getAssociatedObject(self, &NeoWCMessageTimeBubbleLabelKey);
+        if (bubbleTimeLabel && !bubbleTimeLabel.hidden) bubbleTimeLabel.hidden = YES;
     }
+}
+
+- (void)handleTapReferMessage {
+    if (NeoWCJumpToReferencedMessage(self)) return;
+    %orig;
+}
+
+- (void)handleTapForReferMsg:(id)sender {
+    if (NeoWCJumpToReferencedMessage(self)) return;
+    %orig(sender);
+}
+
+%new
+- (void)neowc_scheduleMessageTimeRefresh {
+    NeoWCScheduleMessageTimeRefresh(self);
 }
 
 %new
@@ -4286,11 +5063,30 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 %hook MMUILabel
 
 - (void)setText:(NSString *)text {
-    NSString *contactsText = NeoWCContactsCountTextForOriginal(text);
+    NSString *contactsText = NeoWCResponderIsInsideControllerClass(self, @"ContactsViewController")
+        ? NeoWCContactsCountTextForOriginal(text)
+        : nil;
     if (contactsText.length > 0 && ![contactsText isEqualToString:text]) {
         NeoWCCompatibilityMarkTriggered(@"contacts-count");
     }
     %orig(contactsText ?: text);
+    NeoWCUpdateChatMuteMemberLabel(self);
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    NeoWCUpdateChatMuteMemberLabel(self);
+    if (!self.window || !NeoWCResponderIsInsideControllerClass(self, @"ContactsViewController")) return;
+    NSString *contactsText = NeoWCContactsCountTextForOriginal(self.text);
+    if (contactsText.length > 0 && ![contactsText isEqualToString:self.text]) self.text = contactsText;
+}
+
+- (void)setHidden:(BOOL)hidden {
+    if (!hidden && NeoWCShouldKeepManagedChatMuteMemberLabelHidden(self)) {
+        %orig(YES);
+        return;
+    }
+    %orig;
 }
 
 %end
@@ -4679,6 +5475,156 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 - (void)renewInfoForReport {
     if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
     %orig;
+}
+
+%end
+
+static void NeoWCApplyRedEnvelopeDetail(WCRedEnvelopesRedEnvelopesDetailViewController *controller) {
+    id delegate = NeoWCTweakValueForSelectorNames(controller, @[@"m_delegate"]);
+    Class logicClass = NSClassFromString(@"WCRedEnvelopesReceiveControlLogic");
+    if (logicClass && ![delegate isKindOfClass:logicClass]) return;
+    id data = NeoWCTweakValueForSelectorNames(delegate, @[@"m_data"]);
+    Class dataClass = NSClassFromString(@"WCRedEnvelopesControlData");
+    if (dataClass && ![data isKindOfClass:dataClass]) return;
+    id detail = NeoWCTweakValueForSelectorNames(data, @[@"m_oWCRedEnvelopesDetailInfo"]);
+    Class detailClass = NSClassFromString(@"WCRedEnvelopesDetailInfo");
+    if (!detail || (detailClass && ![detail isKindOfClass:detailClass])) return;
+    UILabel *label = NeoWCTweakValueForSelectorNames(controller, @[@"nickNameLabel", @"m_receivedInfoLable"]);
+    if (![label isKindOfClass:[UILabel class]]) return;
+    NSString *original = objc_getAssociatedObject(label, &NeoWCRedEnvelopeOriginalTextKey);
+    if (!original) {
+        original = label.text ?: @"";
+        objc_setAssociatedObject(label, &NeoWCRedEnvelopeOriginalTextKey, original, OBJC_ASSOCIATION_COPY_NONATOMIC);
+    }
+    if (!NeoWCEnhancementEnabled(NeoWCRedEnvelopeDetailEnabledKey)) {
+        label.text = original;
+        return;
+    }
+    long long totalAmount = [NeoWCTweakValueForSelectorNames(detail, @[@"m_lTotalAmount"]) longLongValue];
+    long long receivedAmount = [NeoWCTweakValueForSelectorNames(detail, @[@"m_lRecAmount"]) longLongValue];
+    long long totalCount = [NeoWCTweakValueForSelectorNames(detail, @[@"m_lTotalNum"]) longLongValue];
+    long long receivedCount = [NeoWCTweakValueForSelectorNames(detail, @[@"m_lRecNum"]) longLongValue];
+    double remainingAmount = MAX(0LL, totalAmount - receivedAmount) / 100.0;
+    long long remainingCount = MAX(0LL, totalCount - receivedCount);
+    NSString *detailText = [NSString stringWithFormat:@"总额 ¥%.2f · 已领 %lld/%lld\n剩余 ¥%.2f · %lld 个",
+                            totalAmount / 100.0,
+                            receivedCount,
+                            totalCount,
+                            remainingAmount,
+                            remainingCount];
+    label.text = original.length > 0 ? [NSString stringWithFormat:@"%@\n%@", original, detailText] : detailText;
+    label.numberOfLines = 0;
+    CGFloat size = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCRedEnvelopeDetailFontSizeKey];
+    label.font = [UIFont systemFontOfSize:size >= 10.0 && size <= 24.0 ? size : 14.0];
+    label.textAlignment = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCRedEnvelopeDetailCenterKey]
+        ? NSTextAlignmentCenter
+        : NSTextAlignmentNatural;
+    NeoWCCompatibilityMarkTriggered(@"red-envelope-detail");
+}
+
+static BOOL NeoWCPresentCallConfirmation(VoIPBubbleMessageCellView *cell, BOOL video) {
+    UIWindow *window = NeoWCActiveApplicationWindow();
+    UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
+    if (!presenter.view.window || presenter.presentedViewController) return NO;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:video ? @"发起视频通话？" : @"发起语音通话？"
+                                                                   message:@"确认后将立即呼叫对方"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak VoIPBubbleMessageCellView *weakCell = cell;
+    [alert addAction:[UIAlertAction actionWithTitle:@"呼叫" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        (void)action;
+        VoIPBubbleMessageCellView *strongCell = weakCell;
+        if (!strongCell) return;
+        const void *key = video ? &NeoWCCallVideoConfirmedKey : &NeoWCCallVoiceConfirmedKey;
+        objc_setAssociatedObject(strongCell, key, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        SEL selector = video ? @selector(startVideoVoip) : @selector(startVoiceVoip);
+        ((void (*)(id, SEL))objc_msgSend)(strongCell, selector);
+    }]];
+    [presenter presentViewController:alert animated:YES completion:nil];
+    NeoWCCompatibilityMarkTriggered(@"call-confirm");
+    return YES;
+}
+
+%hook WCRedEnvelopesRedEnvelopesDetailViewController
+
+- (void)viewWillAppear:(BOOL)animated {
+    %orig(animated);
+    NeoWCApplyRedEnvelopeDetail(self);
+}
+
+%end
+
+%hook VoIPBubbleMessageCellView
+
+- (void)startVoiceVoip {
+    if ([objc_getAssociatedObject(self, &NeoWCCallVoiceConfirmedKey) boolValue]) {
+        objc_setAssociatedObject(self, &NeoWCCallVoiceConfirmedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        %orig;
+        return;
+    }
+    if (!NeoWCEnhancementEnabled(NeoWCCallConfirmEnabledKey)) {
+        %orig;
+        return;
+    }
+    if (!NeoWCPresentCallConfirmation(self, NO)) {
+        %orig;
+    }
+}
+
+- (void)startVideoVoip {
+    if ([objc_getAssociatedObject(self, &NeoWCCallVideoConfirmedKey) boolValue]) {
+        objc_setAssociatedObject(self, &NeoWCCallVideoConfirmedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        %orig;
+        return;
+    }
+    if (!NeoWCEnhancementEnabled(NeoWCCallConfirmEnabledKey)) {
+        %orig;
+        return;
+    }
+    if (!NeoWCPresentCallConfirmation(self, YES)) {
+        %orig;
+    }
+}
+
+%end
+
+%hook ScanQRCodeLogicController
+
+- (void)onDetectCodesWithMarkDotInfoList:(id)list isCameraScan:(BOOL)isCameraScan {
+    BOOL disguise = NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey);
+    if (disguise) NeoWCCompatibilityMarkTriggered(@"qr-camera-source");
+    BOOL cameraScan = disguise ? YES : isCameraScan;
+    %orig(list, cameraScan);
+}
+
+- (BOOL)isInScanSceneAndUseCameraScan {
+    if (NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey)) return YES;
+    return %orig;
+}
+
+- (NSInteger)fromScene {
+    if (NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey)) return 1;
+    return %orig;
+}
+
+- (NSInteger)m_sourceType {
+    if (NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey)) return 0;
+    return %orig;
+}
+
+- (NSInteger)fromRawScene {
+    if (NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey)) return 0;
+    return %orig;
+}
+
+- (NSInteger)picFrom {
+    if (NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey)) return 0;
+    return %orig;
+}
+
+- (void)setIsFromAlbum:(BOOL)isFromAlbum {
+    BOOL value = NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey) ? NO : isFromAlbum;
+    %orig(value);
 }
 
 %end

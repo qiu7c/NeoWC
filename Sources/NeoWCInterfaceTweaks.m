@@ -21,6 +21,7 @@ static char NeoWCRoundingStateSavedKey;
 static char NeoWCRoundingAppliedToToolViewKey;
 static char NeoWCRoundingConfigurationKey;
 static char NeoWCOriginalMuteIconHiddenKey;
+static char NeoWCOriginalMuteMemberLabelHiddenKey;
 
 static NSHashTable<UIImageView *> *NeoWCHiddenMuteImageViews(void) {
     static NSHashTable<UIImageView *> *imageViews;
@@ -29,6 +30,15 @@ static NSHashTable<UIImageView *> *NeoWCHiddenMuteImageViews(void) {
         imageViews = [NSHashTable weakObjectsHashTable];
     });
     return imageViews;
+}
+
+static NSHashTable<UILabel *> *NeoWCHiddenMuteMemberLabels(void) {
+    static NSHashTable<UILabel *> *labels;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        labels = [NSHashTable weakObjectsHashTable];
+    });
+    return labels;
 }
 
 static void NeoWCRegisterChatInputRoundingDefaults(void) {
@@ -160,6 +170,55 @@ BOOL NeoWCShouldKeepManagedChatMuteImageViewHidden(UIImageView *imageView) {
     return NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey);
 }
 
+static UIImageView *NeoWCChatMuteImageViewBesideLabel(UILabel *label) {
+    UIView *container = label.superview;
+    if (!container || ![NSStringFromClass(label.class) isEqualToString:@"MMUILabel"]) return nil;
+    NSString *text = label.text;
+    if (text.length < 3 || ![text hasPrefix:@"("] || ![text hasSuffix:@")"]) return nil;
+    NSString *memberCount = [text substringWithRange:NSMakeRange(1, text.length - 2)];
+    NSCharacterSet *nonDigits = [NSCharacterSet decimalDigitCharacterSet].invertedSet;
+    if (memberCount.length == 0 ||
+        [memberCount rangeOfCharacterFromSet:nonDigits].location != NSNotFound) return nil;
+    CGRect labelFrame = label.frame;
+    for (UIView *subview in container.subviews) {
+        if (![subview isKindOfClass:[UIImageView class]]) continue;
+        UIImageView *imageView = (UIImageView *)subview;
+        if (![imageView.accessibilityLabel isEqualToString:@"免打扰"]) continue;
+        CGRect imageFrame = imageView.frame;
+        BOOL immediatelyBeforeIcon = CGRectGetMaxX(labelFrame) <= CGRectGetMinX(imageFrame) + 2.0 &&
+                                     CGRectGetMinX(imageFrame) - CGRectGetMaxX(labelFrame) <= 8.0;
+        BOOL verticallyAligned = CGRectGetMaxY(labelFrame) > CGRectGetMinY(imageFrame) &&
+                                 CGRectGetMinY(labelFrame) < CGRectGetMaxY(imageFrame);
+        if (immediatelyBeforeIcon && verticallyAligned) return imageView;
+    }
+    return nil;
+}
+
+BOOL NeoWCShouldKeepManagedChatMuteMemberLabelHidden(UILabel *label) {
+    if (!objc_getAssociatedObject(label, &NeoWCOriginalMuteMemberLabelHiddenKey)) return NO;
+    return NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey);
+}
+
+void NeoWCUpdateChatMuteMemberLabel(UILabel *label) {
+    if (!label) return;
+    NSNumber *savedHidden = objc_getAssociatedObject(label, &NeoWCOriginalMuteMemberLabelHiddenKey);
+    BOOL shouldHide = NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey) &&
+                      NeoWCChatMuteImageViewBesideLabel(label) != nil;
+    if (shouldHide) {
+        if (!savedHidden) {
+            objc_setAssociatedObject(label, &NeoWCOriginalMuteMemberLabelHiddenKey,
+                                     @(label.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        [NeoWCHiddenMuteMemberLabels() addObject:label];
+        label.hidden = YES;
+    } else if (savedHidden) {
+        label.hidden = savedHidden.boolValue;
+        [NeoWCHiddenMuteMemberLabels() removeObject:label];
+        objc_setAssociatedObject(label, &NeoWCOriginalMuteMemberLabelHiddenKey,
+                                 nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
 void NeoWCUpdateChatMuteImageView(UIImageView *imageView) {
     if (!imageView) return;
     NSNumber *savedHidden = objc_getAssociatedObject(imageView, &NeoWCOriginalMuteIconHiddenKey);
@@ -175,6 +234,11 @@ void NeoWCUpdateChatMuteImageView(UIImageView *imageView) {
         imageView.hidden = savedHidden.boolValue;
         [NeoWCHiddenMuteImageViews() removeObject:imageView];
         objc_setAssociatedObject(imageView, &NeoWCOriginalMuteIconHiddenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    for (UIView *subview in imageView.superview.subviews) {
+        if ([NSStringFromClass(subview.class) isEqualToString:@"MMUILabel"]) {
+            NeoWCUpdateChatMuteMemberLabel((UILabel *)subview);
+        }
     }
 }
 
@@ -193,6 +257,9 @@ void NeoWCUpdateChatMuteIconVisibility(UIViewController *controller) {
         // the full chat hierarchy while the feature is disabled.
         for (UIImageView *imageView in NeoWCHiddenMuteImageViews().allObjects) {
             NeoWCUpdateChatMuteImageView(imageView);
+        }
+        for (UILabel *label in NeoWCHiddenMuteMemberLabels().allObjects) {
+            NeoWCUpdateChatMuteMemberLabel(label);
         }
         return;
     }

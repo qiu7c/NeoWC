@@ -52,6 +52,17 @@ static NSArray<NSDictionary *> *NeoWCCompatibilityDefinitions(void) {
             @{ @"id": @"input-rounding", @"title": @"聊天输入栏圆角", @"class": @"MMInputToolView", @"selector": @"didMoveToWindow" },
             @{ @"id": @"input-swipe", @"title": @"输入框滑动操作", @"class": @"MMGrowTextView", @"selector": @"didMoveToWindow" },
             @{ @"id": @"hide-chat-mute-icon", @"title": @"隐藏免打扰图标", @"class": @"UIImageView", @"selector": @"didMoveToWindow" },
+            @{ @"id": @"me-menu-visibility", @"title": @"我的页面入口管理", @"class": @"WCTableViewSectionManager", @"selector": @"addCell:" },
+            @{ @"id": @"auto-voice-transcription", @"title": @"语音自动转文字", @"class": @"VoiceMessageCellView", @"selector": @"onVoiceTrans:" },
+            @{ @"id": @"hide-screenshot-forward", @"title": @"隐藏截屏分享按钮", @"class": @"MMScreenShotViewController", @"selector": @"show" },
+            @{ @"id": @"quote-jump", @"title": @"引用消息定位", @"class": @"CommonMessageCellView", @"selector": @"handleTapReferMessage" },
+            @{ @"id": @"chat-search-button", @"title": @"聊天搜索按钮", @"class": @"MsgSearchHelper", @"selector": @"initWithContentsController:" },
+            @{ @"id": @"chat-message-time", @"title": @"聊天消息时间标签", @"class": @"CommonMessageCellView", @"selector": @"updateNodeStatus" },
+            @{ @"id": @"group-at-tip", @"title": @"群聊艾特提示", @"class": @"MMEdgeTipsView", @"selector": @"showAnimate:parentView:finishBlock:" },
+            @{ @"id": @"keyword-edge-tip", @"title": @"关键词边缘提示", @"class": @"MMEdgeTipsView", @"selector": @"showAnimate:parentView:finishBlock:" },
+            @{ @"id": @"red-envelope-detail", @"title": @"红包详情显示", @"class": @"WCRedEnvelopesRedEnvelopesDetailViewController", @"selector": @"viewWillAppear:" },
+            @{ @"id": @"call-confirm", @"title": @"通话二次确认", @"class": @"VoIPBubbleMessageCellView", @"selector": @"startVoiceVoip" },
+            @{ @"id": @"qr-camera-source", @"title": @"伪装扫码来源", @"class": @"ScanQRCodeLogicController", @"selector": @"onDetectCodesWithMarkDotInfoList:isCameraScan:" },
         ];
     });
     return definitions;
