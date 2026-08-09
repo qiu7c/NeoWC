@@ -49,6 +49,7 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionStepMode,
     NeoWCSettingActionFixedSteps,
     NeoWCSettingActionRandomStepRange,
+    NeoWCSettingActionRegenerateRandomSteps,
     NeoWCSettingActionWalletBalance,
     NeoWCSettingActionContactsCount,
     NeoWCSettingActionRedEnvelopeFontSize,

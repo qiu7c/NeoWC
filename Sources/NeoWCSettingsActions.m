@@ -50,11 +50,15 @@
 }
 
 - (void)presentRevokeFilterPicker {
+    NSTimeInterval current = [NSUserDefaults.standardUserDefaults doubleForKey:NeoWCAntiRevokeTimeFilterKey];
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"回复时间限制" message:@"仅影响“回复撤回者”，不会影响本地防撤回" preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray *options = @[@{@"title": @"不限制", @"value": @0}, @{@"title": @"1 分钟", @"value": @60}, @{@"title": @"5 分钟", @"value": @300}, @{@"title": @"30 分钟", @"value": @1800}, @{@"title": @"1 小时", @"value": @3600}, @{@"title": @"24 小时", @"value": @86400}];
     __weak typeof(self) weakSelf = self;
     for (NSDictionary *option in options) {
-        [sheet addAction:[UIAlertAction actionWithTitle:option[@"title"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *title = fabs([option[@"value"] doubleValue] - current) < 0.5
+            ? [NSString stringWithFormat:@"✓  %@", option[@"title"]]
+            : option[@"title"];
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
             [NSUserDefaults.standardUserDefaults setDouble:[option[@"value"] doubleValue] forKey:NeoWCAntiRevokeTimeFilterKey];
             [weakSelf reload];
         }]];
@@ -159,13 +163,21 @@
 }
 
 - (void)presentHapticIntensityPicker {
+    CGFloat current = [NSUserDefaults.standardUserDefaults doubleForKey:NeoWCMomentsLikeHapticIntensityKey];
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"点赞震动力度" message:@"选择双击点赞时的触感强度" preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray *options = @[@{@"title": @"轻", @"value": @0.25}, @{@"title": @"中", @"value": @0.65}, @{@"title": @"强", @"value": @1.0}];
     __weak typeof(self) weakSelf = self;
-    for (NSDictionary *option in options) [sheet addAction:[UIAlertAction actionWithTitle:option[@"title"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+    for (NSDictionary *option in options) {
+        CGFloat value = [option[@"value"] doubleValue];
+        BOOL selected = (current < 0.34 && value < 0.34) ||
+                        (current >= 0.34 && current < 0.75 && value >= 0.34 && value < 0.75) ||
+                        (current >= 0.75 && value >= 0.75);
+        NSString *title = selected ? [NSString stringWithFormat:@"✓  %@", option[@"title"]] : option[@"title"];
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         [NSUserDefaults.standardUserDefaults setDouble:[option[@"value"] doubleValue] forKey:NeoWCMomentsLikeHapticIntensityKey];
         [weakSelf reload];
-    }]];
+        }]];
+    }
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [self presentSheet:sheet];
 }
@@ -200,16 +212,21 @@
 }
 
 - (void)presentStepModePicker {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"每日目标模式" message:@"随机模式每天只生成一次目标" preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray *options = @[@{@"title": @"每日固定", @"value": @(NeoWCStepModeDailyFixed)}, @{@"title": @"每日随机", @"value": @(NeoWCStepModeDailyRandom)}];
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSInteger current = [defaults integerForKey:NeoWCStepModeKey];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"步数模式" message:@"固定模式使用同一个数值；随机模式每天生成一次并显示当天结果。" preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray *options = @[@{@"title": @"固定步数", @"value": @(NeoWCStepModeDailyFixed)}, @{@"title": @"每日随机", @"value": @(NeoWCStepModeDailyRandom)}];
     __weak typeof(self) weakSelf = self;
-    for (NSDictionary *option in options) [sheet addAction:[UIAlertAction actionWithTitle:option[@"title"] style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-        [defaults setInteger:[option[@"value"] integerValue] forKey:NeoWCStepModeKey];
+    for (NSDictionary *option in options) {
+        NSInteger value = [option[@"value"] integerValue];
+        NSString *title = value == current ? [NSString stringWithFormat:@"✓  %@", option[@"title"]] : option[@"title"];
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [defaults setInteger:value forKey:NeoWCStepModeKey];
         [defaults setBool:YES forKey:NeoWCStepOverrideEnabledKey];
         NeoWCSettingsRegenerateDailyStepTarget(defaults);
         [weakSelf reload];
-    }]];
+        }]];
+    }
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [self presentSheet:sheet];
 }
@@ -255,6 +272,26 @@
         [weakSelf reload];
     }]];
     [self.viewController presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentRegenerateRandomSteps {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSInteger current = [defaults integerForKey:NeoWCStepDailyTargetKey];
+    NSString *message = current > 0
+        ? [NSString stringWithFormat:@"当前结果为 %ld 步。重新生成后，今天将改用新结果。", (long)current]
+        : @"今天尚未生成随机步数。";
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"今日随机结果"
+                                                                    message:message
+                                                             preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    [sheet addAction:[UIAlertAction actionWithTitle:@"重新生成" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [defaults setInteger:NeoWCStepModeDailyRandom forKey:NeoWCStepModeKey];
+        [defaults setBool:YES forKey:NeoWCStepOverrideEnabledKey];
+        NeoWCSettingsRegenerateDailyStepTarget(defaults);
+        [weakSelf reload];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentSheet:sheet];
 }
 
 - (void)presentWalletEditor {
@@ -325,6 +362,7 @@
         case NeoWCSettingActionStepMode: [self presentStepModePicker]; break;
         case NeoWCSettingActionFixedSteps: [self presentFixedStepsEditor]; break;
         case NeoWCSettingActionRandomStepRange: [self presentRandomStepRangeEditor]; break;
+        case NeoWCSettingActionRegenerateRandomSteps: [self presentRegenerateRandomSteps]; break;
         case NeoWCSettingActionWalletBalance: [self presentWalletEditor]; break;
         case NeoWCSettingActionContactsCount: [self presentContactsEditor]; break;
         case NeoWCSettingActionRedEnvelopeFontSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 10 到 24 之间的字号" key:NeoWCRedEnvelopeDetailFontSizeKey minimum:10 maximum:24 notifyChange:YES applyScale:NO]; break;

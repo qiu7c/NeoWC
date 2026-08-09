@@ -135,14 +135,14 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
 
     _nicknameLabel = [UILabel new];
     _nicknameLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _nicknameLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    _nicknameLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle3];
     _nicknameLabel.adjustsFontForContentSizeCategory = YES;
     _nicknameLabel.numberOfLines = 2;
     [self addSubview:_nicknameLabel];
 
     _wxidLabel = [UILabel new];
     _wxidLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _wxidLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    _wxidLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
     _wxidLabel.adjustsFontForContentSizeCategory = YES;
     _wxidLabel.textColor = UIColor.secondaryLabelColor;
     _wxidLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
@@ -178,32 +178,32 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
     self.avatarView = [self makeAvatarViewWithWXID:self.wxid headURL:headURL];
     self.avatarView.translatesAutoresizingMaskIntoConstraints = NO;
     self.avatarView.clipsToBounds = YES;
-    self.avatarView.layer.cornerRadius = 10.0;
+    self.avatarView.layer.cornerRadius = 12.0;
     [self addSubview:self.avatarView];
     self.avatarConstraints = @[
         [self.avatarView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:20.0],
-        [self.avatarView.topAnchor constraintEqualToAnchor:self.topAnchor constant:14.0],
-        [self.avatarView.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-14.0],
-        [self.avatarView.widthAnchor constraintEqualToConstant:58.0],
-        [self.avatarView.heightAnchor constraintEqualToConstant:58.0],
-        [self.nicknameLabel.leadingAnchor constraintEqualToAnchor:self.avatarView.trailingAnchor constant:14.0],
+        [self.avatarView.topAnchor constraintEqualToAnchor:self.topAnchor constant:16.0],
+        [self.avatarView.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-16.0],
+        [self.avatarView.widthAnchor constraintEqualToConstant:64.0],
+        [self.avatarView.heightAnchor constraintEqualToConstant:64.0],
+        [self.nicknameLabel.leadingAnchor constraintEqualToAnchor:self.avatarView.trailingAnchor constant:16.0],
         [self.nicknameLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-20.0],
         [self.nicknameLabel.topAnchor constraintGreaterThanOrEqualToAnchor:self.topAnchor constant:12.0],
         [self.wxidLabel.leadingAnchor constraintEqualToAnchor:self.nicknameLabel.leadingAnchor],
         [self.wxidLabel.trailingAnchor constraintEqualToAnchor:self.nicknameLabel.trailingAnchor],
         [self.wxidLabel.topAnchor constraintEqualToAnchor:self.nicknameLabel.bottomAnchor constant:4.0],
         [self.wxidLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-12.0],
-        [self.nicknameLabel.centerYAnchor constraintEqualToAnchor:self.avatarView.centerYAnchor constant:-10.0],
+        [self.nicknameLabel.centerYAnchor constraintEqualToAnchor:self.avatarView.centerYAnchor constant:-11.0],
     ];
     [NSLayoutConstraint activateConstraints:self.avatarConstraints];
 }
 
 - (CGFloat)preferredHeightForWidth:(CGFloat)width scale:(CGFloat)scale {
-    CGFloat textWidth = MAX(120.0, width - 112.0);
+    CGFloat textWidth = MAX(120.0, width - 124.0);
     CGFloat nicknameHeight = [self.nicknameLabel sizeThatFits:CGSizeMake(textWidth, CGFLOAT_MAX)].height;
     CGFloat wxidHeight = [self.wxidLabel sizeThatFits:CGSizeMake(textWidth, CGFLOAT_MAX)].height;
     CGFloat textHeight = 14.0 + nicknameHeight + 4.0 + wxidHeight + 14.0;
-    return MAX(MAX(86.0, 98.0 * scale), textHeight);
+    return MAX(MAX(96.0, 106.0 * scale), textHeight);
 }
 
 - (void)showCopyConfirmation {

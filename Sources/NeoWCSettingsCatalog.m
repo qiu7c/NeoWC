@@ -10,7 +10,7 @@ NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 
-NSString *const NeoWCDisplayVersion = @"0.1.2 beta16";
+NSString *const NeoWCDisplayVersion = @"0.1.2 beta17";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -42,6 +42,10 @@ static void NeoWCAddFeature(NSMutableArray<NeoWCSettingItem *> *items,
 
 static NSString *NeoWCCountText(NSUInteger count) {
     return count > 0 ? [NSString stringWithFormat:@"%lu 项", (unsigned long)count] : @"设置";
+}
+
+static NSString *NeoWCCurrentSelection(NSString *value) {
+    return [NSString stringWithFormat:@"当前选择：%@", value ?: @"未设置"];
 }
 
 static long long NeoWCLongLongForKey(NSString *key) {
@@ -190,14 +194,14 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     if (filter >= 86400) filterValue = @"24 小时"; else if (filter >= 3600) filterValue = @"1 小时";
     else if (filter >= 1800) filterValue = @"30 分钟"; else if (filter >= 300) filterValue = @"5 分钟"; else if (filter >= 60) filterValue = @"1 分钟";
     NSMutableArray *revokeChildren = [NSMutableArray arrayWithObjects:
-        NeoWCItem(@"防撤回提示方案", [NSString stringWithFormat:@"当前方案：%@", promptStyle], @"text.bubble", NeoWCSettingRowKindDetail, nil, promptStyle, NeoWCSettingActionRevokePromptStyle),
+        NeoWCItem(@"防撤回提示方案", @"选择提示显示在消息下方或气泡旁", @"text.bubble", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(promptStyle), NeoWCSettingActionRevokePromptStyle),
         promptStyleValue == 1
             ? NeoWCItem(@"提示外观预览", @"调整文字、颜色和 X / Y 位置", @"cursorarrow.motionlines", NeoWCSettingRowKindDetail, nil, @"编辑", NeoWCSettingActionRevokeAppearance)
             : NeoWCItem(@"本地提示模板", @"编辑完整提示内容与文字颜色", @"text.quote", NeoWCSettingRowKindDetail, nil, @"编辑", NeoWCSettingActionRevokeLocalTemplate),
         nil];
     NeoWCSettingItem *notify = NeoWCItem(@"回复撤回者", @"自动发送提示，默认关闭", @"paperplane", NeoWCSettingRowKindSwitch, NeoWCAntiRevokeNotifySenderKey, nil, NeoWCSettingActionNone);
     NSArray *notifyChildren = @[
-        NeoWCItem(@"回复时间限制", @"避免响应很久以前的撤回事件", @"timer", NeoWCSettingRowKindDetail, nil, filterValue, NeoWCSettingActionRevokeFilter),
+        NeoWCItem(@"回复时间限制", @"避免响应很久以前的撤回事件", @"timer", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(filterValue), NeoWCSettingActionRevokeFilter),
         NeoWCItem(@"回复消息模板", @"设置发送给撤回者的提示", @"text.quote", NeoWCSettingRowKindDetail, nil, @"编辑", NeoWCSettingActionRevokeReplyTemplate),
     ];
     notify.hasChildren = YES;
@@ -239,7 +243,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     NeoWCAddFeature(interaction,
                     NeoWCItem(@"胶囊顶栏", @"隐藏整条顶栏背景，左右使用玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatTopBarCapsuleEnabledKey, nil, NeoWCSettingActionNone),
                     @[
-        NeoWCItem(@"模糊效果", @"在超薄玻璃与系统液态玻璃之间切换", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, [defaults integerForKey:NeoWCChatTopBarEffectStyleKey] == NeoWCChatTopBarEffectStyleLiquid ? @"液态玻璃" : @"超薄玻璃", NeoWCSettingActionChatTopEffectStyle),
+        NeoWCItem(@"模糊效果", @"在超薄玻璃与系统液态玻璃之间切换", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection([defaults integerForKey:NeoWCChatTopBarEffectStyleKey] == NeoWCChatTopBarEffectStyleLiquid ? @"液态玻璃" : @"超薄玻璃"), NeoWCSettingActionChatTopEffectStyle),
         NeoWCItem(@"胶囊阴影", @"轻微环境阴影，不产生底部切割线", @"circle.dotted", NeoWCSettingRowKindSwitch, NeoWCChatTopBarShadowEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"头像大小", @"限制在 24 到 34 之间", @"person.crop.circle", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarAvatarSizeKey]], NeoWCSettingActionChatTopAvatarSize),
         NeoWCItem(@"昵称字号", @"限制在 12 到 18 之间", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarNicknameSizeKey]], NeoWCSettingActionChatTopNicknameSize),
@@ -293,7 +297,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     haptic.hasChildren = YES;
     NSMutableArray *likeChildren = [NSMutableArray arrayWithObject:haptic];
     if ([defaults boolForKey:NeoWCMomentsLikeHapticEnabledKey] && ![collapsed containsObject:NeoWCMomentsLikeHapticEnabledKey]) {
-        [likeChildren addObject:NeoWCItem(@"点赞震动力度", @"调整双击点赞时的震动反馈", @"slider.horizontal.3", NeoWCSettingRowKindDetail, nil, intensityText, NeoWCSettingActionHapticIntensity)];
+        [likeChildren addObject:NeoWCItem(@"点赞震动力度", @"调整双击点赞时的震动反馈", @"slider.horizontal.3", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(intensityText), NeoWCSettingActionHapticIntensity)];
     }
     NeoWCAddFeature(moments, NeoWCItem(@"朋友圈双击点赞", @"双击好友朋友圈内容直接点赞", @"hand.thumbsup", NeoWCSettingRowKindSwitch, NeoWCMomentsDoubleTapLikeKey, nil, NeoWCSettingActionNone), likeChildren, defaults, collapsed);
     [moments addObjectsFromArray:@[
@@ -308,21 +312,31 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
 
     NSMutableArray *local = [NSMutableArray array];
     NeoWCStepMode stepMode = [defaults integerForKey:NeoWCStepModeKey] == NeoWCStepModeDailyRandom ? NeoWCStepModeDailyRandom : NeoWCStepModeDailyFixed;
-    NSInteger configuredSteps = [defaults integerForKey:NeoWCStepCountKey];
+    NSInteger configuredSteps = MIN(100000, MAX(0, [defaults integerForKey:NeoWCStepCountKey]));
     NSInteger effectiveSteps = [defaults integerForKey:NeoWCStepDailyTargetKey];
     NSDate *stepDate = [defaults objectForKey:NeoWCStepCountDateKey];
     BOOL today = effectiveSteps > 0 && [stepDate isKindOfClass:NSDate.class] && [NSCalendar.currentCalendar isDateInToday:stepDate];
-    NSMutableArray *stepChildren = [NSMutableArray arrayWithObject:NeoWCItem(@"每日目标模式", @"固定目标，或每天随机生成一次", @"arrow.triangle.2.circlepath", NeoWCSettingRowKindDetail, nil, stepMode == NeoWCStepModeDailyRandom ? @"每日随机" : @"每日固定", NeoWCSettingActionStepMode)];
+    if ([defaults boolForKey:NeoWCStepOverrideEnabledKey] && !today) {
+        NeoWCSettingsRegenerateDailyStepTarget(defaults);
+        effectiveSteps = [defaults integerForKey:NeoWCStepDailyTargetKey];
+        stepDate = [defaults objectForKey:NeoWCStepCountDateKey];
+        today = effectiveSteps > 0 && [stepDate isKindOfClass:NSDate.class] && [NSCalendar.currentCalendar isDateInToday:stepDate];
+    }
+    NSString *modeText = stepMode == NeoWCStepModeDailyRandom ? @"每日随机" : @"固定步数";
+    NSMutableArray *stepChildren = [NSMutableArray arrayWithObject:NeoWCItem(@"步数模式", @"选择固定数值，或每天随机生成一次", @"arrow.triangle.2.circlepath", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(modeText), NeoWCSettingActionStepMode)];
     if (stepMode == NeoWCStepModeDailyRandom) {
         NSInteger minimum = MAX(1, [defaults integerForKey:NeoWCStepRandomMinimumKey]);
         NSInteger maximum = MAX(minimum, [defaults integerForKey:NeoWCStepRandomMaximumKey]);
-        [stepChildren addObject:NeoWCItem(@"设置随机范围", @"每天在范围内生成一次", @"dice", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%ld–%ld 步", (long)minimum, (long)maximum], NeoWCSettingActionRandomStepRange)];
+        [stepChildren addObject:NeoWCItem(@"随机步数范围", @"每天首次使用时在范围内生成一次", @"dice", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%ld–%ld 步", (long)minimum, (long)maximum], NeoWCSettingActionRandomStepRange)];
+        [stepChildren addObject:NeoWCItem(@"今日随机结果", @"当天保持不变；点击可重新生成", @"figure.walk.motion", NeoWCSettingRowKindDetail, nil, today ? [NSString stringWithFormat:@"%ld 步", (long)effectiveSteps] : @"尚未生成", NeoWCSettingActionRegenerateRandomSteps)];
     } else {
-        [stepChildren addObject:NeoWCItem(@"设置固定步数", @"每天保持同一个设定值", @"number", NeoWCSettingRowKindDetail, nil, configuredSteps > 0 ? [NSString stringWithFormat:@"%ld 步", (long)configuredSteps] : @"设置", NeoWCSettingActionFixedSteps)];
+        [stepChildren addObject:NeoWCItem(@"固定步数", @"点击输入每天固定显示的步数", @"number", NeoWCSettingRowKindDetail, nil, configuredSteps > 0 ? [NSString stringWithFormat:@"已设置：%ld 步", (long)configuredSteps] : @"尚未设置", NeoWCSettingActionFixedSteps)];
     }
-    [stepChildren addObject:NeoWCItem(@"当天逐步递增", @"按活动节奏增加到今日目标", @"chart.line.uptrend.xyaxis", NeoWCSettingRowKindSwitch, NeoWCStepGradualEnabledKey, nil, NeoWCSettingActionNone)];
-    [stepChildren addObject:NeoWCInfoItem(@"today-step-target", @"今日目标步数", stepMode == NeoWCStepModeDailyRandom ? @"当天随机目标保持不变" : @"固定目标每天保持一致", @"figure.walk.motion", today ? [NSString stringWithFormat:@"%ld 步", (long)effectiveSteps] : @"待生成")];
-    NeoWCAddFeature(local, NeoWCItem(@"自定义微信运动步数", @"支持固定或随机目标", @"figure.walk", NeoWCSettingRowKindSwitch, NeoWCStepOverrideEnabledKey, nil, NeoWCSettingActionNone), stepChildren, defaults, collapsed);
+    [stepChildren addObject:NeoWCItem(@"随时间逐步递增", @"关闭时直接显示目标；开启后一天内逐步增长", @"chart.line.uptrend.xyaxis", NeoWCSettingRowKindSwitch, NeoWCStepGradualEnabledKey, nil, NeoWCSettingActionNone)];
+    NSString *stepSummary = stepMode == NeoWCStepModeDailyRandom
+        ? (today ? [NSString stringWithFormat:@"今日随机：%ld 步", (long)effectiveSteps] : @"每日随机，尚未生成")
+        : (configuredSteps > 0 ? [NSString stringWithFormat:@"固定：%ld 步", (long)configuredSteps] : @"固定模式，请先设置步数");
+    NeoWCAddFeature(local, NeoWCItem(@"自定义微信运动步数", stepSummary, @"figure.walk", NeoWCSettingRowKindSwitch, NeoWCStepOverrideEnabledKey, nil, NeoWCSettingActionNone), stepChildren, defaults, collapsed);
     NeoWCAddFeature(local, NeoWCItem(@"钱包余额本地显示", @"仅修改本机钱包余额文字", @"creditcard", NeoWCSettingRowKindSwitch, NeoWCWalletBalanceEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"设置钱包余额", @"金额按分保存，仅作用于钱包余额组件", @"number", NeoWCSettingRowKindDetail, nil, NeoWCLongLongForKey(NeoWCWalletBalanceFenKey) > 0 ? @"已设置" : @"设置", NeoWCSettingActionWalletBalance)
     ], defaults, collapsed);

@@ -81,15 +81,15 @@ static char NeoWCLiquidGlassOverlayKey;
 - (void)updatePalette {
     BOOL dark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
     _surfaceLayer.colors = @[
-        (id)[UIColor colorWithWhite:1.0 alpha:dark ? 0.045 : 0.055].CGColor,
+        (id)[UIColor colorWithWhite:1.0 alpha:dark ? 0.035 : 0.040].CGColor,
         (id)UIColor.clearColor.CGColor,
-        (id)[UIColor colorWithWhite:0.0 alpha:dark ? 0.025 : 0.010].CGColor,
+        (id)UIColor.clearColor.CGColor,
     ];
     _surfaceLayer.locations = @[@0.0, @0.42, @1.0];
     _depthLayer.colors = @[
         (id)UIColor.clearColor.CGColor,
         (id)UIColor.clearColor.CGColor,
-        (id)[UIColor colorWithWhite:0.0 alpha:dark ? 0.055 : 0.032].CGColor,
+        (id)[UIColor colorWithWhite:0.0 alpha:dark ? 0.025 : 0.010].CGColor,
     ];
     _glareLayer.colors = @[
         (id)[UIColor colorWithWhite:1.0 alpha:dark ? 0.14 : 0.18].CGColor,
@@ -100,7 +100,7 @@ static char NeoWCLiquidGlassOverlayKey;
     _edgeLayer.colors = @[
         (id)[UIColor colorWithWhite:1.0 alpha:dark ? 0.24 : 0.30].CGColor,
         (id)[UIColor colorWithWhite:1.0 alpha:dark ? 0.04 : 0.07].CGColor,
-        (id)[UIColor colorWithWhite:0.0 alpha:dark ? 0.10 : 0.045].CGColor,
+        (id)[UIColor colorWithWhite:1.0 alpha:dark ? 0.025 : 0.018].CGColor,
         (id)[UIColor colorWithWhite:1.0 alpha:dark ? 0.13 : 0.18].CGColor,
     ];
     _edgeLayer.locations = @[@0.0, @0.34, @0.72, @1.0];

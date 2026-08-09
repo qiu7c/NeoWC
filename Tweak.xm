@@ -298,6 +298,12 @@ static char NeoWCChatTopOriginalBackgroundMaskKey;
 static char NeoWCChatTopFadeBackgroundMaskKey;
 static char NeoWCChatPinnedBlurViewKey;
 static char NeoWCChatPinnedOriginalBackgroundColorKey;
+static char NeoWCChatPinnedOriginalShadowOpacityKey;
+static char NeoWCChatPinnedOriginalShadowRadiusKey;
+static char NeoWCChatPinnedOriginalShadowOffsetKey;
+static char NeoWCChatPinnedOriginalShadowColorKey;
+static char NeoWCChatPinnedOriginalBorderWidthKey;
+static char NeoWCChatPinnedOriginalBorderColorKey;
 static char NeoWCAtTipsViewKey;
 static char NeoWCKeywordTipsViewKey;
 static char NeoWCAtTipsMessagesKey;
@@ -3668,83 +3674,85 @@ static void NeoWCRemoveChatSearchButton(BaseMsgContentViewController *controller
 static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) {
     NeoWCLogAlways(@"聊天搜索：收到点击，controller=%@ window=%@",
                    NSStringFromClass(controller.class), NSStringFromClass(controller.view.window.class));
-    id helper = objc_getAssociatedObject(controller, &NeoWCChatSearchHelperKey);
-    if (!helper) {
-        Class helperClass = NSClassFromString(@"MsgSearchHelper");
-        SEL initializer = NSSelectorFromString(@"initWithContentsController:");
-        if (helperClass && [helperClass instancesRespondToSelector:initializer]) {
-            @try {
-                helper = ((id (*)(id, SEL, id))objc_msgSend)([helperClass alloc], initializer, controller);
-                if (helper) {
-                    objc_setAssociatedObject(controller, &NeoWCChatSearchHelperKey,
-                                             helper, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                }
-            } @catch (NSException *exception) {
-                NeoWCLogAlways(@"聊天搜索：独立 helper 初始化失败：%@", exception.reason ?: exception.name);
-            }
-        }
+    NSString *session = NeoWCChatUserName(controller);
+    if (session.length == 0) {
+        NeoWCLogAlways(@"聊天搜索：当前聊天 ID 为空，取消打开");
+        return;
+    }
+    Class helperClass = NSClassFromString(@"MsgSearchHelper");
+    SEL initializer = NSSelectorFromString(@"initWithContentsController:");
+    if (!helperClass || ![helperClass instancesRespondToSelector:initializer]) {
+        NeoWCLogAlways(@"聊天搜索：MsgSearchHelper 或初始化方法不存在");
+        return;
+    }
+    id helper = nil;
+    @try {
+        NeoWCLogAlways(@"聊天搜索：开始创建独立 helper，session=%@", session);
+        helper = ((id (*)(id, SEL, id))objc_msgSend)([helperClass alloc], initializer, controller);
+        NeoWCLogAlways(@"聊天搜索：helper 创建完成，class=%@", NSStringFromClass([helper class]));
+    } @catch (NSException *exception) {
+        NeoWCLogAlways(@"聊天搜索：独立 helper 初始化失败：%@", exception.reason ?: exception.name);
     }
     if (!helper) {
         NeoWCLogAlways(@"聊天搜索：无法创建独立 MsgSearchHelper");
         return;
     }
-    NSString *session = NeoWCChatUserName(controller);
-    NeoWCLogAlways(@"聊天搜索：使用独立 helper=%@ session=%@",
-                   NSStringFromClass([helper class]), session ?: @"<nil>");
-    SEL delegateSelector = NSSelectorFromString(@"setM_delegate:");
-    if ([helper respondsToSelector:delegateSelector]) {
-        ((void (*)(id, SEL, id))objc_msgSend)(helper, delegateSelector, controller);
-    }
-    SEL sceneSelector = NSSelectorFromString(@"setM_eMsgSearchHelperScene:");
-    if ([helper respondsToSelector:sceneSelector]) {
-        ((void (*)(id, SEL, NSInteger))objc_msgSend)(helper, sceneSelector, 0);
-    }
     BOOL isChatRoom = [session hasSuffix:@"@chatroom"];
-    SEL showNameSelector = NSSelectorFromString(@"setM_bShowSearchByName:");
-    if ([helper respondsToSelector:showNameSelector]) {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, showNameSelector, isChatRoom);
+    @try {
+        [helper setValue:session forKey:@"m_sessionId"];
+        [helper setValue:session forKey:@"m_searchSessionId"];
+        [helper setValue:controller forKey:@"m_delegate"];
+        [helper setValue:controller forKey:@"m_searchParentVC"];
+        [helper setValue:@0 forKey:@"m_eMsgSearchHelperScene"];
+        [helper setValue:@(isChatRoom) forKey:@"m_bShowSearchByName"];
+        [helper setValue:@YES forKey:@"m_bShowSearchByTime"];
+        [helper setValue:@YES forKey:@"bUsePanCancelGesture"];
+        [helper setValue:(isChatRoom
+            ? @[@1, @2, @6, @3, @4, @5, @7, @8, @9, @12, @14, @13, @10, @11, @15]
+            : @[@2, @6, @3, @4, @5, @7, @8, @9, @12, @14, @13, @10, @11, @15])
+                 forKey:@"m_buttonIndexes"];
+        NeoWCLogAlways(@"聊天搜索：已绑定会话 ID 与搜索参数");
+    } @catch (NSException *exception) {
+        NeoWCLogAlways(@"聊天搜索：绑定会话失败：%@", exception.reason ?: exception.name);
+        return;
     }
-    SEL showTimeSelector = NSSelectorFromString(@"setM_bShowSearchByTime:");
-    if ([helper respondsToSelector:showTimeSelector]) {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, showTimeSelector, YES);
-    }
-    SEL panCancelSelector = NSSelectorFromString(@"setBUsePanCancelGesture:");
-    if ([helper respondsToSelector:panCancelSelector]) {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, panCancelSelector, YES);
-    }
-    NeoWCTweakSetValue(helper, @"m_searchParentVC", controller);
-    NeoWCTweakSetValue(helper, @"m_buttonIndexes", isChatRoom
-        ? @[@1, @2, @6, @3, @4, @5, @7, @8, @9, @12, @14, @13, @10, @11, @15]
-        : @[@2, @6, @3, @4, @5, @7, @8, @9, @12, @14, @13, @10, @11, @15]);
+    objc_setAssociatedObject(controller, &NeoWCChatSearchHelperKey,
+                             helper, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
-    id searcher = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcher"]);
-    SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
-    if ([searcher respondsToSelector:pushSelector]) {
-        @try {
-            NeoWCLogAlways(@"聊天搜索：由 %@ push 原生搜索页", NSStringFromClass([searcher class]));
-            ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
-            NeoWCCompatibilityMarkTriggered(@"chat-search-button");
-            return;
-        } @catch (NSException *exception) {
-            NeoWCLogAlways(@"聊天搜索：searcher push 失败：%@",
-                           exception.reason ?: exception.name);
-        }
+    id searchController = nil;
+    SEL controllerSelector = NSSelectorFromString(@"getSearcherViewController");
+    if (![helper respondsToSelector:controllerSelector]) {
+        NeoWCLogAlways(@"聊天搜索：helper 没有 getSearcherViewController");
+        return;
     }
-
-    id searchController = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcherViewController"]);
-    if ([searchController isKindOfClass:[UIViewController class]] && searchController != controller) {
+    @try {
+        NeoWCLogAlways(@"聊天搜索：开始获取搜索控制器");
+        searchController = ((id (*)(id, SEL))objc_msgSend)(helper, controllerSelector);
+        NeoWCLogAlways(@"聊天搜索：获取控制器完成，class=%@",
+                       searchController ? NSStringFromClass([searchController class]) : @"<nil>");
+    } @catch (NSException *exception) {
+        NeoWCLogAlways(@"聊天搜索：获取搜索控制器失败：%@", exception.reason ?: exception.name);
+        return;
+    }
+    Class nativeSearchClass = NSClassFromString(@"WCSearchController");
+    BOOL isNativeSearchController =
+        (nativeSearchClass && [searchController isKindOfClass:nativeSearchClass]) ||
+        [searchController isKindOfClass:[UISearchController class]];
+    if (isNativeSearchController && searchController != controller) {
         @try {
             UIViewController *viewController = (UIViewController *)searchController;
-            viewController.modalPresentationStyle = UIModalPresentationFullScreen;
-            NeoWCLogAlways(@"聊天搜索：全屏展示独立控制器=%@", NSStringFromClass(viewController.class));
+            viewController.modalPresentationStyle = UIModalPresentationPageSheet;
+            NeoWCLogAlways(@"聊天搜索：开始展示原生搜索控制器=%@",
+                           NSStringFromClass(viewController.class));
             [controller presentViewController:viewController animated:NO completion:nil];
+            NeoWCLogAlways(@"聊天搜索：已发起系统 page sheet 展示");
             NeoWCCompatibilityMarkTriggered(@"chat-search-button");
             return;
         } @catch (NSException *exception) {
             NeoWCLogAlways(@"聊天搜索：独立控制器展示失败：%@", exception.reason ?: exception.name);
         }
     }
-    NeoWCLogAlways(@"聊天搜索：独立 helper 未提供可展示的搜索控制器");
+    NeoWCLogAlways(@"聊天搜索：helper 返回的不是 WCSearchController，取消展示");
 }
 
 static void NeoWCInstallChatSearchButton(BaseMsgContentViewController *controller) {
@@ -3848,6 +3856,21 @@ static UIVisualEffect *NeoWCChatTopVisualEffect(void) {
                 ((void (*)(id, SEL, BOOL))objc_msgSend)(effect, interactiveSelector, NO);
             }
             if (effect) return effect;
+        }
+        Class customBlurClass = NSClassFromString(@"UICustomBlurEffect");
+        SEL customFactory = NSSelectorFromString(@"effectWithStyle:");
+        if (customBlurClass && [customBlurClass respondsToSelector:customFactory]) {
+            @try {
+                UIVisualEffect *effect = ((id (*)(id, SEL, NSInteger))objc_msgSend)(customBlurClass,
+                                                                                    customFactory,
+                                                                                    UIBlurEffectStyleLight);
+                if (!effect) return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
+                [effect setValue:@12.0 forKey:@"blurRadius"];
+                [effect setValue:UIColor.whiteColor forKey:@"colorTint"];
+                [effect setValue:@0.025 forKey:@"colorTintAlpha"];
+                return effect;
+            } @catch (__unused NSException *exception) {
+            }
         }
         return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
     }
@@ -4898,11 +4921,38 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
     UIVisualEffectView *blurView = objc_getAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey);
     if (!enabled) {
         NeoWCSetPinnedMessageDescendantBackgroundsClear(tipsView, blurView, NO);
+        NSNumber *shadowOpacity = objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOpacityKey);
+        if (shadowOpacity) {
+            tipsView.layer.shadowOpacity = shadowOpacity.floatValue;
+            tipsView.layer.shadowRadius = [objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowRadiusKey) doubleValue];
+            tipsView.layer.shadowOffset = [objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOffsetKey) CGSizeValue];
+            id shadowColor = objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowColorKey);
+            tipsView.layer.shadowColor = shadowColor == NSNull.null ? nil : (__bridge CGColorRef)shadowColor;
+            tipsView.layer.borderWidth = [objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalBorderWidthKey) doubleValue];
+            id borderColor = objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalBorderColorKey);
+            tipsView.layer.borderColor = borderColor == NSNull.null ? nil : (__bridge CGColorRef)borderColor;
+            objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOpacityKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
         [blurView removeFromSuperview];
         objc_setAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
+
+    if (!objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOpacityKey)) {
+        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOpacityKey, @(tipsView.layer.shadowOpacity), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowRadiusKey, @(tipsView.layer.shadowRadius), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOffsetKey, [NSValue valueWithCGSize:tipsView.layer.shadowOffset], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowColorKey, tipsView.layer.shadowColor ? (__bridge id)tipsView.layer.shadowColor : NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalBorderWidthKey, @(tipsView.layer.borderWidth), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalBorderColorKey, tipsView.layer.borderColor ? (__bridge id)tipsView.layer.borderColor : NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    tipsView.layer.shadowOpacity = 0.0;
+    tipsView.layer.shadowRadius = 0.0;
+    tipsView.layer.shadowOffset = CGSizeZero;
+    tipsView.layer.shadowColor = UIColor.clearColor.CGColor;
+    tipsView.layer.borderWidth = 0.0;
+    tipsView.layer.borderColor = UIColor.clearColor.CGColor;
 
     if (!blurView) {
         blurView = [[UIVisualEffectView alloc] initWithEffect:nil];
