@@ -273,6 +273,8 @@ static char NeoWCChatTopBackProxyKey;
 static char NeoWCChatTopOriginalStandardAppearanceKey;
 static char NeoWCChatTopOriginalCompactAppearanceKey;
 static char NeoWCChatTopOriginalScrollEdgeAppearanceKey;
+static char NeoWCChatTopBackgroundOriginalAlphaKey;
+static char NeoWCChatTopPlaceholderTitleViewKey;
 static char NeoWCAtTipsViewKey;
 static char NeoWCKeywordTipsViewKey;
 static char NeoWCAtTipsMessagesKey;
@@ -3912,6 +3914,56 @@ static void NeoWCApplyTransparentChatTopAppearance(UINavigationItem *navigationI
     navigationItem.scrollEdgeAppearance = appearance;
 }
 
+static BOOL NeoWCIsNavigationBarBackgroundView(UIView *view) {
+    NSString *className = NSStringFromClass(view.class);
+    return [className containsString:@"BarBackground"] ||
+           [className containsString:@"NavigationBarBackground"];
+}
+
+static void NeoWCSetChatNavigationBackgroundHidden(UIView *view, BOOL hidden) {
+    if (!view) return;
+    if (NeoWCIsNavigationBarBackgroundView(view)) {
+        NSNumber *originalAlpha = objc_getAssociatedObject(view, &NeoWCChatTopBackgroundOriginalAlphaKey);
+        if (hidden) {
+            if (!originalAlpha) {
+                objc_setAssociatedObject(view, &NeoWCChatTopBackgroundOriginalAlphaKey,
+                                         @(view.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            }
+            view.alpha = 0.0;
+        } else if (originalAlpha) {
+            view.alpha = originalAlpha.doubleValue;
+            objc_setAssociatedObject(view, &NeoWCChatTopBackgroundOriginalAlphaKey,
+                                     nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        return;
+    }
+    for (UIView *subview in view.subviews) {
+        NeoWCSetChatNavigationBackgroundHidden(subview, hidden);
+    }
+}
+
+static void NeoWCApplyChatNavigationBackground(BaseMsgContentViewController *controller, BOOL hidden) {
+    UINavigationBar *navigationBar = controller.navigationController.navigationBar;
+    NeoWCSetChatNavigationBackgroundHidden(navigationBar, hidden);
+}
+
+static UIBarButtonItem *NeoWCNativeChatMoreItem(BaseMsgContentViewController *controller) {
+    SEL selector = NSSelectorFromString(@"getRightBarButton");
+    if ([controller respondsToSelector:selector]) {
+        @try {
+            id item = ((id (*)(id, SEL))objc_msgSend)(controller, selector);
+            if ([item isKindOfClass:[UIBarButtonItem class]]) return item;
+        } @catch (__unused NSException *exception) {
+        }
+    }
+    UIBarButtonItem *installed = objc_getAssociatedObject(controller, &NeoWCChatTopCapsuleItemKey);
+    for (UIBarButtonItem *item in controller.navigationItem.rightBarButtonItems) {
+        if (item != installed) return item;
+    }
+    NSArray *original = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey);
+    return original.firstObject;
+}
+
 static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller) {
     NSArray *originalLeft = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey);
     if (!originalLeft) return;
@@ -3928,13 +3980,15 @@ static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller) {
     controller.navigationItem.standardAppearance = standardAppearance == NSNull.null ? nil : standardAppearance;
     controller.navigationItem.compactAppearance = compactAppearance == NSNull.null ? nil : compactAppearance;
     controller.navigationItem.scrollEdgeAppearance = scrollEdgeAppearance == NSNull.null ? nil : scrollEdgeAppearance;
+    NeoWCApplyChatNavigationBackground(controller, NO);
     const void *keys[] = {&NeoWCChatTopProfileItemKey, &NeoWCChatTopCapsuleItemKey,
                           &NeoWCChatTopOriginalLeftItemsKey, &NeoWCChatTopOriginalRightItemsKey,
                           &NeoWCChatTopOriginalTitleViewKey, &NeoWCChatTopOriginalSupplementKey,
                           &NeoWCChatTopMoreProxyKey, &NeoWCChatTopBackProxyKey,
                           &NeoWCChatTopOriginalStandardAppearanceKey,
                           &NeoWCChatTopOriginalCompactAppearanceKey,
-                          &NeoWCChatTopOriginalScrollEdgeAppearanceKey};
+                          &NeoWCChatTopOriginalScrollEdgeAppearanceKey,
+                          &NeoWCChatTopPlaceholderTitleViewKey};
     for (NSUInteger index = 0; index < sizeof(keys) / sizeof(keys[0]); index++) {
         objc_setAssociatedObject(controller, keys[index], nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
@@ -3949,17 +4003,6 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller) {
     NeoWCRemoveChatSearchButton(controller);
     UINavigationItem *navigationItem = controller.navigationItem;
     NSArray *originalLeft = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey);
-    UIBarButtonItem *installedCapsule = objc_getAssociatedObject(controller, &NeoWCChatTopCapsuleItemKey);
-    if (originalLeft && (!installedCapsule ||
-        ![navigationItem.rightBarButtonItems containsObject:installedCapsule])) {
-        NSMutableArray *refreshedRight = [navigationItem.rightBarButtonItems mutableCopy] ?: [NSMutableArray array];
-        UIBarButtonItem *standaloneSearch = objc_getAssociatedObject(controller, &NeoWCChatSearchButtonKey);
-        [refreshedRight removeObject:standaloneSearch];
-        if (refreshedRight.count > 0) {
-            objc_setAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey,
-                                     refreshedRight, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        }
-    }
     if (!originalLeft) {
         originalLeft = navigationItem.leftBarButtonItems ?: @[];
         NSMutableArray *originalRight = [navigationItem.rightBarButtonItems mutableCopy] ?: [NSMutableArray array];
@@ -3979,9 +4022,8 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller) {
                                  navigationItem.scrollEdgeAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     NSArray<UIBarButtonItem *> *originalRight = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey) ?: @[];
-    UIBarButtonItem *moreItem = originalRight.firstObject;
-    NSArray *remainingRight = originalRight.count > 1
-        ? [originalRight subarrayWithRange:NSMakeRange(1, originalRight.count - 1)] : @[];
+    UIBarButtonItem *moreItem = NeoWCNativeChatMoreItem(controller) ?: originalRight.firstObject;
+    NSArray *remainingRight = @[];
 
     UIBarButtonItem *backItem = originalLeft.firstObject;
     NSArray *remainingLeft = originalLeft.count > 1
@@ -3991,8 +4033,12 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller) {
     [leftItems addObjectsFromArray:remainingLeft];
     navigationItem.leftItemsSupplementBackButton = NO;
     navigationItem.leftBarButtonItems = leftItems;
-    navigationItem.titleView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 1, 1)];
+    UIView *placeholderTitleView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 1, 1)];
+    navigationItem.titleView = placeholderTitleView;
+    objc_setAssociatedObject(controller, &NeoWCChatTopPlaceholderTitleViewKey,
+                             placeholderTitleView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     NeoWCApplyTransparentChatTopAppearance(navigationItem);
+    NeoWCApplyChatNavigationBackground(controller, YES);
     objc_setAssociatedObject(controller, &NeoWCChatTopProfileItemKey, profileItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     BOOL showSearch = NeoWCEnhancementEnabled(NeoWCChatSearchButtonEnabledKey);
@@ -4002,6 +4048,21 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller) {
     [rightItems addObjectsFromArray:remainingRight];
     navigationItem.rightBarButtonItems = rightItems;
     objc_setAssociatedObject(controller, &NeoWCChatTopCapsuleItemKey, capsuleItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+static void NeoWCRefreshChatTopBarAfterWechatUpdate(BaseMsgContentViewController *controller) {
+    if (!NeoWCEnhancementEnabled(NeoWCChatTopBarCapsuleEnabledKey)) return;
+    if (!controller.isViewLoaded || !controller.view.window) return;
+    if (controller.navigationController.topViewController != controller) return;
+    UIBarButtonItem *profileItem = objc_getAssociatedObject(controller, &NeoWCChatTopProfileItemKey);
+    UIBarButtonItem *capsuleItem = objc_getAssociatedObject(controller, &NeoWCChatTopCapsuleItemKey);
+    UIView *placeholderTitleView = objc_getAssociatedObject(controller, &NeoWCChatTopPlaceholderTitleViewKey);
+    BOOL profileMissing = !profileItem || ![controller.navigationItem.leftBarButtonItems containsObject:profileItem];
+    BOOL capsuleMissing = capsuleItem && ![controller.navigationItem.rightBarButtonItems containsObject:capsuleItem];
+    BOOL titleWasReplaced = !placeholderTitleView || controller.navigationItem.titleView != placeholderTitleView;
+    if (profileMissing || capsuleMissing || titleWasReplaced) NeoWCUpdateChatTopBar(controller);
+    NeoWCApplyTransparentChatTopAppearance(controller.navigationItem);
+    NeoWCApplyChatNavigationBackground(controller, YES);
 }
 
 static BOOL NeoWCJumpToReferencedMessage(CommonMessageCellView *cell) {
@@ -4341,6 +4402,16 @@ static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const
     NeoWCUpdateChatTopBar(self);
 }
 
+- (void)updateTitleView:(id)titleView {
+    %orig(titleView);
+    NeoWCRefreshChatTopBarAfterWechatUpdate(self);
+}
+
+- (void)updateTitleView:(id)titleView ignoreAnimation:(BOOL)ignoreAnimation {
+    %orig(titleView, ignoreAnimation);
+    NeoWCRefreshChatTopBarAfterWechatUpdate(self);
+}
+
 - (void)ShowMultiSelectMoreOperation:(id)argument {
     NeoWCCompatibilityMarkTriggered(@"multi-select-export");
     BOOL exportEnabled = NeoWCEnhancementEnabled(NeoWCMultiSelectExportEnabledKey);
@@ -4372,6 +4443,7 @@ static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
+    NeoWCApplyChatNavigationBackground(self, NO);
     %orig(animated);
     UIViewController *controller = (UIViewController *)self;
     if (controller.isMovingFromParentViewController || controller.isBeingDismissed) {
@@ -4392,6 +4464,7 @@ static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const
 
 - (void)viewDidLayoutSubviews {
     %orig;
+    NeoWCRefreshChatTopBarAfterWechatUpdate(self);
     [self updateAtTipsViewPosition];
     [self updateKeywordTipsViewPosition];
 }
