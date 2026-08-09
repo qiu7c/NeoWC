@@ -285,9 +285,9 @@ static char NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey;
 static char NeoWCChatTopContainerOriginalBackgroundColorKey;
 static char NeoWCChatTopBackgroundOriginalHiddenKey;
 static char NeoWCChatTopGlassEffectMarkerKey;
-static char NeoWCChatTopWallpaperViewKey;
-static char NeoWCChatTopWallpaperOriginalFrameKey;
 static char NeoWCChatTopOriginalClipsToBoundsKey;
+static char NeoWCChatTopOriginalBorderWidthKey;
+static char NeoWCChatTopOriginalCornerRadiusKey;
 static char NeoWCAtTipsViewKey;
 static char NeoWCKeywordTipsViewKey;
 static char NeoWCAtTipsMessagesKey;
@@ -3773,6 +3773,8 @@ static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectVi
     container.layer.shadowOpacity = 0.06;
     container.layer.shadowRadius = 5.0;
     container.layer.shadowOffset = CGSizeMake(0.0, 1.0);
+    objc_setAssociatedObject(container, &NeoWCChatTopGlassEffectMarkerKey,
+                             @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     UIVisualEffectView *effectView = [[UIVisualEffectView alloc]
         initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial]];
@@ -3966,6 +3968,17 @@ static BOOL NeoWCIsNavigationBarBackgroundView(UIView *view) {
            [className containsString:@"Material"];
 }
 
+static BOOL NeoWCViewContainsChatTopContent(UIView *view) {
+    if (!view) return NO;
+    if (objc_getAssociatedObject(view, &NeoWCChatTopGlassEffectMarkerKey)) return YES;
+    NSString *className = NSStringFromClass(view.class);
+    if ([className containsString:@"ContentView"] || [className containsString:@"BarContent"]) return YES;
+    for (UIView *subview in view.subviews) {
+        if (NeoWCViewContainsChatTopContent(subview)) return YES;
+    }
+    return NO;
+}
+
 static void NeoWCSetChatNavigationBackgroundHidden(UIView *view, BOOL hidden) {
     if (!view) return;
     if (objc_getAssociatedObject(view, &NeoWCChatTopGlassEffectMarkerKey)) return;
@@ -3996,6 +4009,62 @@ static void NeoWCSetChatNavigationBackgroundHidden(UIView *view, BOOL hidden) {
     }
 }
 
+static void NeoWCSetChatNavigationDirectBackgroundsHidden(UINavigationBar *navigationBar, BOOL hidden) {
+    if (!navigationBar) return;
+    for (UIView *subview in navigationBar.subviews) {
+        if (NeoWCViewContainsChatTopContent(subview)) continue;
+        NSNumber *originalAlpha = objc_getAssociatedObject(subview, &NeoWCChatTopBackgroundOriginalAlphaKey);
+        NSNumber *originalHidden = objc_getAssociatedObject(subview, &NeoWCChatTopBackgroundOriginalHiddenKey);
+        if (hidden) {
+            if (!originalAlpha) {
+                objc_setAssociatedObject(subview, &NeoWCChatTopBackgroundOriginalAlphaKey,
+                                         @(subview.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                objc_setAssociatedObject(subview, &NeoWCChatTopBackgroundOriginalHiddenKey,
+                                         @(subview.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            }
+            subview.hidden = YES;
+            subview.alpha = 0.0;
+        } else if (originalAlpha) {
+            subview.alpha = originalAlpha.doubleValue;
+            subview.hidden = originalHidden.boolValue;
+            objc_setAssociatedObject(subview, &NeoWCChatTopBackgroundOriginalAlphaKey,
+                                     nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(subview, &NeoWCChatTopBackgroundOriginalHiddenKey,
+                                     nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    }
+}
+
+static void NeoWCSetChatNavigationHostTransparent(UIView *hostView, BOOL transparent) {
+    if (!hostView) return;
+    NSNumber *originalClips = objc_getAssociatedObject(hostView, &NeoWCChatTopOriginalClipsToBoundsKey);
+    NSNumber *originalBorder = objc_getAssociatedObject(hostView, &NeoWCChatTopOriginalBorderWidthKey);
+    NSNumber *originalCorner = objc_getAssociatedObject(hostView, &NeoWCChatTopOriginalCornerRadiusKey);
+    if (transparent) {
+        if (!originalClips) {
+            objc_setAssociatedObject(hostView, &NeoWCChatTopOriginalClipsToBoundsKey,
+                                     @(hostView.clipsToBounds), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(hostView, &NeoWCChatTopOriginalBorderWidthKey,
+                                     @(hostView.layer.borderWidth), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(hostView, &NeoWCChatTopOriginalCornerRadiusKey,
+                                     @(hostView.layer.cornerRadius), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        hostView.clipsToBounds = NO;
+        hostView.layer.borderWidth = 0.0;
+        hostView.layer.cornerRadius = 0.0;
+    } else if (originalClips) {
+        hostView.clipsToBounds = originalClips.boolValue;
+        hostView.layer.borderWidth = originalBorder.doubleValue;
+        hostView.layer.cornerRadius = originalCorner.doubleValue;
+        objc_setAssociatedObject(hostView, &NeoWCChatTopOriginalClipsToBoundsKey,
+                                 nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(hostView, &NeoWCChatTopOriginalBorderWidthKey,
+                                 nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(hostView, &NeoWCChatTopOriginalCornerRadiusKey,
+                                 nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
 static void NeoWCSetChatNavigationContainerClear(UIView *view, BOOL clear) {
     if (!view) return;
     id originalColor = objc_getAssociatedObject(view, &NeoWCChatTopContainerOriginalBackgroundColorKey);
@@ -4015,7 +4084,10 @@ static void NeoWCSetChatNavigationContainerClear(UIView *view, BOOL clear) {
 
 static void NeoWCApplyChatNavigationBackground(BaseMsgContentViewController *controller, BOOL hidden) {
     UINavigationBar *navigationBar = controller.navigationController.navigationBar;
+    NeoWCSetChatNavigationHostTransparent(navigationBar, hidden);
+    NeoWCSetChatNavigationHostTransparent(navigationBar.superview, hidden);
     NeoWCSetChatNavigationBackgroundHidden(navigationBar, hidden);
+    NeoWCSetChatNavigationDirectBackgroundsHidden(navigationBar, hidden);
     UIView *navigationRoot = controller.navigationController.view;
     UIView *view = navigationBar;
     for (NSUInteger depth = 0; view && depth < 4; depth++, view = view.superview) {
@@ -4029,90 +4101,7 @@ static void NeoWCApplyChatNavigationBackground(BaseMsgContentViewController *con
     }
 }
 
-static void NeoWCFindChatWallpaperImageView(UIView *view,
-                                            UIView *rootView,
-                                            UIImageView **bestMatch,
-                                            CGFloat *bestArea) {
-    if (!view || view.hidden || view.alpha <= 0.01) return;
-    if ([view isKindOfClass:[UIImageView class]]) {
-        UIImageView *imageView = (UIImageView *)view;
-        CGRect frame = [imageView convertRect:imageView.bounds toView:rootView];
-        CGFloat rootWidth = CGRectGetWidth(rootView.bounds);
-        CGFloat rootHeight = CGRectGetHeight(rootView.bounds);
-        CGFloat area = CGRectGetWidth(frame) * CGRectGetHeight(frame);
-        if (imageView.image && CGRectGetWidth(frame) >= rootWidth * 0.85 &&
-            CGRectGetHeight(frame) >= rootHeight * 0.50 && area > *bestArea) {
-            *bestMatch = imageView;
-            *bestArea = area;
-        }
-    }
-    for (UIView *subview in view.subviews) {
-        NeoWCFindChatWallpaperImageView(subview, rootView, bestMatch, bestArea);
-    }
-}
-
-static void NeoWCSetChatWallpaperAncestorClipping(UIImageView *wallpaper,
-                                                   UIView *navigationRoot,
-                                                   BOOL allowOverflow) {
-    for (UIView *view = wallpaper.superview; view; view = view.superview) {
-        NSNumber *original = objc_getAssociatedObject(view, &NeoWCChatTopOriginalClipsToBoundsKey);
-        if (allowOverflow) {
-            if (!original) {
-                objc_setAssociatedObject(view, &NeoWCChatTopOriginalClipsToBoundsKey,
-                                         @(view.clipsToBounds), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            }
-            view.clipsToBounds = NO;
-        } else if (original) {
-            view.clipsToBounds = original.boolValue;
-            objc_setAssociatedObject(view, &NeoWCChatTopOriginalClipsToBoundsKey,
-                                     nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        }
-        if (view == navigationRoot) break;
-    }
-}
-
-static void NeoWCRestoreChatWallpaper(BaseMsgContentViewController *controller) {
-    UIImageView *wallpaper = objc_getAssociatedObject(controller, &NeoWCChatTopWallpaperViewKey);
-    UIView *navigationRoot = controller.navigationController.view;
-    if (wallpaper) {
-        NSValue *originalFrame = objc_getAssociatedObject(wallpaper, &NeoWCChatTopWallpaperOriginalFrameKey);
-        if (originalFrame) wallpaper.frame = originalFrame.CGRectValue;
-        NeoWCSetChatWallpaperAncestorClipping(wallpaper, navigationRoot, NO);
-        objc_setAssociatedObject(wallpaper, &NeoWCChatTopWallpaperOriginalFrameKey,
-                                 nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    objc_setAssociatedObject(controller, &NeoWCChatTopWallpaperViewKey,
-                             nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
-
-static void NeoWCExtendChatWallpaperUnderNavigationBar(BaseMsgContentViewController *controller) {
-    UIView *navigationRoot = controller.navigationController.view;
-    if (!navigationRoot || !controller.view.window) return;
-    UIImageView *wallpaper = objc_getAssociatedObject(controller, &NeoWCChatTopWallpaperViewKey);
-    if (!wallpaper || !wallpaper.superview) {
-        CGFloat bestArea = 0.0;
-        NeoWCFindChatWallpaperImageView(controller.view, navigationRoot, &wallpaper, &bestArea);
-        if (!wallpaper) return;
-        objc_setAssociatedObject(controller, &NeoWCChatTopWallpaperViewKey,
-                                 wallpaper, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    CGRect frameInNavigationRoot = [wallpaper.superview convertRect:wallpaper.frame toView:navigationRoot];
-    CGFloat desiredTop = CGRectGetMinY(navigationRoot.bounds);
-    CGFloat extraHeight = CGRectGetMinY(frameInNavigationRoot) - desiredTop;
-    if (extraHeight <= 0.5) {
-        NeoWCSetChatWallpaperAncestorClipping(wallpaper, navigationRoot, YES);
-        return;
-    }
-    objc_setAssociatedObject(wallpaper, &NeoWCChatTopWallpaperOriginalFrameKey,
-                             [NSValue valueWithCGRect:wallpaper.frame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCSetChatWallpaperAncestorClipping(wallpaper, navigationRoot, YES);
-    frameInNavigationRoot.origin.y = desiredTop;
-    frameInNavigationRoot.size.height += extraHeight;
-    wallpaper.frame = [navigationRoot convertRect:frameInNavigationRoot toView:wallpaper.superview];
-}
-
 static void NeoWCRestoreChatNavigationPresentation(BaseMsgContentViewController *controller) {
-    NeoWCRestoreChatWallpaper(controller);
     UINavigationBar *navigationBar = controller.navigationController.navigationBar;
     id standardAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationStandardAppearanceKey);
     id compactAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationCompactAppearanceKey);
@@ -4251,7 +4240,6 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller) {
                              placeholderTitleView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     NeoWCApplyTransparentChatTopAppearance(controller);
     NeoWCApplyChatNavigationBackground(controller, YES);
-    NeoWCExtendChatWallpaperUnderNavigationBar(controller);
     objc_setAssociatedObject(controller, &NeoWCChatTopProfileItemKey, profileItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     BOOL showSearch = NeoWCEnhancementEnabled(NeoWCChatSearchButtonEnabledKey);
@@ -4276,7 +4264,6 @@ static void NeoWCRefreshChatTopBarAfterWechatUpdate(BaseMsgContentViewController
     if (profileMissing || capsuleMissing || titleWasReplaced) NeoWCUpdateChatTopBar(controller);
     NeoWCApplyTransparentChatTopAppearance(controller);
     NeoWCApplyChatNavigationBackground(controller, YES);
-    NeoWCExtendChatWallpaperUnderNavigationBar(controller);
 }
 
 static BOOL NeoWCJumpToReferencedMessage(CommonMessageCellView *cell) {
