@@ -2180,19 +2180,13 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
     UIView *timeLabel = NeoWCMomentsObjectForName(cell, @"m_timeLabel");
     BOOL shouldStackVertically = NeoWCEnhancementEnabled(NeoWCMomentsPreciseTimeKey) &&
         NeoWCMomentsVisibleTextIntersectsRect(cell, cell, operateButton, timeLabel, shiftedFrameInCell) &&
-        CGRectGetMinY(originalFrameInCell) >= 34.0;
+        CGRectGetMinY(originalFrameInCell) >= CGRectGetHeight(originalFrameInCell) + 2.0;
     if (shouldStackVertically) {
         operateButton.frame = originalFrame;
-        button.frame = CGRectMake(CGRectGetMidX(originalFrameInCell) - 16.0,
-                                  CGRectGetMinY(originalFrameInCell) - 34.0,
-                                  32.0,
-                                  32.0);
+        button.frame = CGRectOffset(originalFrameInCell, 0.0, -CGRectGetHeight(originalFrameInCell) - 2.0);
     } else {
         operateButton.frame = shiftedFrame;
-        button.frame = CGRectMake(CGRectGetMidX(originalFrameInCell) - 16.0,
-                                  CGRectGetMidY(originalFrameInCell) - 16.0,
-                                  32.0,
-                                  32.0);
+        button.frame = originalFrameInCell;
     }
     button.hidden = NO;
     button.alpha = 1.0;
@@ -3582,15 +3576,28 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
     NeoWCTweakSetValue(helper, @"m_bShowSearchByName", @([session hasSuffix:@"@chatroom"]));
     NeoWCTweakSetValue(helper, @"m_bShowSearchByTime", @YES);
     NeoWCTweakSetValue(helper, @"bUsePanCancelGesture", @YES);
+    (void)NeoWCTweakValueForSelectorNames(helper, @[@"getSearcher"]);
     id searchController = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcherViewController"]);
-    if (![searchController isKindOfClass:[UIViewController class]]) return;
+    if (![searchController isKindOfClass:[UIViewController class]]) {
+        NeoWCLog(@"聊天搜索控制器获取失败");
+        return;
+    }
     UIViewController *standaloneController = searchController;
+    if (standaloneController == controller || standaloneController == controller.navigationController) return;
     for (NSUInteger depth = 0; standaloneController.parentViewController && depth < 8; depth++) {
         UIViewController *parent = standaloneController.parentViewController;
-        if (parent == controller || parent == controller.navigationController) return;
+        if (parent == controller || parent == controller.navigationController) {
+            [standaloneController willMoveToParentViewController:nil];
+            [standaloneController.view removeFromSuperview];
+            [standaloneController removeFromParentViewController];
+            break;
+        }
         standaloneController = parent;
     }
-    if (standaloneController.parentViewController) return;
+    if (standaloneController.parentViewController) {
+        NeoWCLog(@"聊天搜索容器仍属于 %@，取消展示", NSStringFromClass(standaloneController.parentViewController.class));
+        return;
+    }
     if (standaloneController == controller ||
         standaloneController == controller.navigationController ||
         standaloneController.presentingViewController ||
@@ -3609,7 +3616,8 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
         @try {
             [presenter presentViewController:standaloneController animated:YES completion:nil];
             NeoWCCompatibilityMarkTriggered(@"chat-search-button");
-        } @catch (__unused NSException *exception) {
+        } @catch (NSException *exception) {
+            NeoWCLog(@"聊天搜索展示失败：%@", exception.reason ?: exception.name);
             return;
         }
     });
