@@ -293,7 +293,10 @@ static char NeoWCChatTopOriginalCornerRadiusKey;
 static char NeoWCChatTopContentNavigationBarKey;
 static char NeoWCChatTopOriginalVisualEffectKey;
 static char NeoWCChatTopOriginalVisualEffectMaskKey;
-static char NeoWCChatTopFadeVisualEffectMaskKey;
+static char NeoWCChatTopOriginalBackgroundMaskKey;
+static char NeoWCChatTopFadeBackgroundMaskKey;
+static char NeoWCChatPinnedBlurViewKey;
+static char NeoWCChatPinnedOriginalBackgroundColorKey;
 static char NeoWCAtTipsViewKey;
 static char NeoWCKeywordTipsViewKey;
 static char NeoWCAtTipsMessagesKey;
@@ -3829,16 +3832,26 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     [content addSubview:backButton];
     objc_setAssociatedObject(controller, &NeoWCChatTopBackProxyKey, backProxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
-    UIView *avatar = NeoWCChatTopAvatarView(contact, userName);
+    UIView *avatarSource = NeoWCChatTopAvatarView(contact, userName);
+    UIView *avatar = [UIView new];
     avatar.translatesAutoresizingMaskIntoConstraints = NO;
+    avatar.backgroundColor = UIColor.clearColor;
     avatar.clipsToBounds = YES;
     avatar.layer.cornerRadius = 14.0;
+    avatar.layer.cornerCurve = kCACornerCurveContinuous;
+    avatarSource.translatesAutoresizingMaskIntoConstraints = NO;
+    avatarSource.clipsToBounds = NO;
+    avatarSource.userInteractionEnabled = NO;
+    if (![avatarSource isKindOfClass:[UIImageView class]]) {
+        avatarSource.transform = CGAffineTransformMakeScale(0.70, 0.70);
+    }
+    [avatar addSubview:avatarSource];
     [content addSubview:avatar];
 
     UILabel *label = [UILabel new];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.text = displayName;
-    label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     label.adjustsFontForContentSizeCategory = YES;
     label.adjustsFontSizeToFitWidth = YES;
     label.minimumScaleFactor = 0.78;
@@ -3862,6 +3875,10 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
         [avatar.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
         [avatar.widthAnchor constraintEqualToConstant:28.0],
         [avatar.heightAnchor constraintEqualToConstant:28.0],
+        [avatarSource.centerXAnchor constraintEqualToAnchor:avatar.centerXAnchor],
+        [avatarSource.centerYAnchor constraintEqualToAnchor:avatar.centerYAnchor],
+        [avatarSource.widthAnchor constraintEqualToConstant:28.0],
+        [avatarSource.heightAnchor constraintEqualToConstant:28.0],
         [label.leadingAnchor constraintEqualToAnchor:avatar.trailingAnchor constant:8.0],
         [label.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-10.0],
         [label.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
@@ -4067,6 +4084,38 @@ static void NeoWCSetChatNavigationDirectBackgroundsHidden(UINavigationBar *navig
 static void NeoWCSetChatNavigationHostTransparent(UIView *hostView, BOOL transparent);
 static void NeoWCSetChatNavigationContainerClear(UIView *view, BOOL clear);
 
+static void NeoWCSetChatTopFadeMask(UIView *backgroundView, BOOL enabled) {
+    if (!backgroundView) return;
+    id originalMask = objc_getAssociatedObject(backgroundView, &NeoWCChatTopOriginalBackgroundMaskKey);
+    if (enabled) {
+        if (!originalMask) {
+            objc_setAssociatedObject(backgroundView, &NeoWCChatTopOriginalBackgroundMaskKey,
+                                     backgroundView.layer.mask ?: NSNull.null,
+                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        CAGradientLayer *fadeMask = objc_getAssociatedObject(backgroundView, &NeoWCChatTopFadeBackgroundMaskKey);
+        if (!fadeMask) {
+            fadeMask = [CAGradientLayer layer];
+            fadeMask.startPoint = CGPointMake(0.5, 0.0);
+            fadeMask.endPoint = CGPointMake(0.5, 1.0);
+            fadeMask.colors = @[(id)UIColor.blackColor.CGColor,
+                                (id)UIColor.clearColor.CGColor,
+                                (id)UIColor.clearColor.CGColor];
+            fadeMask.locations = @[@0.0, @0.45, @1.0];
+            objc_setAssociatedObject(backgroundView, &NeoWCChatTopFadeBackgroundMaskKey,
+                                     fadeMask, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        fadeMask.frame = backgroundView.bounds;
+        backgroundView.layer.mask = fadeMask;
+    } else if (originalMask) {
+        backgroundView.layer.mask = originalMask == NSNull.null ? nil : originalMask;
+        objc_setAssociatedObject(backgroundView, &NeoWCChatTopOriginalBackgroundMaskKey,
+                                 nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(backgroundView, &NeoWCChatTopFadeBackgroundMaskKey,
+                                 nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
 static void NeoWCSetVisualEffectsTopFade(UIView *view, BOOL enabled) {
     if (!view) return;
     if ([view isKindOfClass:[UIVisualEffectView class]]) {
@@ -4087,20 +4136,7 @@ static void NeoWCSetVisualEffectsTopFade(UIView *view, BOOL enabled) {
                     ? originalEffect
                     : [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
             }
-            CAGradientLayer *fadeMask = objc_getAssociatedObject(effectView, &NeoWCChatTopFadeVisualEffectMaskKey);
-            if (!fadeMask) {
-                fadeMask = [CAGradientLayer layer];
-                fadeMask.startPoint = CGPointMake(0.5, 0.0);
-                fadeMask.endPoint = CGPointMake(0.5, 1.0);
-                fadeMask.colors = @[(id)UIColor.blackColor.CGColor,
-                                    (id)UIColor.clearColor.CGColor,
-                                    (id)UIColor.clearColor.CGColor];
-                fadeMask.locations = @[@0.0, @0.30, @1.0];
-                objc_setAssociatedObject(effectView, &NeoWCChatTopFadeVisualEffectMaskKey,
-                                         fadeMask, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            }
-            fadeMask.frame = effectView.bounds;
-            effectView.layer.mask = fadeMask;
+            effectView.layer.mask = originalMask == NSNull.null ? nil : originalMask;
             NeoWCSetChatNavigationContainerClear(effectView, YES);
         } else if (originalEffect) {
             effectView.effect = originalEffect == NSNull.null ? nil : originalEffect;
@@ -4109,8 +4145,6 @@ static void NeoWCSetVisualEffectsTopFade(UIView *view, BOOL enabled) {
             objc_setAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectKey,
                                      nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             objc_setAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectMaskKey,
-                                     nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            objc_setAssociatedObject(effectView, &NeoWCChatTopFadeVisualEffectMaskKey,
                                      nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
     }
@@ -4143,6 +4177,7 @@ static void NeoWCSetChatContentNavigationBackgroundTransparent(BaseMsgContentVie
         if (fillsTopBar && NeoWCViewContainsVisualEffect(subview)) {
             NeoWCSetChatNavigationContainerClear(subview, transparent);
             NeoWCSetVisualEffectsTopFade(subview, transparent);
+            NeoWCSetChatTopFadeMask(subview, transparent);
             for (UIView *backgroundSubview in subview.subviews) {
                 if (CGRectGetHeight(backgroundSubview.bounds) <= 1.0) {
                     NeoWCSetChatNavigationContainerClear(backgroundSubview, transparent);
@@ -4732,6 +4767,71 @@ static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const
         NeoWCHideEdgeTip(controller, viewKey, NO);
     }
 }
+
+static void NeoWCSetPinnedMessageDescendantBackgroundsClear(UIView *view,
+                                                            UIVisualEffectView *blurView,
+                                                            BOOL clear) {
+    if (!view || view == blurView || [view isDescendantOfView:blurView]) return;
+    id originalColor = objc_getAssociatedObject(view, &NeoWCChatPinnedOriginalBackgroundColorKey);
+    if (clear) {
+        if (!originalColor) {
+            objc_setAssociatedObject(view, &NeoWCChatPinnedOriginalBackgroundColorKey,
+                                     view.backgroundColor ?: NSNull.null,
+                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        view.backgroundColor = UIColor.clearColor;
+    } else if (originalColor) {
+        view.backgroundColor = originalColor == NSNull.null ? nil : originalColor;
+        objc_setAssociatedObject(view, &NeoWCChatPinnedOriginalBackgroundColorKey,
+                                 nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    for (UIView *subview in view.subviews) {
+        NeoWCSetPinnedMessageDescendantBackgroundsClear(subview, blurView, clear);
+    }
+}
+
+static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
+    if (!tipsView) return;
+    BOOL enabled = NeoWCEnhancementEnabled(NeoWCChatTopBarCapsuleEnabledKey);
+    UIVisualEffectView *blurView = objc_getAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey);
+    if (!enabled) {
+        NeoWCSetPinnedMessageDescendantBackgroundsClear(tipsView, blurView, NO);
+        [blurView removeFromSuperview];
+        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey,
+                                 nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return;
+    }
+
+    if (!blurView) {
+        blurView = [[UIVisualEffectView alloc]
+            initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial]];
+        blurView.userInteractionEnabled = NO;
+        blurView.clipsToBounds = YES;
+        blurView.layer.cornerRadius = 14.0;
+        blurView.layer.cornerCurve = kCACornerCurveContinuous;
+        objc_setAssociatedObject(blurView, &NeoWCChatTopGlassEffectMarkerKey,
+                                 @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey,
+                                 blurView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    blurView.frame = tipsView.bounds;
+    blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    if (blurView.superview != tipsView) {
+        [tipsView insertSubview:blurView atIndex:0];
+    } else {
+        [tipsView sendSubviewToBack:blurView];
+    }
+    NeoWCSetPinnedMessageDescendantBackgroundsClear(tipsView, blurView, YES);
+}
+
+%hook MMMsgCommonTipsView
+
+- (void)layoutSubviews {
+    %orig;
+    NeoWCUpdatePinnedMessageGlass(self);
+}
+
+%end
 
 %hook BaseMsgContentViewController
 
