@@ -260,7 +260,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
    - 红包详情已改为写入 `m_receivedInfoLable`，金额按分换算。
 
 2. 当前未提交修复
-   - 聊天搜索已补齐 WCPulse 的控制器归一化与导航前处理：先恢复微信原生导航栏并暂停胶囊刷新，再从导航栈顶部/父控制器确定真实宿主，执行 `initMsgSearchHelper:NO` → `m_oMsgSearchHelper` → `pushSearchControllerWithCompletion:nil`，并保留 `onSearchItem` 兼容分支；搜索返回后恢复胶囊顶栏。
+   - 聊天搜索已补齐 WCPulse 的控制器归一化、导航前处理及 `object_getIvar` 内部目标解析：先恢复微信原生导航栏并暂停胶囊刷新，再从导航栈顶部/父控制器确定真实宿主，执行 `initMsgSearchHelper:NO` → `m_oMsgSearchHelper`，随后从 Helper 的对象 ivar 中寻找真正实现 `pushSearchControllerWithCompletion:` 或 `onSearchItem` 的内部目标；搜索返回后恢复胶囊顶栏。
    - 胶囊顶栏的液态玻璃仅允许 iOS 26 原生 `UIGlassEffect`；低版本强制使用超薄玻璃，已移除 NeoWC 自研兼容液态叠层。
    - 设置首页头像改为 96 点圆角方形容器，并同步扩大昵称、wxid 间距和页眉高度，避免直接缩放微信内部头像 View 造成首帧裁切。
    - 所有持久多选设置均在列表显示“当前选择：…”并在操作表中勾选当前项。

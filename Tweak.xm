@@ -3666,6 +3666,60 @@ static NSString *NeoWCChatUserName(id controller) {
 static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller);
 static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
 
+static id NeoWCFindSearchActionTarget(id root, SEL selector, NSUInteger depth,
+                                      NSMutableSet<NSValue *> *visited,
+                                      NSString **matchedPath) {
+    if (!root || !selector) return nil;
+    if ([root respondsToSelector:selector]) return root;
+    NSValue *identity = [NSValue valueWithPointer:(__bridge const void *)root];
+    if ([visited containsObject:identity] || depth == 0) return nil;
+    [visited addObject:identity];
+
+    for (Class cls = object_getClass(root); cls && cls != NSObject.class; cls = class_getSuperclass(cls)) {
+        unsigned int count = 0;
+        Ivar *ivars = class_copyIvarList(cls, &count);
+        for (unsigned int index = 0; index < count; index++) {
+            Ivar ivar = ivars[index];
+            const char *encoding = ivar_getTypeEncoding(ivar);
+            if (!encoding || encoding[0] != '@') continue;
+            id value = nil;
+            @try {
+                value = object_getIvar(root, ivar);
+            } @catch (__unused NSException *exception) {
+                continue;
+            }
+            if (!value || value == root) continue;
+            NSString *ivarName = @(ivar_getName(ivar) ?: "<unknown>");
+            if ([value respondsToSelector:selector]) {
+                if (matchedPath) {
+                    *matchedPath = [NSString stringWithFormat:@"%@.%@(%@)",
+                        NSStringFromClass([root class]), ivarName, NSStringFromClass([value class])];
+                }
+                free(ivars);
+                return value;
+            }
+            NSString *className = NSStringFromClass([value class]);
+            BOOL searchRelated = [className localizedCaseInsensitiveContainsString:@"search"] ||
+                                 [className localizedCaseInsensitiveContainsString:@"helper"];
+            if (depth > 1 && searchRelated) {
+                NSString *childPath = nil;
+                id target = NeoWCFindSearchActionTarget(value, selector, depth - 1,
+                                                        visited, &childPath);
+                if (target) {
+                    if (matchedPath) {
+                        *matchedPath = [NSString stringWithFormat:@"%@.%@ -> %@",
+                            NSStringFromClass([root class]), ivarName, childPath ?: className];
+                    }
+                    free(ivars);
+                    return target;
+                }
+            }
+        }
+        free(ivars);
+    }
+    return nil;
+}
+
 static void NeoWCRemoveChatSearchButton(BaseMsgContentViewController *controller) {
     UIBarButtonItem *button = objc_getAssociatedObject(controller, &NeoWCChatSearchButtonKey);
     if (!button || ![controller.navigationItem.rightBarButtonItems containsObject:button]) return;
@@ -3755,29 +3809,39 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
                              helper, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
-    if ([helper respondsToSelector:pushSelector]) {
+    NSString *pushTargetPath = nil;
+    id pushTarget = NeoWCFindSearchActionTarget(helper, pushSelector, 3,
+                                                [NSMutableSet set], &pushTargetPath);
+    if (pushTarget) {
         @try {
-            NeoWCLogAlways(@"聊天搜索：由原生 helper 打开搜索页");
-            ((void (*)(id, SEL, id))objc_msgSend)(helper, pushSelector, nil);
+            NeoWCLogAlways(@"聊天搜索：由内部搜索目标打开页面，target=%@ path=%@",
+                           NSStringFromClass([pushTarget class]), pushTargetPath ?: @"self");
+            ((void (*)(id, SEL, id))objc_msgSend)(pushTarget, pushSelector, nil);
             NeoWCCompatibilityMarkTriggered(@"chat-search-button");
             return;
         } @catch (NSException *exception) {
-            NeoWCLogAlways(@"聊天搜索：原生 helper 打开失败：%@", exception.reason ?: exception.name);
+            NeoWCLogAlways(@"聊天搜索：内部搜索目标打开失败：%@", exception.reason ?: exception.name);
         }
     }
 
     SEL fallbackSelector = NSSelectorFromString(@"onSearchItem");
-    if ([hostController respondsToSelector:fallbackSelector]) {
+    NSString *fallbackPath = nil;
+    id fallbackTarget = [hostController respondsToSelector:fallbackSelector]
+        ? hostController
+        : NeoWCFindSearchActionTarget(helper, fallbackSelector, 3,
+                                      [NSMutableSet set], &fallbackPath);
+    if (fallbackTarget) {
         @try {
-            NeoWCLogAlways(@"聊天搜索：回退到聊天控制器 onSearchItem");
-            ((void (*)(id, SEL))objc_msgSend)(hostController, fallbackSelector);
+            NeoWCLogAlways(@"聊天搜索：回退到 onSearchItem，target=%@ path=%@",
+                           NSStringFromClass([fallbackTarget class]), fallbackPath ?: @"self");
+            ((void (*)(id, SEL))objc_msgSend)(fallbackTarget, fallbackSelector);
             NeoWCCompatibilityMarkTriggered(@"chat-search-button");
             return;
         } @catch (NSException *exception) {
             NeoWCLogAlways(@"聊天搜索：onSearchItem 打开失败：%@", exception.reason ?: exception.name);
         }
     }
-    NeoWCLogAlways(@"聊天搜索：原生 helper 与聊天控制器均无可用打开入口");
+    NeoWCLogAlways(@"聊天搜索：Helper 内部与聊天控制器均无可用打开入口");
 }
 
 static void NeoWCInstallChatSearchButton(BaseMsgContentViewController *controller) {
