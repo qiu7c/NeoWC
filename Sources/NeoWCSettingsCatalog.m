@@ -88,6 +88,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCQuoteJumpImageEnabledKey: @YES,
         NeoWCQuoteJumpVideoEnabledKey: @YES,
         NeoWCChatSearchButtonEnabledKey: @NO,
+        NeoWCChatTopBarCapsuleEnabledKey: @NO,
         NeoWCGroupAtTipsEnabledKey: @NO,
         NeoWCMessageBlockEnabledKey: @NO,
         NeoWCMessageBlockUsersKey: @[],
@@ -231,6 +232,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     ], defaults, collapsed);
     [interaction addObjectsFromArray:@[
         NeoWCItem(@"聊天搜索按钮", @"在聊天页加入微信原生聊天记录搜索", @"magnifyingglass", NeoWCSettingRowKindSwitch, NeoWCChatSearchButtonEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"聊天顶栏胶囊", @"左侧显示头像昵称，右侧合并已开启的搜索与更多", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatTopBarCapsuleEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"输入框滑动操作", @"左滑清空，右滑粘贴", @"hand.draw", NeoWCSettingRowKindSwitch, NeoWCInputSwipeActionsEnabledKey, nil, NeoWCSettingActionNone),
     ]];
 

@@ -50,7 +50,7 @@
 
 - 艾特与关键词边缘提示定位调用 `scrollToMessage:highlight:marginTop:animated:`，`marginTop` 为屏幕高度三分之一；关键词命中后可通过 `getChatCellWithMsg:` 和 `highLightSearchKeyWords:` 高亮。
 - 引用位置跳转与边缘提示是两条不同路径，不能统一强行调用 `returnToOriginalMsg:`。
-- 聊天搜索的独立控制器来自 `MsgSearchHelper getSearcherViewController`。参考回退分支使用 `presentViewController:animated:completion:`，不是把搜索控制器 push 到聊天导航栈。
+- 聊天搜索入口先让聊天控制器执行 `initMsgSearchHelper:`，再读取其原生 `m_oMsgSearchHelper`；打开路径优先使用 `pushSearchControllerWithCompletion:`，兼容分支调用 `onSearchItem`。该实现未调用 `getSearcherViewController` 或自行 `presentViewController:`。
 - 红包详情 Hook 是 `WCRedEnvelopesRedEnvelopesDetailViewController viewWillAppear:`。数据链为 `m_delegate` -> `m_data` -> `m_oWCRedEnvelopesDetailInfo`。
 - 红包金额字段 `m_lTotalAmount`、`m_lRecAmount` 单位为分；数量字段为 `m_lTotalNum`、`m_lRecNum`。
 - `nickNameLabel` 仅用于清理旧的 `\n(¥` 残留；详情应写入 `m_receivedInfoLable` 的 attributedText。默认格式为“总金额、已领个数、剩余个数、剩余金额”，不能把原生领取状态再次当祝福语追加。

@@ -262,7 +262,13 @@ static char NeoWCVoiceTranscriptionDoneKey;
 static char NeoWCVoiceTranscriptionInProgressKey;
 static char NeoWCVoiceTranscriptionRetryCountKey;
 static char NeoWCChatSearchButtonKey;
-static char NeoWCChatSearchHelperKey;
+static char NeoWCChatTopProfileItemKey;
+static char NeoWCChatTopCapsuleItemKey;
+static char NeoWCChatTopOriginalLeftItemsKey;
+static char NeoWCChatTopOriginalRightItemsKey;
+static char NeoWCChatTopOriginalTitleViewKey;
+static char NeoWCChatTopOriginalSupplementKey;
+static char NeoWCChatTopMoreProxyKey;
 static char NeoWCAtTipsViewKey;
 static char NeoWCKeywordTipsViewKey;
 static char NeoWCAtTipsMessagesKey;
@@ -273,6 +279,27 @@ static char NeoWCCallVideoConfirmedKey;
 static __weak BaseMsgContentViewController *NeoWCVisibleChatController;
 static __weak id NeoWCCurrentEditImageLogicController;
 static BOOL NeoWCMomentsDispatchingQuickComment = NO;
+
+@interface NeoWCBarButtonActionProxy : NSObject
+@property (nonatomic, strong) UIBarButtonItem *originalItem;
+- (void)invoke:(id)sender;
+@end
+
+@implementation NeoWCBarButtonActionProxy
+
+- (void)invoke:(id)sender {
+    UIBarButtonItem *item = self.originalItem;
+    if (!item) return;
+    if (item.action) {
+        [UIApplication.sharedApplication sendAction:item.action to:item.target from:item forEvent:nil];
+        return;
+    }
+    UIControl *control = [item.customView isKindOfClass:[UIControl class]] ? (UIControl *)item.customView : nil;
+    if (control) [control sendActionsForControlEvents:UIControlEventTouchUpInside];
+    (void)sender;
+}
+
+@end
 
 @interface NeoWCMomentsFloatMenuSnapshot : NSObject
 @property (nonatomic, assign) CGRect baseFrame;
@@ -3573,23 +3600,23 @@ static void NeoWCRemoveChatSearchButton(BaseMsgContentViewController *controller
 static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) {
     NeoWCLogAlways(@"聊天搜索：收到点击，controller=%@ window=%@",
                    NSStringFromClass(controller.class), NSStringFromClass(controller.view.window.class));
-    id helper = objc_getAssociatedObject(controller, &NeoWCChatSearchHelperKey);
+    SEL initializeSelector = NSSelectorFromString(@"initMsgSearchHelper:");
+    if ([controller respondsToSelector:initializeSelector]) {
+        @try {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, initializeSelector, NO);
+        } @catch (NSException *exception) {
+            NeoWCLogAlways(@"聊天搜索：原生 helper 初始化失败：%@", exception.reason ?: exception.name);
+        }
+    }
+    id helper = NeoWCTweakSafeValue(controller, @"m_oMsgSearchHelper");
+    if (!helper) helper = NeoWCTweakValueForSelectorNames(controller, @[@"m_oMsgSearchHelper"]);
     if (!helper) {
-        Class helperClass = NSClassFromString(@"MsgSearchHelper");
-        SEL initializer = NSSelectorFromString(@"initWithContentsController:");
-        if (!helperClass || ![helperClass instancesRespondToSelector:initializer]) {
-            NeoWCLogAlways(@"聊天搜索：MsgSearchHelper 或 initWithContentsController: 不可用");
-            return;
-        }
-        helper = ((id (*)(id, SEL, id))objc_msgSend)([helperClass alloc], initializer, controller);
-        if (!helper) {
-            NeoWCLogAlways(@"聊天搜索：MsgSearchHelper 初始化返回 nil");
-            return;
-        }
-        objc_setAssociatedObject(controller, &NeoWCChatSearchHelperKey, helper, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NeoWCLogAlways(@"聊天搜索：聊天控制器未生成 m_oMsgSearchHelper");
+        return;
     }
     NSString *session = NeoWCChatUserName(controller);
-    NeoWCLogAlways(@"聊天搜索：helper=%@ session=%@", NSStringFromClass([helper class]), session ?: @"<nil>");
+    NeoWCLogAlways(@"聊天搜索：使用原生 helper=%@ session=%@",
+                   NSStringFromClass([helper class]), session ?: @"<nil>");
     NeoWCTweakSetValue(helper, @"m_sessionId", session);
     NeoWCTweakSetValue(helper, @"m_searchSessionId", session);
     NeoWCTweakSetValue(helper, @"m_delegate", controller);
@@ -3602,42 +3629,34 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
     NeoWCTweakSetValue(helper, @"m_bShowSearchByName", @(isChatRoom));
     NeoWCTweakSetValue(helper, @"m_bShowSearchByTime", @YES);
     NeoWCTweakSetValue(helper, @"bUsePanCancelGesture", @YES);
-    id searchController = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcherViewController"]);
-    if (![searchController isKindOfClass:[UIViewController class]]) {
-        NeoWCLogAlways(@"聊天搜索：控制器获取失败，返回对象=%@",
-                       searchController ? NSStringFromClass([searchController class]) : @"<nil>");
-        return;
-    }
-    UIViewController *standaloneController = (UIViewController *)searchController;
-    if (standaloneController == controller || standaloneController == controller.navigationController) {
-        NeoWCLogAlways(@"聊天搜索：原生组件未返回独立控制器");
-        return;
-    }
-    if (controller.presentedViewController || standaloneController.presentingViewController) return;
-    standaloneController.modalPresentationStyle = UIModalPresentationFullScreen;
-    __weak BaseMsgContentViewController *weakController = controller;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        BaseMsgContentViewController *strongController = weakController;
-        if (!strongController.view.window) {
-            NeoWCLogAlways(@"聊天搜索：聊天页已离开窗口");
-            return;
-        }
-        if (strongController.presentedViewController ||
-            standaloneController.presentingViewController ||
-            (standaloneController.isViewLoaded && standaloneController.view.window)) {
-            NeoWCLogAlways(@"聊天搜索：控制器已处于展示层级，取消重复展示");
-            return;
-        }
+    id searcher = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcher"]);
+    SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
+    for (id target in @[searcher ?: NSNull.null, helper]) {
+        if (target == NSNull.null || ![target respondsToSelector:pushSelector]) continue;
         @try {
-            NeoWCLogAlways(@"聊天搜索：由聊天控制器全屏展示 %@",
-                           NSStringFromClass(standaloneController.class));
-            [strongController presentViewController:standaloneController animated:NO completion:nil];
+            NeoWCLogAlways(@"聊天搜索：调用 %@ pushSearchControllerWithCompletion:",
+                           NSStringFromClass([target class]));
+            ((void (*)(id, SEL, id))objc_msgSend)(target, pushSelector, nil);
             NeoWCCompatibilityMarkTriggered(@"chat-search-button");
-        } @catch (NSException *exception) {
-            NeoWCLogAlways(@"聊天搜索：展示失败：%@", exception.reason ?: exception.name);
             return;
+        } @catch (NSException *exception) {
+            NeoWCLogAlways(@"聊天搜索：pushSearchControllerWithCompletion: 失败：%@",
+                           exception.reason ?: exception.name);
         }
-    });
+    }
+    SEL openSelector = NSSelectorFromString(@"onSearchItem");
+    for (id target in @[controller, helper, searcher ?: NSNull.null]) {
+        if (target == NSNull.null || ![target respondsToSelector:openSelector]) continue;
+        @try {
+            NeoWCLogAlways(@"聊天搜索：调用 %@ onSearchItem", NSStringFromClass([target class]));
+            ((void (*)(id, SEL))objc_msgSend)(target, openSelector);
+            NeoWCCompatibilityMarkTriggered(@"chat-search-button");
+            return;
+        } @catch (NSException *exception) {
+            NeoWCLogAlways(@"聊天搜索：onSearchItem 失败：%@", exception.reason ?: exception.name);
+        }
+    }
+    NeoWCLogAlways(@"聊天搜索：原生 helper、searcher 与聊天控制器均无可用打开入口");
 }
 
 static void NeoWCInstallChatSearchButton(BaseMsgContentViewController *controller) {
@@ -3666,6 +3685,233 @@ static void NeoWCInstallChatSearchButton(BaseMsgContentViewController *controlle
         [items addObject:button];
         controller.navigationItem.rightBarButtonItems = items;
     }
+}
+
+static UIView *NeoWCChatTopAvatarView(id contact, NSString *userName) {
+    NSString *headURL = NeoWCTweakSafeValue(contact, @"m_nsHeadImgUrl");
+    if (![headURL isKindOfClass:[NSString class]] || headURL.length == 0) {
+        headURL = NeoWCTweakSafeValue(contact, @"m_nsHeadImgUrlHD");
+    }
+    Class helperClass = NSClassFromString(@"MMHeadImageHelper");
+    SEL selector = NSSelectorFromString(@"getContactHeadImageViewWithUsrName:headImgUrl:bAutoUpdate:bRoundCorner:");
+    if (helperClass && [helperClass respondsToSelector:selector] && userName.length > 0) {
+        id view = ((id (*)(id, SEL, id, id, BOOL, BOOL))objc_msgSend)(helperClass,
+                                                                      selector,
+                                                                      userName,
+                                                                      headURL ?: @"",
+                                                                      YES,
+                                                                      YES);
+        if ([view isKindOfClass:[UIView class]]) return view;
+    }
+    UIImageView *fallback = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"person.crop.circle.fill"]];
+    fallback.tintColor = UIColor.tertiaryLabelColor;
+    fallback.contentMode = UIViewContentModeScaleAspectFit;
+    return fallback;
+}
+
+static NSString *NeoWCChatTopDisplayName(BaseMsgContentViewController *controller, id contact) {
+    for (NSString *key in @[@"m_nsRemark", @"m_nsNickName", @"m_nsAlias"]) {
+        NSString *value = NeoWCTweakSafeValue(contact, key);
+        if ([value isKindOfClass:[NSString class]] && value.length > 0) return value;
+    }
+    NSString *title = controller.navigationItem.title ?: controller.title;
+    return title.length > 0 ? title : @"聊天";
+}
+
+static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *controller) {
+    id contact = NeoWCTweakValueForSelectorNames(controller, @[@"m_contact", @"chatContact", @"contact"]);
+    if (!contact && [controller respondsToSelector:@selector(GetContact)]) {
+        contact = ((id (*)(id, SEL))objc_msgSend)(controller, @selector(GetContact));
+    }
+    NSString *userName = NeoWCChatUserName(controller);
+    NSString *displayName = NeoWCChatTopDisplayName(controller, contact);
+    CGFloat availableWidth = CGRectGetWidth(UIScreen.mainScreen.bounds) - 215.0;
+    CGFloat width = MIN(160.0, MAX(105.0, availableWidth));
+
+    UIView *container = [UIView new];
+    container.translatesAutoresizingMaskIntoConstraints = NO;
+    container.userInteractionEnabled = NO;
+    UIView *avatar = NeoWCChatTopAvatarView(contact, userName);
+    avatar.translatesAutoresizingMaskIntoConstraints = NO;
+    avatar.clipsToBounds = YES;
+    avatar.layer.cornerRadius = 15.0;
+    [container addSubview:avatar];
+
+    UILabel *label = [UILabel new];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.text = displayName;
+    label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    label.adjustsFontForContentSizeCategory = YES;
+    label.adjustsFontSizeToFitWidth = YES;
+    label.minimumScaleFactor = 0.78;
+    label.textColor = UIColor.labelColor;
+    label.lineBreakMode = NSLineBreakByTruncatingTail;
+    label.numberOfLines = 1;
+    label.accessibilityLabel = displayName;
+    [container addSubview:label];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [container.widthAnchor constraintEqualToConstant:width],
+        [container.heightAnchor constraintEqualToConstant:36.0],
+        [avatar.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [avatar.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
+        [avatar.widthAnchor constraintEqualToConstant:30.0],
+        [avatar.heightAnchor constraintEqualToConstant:30.0],
+        [label.leadingAnchor constraintEqualToAnchor:avatar.trailingAnchor constant:8.0],
+        [label.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [label.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
+    ]];
+    return [[UIBarButtonItem alloc] initWithCustomView:container];
+}
+
+static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibilityLabel) {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.translatesAutoresizingMaskIntoConstraints = NO;
+    [button setImage:[image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] forState:UIControlStateNormal];
+    button.tintColor = UIColor.labelColor;
+    button.accessibilityLabel = accessibilityLabel;
+    return button;
+}
+
+static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *controller,
+                                                UIBarButtonItem *moreItem,
+                                                BOOL showSearch) {
+    if (!showSearch && !moreItem) return nil;
+    UIVisualEffectView *capsule = [[UIVisualEffectView alloc]
+        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial]];
+    capsule.translatesAutoresizingMaskIntoConstraints = NO;
+    capsule.clipsToBounds = YES;
+    capsule.layer.cornerRadius = 17.0;
+    capsule.layer.borderWidth = 0.5;
+    capsule.layer.borderColor = [UIColor.separatorColor colorWithAlphaComponent:0.45].CGColor;
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.alignment = UIStackViewAlignmentFill;
+    stack.distribution = UIStackViewDistributionFillEqually;
+    [capsule.contentView addSubview:stack];
+
+    NSUInteger buttonCount = 0;
+    if (showSearch) {
+        UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:15.0
+                                                                                                      weight:UIImageSymbolWeightRegular];
+        UIButton *search = NeoWCChatTopCapsuleButton([UIImage systemImageNamed:@"magnifyingglass"
+                                                               withConfiguration:configuration], @"搜索聊天记录");
+        [search addTarget:controller action:@selector(neowc_openNativeChatSearch:) forControlEvents:UIControlEventTouchUpInside];
+        [stack addArrangedSubview:search];
+        buttonCount++;
+    }
+    if (moreItem) {
+        if (buttonCount > 0) {
+            UIView *divider = [UIView new];
+            divider.translatesAutoresizingMaskIntoConstraints = NO;
+            divider.backgroundColor = [UIColor.separatorColor colorWithAlphaComponent:0.55];
+            [capsule.contentView addSubview:divider];
+            [NSLayoutConstraint activateConstraints:@[
+                [divider.centerXAnchor constraintEqualToAnchor:capsule.contentView.centerXAnchor],
+                [divider.centerYAnchor constraintEqualToAnchor:capsule.contentView.centerYAnchor],
+                [divider.widthAnchor constraintEqualToConstant:0.5],
+                [divider.heightAnchor constraintEqualToConstant:18.0],
+            ]];
+        }
+        UIImage *moreImage = moreItem.image ?: [UIImage systemImageNamed:@"ellipsis"];
+        UIButton *more = NeoWCChatTopCapsuleButton(moreImage, moreItem.accessibilityLabel ?: @"更多");
+        NeoWCBarButtonActionProxy *proxy = [NeoWCBarButtonActionProxy new];
+        proxy.originalItem = moreItem;
+        objc_setAssociatedObject(controller, &NeoWCChatTopMoreProxyKey, proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [more addTarget:proxy action:@selector(invoke:) forControlEvents:UIControlEventTouchUpInside];
+        if (moreItem.menu) {
+            more.menu = moreItem.menu;
+            more.showsMenuAsPrimaryAction = YES;
+        }
+        [stack addArrangedSubview:more];
+        buttonCount++;
+    }
+    CGFloat width = 40.0 * buttonCount;
+    [NSLayoutConstraint activateConstraints:@[
+        [capsule.widthAnchor constraintEqualToConstant:width],
+        [capsule.heightAnchor constraintEqualToConstant:34.0],
+        [stack.leadingAnchor constraintEqualToAnchor:capsule.contentView.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:capsule.contentView.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:capsule.contentView.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:capsule.contentView.bottomAnchor],
+    ]];
+    return [[UIBarButtonItem alloc] initWithCustomView:capsule];
+}
+
+static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller) {
+    NSArray *originalLeft = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey);
+    if (!originalLeft) return;
+    NSArray *originalRight = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey) ?: @[];
+    id originalTitleView = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalTitleViewKey);
+    NSNumber *originalSupplement = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalSupplementKey);
+    controller.navigationItem.leftBarButtonItems = originalLeft;
+    controller.navigationItem.rightBarButtonItems = originalRight;
+    controller.navigationItem.titleView = originalTitleView == NSNull.null ? nil : originalTitleView;
+    controller.navigationItem.leftItemsSupplementBackButton = originalSupplement.boolValue;
+    const void *keys[] = {&NeoWCChatTopProfileItemKey, &NeoWCChatTopCapsuleItemKey,
+                          &NeoWCChatTopOriginalLeftItemsKey, &NeoWCChatTopOriginalRightItemsKey,
+                          &NeoWCChatTopOriginalTitleViewKey, &NeoWCChatTopOriginalSupplementKey,
+                          &NeoWCChatTopMoreProxyKey};
+    for (NSUInteger index = 0; index < sizeof(keys) / sizeof(keys[0]); index++) {
+        objc_setAssociatedObject(controller, keys[index], nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
+static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller) {
+    if (!NeoWCEnhancementEnabled(NeoWCChatTopBarCapsuleEnabledKey)) {
+        NeoWCRestoreChatTopBar(controller);
+        NeoWCInstallChatSearchButton(controller);
+        return;
+    }
+    NeoWCRemoveChatSearchButton(controller);
+    UINavigationItem *navigationItem = controller.navigationItem;
+    NSArray *originalLeft = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey);
+    UIBarButtonItem *installedCapsule = objc_getAssociatedObject(controller, &NeoWCChatTopCapsuleItemKey);
+    if (originalLeft && (!installedCapsule ||
+        ![navigationItem.rightBarButtonItems containsObject:installedCapsule])) {
+        NSMutableArray *refreshedRight = [navigationItem.rightBarButtonItems mutableCopy] ?: [NSMutableArray array];
+        UIBarButtonItem *standaloneSearch = objc_getAssociatedObject(controller, &NeoWCChatSearchButtonKey);
+        [refreshedRight removeObject:standaloneSearch];
+        if (refreshedRight.count > 0) {
+            objc_setAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey,
+                                     refreshedRight, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    }
+    if (!originalLeft) {
+        originalLeft = navigationItem.leftBarButtonItems ?: @[];
+        NSMutableArray *originalRight = [navigationItem.rightBarButtonItems mutableCopy] ?: [NSMutableArray array];
+        UIBarButtonItem *standaloneSearch = objc_getAssociatedObject(controller, &NeoWCChatSearchButtonKey);
+        [originalRight removeObject:standaloneSearch];
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey, originalLeft, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey, originalRight, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalTitleViewKey,
+                                 navigationItem.titleView ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalSupplementKey,
+                                 @(navigationItem.leftItemsSupplementBackButton), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    NSArray<UIBarButtonItem *> *originalRight = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey) ?: @[];
+    UIBarButtonItem *moreItem = originalRight.firstObject;
+    NSArray *remainingRight = originalRight.count > 1
+        ? [originalRight subarrayWithRange:NSMakeRange(1, originalRight.count - 1)] : @[];
+
+    UIBarButtonItem *profileItem = NeoWCChatTopProfileItem(controller);
+    NSMutableArray *leftItems = [originalLeft mutableCopy];
+    [leftItems addObject:profileItem];
+    NSNumber *originalSupplement = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalSupplementKey);
+    navigationItem.leftItemsSupplementBackButton = originalLeft.count == 0 ? YES : originalSupplement.boolValue;
+    navigationItem.leftBarButtonItems = leftItems;
+    navigationItem.titleView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 1, 1)];
+    objc_setAssociatedObject(controller, &NeoWCChatTopProfileItemKey, profileItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    BOOL showSearch = NeoWCEnhancementEnabled(NeoWCChatSearchButtonEnabledKey);
+    UIBarButtonItem *capsuleItem = NeoWCChatTopCapsuleItem(controller, moreItem, showSearch);
+    NSMutableArray *rightItems = [NSMutableArray array];
+    if (capsuleItem) [rightItems addObject:capsuleItem];
+    [rightItems addObjectsFromArray:remainingRight];
+    navigationItem.rightBarButtonItems = rightItems;
+    objc_setAssociatedObject(controller, &NeoWCChatTopCapsuleItemKey, capsuleItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 static BOOL NeoWCJumpToReferencedMessage(CommonMessageCellView *cell) {
@@ -3950,7 +4196,7 @@ static BOOL NeoWCHighlightEdgeTipKeywords(BaseMsgContentViewController *controll
 
 static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const void *viewKey, const void *messagesKey) {
     NSMutableArray *messages = NeoWCEdgeTipMessages(controller, messagesKey);
-    id message = messages.lastObject;
+    id message = messages.firstObject;
     if (!message) {
         NeoWCHideEdgeTip(controller, viewKey, YES);
         return;
@@ -3965,22 +4211,24 @@ static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const
                        NeoWCTweakSafeValue(message, @"m_n64MesSvrID") ?:
                        NeoWCTweakSafeValue(message, @"m_uiMesLocalID") ?: @"<unknown>");
         ((void (*)(id, SEL, id, BOOL, CGFloat, BOOL))objc_msgSend)(controller, scrollSelector,
-                                                                  message, NO, marginTop, YES);
+                                                                  message, !keyword, marginTop, YES);
         opened = YES;
     }
     if (!opened) return;
-    [messages removeLastObject];
-    BOOL highlighted = keyword && NeoWCHighlightEdgeTipKeywords(controller, message, matchedKeywords);
-    if (keyword && matchedKeywords.count > 0 && !highlighted) {
+    [messages removeObjectAtIndex:0];
+    if (keyword && matchedKeywords.count > 0) {
+        NeoWCHighlightEdgeTipKeywords(controller, message, matchedKeywords);
         __weak BaseMsgContentViewController *weakController = controller;
         __strong id strongMessage = message;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            BaseMsgContentViewController *strongController = weakController;
-            if (strongController.view.window) {
-                NeoWCHighlightEdgeTipKeywords(strongController, strongMessage, matchedKeywords);
-            }
-        });
+        for (NSNumber *delay in @[@0.35, @1.0]) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                BaseMsgContentViewController *strongController = weakController;
+                if (strongController.view.window) {
+                    NeoWCHighlightEdgeTipKeywords(strongController, strongMessage, matchedKeywords);
+                }
+            });
+        }
     }
     UIView *tip = objc_getAssociatedObject(controller, viewKey);
     SEL countSelector = NSSelectorFromString(@"setAtTipsRemainingCount:");
@@ -3995,7 +4243,11 @@ static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const
 
 - (void)viewDidLoad {
     %orig;
-    NeoWCInstallChatSearchButton(self);
+    __weak BaseMsgContentViewController *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        BaseMsgContentViewController *strongSelf = weakSelf;
+        if (strongSelf) NeoWCUpdateChatTopBar(strongSelf);
+    });
 }
 
 - (void)ShowMultiSelectMoreOperation:(id)argument {
@@ -4039,7 +4291,7 @@ static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const
 - (void)viewDidAppear:(BOOL)animated {
     %orig(animated);
     NeoWCVisibleChatController = self;
-    NeoWCInstallChatSearchButton(self);
+    NeoWCUpdateChatTopBar(self);
     NeoWCDrainPendingEdgeTips(self);
     __weak UIViewController *weakController = (UIViewController *)self;
     dispatch_async(dispatch_get_main_queue(), ^{

@@ -20,6 +20,7 @@ NSString *const NeoWCQuoteJumpEnabledKey = @"com.qiu7c.neowc.chat.quote-jump";
 NSString *const NeoWCQuoteJumpImageEnabledKey = @"com.qiu7c.neowc.chat.quote-jump.image";
 NSString *const NeoWCQuoteJumpVideoEnabledKey = @"com.qiu7c.neowc.chat.quote-jump.video";
 NSString *const NeoWCChatSearchButtonEnabledKey = @"com.qiu7c.neowc.chat.search-button";
+NSString *const NeoWCChatTopBarCapsuleEnabledKey = @"com.qiu7c.neowc.chat.top-bar-capsule";
 NSString *const NeoWCGroupAtTipsEnabledKey = @"com.qiu7c.neowc.chat.group-at-tips";
 NSString *const NeoWCMessageBlockEnabledKey = @"com.qiu7c.neowc.message.block";
 NSString *const NeoWCMessageBlockUsersKey = @"com.qiu7c.neowc.message.block.users";
