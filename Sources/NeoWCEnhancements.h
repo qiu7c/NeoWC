@@ -20,6 +20,7 @@ FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpImageEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpVideoEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatSearchButtonEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarCapsuleEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCChatTopBarEffectStyleKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarAvatarSizeKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarNicknameSizeKey;
 FOUNDATION_EXPORT NSString *const NeoWCGroupAtTipsEnabledKey;
@@ -66,6 +67,11 @@ FOUNDATION_EXPORT NSString *const NeoWCHideScreenshotForwardKey;
 typedef NS_ENUM(NSInteger, NeoWCStepMode) {
     NeoWCStepModeDailyFixed = 0,
     NeoWCStepModeDailyRandom = 1,
+};
+
+typedef NS_ENUM(NSInteger, NeoWCChatTopBarEffectStyle) {
+    NeoWCChatTopBarEffectStyleMaterial = 0,
+    NeoWCChatTopBarEffectStyleLiquid = 1,
 };
 FOUNDATION_EXPORT NSString *const NeoWCPageScaleEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCPageScaleGlobalPercentKey;

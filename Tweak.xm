@@ -287,6 +287,7 @@ static char NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey;
 static char NeoWCChatTopContainerOriginalBackgroundColorKey;
 static char NeoWCChatTopBackgroundOriginalHiddenKey;
 static char NeoWCChatTopGlassEffectMarkerKey;
+static char NeoWCChatGlassAppliedStyleKey;
 static char NeoWCChatTopOriginalClipsToBoundsKey;
 static char NeoWCChatTopOriginalBorderWidthKey;
 static char NeoWCChatTopOriginalCornerRadiusKey;
@@ -3257,6 +3258,7 @@ static void NeoWCRegisterPlugin(void) {
                         NSString *changedKey = [note.object isKindOfClass:[NSString class]] ? note.object : nil;
                         BOOL refreshChatTop = !changedKey ||
                             [changedKey isEqualToString:NeoWCChatTopBarCapsuleEnabledKey] ||
+                            [changedKey isEqualToString:NeoWCChatTopBarEffectStyleKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarAvatarSizeKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarNicknameSizeKey] ||
                             [changedKey isEqualToString:NeoWCChatSearchButtonEnabledKey];
@@ -3805,24 +3807,59 @@ static NSString *NeoWCChatTopDisplayName(BaseMsgContentViewController *controlle
 
 static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibilityLabel);
 
+static NeoWCChatTopBarEffectStyle NeoWCChatTopEffectStyle(void) {
+    NSInteger value = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCChatTopBarEffectStyleKey];
+    return value == NeoWCChatTopBarEffectStyleLiquid
+        ? NeoWCChatTopBarEffectStyleLiquid
+        : NeoWCChatTopBarEffectStyleMaterial;
+}
+
+static UIVisualEffect *NeoWCChatTopVisualEffect(void) {
+    if (NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleLiquid) {
+        Class glassEffectClass = NSClassFromString(@"UIGlassEffect");
+        SEL factory = NSSelectorFromString(@"effectWithStyle:");
+        if (glassEffectClass && [glassEffectClass respondsToSelector:factory]) {
+            UIVisualEffect *effect = ((id (*)(id, SEL, NSInteger))objc_msgSend)(glassEffectClass,
+                                                                                factory,
+                                                                                0);
+            SEL interactiveSelector = NSSelectorFromString(@"setInteractive:");
+            if ([effect respondsToSelector:interactiveSelector]) {
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(effect, interactiveSelector, NO);
+            }
+            if (effect) return effect;
+        }
+        return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
+    }
+    return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
+}
+
+static void NeoWCConfigureChatTopGlassLayer(UIVisualEffectView *effectView) {
+    BOOL liquid = NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleLiquid;
+    effectView.layer.borderWidth = liquid ? 0.75 : 0.0;
+    effectView.layer.borderColor = liquid
+        ? [UIColor colorWithWhite:1.0 alpha:0.32].CGColor
+        : UIColor.clearColor.CGColor;
+}
+
 static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectView **effectViewOut) {
     UIView *container = [UIView new];
     container.translatesAutoresizingMaskIntoConstraints = NO;
     container.backgroundColor = UIColor.clearColor;
     container.layer.shadowColor = UIColor.blackColor.CGColor;
-    container.layer.shadowOpacity = 0.06;
-    container.layer.shadowRadius = 5.0;
+    BOOL liquid = NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleLiquid;
+    container.layer.shadowOpacity = liquid ? 0.10 : 0.06;
+    container.layer.shadowRadius = liquid ? 8.0 : 5.0;
     container.layer.shadowOffset = CGSizeMake(0.0, 1.0);
     objc_setAssociatedObject(container, &NeoWCChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     UIVisualEffectView *effectView = [[UIVisualEffectView alloc]
-        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial]];
+        initWithEffect:NeoWCChatTopVisualEffect()];
     effectView.translatesAutoresizingMaskIntoConstraints = NO;
     effectView.clipsToBounds = YES;
     effectView.layer.cornerRadius = cornerRadius;
     effectView.layer.cornerCurve = kCACornerCurveContinuous;
-    effectView.layer.borderWidth = 0.0;
+    NeoWCConfigureChatTopGlassLayer(effectView);
     objc_setAssociatedObject(effectView, &NeoWCChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [container addSubview:effectView];
@@ -4839,8 +4876,7 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
     }
 
     if (!blurView) {
-        blurView = [[UIVisualEffectView alloc]
-            initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial]];
+        blurView = [[UIVisualEffectView alloc] initWithEffect:nil];
         blurView.userInteractionEnabled = NO;
         blurView.clipsToBounds = YES;
         blurView.layer.cornerRadius = 14.0;
@@ -4849,6 +4885,14 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
                                  @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey,
                                  blurView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    NSNumber *appliedStyle = objc_getAssociatedObject(blurView, &NeoWCChatGlassAppliedStyleKey);
+    NSNumber *desiredStyle = @(NeoWCChatTopEffectStyle());
+    if (![appliedStyle isEqualToNumber:desiredStyle]) {
+        blurView.effect = NeoWCChatTopVisualEffect();
+        NeoWCConfigureChatTopGlassLayer(blurView);
+        objc_setAssociatedObject(blurView, &NeoWCChatGlassAppliedStyleKey,
+                                 desiredStyle, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     blurView.frame = CGRectInset(tipsView.bounds, 8.0, 0.0);
     blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;

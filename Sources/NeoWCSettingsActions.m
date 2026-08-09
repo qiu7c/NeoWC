@@ -170,6 +170,35 @@
     [self presentSheet:sheet];
 }
 
+- (void)presentChatTopEffectStylePicker {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSInteger current = [defaults integerForKey:NeoWCChatTopBarEffectStyleKey];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"模糊效果"
+                                                                    message:@"液态玻璃仅在系统支持时使用原生效果；其他系统自动使用兼容材质。"
+                                                             preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray *options = @[
+        @{@"title": @"超薄玻璃", @"value": @(NeoWCChatTopBarEffectStyleMaterial)},
+        @{@"title": @"液态玻璃", @"value": @(NeoWCChatTopBarEffectStyleLiquid)},
+    ];
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary *option in options) {
+        NSInteger value = [option[@"value"] integerValue];
+        NSString *title = value == current
+            ? [NSString stringWithFormat:@"✓  %@", option[@"title"]]
+            : option[@"title"];
+        [sheet addAction:[UIAlertAction actionWithTitle:title
+                                                     style:UIAlertActionStyleDefault
+                                                   handler:^(__unused UIAlertAction *action) {
+            [defaults setInteger:value forKey:NeoWCChatTopBarEffectStyleKey];
+            [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification
+                                                               object:NeoWCChatTopBarEffectStyleKey];
+            [weakSelf reload];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentSheet:sheet];
+}
+
 - (void)presentStepModePicker {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"每日目标模式" message:@"随机模式每天只生成一次目标" preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray *options = @[@{@"title": @"每日固定", @"value": @(NeoWCStepModeDailyFixed)}, @{@"title": @"每日随机", @"value": @(NeoWCStepModeDailyRandom)}];
@@ -301,6 +330,7 @@
         case NeoWCSettingActionRedEnvelopeFontSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 10 到 24 之间的字号" key:NeoWCRedEnvelopeDetailFontSizeKey minimum:10 maximum:24 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatTopAvatarSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 24 到 34 之间的头像大小" key:NeoWCChatTopBarAvatarSizeKey minimum:24 maximum:34 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatTopNicknameSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 12 到 18 之间的昵称字号" key:NeoWCChatTopBarNicknameSizeKey minimum:12 maximum:18 notifyChange:YES applyScale:NO]; break;
+        case NeoWCSettingActionChatTopEffectStyle: [self presentChatTopEffectStylePicker]; break;
         default: break;
     }
 }
