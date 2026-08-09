@@ -292,6 +292,8 @@ static char NeoWCChatTopOriginalBorderWidthKey;
 static char NeoWCChatTopOriginalCornerRadiusKey;
 static char NeoWCChatTopContentNavigationBarKey;
 static char NeoWCChatTopOriginalVisualEffectKey;
+static char NeoWCChatTopOriginalVisualEffectMaskKey;
+static char NeoWCChatTopFadeVisualEffectMaskKey;
 static char NeoWCAtTipsViewKey;
 static char NeoWCKeywordTipsViewKey;
 static char NeoWCAtTipsMessagesKey;
@@ -3808,8 +3810,7 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     }
     NSString *userName = NeoWCChatUserName(controller);
     NSString *displayName = NeoWCChatTopDisplayName(controller, contact);
-    CGFloat availableWidth = CGRectGetWidth(UIScreen.mainScreen.bounds) - 130.0;
-    CGFloat width = MIN(205.0, MAX(150.0, availableWidth));
+    CGFloat availableWidth = MIN(205.0, CGRectGetWidth(UIScreen.mainScreen.bounds) - 130.0);
 
     UIVisualEffectView *glass = nil;
     UIView *container = NeoWCChatTopGlassContainer(18.0, &glass);
@@ -3846,6 +3847,9 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     label.numberOfLines = 1;
     label.accessibilityLabel = displayName;
     [content addSubview:label];
+
+    CGFloat labelWidth = ceil([displayName sizeWithAttributes:@{NSFontAttributeName: label.font}].width);
+    CGFloat width = MIN(availableWidth, MAX(94.0, 83.0 + labelWidth));
 
     [NSLayoutConstraint activateConstraints:@[
         [container.widthAnchor constraintEqualToConstant:width],
@@ -4063,28 +4067,55 @@ static void NeoWCSetChatNavigationDirectBackgroundsHidden(UINavigationBar *navig
 static void NeoWCSetChatNavigationHostTransparent(UIView *hostView, BOOL transparent);
 static void NeoWCSetChatNavigationContainerClear(UIView *view, BOOL clear);
 
-static void NeoWCSetVisualEffectsTransparent(UIView *view, BOOL transparent) {
+static void NeoWCSetVisualEffectsTopFade(UIView *view, BOOL enabled) {
     if (!view) return;
     if ([view isKindOfClass:[UIVisualEffectView class]]) {
         UIVisualEffectView *effectView = (UIVisualEffectView *)view;
         id originalEffect = objc_getAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectKey);
-        if (transparent) {
+        id originalMask = objc_getAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectMaskKey);
+        if (enabled) {
             if (!originalEffect) {
                 objc_setAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectKey,
                                          effectView.effect ?: NSNull.null,
                                          OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                objc_setAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectMaskKey,
+                                         effectView.layer.mask ?: NSNull.null,
+                                         OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             }
-            effectView.effect = nil;
+            if (!effectView.effect) {
+                effectView.effect = originalEffect && originalEffect != NSNull.null
+                    ? originalEffect
+                    : [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
+            }
+            CAGradientLayer *fadeMask = objc_getAssociatedObject(effectView, &NeoWCChatTopFadeVisualEffectMaskKey);
+            if (!fadeMask) {
+                fadeMask = [CAGradientLayer layer];
+                fadeMask.startPoint = CGPointMake(0.5, 0.0);
+                fadeMask.endPoint = CGPointMake(0.5, 1.0);
+                fadeMask.colors = @[(id)UIColor.blackColor.CGColor,
+                                    (id)UIColor.clearColor.CGColor,
+                                    (id)UIColor.clearColor.CGColor];
+                fadeMask.locations = @[@0.0, @0.30, @1.0];
+                objc_setAssociatedObject(effectView, &NeoWCChatTopFadeVisualEffectMaskKey,
+                                         fadeMask, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            }
+            fadeMask.frame = effectView.bounds;
+            effectView.layer.mask = fadeMask;
             NeoWCSetChatNavigationContainerClear(effectView, YES);
         } else if (originalEffect) {
             effectView.effect = originalEffect == NSNull.null ? nil : originalEffect;
+            effectView.layer.mask = originalMask == NSNull.null ? nil : originalMask;
             NeoWCSetChatNavigationContainerClear(effectView, NO);
             objc_setAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectKey,
+                                     nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectMaskKey,
+                                     nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(effectView, &NeoWCChatTopFadeVisualEffectMaskKey,
                                      nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
     }
     for (UIView *subview in view.subviews) {
-        NeoWCSetVisualEffectsTransparent(subview, transparent);
+        NeoWCSetVisualEffectsTopFade(subview, enabled);
     }
 }
 
@@ -4094,6 +4125,10 @@ static void NeoWCSetChatContentNavigationBackgroundTransparent(BaseMsgContentVie
     if (transparent && (!contentNavigationBar || !contentNavigationBar.superview)) {
         Class contentNavigationBarClass = NSClassFromString(@"MMNewMsgContentNavBar");
         contentNavigationBar = NeoWCFirstDescendantOfClass(controller.view, contentNavigationBarClass);
+        if (!contentNavigationBar) {
+            contentNavigationBarClass = NSClassFromString(@"MMMsgContentNavBar");
+            contentNavigationBar = NeoWCFirstDescendantOfClass(controller.view, contentNavigationBarClass);
+        }
         if (contentNavigationBar) {
             objc_setAssociatedObject(controller, &NeoWCChatTopContentNavigationBarKey,
                                      contentNavigationBar, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -4107,7 +4142,7 @@ static void NeoWCSetChatContentNavigationBackgroundTransparent(BaseMsgContentVie
                            CGRectGetHeight(subview.bounds) >= CGRectGetHeight(contentNavigationBar.bounds) - 1.0;
         if (fillsTopBar && NeoWCViewContainsVisualEffect(subview)) {
             NeoWCSetChatNavigationContainerClear(subview, transparent);
-            NeoWCSetVisualEffectsTransparent(subview, transparent);
+            NeoWCSetVisualEffectsTopFade(subview, transparent);
             for (UIView *backgroundSubview in subview.subviews) {
                 if (CGRectGetHeight(backgroundSubview.bounds) <= 1.0) {
                     NeoWCSetChatNavigationContainerClear(backgroundSubview, transparent);
