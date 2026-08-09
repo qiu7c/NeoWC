@@ -2112,6 +2112,24 @@ static UIButton *NeoWCMomentsForwardButton(id target, SEL action) {
     return button;
 }
 
+static BOOL NeoWCMomentsVisibleTextIntersectsRect(UIView *view,
+                                                   UIView *root,
+                                                   UIView *excludedView,
+                                                   UIView *excludedLabel,
+                                                   CGRect rect) {
+    if (!view || view == excludedView || view == excludedLabel || view.hidden || view.alpha <= 0.01) return NO;
+    if ([view isKindOfClass:[UILabel class]] && ((UILabel *)view).text.length > 0) {
+        UILabel *label = (UILabel *)view;
+        CGRect textRect = [label textRectForBounds:label.bounds limitedToNumberOfLines:label.numberOfLines];
+        CGRect textFrame = [label convertRect:textRect toView:root];
+        if (CGRectIntersectsRect(textFrame, rect)) return YES;
+    }
+    for (UIView *subview in view.subviews) {
+        if (NeoWCMomentsVisibleTextIntersectsRect(subview, root, excludedView, excludedLabel, rect)) return YES;
+    }
+    return NO;
+}
+
 static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
     UIButton *button = objc_getAssociatedObject(cell, &NeoWCMomentsForwardButtonKey);
     BOOL shouldShow = NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey) &&
@@ -2156,11 +2174,26 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
     CGRect originalFrameInCell = operateSuperview
         ? [operateSuperview convertRect:originalFrame toView:cell]
         : [operateButton convertRect:operateButton.bounds toView:cell];
-    operateButton.frame = shiftedFrame;
-    button.frame = CGRectMake(CGRectGetMidX(originalFrameInCell) - 16.0,
-                              CGRectGetMidY(originalFrameInCell) - 16.0,
-                              32.0,
-                              32.0);
+    CGRect shiftedFrameInCell = operateSuperview
+        ? [operateSuperview convertRect:shiftedFrame toView:cell]
+        : shiftedFrame;
+    UIView *timeLabel = NeoWCMomentsObjectForName(cell, @"m_timeLabel");
+    BOOL shouldStackVertically = NeoWCEnhancementEnabled(NeoWCMomentsPreciseTimeKey) &&
+        NeoWCMomentsVisibleTextIntersectsRect(cell, cell, operateButton, timeLabel, shiftedFrameInCell) &&
+        CGRectGetMinY(originalFrameInCell) >= 34.0;
+    if (shouldStackVertically) {
+        operateButton.frame = originalFrame;
+        button.frame = CGRectMake(CGRectGetMidX(originalFrameInCell) - 16.0,
+                                  CGRectGetMinY(originalFrameInCell) - 34.0,
+                                  32.0,
+                                  32.0);
+    } else {
+        operateButton.frame = shiftedFrame;
+        button.frame = CGRectMake(CGRectGetMidX(originalFrameInCell) - 16.0,
+                                  CGRectGetMidY(originalFrameInCell) - 16.0,
+                                  32.0,
+                                  32.0);
+    }
     button.hidden = NO;
     button.alpha = 1.0;
     [cell bringSubviewToFront:button];
@@ -3552,9 +3585,14 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
     id searchController = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcherViewController"]);
     if (![searchController isKindOfClass:[UIViewController class]]) return;
     UIViewController *standaloneController = searchController;
+    for (NSUInteger depth = 0; standaloneController.parentViewController && depth < 8; depth++) {
+        UIViewController *parent = standaloneController.parentViewController;
+        if (parent == controller || parent == controller.navigationController) return;
+        standaloneController = parent;
+    }
+    if (standaloneController.parentViewController) return;
     if (standaloneController == controller ||
         standaloneController == controller.navigationController ||
-        standaloneController.parentViewController ||
         standaloneController.presentingViewController ||
         (standaloneController.isViewLoaded && standaloneController.view.window)) return;
     standaloneController.modalPresentationStyle = UIModalPresentationFullScreen;
@@ -3566,7 +3604,6 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
         UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
         if (!presenter || !presenter.view.window || presenter.presentedViewController) return;
         if (standaloneController == presenter ||
-            standaloneController.parentViewController ||
             standaloneController.presentingViewController ||
             (standaloneController.isViewLoaded && standaloneController.view.window)) return;
         @try {

@@ -58,7 +58,7 @@
         return [supportedMeTitles containsObject:title];
     }]];
     if (![filteredMeTitles isEqualToArray:hiddenMeTitles]) [defaults setObject:filteredMeTitles forKey:NeoWCMeMenuHiddenTitlesKey];
-    self.collapsedFeatureKeys = [NSMutableSet setWithArray:[defaults arrayForKey:NeoWCCollapsedFeaturesKey] ?: @[]];
+    [self loadCollapsedFeatureKeys];
     self.title = [self titleForCategory:self.category];
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
     self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
@@ -101,6 +101,7 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    [self loadCollapsedFeatureKeys];
     [self.profileHeader refreshProfile];
     [self reloadSettingsPreservingPositionApplyScale:YES];
 }
@@ -129,8 +130,16 @@
     }];
 }
 
+- (void)loadCollapsedFeatureKeys {
+    NSArray<NSString *> *savedKeys = [NSUserDefaults.standardUserDefaults arrayForKey:NeoWCCollapsedFeaturesKey] ?: @[];
+    self.collapsedFeatureKeys = [NSMutableSet setWithArray:savedKeys];
+}
+
 - (void)saveCollapsedFeatureKeys {
-    [NSUserDefaults.standardUserDefaults setObject:self.collapsedFeatureKeys.allObjects forKey:NeoWCCollapsedFeaturesKey];
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSArray<NSString *> *savedKeys = [self.collapsedFeatureKeys.allObjects sortedArrayUsingSelector:@selector(compare:)];
+    [defaults setObject:savedKeys forKey:NeoWCCollapsedFeaturesKey];
+    [defaults synchronize];
 }
 
 - (NeoWCSettingItem *)itemAtIndexPath:(NSIndexPath *)indexPath {
