@@ -275,6 +275,12 @@ static char NeoWCChatTopOriginalCompactAppearanceKey;
 static char NeoWCChatTopOriginalScrollEdgeAppearanceKey;
 static char NeoWCChatTopBackgroundOriginalAlphaKey;
 static char NeoWCChatTopPlaceholderTitleViewKey;
+static char NeoWCChatTopOriginalNavigationStandardAppearanceKey;
+static char NeoWCChatTopOriginalNavigationCompactAppearanceKey;
+static char NeoWCChatTopOriginalNavigationScrollEdgeAppearanceKey;
+static char NeoWCChatTopOriginalNavigationTranslucentKey;
+static char NeoWCChatTopOriginalEdgesForExtendedLayoutKey;
+static char NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey;
 static char NeoWCAtTipsViewKey;
 static char NeoWCKeywordTipsViewKey;
 static char NeoWCAtTipsMessagesKey;
@@ -3744,18 +3750,17 @@ static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectVi
     container.translatesAutoresizingMaskIntoConstraints = NO;
     container.backgroundColor = UIColor.clearColor;
     container.layer.shadowColor = UIColor.blackColor.CGColor;
-    container.layer.shadowOpacity = 0.12;
-    container.layer.shadowRadius = 8.0;
-    container.layer.shadowOffset = CGSizeMake(0.0, 2.0);
+    container.layer.shadowOpacity = 0.06;
+    container.layer.shadowRadius = 5.0;
+    container.layer.shadowOffset = CGSizeMake(0.0, 1.0);
 
     UIVisualEffectView *effectView = [[UIVisualEffectView alloc]
-        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial]];
+        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial]];
     effectView.translatesAutoresizingMaskIntoConstraints = NO;
     effectView.clipsToBounds = YES;
     effectView.layer.cornerRadius = cornerRadius;
     effectView.layer.cornerCurve = kCACornerCurveContinuous;
-    effectView.layer.borderWidth = 0.5;
-    effectView.layer.borderColor = [UIColor.separatorColor colorWithAlphaComponent:0.38].CGColor;
+    effectView.layer.borderWidth = 0.0;
     [container addSubview:effectView];
     [NSLayoutConstraint activateConstraints:@[
         [effectView.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
@@ -3903,15 +3908,31 @@ static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *co
     return [[UIBarButtonItem alloc] initWithCustomView:capsule];
 }
 
-static void NeoWCApplyTransparentChatTopAppearance(UINavigationItem *navigationItem) {
+static UINavigationBarAppearance *NeoWCTransparentChatTopAppearance(void) {
     UINavigationBarAppearance *appearance = [UINavigationBarAppearance new];
     [appearance configureWithTransparentBackground];
     appearance.backgroundColor = UIColor.clearColor;
     appearance.backgroundEffect = nil;
     appearance.shadowColor = UIColor.clearColor;
+    return appearance;
+}
+
+static void NeoWCApplyTransparentChatTopAppearance(BaseMsgContentViewController *controller) {
+    UINavigationItem *navigationItem = controller.navigationItem;
+    UINavigationBarAppearance *appearance = NeoWCTransparentChatTopAppearance();
     navigationItem.standardAppearance = appearance;
     navigationItem.compactAppearance = appearance;
     navigationItem.scrollEdgeAppearance = appearance;
+
+    UINavigationBar *navigationBar = controller.navigationController.navigationBar;
+    if (navigationBar) {
+        navigationBar.standardAppearance = appearance;
+        navigationBar.compactAppearance = appearance;
+        navigationBar.scrollEdgeAppearance = appearance;
+        navigationBar.translucent = YES;
+    }
+    controller.edgesForExtendedLayout |= UIRectEdgeTop;
+    controller.extendedLayoutIncludesOpaqueBars = YES;
 }
 
 static BOOL NeoWCIsNavigationBarBackgroundView(UIView *view) {
@@ -3947,6 +3968,25 @@ static void NeoWCApplyChatNavigationBackground(BaseMsgContentViewController *con
     NeoWCSetChatNavigationBackgroundHidden(navigationBar, hidden);
 }
 
+static void NeoWCRestoreChatNavigationPresentation(BaseMsgContentViewController *controller) {
+    UINavigationBar *navigationBar = controller.navigationController.navigationBar;
+    id standardAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationStandardAppearanceKey);
+    id compactAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationCompactAppearanceKey);
+    id scrollEdgeAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationScrollEdgeAppearanceKey);
+    NSNumber *translucent = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationTranslucentKey);
+    if (navigationBar && standardAppearance) {
+        navigationBar.standardAppearance = standardAppearance == NSNull.null ? nil : standardAppearance;
+        navigationBar.compactAppearance = compactAppearance == NSNull.null ? nil : compactAppearance;
+        navigationBar.scrollEdgeAppearance = scrollEdgeAppearance == NSNull.null ? nil : scrollEdgeAppearance;
+        navigationBar.translucent = translucent.boolValue;
+    }
+    NSNumber *edges = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalEdgesForExtendedLayoutKey);
+    NSNumber *includesOpaqueBars = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey);
+    if (edges) controller.edgesForExtendedLayout = (UIRectEdge)edges.unsignedIntegerValue;
+    if (includesOpaqueBars) controller.extendedLayoutIncludesOpaqueBars = includesOpaqueBars.boolValue;
+    NeoWCApplyChatNavigationBackground(controller, NO);
+}
+
 static UIBarButtonItem *NeoWCNativeChatMoreItem(BaseMsgContentViewController *controller) {
     SEL selector = NSSelectorFromString(@"getRightBarButton");
     if ([controller respondsToSelector:selector]) {
@@ -3962,6 +4002,27 @@ static UIBarButtonItem *NeoWCNativeChatMoreItem(BaseMsgContentViewController *co
     }
     NSArray *original = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey);
     return original.firstObject;
+}
+
+static void NeoWCCaptureOriginalChatNavigationPresentationIfNeeded(BaseMsgContentViewController *controller) {
+    UINavigationBar *navigationBar = controller.navigationController.navigationBar;
+    if (navigationBar &&
+        !objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationStandardAppearanceKey)) {
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalNavigationStandardAppearanceKey,
+                                 navigationBar.standardAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalNavigationCompactAppearanceKey,
+                                 navigationBar.compactAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalNavigationScrollEdgeAppearanceKey,
+                                 navigationBar.scrollEdgeAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalNavigationTranslucentKey,
+                                 @(navigationBar.translucent), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (!objc_getAssociatedObject(controller, &NeoWCChatTopOriginalEdgesForExtendedLayoutKey)) {
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalEdgesForExtendedLayoutKey,
+                                 @((NSUInteger)controller.edgesForExtendedLayout), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey,
+                                 @(controller.extendedLayoutIncludesOpaqueBars), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
 }
 
 static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller) {
@@ -3980,7 +4041,7 @@ static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller) {
     controller.navigationItem.standardAppearance = standardAppearance == NSNull.null ? nil : standardAppearance;
     controller.navigationItem.compactAppearance = compactAppearance == NSNull.null ? nil : compactAppearance;
     controller.navigationItem.scrollEdgeAppearance = scrollEdgeAppearance == NSNull.null ? nil : scrollEdgeAppearance;
-    NeoWCApplyChatNavigationBackground(controller, NO);
+    NeoWCRestoreChatNavigationPresentation(controller);
     const void *keys[] = {&NeoWCChatTopProfileItemKey, &NeoWCChatTopCapsuleItemKey,
                           &NeoWCChatTopOriginalLeftItemsKey, &NeoWCChatTopOriginalRightItemsKey,
                           &NeoWCChatTopOriginalTitleViewKey, &NeoWCChatTopOriginalSupplementKey,
@@ -3988,7 +4049,13 @@ static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller) {
                           &NeoWCChatTopOriginalStandardAppearanceKey,
                           &NeoWCChatTopOriginalCompactAppearanceKey,
                           &NeoWCChatTopOriginalScrollEdgeAppearanceKey,
-                          &NeoWCChatTopPlaceholderTitleViewKey};
+                          &NeoWCChatTopPlaceholderTitleViewKey,
+                          &NeoWCChatTopOriginalNavigationStandardAppearanceKey,
+                          &NeoWCChatTopOriginalNavigationCompactAppearanceKey,
+                          &NeoWCChatTopOriginalNavigationScrollEdgeAppearanceKey,
+                          &NeoWCChatTopOriginalNavigationTranslucentKey,
+                          &NeoWCChatTopOriginalEdgesForExtendedLayoutKey,
+                          &NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey};
     for (NSUInteger index = 0; index < sizeof(keys) / sizeof(keys[0]); index++) {
         objc_setAssociatedObject(controller, keys[index], nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
@@ -4001,6 +4068,7 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller) {
         return;
     }
     NeoWCRemoveChatSearchButton(controller);
+    NeoWCCaptureOriginalChatNavigationPresentationIfNeeded(controller);
     UINavigationItem *navigationItem = controller.navigationItem;
     NSArray *originalLeft = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey);
     if (!originalLeft) {
@@ -4037,7 +4105,7 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller) {
     navigationItem.titleView = placeholderTitleView;
     objc_setAssociatedObject(controller, &NeoWCChatTopPlaceholderTitleViewKey,
                              placeholderTitleView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCApplyTransparentChatTopAppearance(navigationItem);
+    NeoWCApplyTransparentChatTopAppearance(controller);
     NeoWCApplyChatNavigationBackground(controller, YES);
     objc_setAssociatedObject(controller, &NeoWCChatTopProfileItemKey, profileItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
@@ -4061,7 +4129,7 @@ static void NeoWCRefreshChatTopBarAfterWechatUpdate(BaseMsgContentViewController
     BOOL capsuleMissing = capsuleItem && ![controller.navigationItem.rightBarButtonItems containsObject:capsuleItem];
     BOOL titleWasReplaced = !placeholderTitleView || controller.navigationItem.titleView != placeholderTitleView;
     if (profileMissing || capsuleMissing || titleWasReplaced) NeoWCUpdateChatTopBar(controller);
-    NeoWCApplyTransparentChatTopAppearance(controller.navigationItem);
+    NeoWCApplyTransparentChatTopAppearance(controller);
     NeoWCApplyChatNavigationBackground(controller, YES);
 }
 
@@ -4443,8 +4511,8 @@ static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
-    NeoWCApplyChatNavigationBackground(self, NO);
     %orig(animated);
+    NeoWCRestoreChatNavigationPresentation(self);
     UIViewController *controller = (UIViewController *)self;
     if (controller.isMovingFromParentViewController || controller.isBeingDismissed) {
         NeoWCClearImageJokerOverrides();
