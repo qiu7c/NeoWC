@@ -4,6 +4,7 @@ FOUNDATION_EXPORT NSString *const NeoWCDebugFloatingEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCDebugLoggingEnabledKey;
 
 FOUNDATION_EXPORT void NeoWCLog(NSString *format, ...) NS_FORMAT_FUNCTION(1, 2);
+FOUNDATION_EXPORT void NeoWCLogAlways(NSString *format, ...) NS_FORMAT_FUNCTION(1, 2);
 
 @interface NeoWCDebugManager : NSObject
 + (instancetype)sharedManager;

@@ -3558,16 +3558,25 @@ static NSString *NeoWCChatUserName(id controller) {
 }
 
 static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) {
+    NeoWCLogAlways(@"聊天搜索：收到点击，controller=%@ window=%@",
+                   NSStringFromClass(controller.class), NSStringFromClass(controller.view.window.class));
     id helper = objc_getAssociatedObject(controller, &NeoWCChatSearchHelperKey);
     if (!helper) {
         Class helperClass = NSClassFromString(@"MsgSearchHelper");
         SEL initializer = NSSelectorFromString(@"initWithContentsController:");
-        if (!helperClass || ![helperClass instancesRespondToSelector:initializer]) return;
+        if (!helperClass || ![helperClass instancesRespondToSelector:initializer]) {
+            NeoWCLogAlways(@"聊天搜索：MsgSearchHelper 或 initWithContentsController: 不可用");
+            return;
+        }
         helper = ((id (*)(id, SEL, id))objc_msgSend)([helperClass alloc], initializer, controller);
-        if (!helper) return;
+        if (!helper) {
+            NeoWCLogAlways(@"聊天搜索：MsgSearchHelper 初始化返回 nil");
+            return;
+        }
         objc_setAssociatedObject(controller, &NeoWCChatSearchHelperKey, helper, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     NSString *session = NeoWCChatUserName(controller);
+    NeoWCLogAlways(@"聊天搜索：helper=%@ session=%@", NSStringFromClass([helper class]), session ?: @"<nil>");
     NeoWCTweakSetValue(helper, @"m_sessionId", session);
     NeoWCTweakSetValue(helper, @"m_searchSessionId", session);
     NeoWCTweakSetValue(helper, @"m_delegate", controller);
@@ -3576,26 +3585,35 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
     NeoWCTweakSetValue(helper, @"m_bShowSearchByName", @([session hasSuffix:@"@chatroom"]));
     NeoWCTweakSetValue(helper, @"m_bShowSearchByTime", @YES);
     NeoWCTweakSetValue(helper, @"bUsePanCancelGesture", @YES);
-    (void)NeoWCTweakValueForSelectorNames(helper, @[@"getSearcher"]);
+    id searcher = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcher"]);
+    NeoWCLogAlways(@"聊天搜索：searcher=%@", searcher ? NSStringFromClass([searcher class]) : @"<nil>");
     id searchController = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcherViewController"]);
     if (![searchController isKindOfClass:[UIViewController class]]) {
-        NeoWCLog(@"聊天搜索控制器获取失败");
+        NeoWCLogAlways(@"聊天搜索：控制器获取失败，返回对象=%@",
+                       searchController ? NSStringFromClass([searchController class]) : @"<nil>");
         return;
     }
     UIViewController *standaloneController = searchController;
-    if (standaloneController == controller || standaloneController == controller.navigationController) return;
+    NeoWCLogAlways(@"聊天搜索：controller=%@ parent=%@",
+                   NSStringFromClass(standaloneController.class),
+                   NSStringFromClass(standaloneController.parentViewController.class));
+    if (standaloneController == controller || standaloneController == controller.navigationController) {
+        NeoWCLogAlways(@"聊天搜索：返回了聊天控制器自身，取消展示");
+        return;
+    }
     for (NSUInteger depth = 0; standaloneController.parentViewController && depth < 8; depth++) {
         UIViewController *parent = standaloneController.parentViewController;
         if (parent == controller || parent == controller.navigationController) {
             [standaloneController willMoveToParentViewController:nil];
             [standaloneController.view removeFromSuperview];
             [standaloneController removeFromParentViewController];
+            NeoWCLogAlways(@"聊天搜索：已从聊天页解除容器 %@", NSStringFromClass(standaloneController.class));
             break;
         }
         standaloneController = parent;
     }
     if (standaloneController.parentViewController) {
-        NeoWCLog(@"聊天搜索容器仍属于 %@，取消展示", NSStringFromClass(standaloneController.parentViewController.class));
+        NeoWCLogAlways(@"聊天搜索：容器仍属于 %@，取消展示", NSStringFromClass(standaloneController.parentViewController.class));
         return;
     }
     if (standaloneController == controller ||
@@ -3606,18 +3624,30 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
     __weak BaseMsgContentViewController *weakController = controller;
     dispatch_async(dispatch_get_main_queue(), ^{
         BaseMsgContentViewController *strongController = weakController;
-        if (!strongController.view.window) return;
+        if (!strongController.view.window) {
+            NeoWCLogAlways(@"聊天搜索：聊天页已离开窗口");
+            return;
+        }
         UIWindow *window = strongController.view.window;
         UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
-        if (!presenter || !presenter.view.window || presenter.presentedViewController) return;
+        if (!presenter || !presenter.view.window || presenter.presentedViewController) {
+            NeoWCLogAlways(@"聊天搜索：presenter 不可用，presenter=%@ presented=%@",
+                           NSStringFromClass(presenter.class), NSStringFromClass(presenter.presentedViewController.class));
+            return;
+        }
         if (standaloneController == presenter ||
             standaloneController.presentingViewController ||
-            (standaloneController.isViewLoaded && standaloneController.view.window)) return;
+            (standaloneController.isViewLoaded && standaloneController.view.window)) {
+            NeoWCLogAlways(@"聊天搜索：控制器已处于展示层级，取消重复展示");
+            return;
+        }
         @try {
+            NeoWCLogAlways(@"聊天搜索：由 %@ 展示 %@",
+                           NSStringFromClass(presenter.class), NSStringFromClass(standaloneController.class));
             [presenter presentViewController:standaloneController animated:YES completion:nil];
             NeoWCCompatibilityMarkTriggered(@"chat-search-button");
         } @catch (NSException *exception) {
-            NeoWCLog(@"聊天搜索展示失败：%@", exception.reason ?: exception.name);
+            NeoWCLogAlways(@"聊天搜索：展示失败：%@", exception.reason ?: exception.name);
             return;
         }
     });
@@ -3640,12 +3670,11 @@ static void NeoWCInstallChatSearchButton(BaseMsgContentViewController *controlle
                                                                                                        scale:UIImageSymbolScaleSmall];
         UIImage *image = [[UIImage systemImageNamed:@"magnifyingglass" withConfiguration:configuration]
             imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-        UIButton *searchButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        searchButton.frame = CGRectMake(0.0, 0.0, 28.0, 28.0);
-        searchButton.tintColor = UIColor.blackColor;
-        [searchButton setImage:image forState:UIControlStateNormal];
-        [searchButton addTarget:controller action:@selector(neowc_openNativeChatSearch:) forControlEvents:UIControlEventTouchUpInside];
-        button = [[UIBarButtonItem alloc] initWithCustomView:searchButton];
+        button = [[UIBarButtonItem alloc] initWithImage:image
+                                                  style:UIBarButtonItemStylePlain
+                                                 target:controller
+                                                 action:@selector(neowc_openNativeChatSearch:)];
+        button.tintColor = UIColor.labelColor;
         button.accessibilityLabel = @"聊天记录搜索";
         objc_setAssociatedObject(controller, &NeoWCChatSearchButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }

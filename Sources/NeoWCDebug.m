@@ -71,6 +71,15 @@ void NeoWCLog(NSString *format, ...) {
     [[NeoWCDebugLogStore sharedStore] appendMessage:message];
 }
 
+void NeoWCLogAlways(NSString *format, ...) {
+    if (!format) return;
+    va_list arguments;
+    va_start(arguments, format);
+    NSString *message = [[NSString alloc] initWithFormat:format arguments:arguments];
+    va_end(arguments);
+    [[NeoWCDebugLogStore sharedStore] appendMessage:message];
+}
+
 @interface NeoWCDebugWindow : UIWindow
 @property (nonatomic, assign) BOOL passesThroughBackgroundTouches;
 @end
