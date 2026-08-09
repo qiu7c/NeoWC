@@ -18,6 +18,7 @@
 #import "Sources/NeoWCRuntimeFeatures.h"
 #import "Sources/NeoWCPluginShortcuts.h"
 #import "Sources/NeoWCInterfaceTweaks.h"
+#import "Sources/NeoWCLiquidGlass.h"
 
 @interface WCPluginsMgr : NSObject
 + (instancetype)sharedInstance;
@@ -3675,6 +3676,10 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
             NeoWCLogAlways(@"聊天搜索：原生 helper 初始化失败：%@", exception.reason ?: exception.name);
         }
     }
+    SEL interactivePopSelector = NSSelectorFromString(@"setM_bInteractivePopEnabled:");
+    if ([controller respondsToSelector:interactivePopSelector]) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, interactivePopSelector, NO);
+    }
     id helper = NeoWCTweakSafeValue(controller, @"m_oMsgSearchHelper");
     if (!helper) helper = NeoWCTweakValueForSelectorNames(controller, @[@"m_oMsgSearchHelper"]);
     if (!helper) {
@@ -3684,26 +3689,16 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
     NSString *session = NeoWCChatUserName(controller);
     NeoWCLogAlways(@"聊天搜索：使用原生 helper=%@ session=%@",
                    NSStringFromClass([helper class]), session ?: @"<nil>");
-    NeoWCTweakSetValue(helper, @"m_sessionId", session);
-    NeoWCTweakSetValue(helper, @"m_searchSessionId", session);
-    NeoWCTweakSetValue(helper, @"m_delegate", controller);
-    NeoWCTweakSetValue(helper, @"m_searchParentVC", controller);
-    NeoWCTweakSetValue(helper, @"m_eMsgSearchHelperScene", @0);
-    BOOL isChatRoom = [session hasSuffix:@"@chatroom"];
-    NeoWCTweakSetValue(helper, @"m_buttonIndexes", isChatRoom
-        ? @[@1, @2, @6, @3, @4, @5, @7, @8, @9, @12, @14, @13, @10, @11, @15]
-        : @[@2, @6, @3, @4, @5, @7, @8, @9, @12, @14, @13, @10, @11, @15]);
-    NeoWCTweakSetValue(helper, @"m_bShowSearchByName", @(isChatRoom));
-    NeoWCTweakSetValue(helper, @"m_bShowSearchByTime", @YES);
-    NeoWCTweakSetValue(helper, @"bUsePanCancelGesture", @YES);
-    id searcher = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcher"]);
+    SEL panCancelSelector = NSSelectorFromString(@"setBUsePanCancelGesture:");
+    if ([helper respondsToSelector:panCancelSelector]) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, panCancelSelector, YES);
+    }
     SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
-    for (id target in @[searcher ?: NSNull.null, helper]) {
-        if (target == NSNull.null || ![target respondsToSelector:pushSelector]) continue;
+    if ([helper respondsToSelector:pushSelector]) {
         @try {
             NeoWCLogAlways(@"聊天搜索：调用 %@ pushSearchControllerWithCompletion:",
-                           NSStringFromClass([target class]));
-            ((void (*)(id, SEL, id))objc_msgSend)(target, pushSelector, nil);
+                           NSStringFromClass([helper class]));
+            ((void (*)(id, SEL, id))objc_msgSend)(helper, pushSelector, nil);
             NeoWCCompatibilityMarkTriggered(@"chat-search-button");
             return;
         } @catch (NSException *exception) {
@@ -3712,8 +3707,8 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
         }
     }
     SEL openSelector = NSSelectorFromString(@"onSearchItem");
-    for (id target in @[controller, helper, searcher ?: NSNull.null]) {
-        if (target == NSNull.null || ![target respondsToSelector:openSelector]) continue;
+    id target = controller;
+    if ([target respondsToSelector:openSelector]) {
         @try {
             NeoWCLogAlways(@"聊天搜索：调用 %@ onSearchItem", NSStringFromClass([target class]));
             ((void (*)(id, SEL))objc_msgSend)(target, openSelector);
@@ -3723,7 +3718,7 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
             NeoWCLogAlways(@"聊天搜索：onSearchItem 失败：%@", exception.reason ?: exception.name);
         }
     }
-    NeoWCLogAlways(@"聊天搜索：原生 helper、searcher 与聊天控制器均无可用打开入口");
+    NeoWCLogAlways(@"聊天搜索：原生 helper 与聊天控制器均无可用打开入口");
 }
 
 static void NeoWCInstallChatSearchButton(BaseMsgContentViewController *controller) {
@@ -3835,21 +3830,23 @@ static UIVisualEffect *NeoWCChatTopVisualEffect(void) {
 
 static void NeoWCConfigureChatTopGlassLayer(UIVisualEffectView *effectView) {
     BOOL liquid = NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleLiquid;
-    effectView.layer.borderWidth = liquid ? 0.75 : 0.0;
-    effectView.layer.borderColor = liquid
-        ? [UIColor colorWithWhite:1.0 alpha:0.32].CGColor
-        : UIColor.clearColor.CGColor;
+    Class glassEffectClass = NSClassFromString(@"UIGlassEffect");
+    BOOL nativeLiquid = liquid && glassEffectClass &&
+        [effectView.effect isKindOfClass:glassEffectClass];
+    BOOL compatibilityLiquid = liquid && !nativeLiquid &&
+        !UIAccessibilityIsReduceTransparencyEnabled();
+    effectView.layer.borderWidth = 0.0;
+    effectView.layer.borderColor = UIColor.clearColor.CGColor;
+    NeoWCConfigureLiquidGlassOverlay(effectView, compatibilityLiquid);
 }
 
 static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectView **effectViewOut) {
     UIView *container = [UIView new];
     container.translatesAutoresizingMaskIntoConstraints = NO;
     container.backgroundColor = UIColor.clearColor;
-    container.layer.shadowColor = UIColor.blackColor.CGColor;
-    BOOL liquid = NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleLiquid;
-    container.layer.shadowOpacity = liquid ? 0.10 : 0.06;
-    container.layer.shadowRadius = liquid ? 8.0 : 5.0;
-    container.layer.shadowOffset = CGSizeMake(0.0, 1.0);
+    container.layer.shadowOpacity = 0.0;
+    container.layer.shadowRadius = 0.0;
+    container.layer.shadowOffset = CGSizeZero;
     objc_setAssociatedObject(container, &NeoWCChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
@@ -4172,9 +4169,12 @@ static void NeoWCSetChatTopFadeMask(UIView *backgroundView, BOOL enabled) {
             fadeMask.startPoint = CGPointMake(0.5, 0.0);
             fadeMask.endPoint = CGPointMake(0.5, 1.0);
             fadeMask.colors = @[(id)UIColor.blackColor.CGColor,
+                                (id)[UIColor.blackColor colorWithAlphaComponent:0.55].CGColor,
+                                (id)[UIColor.blackColor colorWithAlphaComponent:0.18].CGColor,
+                                (id)[UIColor.blackColor colorWithAlphaComponent:0.04].CGColor,
                                 (id)UIColor.clearColor.CGColor,
                                 (id)UIColor.clearColor.CGColor];
-            fadeMask.locations = @[@0.0, @0.45, @1.0];
+            fadeMask.locations = @[@0.0, @0.15, @0.30, @0.40, @0.45, @1.0];
             objc_setAssociatedObject(backgroundView, &NeoWCChatTopFadeBackgroundMaskKey,
                                      fadeMask, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
@@ -4254,6 +4254,7 @@ static void NeoWCSetChatContentNavigationBackgroundTransparent(BaseMsgContentVie
             for (UIView *backgroundSubview in subview.subviews) {
                 if (CGRectGetHeight(backgroundSubview.bounds) <= 1.0) {
                     NeoWCSetChatNavigationContainerClear(backgroundSubview, transparent);
+                    NeoWCSetChatNavigationBackgroundHidden(backgroundSubview, transparent);
                 }
             }
         }
