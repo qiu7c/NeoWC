@@ -10,7 +10,7 @@ NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 
-NSString *const NeoWCDisplayVersion = @"0.1.2 beta8";
+NSString *const NeoWCDisplayVersion = @"0.1.2 beta9";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -89,6 +89,8 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCQuoteJumpVideoEnabledKey: @YES,
         NeoWCChatSearchButtonEnabledKey: @NO,
         NeoWCChatTopBarCapsuleEnabledKey: @NO,
+        NeoWCChatTopBarAvatarSizeKey: @30.0,
+        NeoWCChatTopBarNicknameSizeKey: @15.0,
         NeoWCGroupAtTipsEnabledKey: @NO,
         NeoWCMessageBlockEnabledKey: @NO,
         NeoWCMessageBlockUsersKey: @[],
@@ -231,11 +233,14 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"定位图片引用", @"允许点击图片引用定位", @"photo", NeoWCSettingRowKindSwitch, NeoWCQuoteJumpImageEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"定位视频引用", @"允许点击视频引用定位", @"video", NeoWCSettingRowKindSwitch, NeoWCQuoteJumpVideoEnabledKey, nil, NeoWCSettingActionNone),
     ], defaults, collapsed);
-    [interaction addObjectsFromArray:@[
-        NeoWCItem(@"聊天搜索按钮", @"在聊天页加入微信原生聊天记录搜索", @"magnifyingglass", NeoWCSettingRowKindSwitch, NeoWCChatSearchButtonEnabledKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"胶囊顶栏", @"隐藏整条顶栏背景，左右使用液态玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatTopBarCapsuleEnabledKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"输入框滑动操作", @"左滑清空，右滑粘贴", @"hand.draw", NeoWCSettingRowKindSwitch, NeoWCInputSwipeActionsEnabledKey, nil, NeoWCSettingActionNone),
-    ]];
+    [interaction addObject:NeoWCItem(@"聊天搜索按钮", @"在聊天页加入微信原生聊天记录搜索", @"magnifyingglass", NeoWCSettingRowKindSwitch, NeoWCChatSearchButtonEnabledKey, nil, NeoWCSettingActionNone)];
+    NeoWCAddFeature(interaction,
+                    NeoWCItem(@"胶囊顶栏", @"隐藏整条顶栏背景，左右使用液态玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatTopBarCapsuleEnabledKey, nil, NeoWCSettingActionNone),
+                    @[
+        NeoWCItem(@"头像大小", @"限制在 24 到 34 之间", @"person.crop.circle", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarAvatarSizeKey]], NeoWCSettingActionChatTopAvatarSize),
+        NeoWCItem(@"昵称字号", @"限制在 12 到 18 之间", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarNicknameSizeKey]], NeoWCSettingActionChatTopNicknameSize),
+    ], defaults, collapsed);
+    [interaction addObject:NeoWCItem(@"输入框滑动操作", @"左滑清空，右滑粘贴", @"hand.draw", NeoWCSettingRowKindSwitch, NeoWCInputSwipeActionsEnabledKey, nil, NeoWCSettingActionNone)];
 
     NSMutableArray *reminders = [NSMutableArray arrayWithArray:@[
         NeoWCItem(@"群成员进退群提醒", @"根据群成员列表变化显示本地提醒", @"person.2.badge.gearshape", NeoWCSettingRowKindSwitch, NeoWCGroupMemberReminderEnabledKey, nil, NeoWCSettingActionNone),

@@ -299,6 +299,8 @@
         case NeoWCSettingActionWalletBalance: [self presentWalletEditor]; break;
         case NeoWCSettingActionContactsCount: [self presentContactsEditor]; break;
         case NeoWCSettingActionRedEnvelopeFontSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 10 到 24 之间的字号" key:NeoWCRedEnvelopeDetailFontSizeKey minimum:10 maximum:24 notifyChange:YES applyScale:NO]; break;
+        case NeoWCSettingActionChatTopAvatarSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 24 到 34 之间的头像大小" key:NeoWCChatTopBarAvatarSizeKey minimum:24 maximum:34 notifyChange:YES applyScale:NO]; break;
+        case NeoWCSettingActionChatTopNicknameSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 12 到 18 之间的昵称字号" key:NeoWCChatTopBarNicknameSizeKey minimum:12 maximum:18 notifyChange:YES applyScale:NO]; break;
         default: break;
     }
 }

@@ -20,6 +20,8 @@ FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpImageEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpVideoEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatSearchButtonEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarCapsuleEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCChatTopBarAvatarSizeKey;
+FOUNDATION_EXPORT NSString *const NeoWCChatTopBarNicknameSizeKey;
 FOUNDATION_EXPORT NSString *const NeoWCGroupAtTipsEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageBlockEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageBlockUsersKey;

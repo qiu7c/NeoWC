@@ -265,7 +265,6 @@ static char NeoWCVoiceTranscriptionRetryCountKey;
 static char NeoWCChatSearchButtonKey;
 static char NeoWCChatTopProfileItemKey;
 static char NeoWCChatTopCapsuleItemKey;
-static char NeoWCChatTopAvatarSourceKey;
 static char NeoWCChatTopOriginalLeftItemsKey;
 static char NeoWCChatTopOriginalRightItemsKey;
 static char NeoWCChatTopOriginalTitleViewKey;
@@ -308,6 +307,8 @@ static char NeoWCCallVideoConfirmedKey;
 static __weak BaseMsgContentViewController *NeoWCVisibleChatController;
 static __weak id NeoWCCurrentEditImageLogicController;
 static BOOL NeoWCMomentsDispatchingQuickComment = NO;
+
+static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
 
 @interface NeoWCBarButtonActionProxy : NSObject
 @property (nonatomic, strong) UIBarButtonItem *originalItem;
@@ -3250,9 +3251,18 @@ static void NeoWCRegisterPlugin(void) {
             addObserverForName:NeoWCEnhancementDidChangeNotification
                         object:nil
                          queue:[NSOperationQueue mainQueue]
-                    usingBlock:^(__unused NSNotification *note) {
+                    usingBlock:^(NSNotification *note) {
                         NeoWCSynchronizeVisibleMomentsCells();
                         NeoWCSynchronizeVisibleReplyGestures();
+                        NSString *changedKey = [note.object isKindOfClass:[NSString class]] ? note.object : nil;
+                        BOOL refreshChatTop = !changedKey ||
+                            [changedKey isEqualToString:NeoWCChatTopBarCapsuleEnabledKey] ||
+                            [changedKey isEqualToString:NeoWCChatTopBarAvatarSizeKey] ||
+                            [changedKey isEqualToString:NeoWCChatTopBarNicknameSizeKey] ||
+                            [changedKey isEqualToString:NeoWCChatSearchButtonEnabledKey];
+                        if (refreshChatTop && NeoWCVisibleChatController) {
+                            NeoWCUpdateChatTopBar(NeoWCVisibleChatController);
+                        }
                     }];
 
         __block BOOL lastFloatingDebugState = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCDebugFloatingEnabledKey];
@@ -3742,22 +3752,24 @@ static void NeoWCInstallChatSearchButton(BaseMsgContentViewController *controlle
     }
 }
 
-static UIImage *NeoWCChatTopAvatarImage(UIView *view) {
-    if (!view) return nil;
-    if ([view isKindOfClass:[UIImageView class]]) {
-        UIImage *image = ((UIImageView *)view).image;
-        if (image) return image;
-    }
-    for (UIView *subview in view.subviews) {
-        UIImage *image = NeoWCChatTopAvatarImage(subview);
-        if (image) return image;
-    }
-    return nil;
+static CGFloat NeoWCChatTopClampedValue(NSString *key, CGFloat fallback,
+                                       CGFloat minimum, CGFloat maximum) {
+    id stored = [NSUserDefaults.standardUserDefaults objectForKey:key];
+    CGFloat value = [stored respondsToSelector:@selector(doubleValue)] ? [stored doubleValue] : fallback;
+    if (!isfinite(value)) value = fallback;
+    return MIN(maximum, MAX(minimum, value));
 }
 
-static void NeoWCRefreshChatTopAvatarImage(UIImageView *imageView, UIView *sourceView) {
-    UIImage *image = NeoWCChatTopAvatarImage(sourceView);
-    if (image) imageView.image = image;
+static CGFloat NeoWCChatTopAvatarSize(void) {
+    return NeoWCChatTopClampedValue(NeoWCChatTopBarAvatarSizeKey, 30.0, 24.0, 34.0);
+}
+
+static CGFloat NeoWCChatTopNicknameSize(void) {
+    return NeoWCChatTopClampedValue(NeoWCChatTopBarNicknameSizeKey, 15.0, 12.0, 18.0);
+}
+
+static CGFloat NeoWCChatTopLeftCapsuleHeight(void) {
+    return MAX(38.0, NeoWCChatTopAvatarSize() + 8.0);
 }
 
 static UIView *NeoWCChatTopAvatarView(id contact, NSString *userName) {
@@ -3773,30 +3785,8 @@ static UIView *NeoWCChatTopAvatarView(id contact, NSString *userName) {
                                                                       userName,
                                                                       headURL ?: @"",
                                                                       YES,
-                                                                      YES);
-        if ([view isKindOfClass:[UIView class]]) {
-            UIView *sourceView = view;
-            UIImageView *imageView = [[UIImageView alloc]
-                initWithImage:NeoWCChatTopAvatarImage(sourceView) ?:
-                              [UIImage systemImageNamed:@"person.crop.circle.fill"]];
-            imageView.tintColor = UIColor.tertiaryLabelColor;
-            imageView.contentMode = UIViewContentModeScaleAspectFill;
-            imageView.clipsToBounds = YES;
-            imageView.layer.cornerRadius = 15.0;
-            imageView.layer.cornerCurve = kCACornerCurveContinuous;
-            objc_setAssociatedObject(imageView, &NeoWCChatTopAvatarSourceKey,
-                                     sourceView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            __weak UIImageView *weakImageView = imageView;
-            __weak UIView *weakSourceView = sourceView;
-            for (NSNumber *delay in @[@0.0, @0.20, @0.80]) {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
-                                             (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
-                               dispatch_get_main_queue(), ^{
-                    NeoWCRefreshChatTopAvatarImage(weakImageView, weakSourceView);
-                });
-            }
-            return imageView;
-        }
+                                                                      NO);
+        if ([view isKindOfClass:[UIView class]]) return view;
     }
     UIImageView *fallback = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"person.crop.circle.fill"]];
     fallback.tintColor = UIColor.tertiaryLabelColor;
@@ -3855,9 +3845,12 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     NSString *userName = NeoWCChatUserName(controller);
     NSString *displayName = NeoWCChatTopDisplayName(controller, contact);
     CGFloat availableWidth = MIN(205.0, CGRectGetWidth(UIScreen.mainScreen.bounds) - 130.0);
+    CGFloat avatarSize = NeoWCChatTopAvatarSize();
+    CGFloat nicknameSize = NeoWCChatTopNicknameSize();
+    CGFloat capsuleHeight = NeoWCChatTopLeftCapsuleHeight();
 
     UIVisualEffectView *glass = nil;
-    UIView *container = NeoWCChatTopGlassContainer(19.0, &glass);
+    UIView *container = NeoWCChatTopGlassContainer(capsuleHeight / 2.0, &glass);
     UIView *content = glass.contentView;
 
     UIImageSymbolConfiguration *backConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:15.0
@@ -3878,10 +3871,12 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     avatar.translatesAutoresizingMaskIntoConstraints = NO;
     avatar.backgroundColor = UIColor.clearColor;
     avatar.clipsToBounds = YES;
-    avatar.layer.cornerRadius = 15.0;
+    avatar.layer.cornerRadius = avatarSize / 2.0;
     avatar.layer.cornerCurve = kCACornerCurveContinuous;
     avatarSource.translatesAutoresizingMaskIntoConstraints = NO;
     avatarSource.clipsToBounds = YES;
+    avatarSource.layer.cornerRadius = avatarSize / 2.0;
+    avatarSource.layer.cornerCurve = kCACornerCurveContinuous;
     avatarSource.userInteractionEnabled = NO;
     [avatar addSubview:avatarSource];
     [content addSubview:avatar];
@@ -3889,7 +3884,7 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     UILabel *label = [UILabel new];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.text = displayName;
-    UIFont *nicknameFont = [UIFont systemFontOfSize:15.0 weight:UIFontWeightRegular];
+    UIFont *nicknameFont = [UIFont systemFontOfSize:nicknameSize weight:UIFontWeightRegular];
     label.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody] scaledFontForFont:nicknameFont];
     label.adjustsFontForContentSizeCategory = YES;
     label.adjustsFontSizeToFitWidth = YES;
@@ -3901,23 +3896,24 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     [content addSubview:label];
 
     CGFloat labelWidth = ceil([displayName sizeWithAttributes:@{NSFontAttributeName: label.font}].width);
-    CGFloat width = MIN(availableWidth, MAX(96.0, 85.0 + labelWidth));
+    CGFloat avatarDelta = avatarSize - 30.0;
+    CGFloat width = MIN(availableWidth, MAX(96.0 + avatarDelta, 85.0 + avatarDelta + labelWidth));
 
     [NSLayoutConstraint activateConstraints:@[
         [container.widthAnchor constraintEqualToConstant:width],
-        [container.heightAnchor constraintEqualToConstant:38.0],
+        [container.heightAnchor constraintEqualToConstant:capsuleHeight],
         [backButton.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
         [backButton.topAnchor constraintEqualToAnchor:content.topAnchor],
         [backButton.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
         [backButton.widthAnchor constraintEqualToConstant:36.0],
         [avatar.leadingAnchor constraintEqualToAnchor:backButton.trailingAnchor constant:1.0],
         [avatar.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
-        [avatar.widthAnchor constraintEqualToConstant:30.0],
-        [avatar.heightAnchor constraintEqualToConstant:30.0],
+        [avatar.widthAnchor constraintEqualToConstant:avatarSize],
+        [avatar.heightAnchor constraintEqualToConstant:avatarSize],
         [avatarSource.centerXAnchor constraintEqualToAnchor:avatar.centerXAnchor],
         [avatarSource.centerYAnchor constraintEqualToAnchor:avatar.centerYAnchor],
-        [avatarSource.widthAnchor constraintEqualToConstant:30.0],
-        [avatarSource.heightAnchor constraintEqualToConstant:30.0],
+        [avatarSource.widthAnchor constraintEqualToConstant:avatarSize],
+        [avatarSource.heightAnchor constraintEqualToConstant:avatarSize],
         [label.leadingAnchor constraintEqualToAnchor:avatar.trailingAnchor constant:8.0],
         [label.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-10.0],
         [label.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
@@ -3939,7 +3935,8 @@ static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *co
                                                 BOOL showSearch) {
     if (!showSearch && !moreItem) return nil;
     UIVisualEffectView *glass = nil;
-    UIView *capsule = NeoWCChatTopGlassContainer(18.0, &glass);
+    CGFloat capsuleHeight = MAX(36.0, NeoWCChatTopLeftCapsuleHeight() - 2.0);
+    UIView *capsule = NeoWCChatTopGlassContainer(capsuleHeight / 2.0, &glass);
 
     UIStackView *stack = [[UIStackView alloc] init];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -3987,7 +3984,7 @@ static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *co
     CGFloat width = 40.0 * buttonCount;
     [NSLayoutConstraint activateConstraints:@[
         [capsule.widthAnchor constraintEqualToConstant:width],
-        [capsule.heightAnchor constraintEqualToConstant:36.0],
+        [capsule.heightAnchor constraintEqualToConstant:capsuleHeight],
         [stack.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor],
         [stack.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor],
         [stack.topAnchor constraintEqualToAnchor:glass.contentView.topAnchor],
