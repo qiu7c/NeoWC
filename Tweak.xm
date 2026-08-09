@@ -118,6 +118,11 @@
 - (void)returnToOriginalMsg:(id)message;
 @end
 
+@interface MMEdgeTipsView : UIView
+- (void)onClickBtn;
+- (id)delegate;
+@end
+
 @interface VoIPBubbleMessageCellView : UIView
 - (void)startVoiceVoip;
 - (void)startVideoVoip;
@@ -3590,70 +3595,25 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
     NeoWCTweakSetValue(helper, @"m_delegate", controller);
     NeoWCTweakSetValue(helper, @"m_searchParentVC", controller);
     NeoWCTweakSetValue(helper, @"m_eMsgSearchHelperScene", @0);
-    NeoWCTweakSetValue(helper, @"m_bShowSearchByName", @([session hasSuffix:@"@chatroom"]));
+    BOOL isChatRoom = [session hasSuffix:@"@chatroom"];
+    NeoWCTweakSetValue(helper, @"m_buttonIndexes", isChatRoom
+        ? @[@1, @2, @6, @3, @4, @5, @7, @8, @9, @12, @14, @13, @10, @11, @15]
+        : @[@2, @6, @3, @4, @5, @7, @8, @9, @12, @14, @13, @10, @11, @15]);
+    NeoWCTweakSetValue(helper, @"m_bShowSearchByName", @(isChatRoom));
     NeoWCTweakSetValue(helper, @"m_bShowSearchByTime", @YES);
     NeoWCTweakSetValue(helper, @"bUsePanCancelGesture", @YES);
-    id searcher = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcher"]);
-    NeoWCLogAlways(@"聊天搜索：searcher=%@", searcher ? NSStringFromClass([searcher class]) : @"<nil>");
-    SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
-    if ([searcher respondsToSelector:pushSelector]) {
-        @try {
-            NeoWCRemoveChatSearchButton(controller);
-            NeoWCLogAlways(@"聊天搜索：调用 WCDataSearcher pushSearchControllerWithCompletion:");
-            ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
-            NeoWCCompatibilityMarkTriggered(@"chat-search-button");
-            return;
-        } @catch (NSException *exception) {
-            NeoWCLogAlways(@"聊天搜索：pushSearchControllerWithCompletion: 失败：%@",
-                           exception.reason ?: exception.name);
-        }
-    }
-    SEL activeSelector = NSSelectorFromString(@"setActive:animated:completion:");
-    if ([searcher respondsToSelector:activeSelector]) {
-        @try {
-            NeoWCRemoveChatSearchButton(controller);
-            NeoWCLogAlways(@"聊天搜索：调用 WCDataSearcher setActive:animated:completion:");
-            ((void (*)(id, SEL, BOOL, BOOL, id))objc_msgSend)(searcher, activeSelector, YES, YES, nil);
-            NeoWCCompatibilityMarkTriggered(@"chat-search-button");
-            return;
-        } @catch (NSException *exception) {
-            NeoWCLogAlways(@"聊天搜索：setActive:animated:completion: 失败：%@",
-                           exception.reason ?: exception.name);
-        }
-    }
     id searchController = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcherViewController"]);
     if (![searchController isKindOfClass:[UIViewController class]]) {
         NeoWCLogAlways(@"聊天搜索：控制器获取失败，返回对象=%@",
                        searchController ? NSStringFromClass([searchController class]) : @"<nil>");
         return;
     }
-    UIViewController *standaloneController = searchController;
-    NeoWCLogAlways(@"聊天搜索：controller=%@ parent=%@",
-                   NSStringFromClass(standaloneController.class),
-                   NSStringFromClass(standaloneController.parentViewController.class));
+    UIViewController *standaloneController = (UIViewController *)searchController;
     if (standaloneController == controller || standaloneController == controller.navigationController) {
-        NeoWCLogAlways(@"聊天搜索：返回了聊天控制器自身，取消展示");
+        NeoWCLogAlways(@"聊天搜索：原生组件未返回独立控制器");
         return;
     }
-    for (NSUInteger depth = 0; standaloneController.parentViewController && depth < 8; depth++) {
-        UIViewController *parent = standaloneController.parentViewController;
-        if (parent == controller || parent == controller.navigationController) {
-            [standaloneController willMoveToParentViewController:nil];
-            [standaloneController.view removeFromSuperview];
-            [standaloneController removeFromParentViewController];
-            NeoWCLogAlways(@"聊天搜索：已从聊天页解除容器 %@", NSStringFromClass(standaloneController.class));
-            break;
-        }
-        standaloneController = parent;
-    }
-    if (standaloneController.parentViewController) {
-        NeoWCLogAlways(@"聊天搜索：容器仍属于 %@，取消展示", NSStringFromClass(standaloneController.parentViewController.class));
-        return;
-    }
-    if (standaloneController == controller ||
-        standaloneController == controller.navigationController ||
-        standaloneController.presentingViewController ||
-        (standaloneController.isViewLoaded && standaloneController.view.window)) return;
+    if (controller.presentedViewController || standaloneController.presentingViewController) return;
     standaloneController.modalPresentationStyle = UIModalPresentationFullScreen;
     __weak BaseMsgContentViewController *weakController = controller;
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -3662,23 +3622,16 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
             NeoWCLogAlways(@"聊天搜索：聊天页已离开窗口");
             return;
         }
-        UIWindow *window = strongController.view.window;
-        UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
-        if (!presenter || !presenter.view.window || presenter.presentedViewController) {
-            NeoWCLogAlways(@"聊天搜索：presenter 不可用，presenter=%@ presented=%@",
-                           NSStringFromClass(presenter.class), NSStringFromClass(presenter.presentedViewController.class));
-            return;
-        }
-        if (standaloneController == presenter ||
+        if (strongController.presentedViewController ||
             standaloneController.presentingViewController ||
             (standaloneController.isViewLoaded && standaloneController.view.window)) {
             NeoWCLogAlways(@"聊天搜索：控制器已处于展示层级，取消重复展示");
             return;
         }
         @try {
-            NeoWCLogAlways(@"聊天搜索：由 %@ 展示 %@",
-                           NSStringFromClass(presenter.class), NSStringFromClass(standaloneController.class));
-            [presenter presentViewController:standaloneController animated:YES completion:nil];
+            NeoWCLogAlways(@"聊天搜索：由聊天控制器全屏展示 %@",
+                           NSStringFromClass(standaloneController.class));
+            [strongController presentViewController:standaloneController animated:NO completion:nil];
             NeoWCCompatibilityMarkTriggered(@"chat-search-button");
         } @catch (NSException *exception) {
             NeoWCLogAlways(@"聊天搜索：展示失败：%@", exception.reason ?: exception.name);
@@ -3811,9 +3764,7 @@ static UIView *NeoWCCreateEdgeTip(BaseMsgContentViewController *controller, BOOL
     if ([tip respondsToSelector:delegateSelector]) {
         ((void (*)(id, SEL, id))objc_msgSend)(tip, delegateSelector, controller);
     }
-    SEL tapAction = keyword ? @selector(neowc_openKeywordTip:) : @selector(neowc_openAtTip:);
     SEL dismissAction = keyword ? @selector(neowc_dismissKeywordTip:) : @selector(neowc_dismissAtTip:);
-    [tip addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:controller action:tapAction]];
     UISwipeGestureRecognizer *swipe = [[UISwipeGestureRecognizer alloc] initWithTarget:controller action:dismissAction];
     swipe.direction = UISwipeGestureRecognizerDirectionLeft;
     [tip addGestureRecognizer:swipe];
@@ -3966,32 +3917,71 @@ static void NeoWCDrainPendingEdgeTips(BaseMsgContentViewController *controller) 
     }
 }
 
+static NSArray<NSString *> *NeoWCMatchedKeywordsForMessage(id message) {
+    NSString *content = NeoWCIncomingMessageContent(message);
+    if (content.length == 0) return @[];
+    NSMutableArray<NSString *> *matches = [NSMutableArray array];
+    for (id item in [NSUserDefaults.standardUserDefaults arrayForKey:NeoWCKeywordReminderKeywordsKey]) {
+        NSString *keyword = [item isKindOfClass:[NSString class]]
+            ? [item stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
+            : nil;
+        if (keyword.length > 0 &&
+            [content rangeOfString:keyword options:NSCaseInsensitiveSearch].location != NSNotFound &&
+            ![matches containsObject:keyword]) {
+            [matches addObject:keyword];
+        }
+    }
+    return matches;
+}
+
+static BOOL NeoWCHighlightEdgeTipKeywords(BaseMsgContentViewController *controller,
+                                          id message,
+                                          NSArray<NSString *> *keywords) {
+    if (!controller || !message || keywords.count == 0) return NO;
+    SEL cellSelector = NSSelectorFromString(@"getChatCellWithMsg:");
+    SEL highlightSelector = NSSelectorFromString(@"highLightSearchKeyWords:");
+    if (![controller respondsToSelector:cellSelector]) return NO;
+    id cell = ((id (*)(id, SEL, id))objc_msgSend)(controller, cellSelector, message);
+    if ([cell respondsToSelector:highlightSelector]) {
+        return ((BOOL (*)(id, SEL, id))objc_msgSend)(cell, highlightSelector, keywords);
+    }
+    return NO;
+}
+
 static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const void *viewKey, const void *messagesKey) {
     NSMutableArray *messages = NeoWCEdgeTipMessages(controller, messagesKey);
-    id message = messages.firstObject;
+    id message = messages.lastObject;
     if (!message) {
         NeoWCHideEdgeTip(controller, viewKey, YES);
         return;
     }
+    BOOL keyword = messagesKey == &NeoWCKeywordTipsMessagesKey;
+    NSArray<NSString *> *matchedKeywords = keyword ? NeoWCMatchedKeywordsForMessage(message) : @[];
     BOOL opened = NO;
     SEL scrollSelector = NSSelectorFromString(@"scrollToMessage:highlight:marginTop:animated:");
     if ([controller respondsToSelector:scrollSelector]) {
         CGFloat marginTop = UIScreen.mainScreen.bounds.size.height / 3.0;
+        NeoWCLogAlways(@"边缘提示：定位 %@，消息=%@", keyword ? @"关键词" : @"艾特",
+                       NeoWCTweakSafeValue(message, @"m_n64MesSvrID") ?:
+                       NeoWCTweakSafeValue(message, @"m_uiMesLocalID") ?: @"<unknown>");
         ((void (*)(id, SEL, id, BOOL, CGFloat, BOOL))objc_msgSend)(controller, scrollSelector,
                                                                   message, NO, marginTop, YES);
         opened = YES;
-    } else if ([controller respondsToSelector:@selector(returnToOriginalMsg:)]) {
-        [controller returnToOriginalMsg:message];
-        opened = YES;
-    } else {
-        SEL locateSelector = NSSelectorFromString(@"locateToMsg:");
-        if ([controller respondsToSelector:locateSelector]) {
-            ((void (*)(id, SEL, id))objc_msgSend)(controller, locateSelector, message);
-            opened = YES;
-        }
     }
     if (!opened) return;
-    [messages removeObjectAtIndex:0];
+    [messages removeLastObject];
+    BOOL highlighted = keyword && NeoWCHighlightEdgeTipKeywords(controller, message, matchedKeywords);
+    if (keyword && matchedKeywords.count > 0 && !highlighted) {
+        __weak BaseMsgContentViewController *weakController = controller;
+        __strong id strongMessage = message;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            BaseMsgContentViewController *strongController = weakController;
+            if (strongController.view.window) {
+                NeoWCHighlightEdgeTipKeywords(strongController, strongMessage, matchedKeywords);
+            }
+        });
+    }
     UIView *tip = objc_getAssociatedObject(controller, viewKey);
     SEL countSelector = NSSelectorFromString(@"setAtTipsRemainingCount:");
     if (messages.count > 0 && [tip respondsToSelector:countSelector]) {
@@ -4145,6 +4135,33 @@ static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const
 
 - (void)dealloc {
     NeoWCClearImageJokerOverrides();
+    %orig;
+}
+
+%end
+
+%hook MMEdgeTipsView
+
+- (void)onClickBtn {
+    NSInteger tipTag = self.tag;
+    if (tipTag != 0x91d && tipTag != 0x98c) {
+        %orig;
+        return;
+    }
+    id delegate = [self respondsToSelector:@selector(delegate)] ? [self delegate] : NeoWCTweakSafeValue(self, @"delegate");
+    if (![delegate isKindOfClass:NSClassFromString(@"BaseMsgContentViewController")]) {
+        %orig;
+        return;
+    }
+    BaseMsgContentViewController *controller = (BaseMsgContentViewController *)delegate;
+    if (tipTag == 0x98c && objc_getAssociatedObject(controller, &NeoWCKeywordTipsViewKey) == self) {
+        NeoWCOpenNextEdgeTip(controller, &NeoWCKeywordTipsViewKey, &NeoWCKeywordTipsMessagesKey);
+        return;
+    }
+    if (tipTag == 0x91d && objc_getAssociatedObject(controller, &NeoWCAtTipsViewKey) == self) {
+        NeoWCOpenNextEdgeTip(controller, &NeoWCAtTipsViewKey, &NeoWCAtTipsMessagesKey);
+        return;
+    }
     %orig;
 }
 
