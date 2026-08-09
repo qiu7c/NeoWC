@@ -269,6 +269,10 @@ static char NeoWCChatTopOriginalRightItemsKey;
 static char NeoWCChatTopOriginalTitleViewKey;
 static char NeoWCChatTopOriginalSupplementKey;
 static char NeoWCChatTopMoreProxyKey;
+static char NeoWCChatTopBackProxyKey;
+static char NeoWCChatTopOriginalStandardAppearanceKey;
+static char NeoWCChatTopOriginalCompactAppearanceKey;
+static char NeoWCChatTopOriginalScrollEdgeAppearanceKey;
 static char NeoWCAtTipsViewKey;
 static char NeoWCKeywordTipsViewKey;
 static char NeoWCAtTipsMessagesKey;
@@ -282,6 +286,8 @@ static BOOL NeoWCMomentsDispatchingQuickComment = NO;
 
 @interface NeoWCBarButtonActionProxy : NSObject
 @property (nonatomic, strong) UIBarButtonItem *originalItem;
+@property (nonatomic, weak) UIViewController *fallbackController;
+@property (nonatomic, assign) BOOL popsNavigationController;
 - (void)invoke:(id)sender;
 @end
 
@@ -289,13 +295,24 @@ static BOOL NeoWCMomentsDispatchingQuickComment = NO;
 
 - (void)invoke:(id)sender {
     UIBarButtonItem *item = self.originalItem;
-    if (!item) return;
+    if (!item) {
+        if (self.popsNavigationController) {
+            [self.fallbackController.navigationController popViewControllerAnimated:YES];
+        }
+        return;
+    }
     if (item.action) {
         [UIApplication.sharedApplication sendAction:item.action to:item.target from:item forEvent:nil];
         return;
     }
     UIControl *control = [item.customView isKindOfClass:[UIControl class]] ? (UIControl *)item.customView : nil;
-    if (control) [control sendActionsForControlEvents:UIControlEventTouchUpInside];
+    if (control) {
+        [control sendActionsForControlEvents:UIControlEventTouchUpInside];
+        return;
+    }
+    if (self.popsNavigationController) {
+        [self.fallbackController.navigationController popViewControllerAnimated:YES];
+    }
     (void)sender;
 }
 
@@ -3718,24 +3735,69 @@ static NSString *NeoWCChatTopDisplayName(BaseMsgContentViewController *controlle
     return title.length > 0 ? title : @"聊天";
 }
 
-static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *controller) {
+static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibilityLabel);
+
+static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectView **effectViewOut) {
+    UIView *container = [UIView new];
+    container.translatesAutoresizingMaskIntoConstraints = NO;
+    container.backgroundColor = UIColor.clearColor;
+    container.layer.shadowColor = UIColor.blackColor.CGColor;
+    container.layer.shadowOpacity = 0.12;
+    container.layer.shadowRadius = 8.0;
+    container.layer.shadowOffset = CGSizeMake(0.0, 2.0);
+
+    UIVisualEffectView *effectView = [[UIVisualEffectView alloc]
+        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial]];
+    effectView.translatesAutoresizingMaskIntoConstraints = NO;
+    effectView.clipsToBounds = YES;
+    effectView.layer.cornerRadius = cornerRadius;
+    effectView.layer.cornerCurve = kCACornerCurveContinuous;
+    effectView.layer.borderWidth = 0.5;
+    effectView.layer.borderColor = [UIColor.separatorColor colorWithAlphaComponent:0.38].CGColor;
+    [container addSubview:effectView];
+    [NSLayoutConstraint activateConstraints:@[
+        [effectView.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [effectView.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [effectView.topAnchor constraintEqualToAnchor:container.topAnchor],
+        [effectView.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
+    ]];
+    if (effectViewOut) *effectViewOut = effectView;
+    return container;
+}
+
+static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *controller,
+                                                UIBarButtonItem *backItem) {
     id contact = NeoWCTweakValueForSelectorNames(controller, @[@"m_contact", @"chatContact", @"contact"]);
     if (!contact && [controller respondsToSelector:@selector(GetContact)]) {
         contact = ((id (*)(id, SEL))objc_msgSend)(controller, @selector(GetContact));
     }
     NSString *userName = NeoWCChatUserName(controller);
     NSString *displayName = NeoWCChatTopDisplayName(controller, contact);
-    CGFloat availableWidth = CGRectGetWidth(UIScreen.mainScreen.bounds) - 215.0;
-    CGFloat width = MIN(160.0, MAX(105.0, availableWidth));
+    CGFloat availableWidth = CGRectGetWidth(UIScreen.mainScreen.bounds) - 130.0;
+    CGFloat width = MIN(205.0, MAX(150.0, availableWidth));
 
-    UIView *container = [UIView new];
-    container.translatesAutoresizingMaskIntoConstraints = NO;
-    container.userInteractionEnabled = NO;
+    UIVisualEffectView *glass = nil;
+    UIView *container = NeoWCChatTopGlassContainer(18.0, &glass);
+    UIView *content = glass.contentView;
+
+    UIImageSymbolConfiguration *backConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:16.0
+                                                                                                      weight:UIImageSymbolWeightSemibold];
+    UIImage *backImage = backItem.image ?: [UIImage systemImageNamed:@"chevron.left"
+                                                    withConfiguration:backConfiguration];
+    UIButton *backButton = NeoWCChatTopCapsuleButton(backImage, backItem.accessibilityLabel ?: @"返回");
+    NeoWCBarButtonActionProxy *backProxy = [NeoWCBarButtonActionProxy new];
+    backProxy.originalItem = backItem;
+    backProxy.fallbackController = controller;
+    backProxy.popsNavigationController = YES;
+    [backButton addTarget:backProxy action:@selector(invoke:) forControlEvents:UIControlEventTouchUpInside];
+    [content addSubview:backButton];
+    objc_setAssociatedObject(controller, &NeoWCChatTopBackProxyKey, backProxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
     UIView *avatar = NeoWCChatTopAvatarView(contact, userName);
     avatar.translatesAutoresizingMaskIntoConstraints = NO;
     avatar.clipsToBounds = YES;
-    avatar.layer.cornerRadius = 15.0;
-    [container addSubview:avatar];
+    avatar.layer.cornerRadius = 14.0;
+    [content addSubview:avatar];
 
     UILabel *label = [UILabel new];
     label.translatesAutoresizingMaskIntoConstraints = NO;
@@ -3748,18 +3810,22 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     label.lineBreakMode = NSLineBreakByTruncatingTail;
     label.numberOfLines = 1;
     label.accessibilityLabel = displayName;
-    [container addSubview:label];
+    [content addSubview:label];
 
     [NSLayoutConstraint activateConstraints:@[
         [container.widthAnchor constraintEqualToConstant:width],
         [container.heightAnchor constraintEqualToConstant:36.0],
-        [avatar.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
-        [avatar.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
-        [avatar.widthAnchor constraintEqualToConstant:30.0],
-        [avatar.heightAnchor constraintEqualToConstant:30.0],
+        [backButton.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
+        [backButton.topAnchor constraintEqualToAnchor:content.topAnchor],
+        [backButton.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
+        [backButton.widthAnchor constraintEqualToConstant:36.0],
+        [avatar.leadingAnchor constraintEqualToAnchor:backButton.trailingAnchor constant:1.0],
+        [avatar.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
+        [avatar.widthAnchor constraintEqualToConstant:28.0],
+        [avatar.heightAnchor constraintEqualToConstant:28.0],
         [label.leadingAnchor constraintEqualToAnchor:avatar.trailingAnchor constant:8.0],
-        [label.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
-        [label.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
+        [label.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-10.0],
+        [label.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
     ]];
     return [[UIBarButtonItem alloc] initWithCustomView:container];
 }
@@ -3777,20 +3843,15 @@ static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *co
                                                 UIBarButtonItem *moreItem,
                                                 BOOL showSearch) {
     if (!showSearch && !moreItem) return nil;
-    UIVisualEffectView *capsule = [[UIVisualEffectView alloc]
-        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial]];
-    capsule.translatesAutoresizingMaskIntoConstraints = NO;
-    capsule.clipsToBounds = YES;
-    capsule.layer.cornerRadius = 17.0;
-    capsule.layer.borderWidth = 0.5;
-    capsule.layer.borderColor = [UIColor.separatorColor colorWithAlphaComponent:0.45].CGColor;
+    UIVisualEffectView *glass = nil;
+    UIView *capsule = NeoWCChatTopGlassContainer(17.0, &glass);
 
     UIStackView *stack = [[UIStackView alloc] init];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisHorizontal;
     stack.alignment = UIStackViewAlignmentFill;
     stack.distribution = UIStackViewDistributionFillEqually;
-    [capsule.contentView addSubview:stack];
+    [glass.contentView addSubview:stack];
 
     NSUInteger buttonCount = 0;
     if (showSearch) {
@@ -3806,13 +3867,13 @@ static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *co
         if (buttonCount > 0) {
             UIView *divider = [UIView new];
             divider.translatesAutoresizingMaskIntoConstraints = NO;
-            divider.backgroundColor = [UIColor.separatorColor colorWithAlphaComponent:0.55];
-            [capsule.contentView addSubview:divider];
+            divider.backgroundColor = [UIColor.separatorColor colorWithAlphaComponent:0.42];
+            [glass.contentView addSubview:divider];
             [NSLayoutConstraint activateConstraints:@[
-                [divider.centerXAnchor constraintEqualToAnchor:capsule.contentView.centerXAnchor],
-                [divider.centerYAnchor constraintEqualToAnchor:capsule.contentView.centerYAnchor],
+                [divider.centerXAnchor constraintEqualToAnchor:glass.contentView.centerXAnchor],
+                [divider.centerYAnchor constraintEqualToAnchor:glass.contentView.centerYAnchor],
                 [divider.widthAnchor constraintEqualToConstant:0.5],
-                [divider.heightAnchor constraintEqualToConstant:18.0],
+                [divider.heightAnchor constraintEqualToConstant:16.0],
             ]];
         }
         UIImage *moreImage = moreItem.image ?: [UIImage systemImageNamed:@"ellipsis"];
@@ -3832,12 +3893,23 @@ static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *co
     [NSLayoutConstraint activateConstraints:@[
         [capsule.widthAnchor constraintEqualToConstant:width],
         [capsule.heightAnchor constraintEqualToConstant:34.0],
-        [stack.leadingAnchor constraintEqualToAnchor:capsule.contentView.leadingAnchor],
-        [stack.trailingAnchor constraintEqualToAnchor:capsule.contentView.trailingAnchor],
-        [stack.topAnchor constraintEqualToAnchor:capsule.contentView.topAnchor],
-        [stack.bottomAnchor constraintEqualToAnchor:capsule.contentView.bottomAnchor],
+        [stack.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:glass.contentView.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:glass.contentView.bottomAnchor],
     ]];
     return [[UIBarButtonItem alloc] initWithCustomView:capsule];
+}
+
+static void NeoWCApplyTransparentChatTopAppearance(UINavigationItem *navigationItem) {
+    UINavigationBarAppearance *appearance = [UINavigationBarAppearance new];
+    [appearance configureWithTransparentBackground];
+    appearance.backgroundColor = UIColor.clearColor;
+    appearance.backgroundEffect = nil;
+    appearance.shadowColor = UIColor.clearColor;
+    navigationItem.standardAppearance = appearance;
+    navigationItem.compactAppearance = appearance;
+    navigationItem.scrollEdgeAppearance = appearance;
 }
 
 static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller) {
@@ -3850,10 +3922,19 @@ static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller) {
     controller.navigationItem.rightBarButtonItems = originalRight;
     controller.navigationItem.titleView = originalTitleView == NSNull.null ? nil : originalTitleView;
     controller.navigationItem.leftItemsSupplementBackButton = originalSupplement.boolValue;
+    id standardAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalStandardAppearanceKey);
+    id compactAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalCompactAppearanceKey);
+    id scrollEdgeAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalScrollEdgeAppearanceKey);
+    controller.navigationItem.standardAppearance = standardAppearance == NSNull.null ? nil : standardAppearance;
+    controller.navigationItem.compactAppearance = compactAppearance == NSNull.null ? nil : compactAppearance;
+    controller.navigationItem.scrollEdgeAppearance = scrollEdgeAppearance == NSNull.null ? nil : scrollEdgeAppearance;
     const void *keys[] = {&NeoWCChatTopProfileItemKey, &NeoWCChatTopCapsuleItemKey,
                           &NeoWCChatTopOriginalLeftItemsKey, &NeoWCChatTopOriginalRightItemsKey,
                           &NeoWCChatTopOriginalTitleViewKey, &NeoWCChatTopOriginalSupplementKey,
-                          &NeoWCChatTopMoreProxyKey};
+                          &NeoWCChatTopMoreProxyKey, &NeoWCChatTopBackProxyKey,
+                          &NeoWCChatTopOriginalStandardAppearanceKey,
+                          &NeoWCChatTopOriginalCompactAppearanceKey,
+                          &NeoWCChatTopOriginalScrollEdgeAppearanceKey};
     for (NSUInteger index = 0; index < sizeof(keys) / sizeof(keys[0]); index++) {
         objc_setAssociatedObject(controller, keys[index], nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
@@ -3890,19 +3971,28 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller) {
                                  navigationItem.titleView ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(controller, &NeoWCChatTopOriginalSupplementKey,
                                  @(navigationItem.leftItemsSupplementBackButton), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalStandardAppearanceKey,
+                                 navigationItem.standardAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalCompactAppearanceKey,
+                                 navigationItem.compactAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalScrollEdgeAppearanceKey,
+                                 navigationItem.scrollEdgeAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     NSArray<UIBarButtonItem *> *originalRight = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey) ?: @[];
     UIBarButtonItem *moreItem = originalRight.firstObject;
     NSArray *remainingRight = originalRight.count > 1
         ? [originalRight subarrayWithRange:NSMakeRange(1, originalRight.count - 1)] : @[];
 
-    UIBarButtonItem *profileItem = NeoWCChatTopProfileItem(controller);
-    NSMutableArray *leftItems = [originalLeft mutableCopy];
-    [leftItems addObject:profileItem];
-    NSNumber *originalSupplement = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalSupplementKey);
-    navigationItem.leftItemsSupplementBackButton = originalLeft.count == 0 ? YES : originalSupplement.boolValue;
+    UIBarButtonItem *backItem = originalLeft.firstObject;
+    NSArray *remainingLeft = originalLeft.count > 1
+        ? [originalLeft subarrayWithRange:NSMakeRange(1, originalLeft.count - 1)] : @[];
+    UIBarButtonItem *profileItem = NeoWCChatTopProfileItem(controller, backItem);
+    NSMutableArray *leftItems = [NSMutableArray arrayWithObject:profileItem];
+    [leftItems addObjectsFromArray:remainingLeft];
+    navigationItem.leftItemsSupplementBackButton = NO;
     navigationItem.leftBarButtonItems = leftItems;
     navigationItem.titleView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 1, 1)];
+    NeoWCApplyTransparentChatTopAppearance(navigationItem);
     objc_setAssociatedObject(controller, &NeoWCChatTopProfileItemKey, profileItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     BOOL showSearch = NeoWCEnhancementEnabled(NeoWCChatSearchButtonEnabledKey);
@@ -4243,11 +4333,12 @@ static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const
 
 - (void)viewDidLoad {
     %orig;
-    __weak BaseMsgContentViewController *weakSelf = self;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        BaseMsgContentViewController *strongSelf = weakSelf;
-        if (strongSelf) NeoWCUpdateChatTopBar(strongSelf);
-    });
+    NeoWCUpdateChatTopBar(self);
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    %orig(animated);
+    NeoWCUpdateChatTopBar(self);
 }
 
 - (void)ShowMultiSelectMoreOperation:(id)argument {
@@ -4291,7 +4382,6 @@ static void NeoWCOpenNextEdgeTip(BaseMsgContentViewController *controller, const
 - (void)viewDidAppear:(BOOL)animated {
     %orig(animated);
     NeoWCVisibleChatController = self;
-    NeoWCUpdateChatTopBar(self);
     NeoWCDrainPendingEdgeTips(self);
     __weak UIViewController *weakController = (UIViewController *)self;
     dispatch_async(dispatch_get_main_queue(), ^{
