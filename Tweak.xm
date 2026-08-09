@@ -3763,6 +3763,20 @@ static UIView *NeoWCChatTopAvatarView(id contact, NSString *userName) {
     return fallback;
 }
 
+static void NeoWCNormalizeChatTopAvatarSource(UIView *sourceView) {
+    if (!sourceView) return;
+    for (UIView *subview in sourceView.subviews) {
+        NSString *className = NSStringFromClass(subview.class);
+        CGFloat width = CGRectGetWidth(subview.bounds);
+        CGFloat height = CGRectGetHeight(subview.bounds);
+        if ([className containsString:@"LongPressImageView"] && width > 28.0 && height > 28.0) {
+            CGFloat scale = MIN(28.0 / width, 28.0 / height);
+            subview.transform = CGAffineTransformMakeScale(scale, scale);
+        }
+        NeoWCNormalizeChatTopAvatarSource(subview);
+    }
+}
+
 static NSString *NeoWCChatTopDisplayName(BaseMsgContentViewController *controller, id contact) {
     for (NSString *key in @[@"m_nsRemark", @"m_nsNickName", @"m_nsAlias"]) {
         NSString *value = NeoWCTweakSafeValue(contact, key);
@@ -3842,16 +3856,19 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     avatarSource.translatesAutoresizingMaskIntoConstraints = NO;
     avatarSource.clipsToBounds = NO;
     avatarSource.userInteractionEnabled = NO;
-    if (![avatarSource isKindOfClass:[UIImageView class]]) {
-        avatarSource.transform = CGAffineTransformMakeScale(0.70, 0.70);
-    }
+    NeoWCNormalizeChatTopAvatarSource(avatarSource);
     [avatar addSubview:avatarSource];
     [content addSubview:avatar];
+    __weak UIView *weakAvatarSource = avatarSource;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NeoWCNormalizeChatTopAvatarSource(weakAvatarSource);
+    });
 
     UILabel *label = [UILabel new];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.text = displayName;
-    label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+    UIFont *nicknameFont = [UIFont systemFontOfSize:16.0 weight:UIFontWeightRegular];
+    label.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody] scaledFontForFont:nicknameFont];
     label.adjustsFontForContentSizeCategory = YES;
     label.adjustsFontSizeToFitWidth = YES;
     label.minimumScaleFactor = 0.78;
@@ -4814,7 +4831,7 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
         objc_setAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey,
                                  blurView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    blurView.frame = tipsView.bounds;
+    blurView.frame = CGRectInset(tipsView.bounds, 8.0, 0.0);
     blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     if (blurView.superview != tipsView) {
         [tipsView insertSubview:blurView atIndex:0];

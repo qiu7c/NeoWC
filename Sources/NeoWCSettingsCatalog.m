@@ -10,7 +10,7 @@ NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 
-NSString *const NeoWCDisplayVersion = @"0.1.2 beta6";
+NSString *const NeoWCDisplayVersion = @"0.1.2 beta7";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -233,7 +233,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     ], defaults, collapsed);
     [interaction addObjectsFromArray:@[
         NeoWCItem(@"聊天搜索按钮", @"在聊天页加入微信原生聊天记录搜索", @"magnifyingglass", NeoWCSettingRowKindSwitch, NeoWCChatSearchButtonEnabledKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"聊天 TG 顶栏", @"隐藏整条顶栏背景，左右使用液态玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatTopBarCapsuleEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"胶囊顶栏", @"隐藏整条顶栏背景，左右使用液态玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatTopBarCapsuleEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"输入框滑动操作", @"左滑清空，右滑粘贴", @"hand.draw", NeoWCSettingRowKindSwitch, NeoWCInputSwipeActionsEnabledKey, nil, NeoWCSettingActionNone),
     ]];
 
