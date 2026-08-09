@@ -3549,19 +3549,13 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
     NeoWCTweakSetValue(helper, @"m_bShowSearchByName", @([session hasSuffix:@"@chatroom"]));
     NeoWCTweakSetValue(helper, @"m_bShowSearchByTime", @YES);
     NeoWCTweakSetValue(helper, @"bUsePanCancelGesture", @YES);
-    if (!helper) return;
-    id searcher = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcher"]);
-    SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
-    if ([searcher respondsToSelector:pushSelector]) {
-        ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
-        NeoWCCompatibilityMarkTriggered(@"chat-search-button");
-        return;
-    }
+    (void)NeoWCTweakValueForSelectorNames(helper, @[@"getSearcher"]);
     id searchController = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcherViewController"]);
-    if ([searchController isKindOfClass:[UIViewController class]]) {
-        [controller.navigationController pushViewController:searchController animated:YES];
-        NeoWCCompatibilityMarkTriggered(@"chat-search-button");
-    }
+    if (![searchController isKindOfClass:[UIViewController class]] || controller.presentedViewController) return;
+    UIViewController *standaloneController = searchController;
+    standaloneController.modalPresentationStyle = UIModalPresentationFullScreen;
+    [controller presentViewController:standaloneController animated:YES completion:nil];
+    NeoWCCompatibilityMarkTriggered(@"chat-search-button");
 }
 
 static void NeoWCInstallChatSearchButton(BaseMsgContentViewController *controller) {
@@ -5531,10 +5525,8 @@ static void NeoWCApplyRedEnvelopeDetail(WCRedEnvelopesRedEnvelopesDetailViewCont
         : [NeoWCTweakSafeValue(detail, @"m_lRecNum") longLongValue];
     double remainingAmount = MAX(0LL, totalAmount - receivedAmount) / 100.0;
     long long remainingCount = MAX(0LL, totalCount - receivedCount);
-    NSString *blessing = [original.string stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
-    NSString *displayText = [NSString stringWithFormat:@"总 %.2f元｜已领 %lld个｜剩余 %lld个 · %.2f元%@",
-                             totalAmount / 100.0, receivedCount, remainingCount, remainingAmount,
-                             blessing.length > 0 ? [NSString stringWithFormat:@"｜%@", blessing] : @""];
+    NSString *displayText = [NSString stringWithFormat:@"总 %.2f元｜已领 %lld个｜剩余 %lld个 · %.2f元",
+                             totalAmount / 100.0, receivedCount, remainingCount, remainingAmount];
     CGFloat size = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCRedEnvelopeDetailFontSizeKey];
     UIFont *font = [UIFont systemFontOfSize:size >= 10.0 && size <= 24.0 ? size : 14.0 weight:UIFontWeightRegular];
     UIColor *color = receivedInfoLabel.textColor ?: [UIColor colorWithWhite:1.0 alpha:0.7];

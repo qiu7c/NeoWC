@@ -1,15 +1,15 @@
 # NeoWC 项目交接文档
 
-更新时间：2026-08-01
+更新时间：2026-08-09
 项目版本：0.1.2
 仓库：`git@github.com:qiu7c/NeoWC.git`
 主分支：`main`
 
 ## 1. 当前工作区状态
 
-- 最近已推送提交：`65c75aa Fix wallet and chat display overrides`。
-- `main` 已与 `origin/main` 同步；开始新工作前仍须重新检查 `git status` 和当前 diff。
-- `65c75aa` 的真机结果不合格：钱包余额功能会导致余额页面无法进入，聊天记录文字修改仍不生效。详见“当前阻断问题”。
+- 最近已推送提交：`c62cb2b Fix chat helpers and red envelope details`。
+- 当前未提交修改位于 `Tweak.xm`：聊天搜索改为全屏模态独立控制器；红包详情移除错误追加的原生领取状态，避免重复和截断。
+- `main` 的已推送部分与 `origin/main` 同步；开始新工作前仍须重新检查 `git status` 和当前 diff。
 - 提交前必须先执行 `git status --short` 和 `git diff --check`，不要覆盖用户已有修改。
 - 用户通常会明确说“推送”后再提交；推送后不主动查询 GitHub Actions 构建结果。
 
@@ -74,6 +74,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | `Sources/NeoWCCompatibility.m` | Runtime 类/Selector/触发状态检查 |
 | `Sources/NeoWCPluginVisibility.m` | 记录插件注册并隐藏指定插件入口 |
 | `Sources/NeoWCPluginShortcuts.m` | 动态注册日志、悬浮窗、调试中心及自定义页面入口 |
+| `REFERENCE_PLUGIN_ANALYSIS.md` | 2DD、WeChatX、WCPulse、WeChatEnhance、存自拍和微信广告的稳定反编译结论 |
 
 `参考/` 下的源码、dylib 和分析目录只用于对照，不要把分析脚本或反编译临时产物加入主工程。
 
@@ -90,7 +91,11 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
   - 运行期记录中心与可选本地摘要
 - 小游戏结果选择及骰子/猜拳跨类型彩蛋
 - 聊天记录显示修改：长按文字、应用、图片或转账消息，仅修改当前页面本机显示
+- 语音自动转文字，可分别忽略群聊、私聊和自己发送
 - 引用回复手势复用微信原生回复入口
+- 引用消息定位、聊天搜索按钮
+- 群聊艾特与关键词边缘提示
+- 红包详情显示与通话二次确认
 - 普通文字消息屏蔽、长按菜单管理
 - 群成员进退群提醒与关键词提醒
 - 自动选择原图
@@ -154,6 +159,10 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | 游戏选择 | `CMessageMgr AddEmoticonMsg:MsgWrap:` | 非游戏消息和关闭状态直接 `%orig` |
 | 聊天记录显示修改 | `TextMessageCellView`、`AppMessageCellView`、`ImageMessageCellView`、`WCPayTransferMessageCellView` | 文字/应用/转账沿用参考插件确认的消息对象、setter 与节点刷新；图片使用当前聊天页缓存并覆盖图片 Cell、ViewModel、数据项和 `CMessageWrap` 精确读取入口 |
 | 引用回复手势 | `CommonMessageCellView onShowMsgReplyMenuItem:` | 仅横向滑动结束且超过阈值时调用微信原生回复入口；手势关闭后移除 |
+| 语音自动转文字 | `VoiceMessageCellView layoutSubviews/onVoiceTrans:` | 消息级记录完成、处理中和重试次数；同时检查本地翻译结果与加载视图；失败最多尝试 5 次，禁止空语音无限循环 |
+| 聊天搜索 | `BaseMsgContentViewController`、`MsgSearchHelper` | 独立 Helper 配置会话和父控制器；使用 `getSearcherViewController` 后全屏模态展示，禁止再走内嵌搜索或 push 到聊天导航栈 |
+| 艾特/关键词边缘提示 | `MMEdgeTipsView`、`BaseMsgContentViewController` | 点击使用 `scrollToMessage:highlight:marginTop:animated:` 精确定位，成功调用后才移除队列消息 |
+| 红包详情 | `WCRedEnvelopesRedEnvelopesDetailViewController viewWillAppear:` | 金额单位为分；详情写 `m_receivedInfoLable`，`nickNameLabel` 只清理旧残留；不得追加原生领取状态造成重复 |
 | 消息屏蔽/关键词提醒 | `CMessageMgr AsyncOnAddMsg:MsgWrap:` | 只处理新收到的普通文字；关闭或不命中时完整执行 `%orig` |
 | 长按菜单管理 | 各消息 Cell 的 `operationMenuItems` | 只管理已存在菜单项；关闭时恢复原始标题 |
 | 群成员提醒 | `CContactMgr printContactImportantChangeData:oldContact:` | 原调用前后比较群成员列表，本地提醒不写回联系人 |
@@ -232,6 +241,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 - 多选批量保存文件附件不实现，只保存已下载图片。
 - View 选择器不提供“复制 Hook”。
 - 不使用全局手势启动调试悬浮窗。
+- 聊天消息时间标签已于 2026-08-09 完整删除，包括 Hook、设置项、配置键和兼容性条目；重构完成前不要恢复。
 
 ## 11. 已知限制
 
@@ -241,38 +251,46 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 - 本地 Windows 无法完整验证 Theos/iOS 私有 API 编译，推送后由云端构建。
 - 调试日志默认开启；排查性能时可先关闭。
 
-### 已完成静态修复，待真机验证
+### 当前静态修复，待云端编译与真机验证
 
-参考插件：`2DD小丑助手-arm64.deb`。本地提取目录为 `.codex-analysis/2dd-joker/`，该目录已被 Git 忽略，只用于分析。用户已确认参考 dylib 在同一真机环境中余额修改和聊天文字修改都完全生效。
+1. 已推送提交 `c62cb2b`
+   - 语音自动转文字加入完成、处理中和最多 5 次重试状态，避免空内容或识别失败时无限循环。
+   - 聊天消息时间标签已完整删除。
+   - 艾特/关键词边缘提示改用 `scrollToMessage:highlight:marginTop:animated:`。
+   - 红包详情已改为写入 `m_receivedInfoLable`，金额按分换算。
 
-1. 钱包余额
-   - 已从参考 dylib 的替换函数确认 `TimeoutNumber updateNumber:` 接收 `unsigned long long`，金额单位为分，并将替换后的整数交给原 IMP。
-   - 当前实现只在 `TimeoutNumber` 位于 `WCPayWalletEntryHeaderView` 内时替换 `updateNumber:/defaultNumber:`；其他实例原样回退。
-   - 钱包页长按编辑后仍按分保存并通过头部 `_timeoutNumber` 的精确入口刷新。
-   - 全局 `MMUILabel` 金额/数字猜测保持删除，版本号不会再因余额功能被匹配。
+2. 当前未提交 `Tweak.xm`
+   - 真机截图确认聊天搜索仍以内嵌层覆盖聊天页，返回后出现搜索栏、聊天标题和按钮重叠。
+   - 已按 WCPulse/WeChatX 的独立控制器分支改为 `getSearcherViewController` + `presentViewController:animated:completion:`，并设为全屏；不再调用 `pushSearchControllerWithCompletion:`，也不再 push 到聊天导航栈。
+   - 红包详情曾错误把原生“已领取 0/2 个，共……”当祝福语追加，导致重复与省略号；现固定为“总金额｜已领个数｜剩余个数 · 剩余金额”，不追加原生状态。
 
-2. 聊天记录显示修改
-   - 文字、应用与转账已按参考插件确认的消息对象来源、字段 setter 和消息节点刷新顺序还原，不再遍历全局窗口或递归猜测正文控件。
-   - 图片伪装使用 `ImageMessageCellView`、`ImageMessageViewModel`、`MMImgDataItem_Message` 与 `CMessageWrap` 的精确读取入口，仅缓存当前聊天页并在退出时清理。
-   - 转账菜单恢复明确的 `WCPayTransferMessageCellView` 上下文，依次写入 `m_nsFeeDesc`、`m_receiverDesc`、`m_senderDesc`；仍需真机确认当前微信版本的最终刷新效果。
+3. 仍须保持的既有边界
+   - 钱包只处理 `WCPayWalletEntryHeaderView` 内的 `TimeoutNumber`，金额单位为分。
+   - 全局 `MMUILabel` 数字猜测保持删除，只保留通讯录好友数量的严格文案匹配。
+   - 图片伪装只缓存当前聊天页，退出时清理；图片编辑快捷发送与微信官方转发继续隔离。
+   - 防撤回气泡提示继续使用弱引用合并调度器，不恢复 `CommonMessageCellView layoutSubviews`。
 
-3. 新增参考功能
-   - 朋友圈转发、页面缩放、微信运动上传字段和图片伪装均按参考 dylib 的实际 Selector/控制器调用链接入。
-   - 朋友圈媒体转发任务在下载阶段由当前页面强持有，展示后转移给转发导航控制器，失败时释放。
-   - 参考插件的“去除分割线”依赖宽泛视图处理，当前未接入，避免给微信全局 UI 带来不可控副作用。
+### 参考插件分析索引
+
+完整稳定结论见 `REFERENCE_PLUGIN_ANALYSIS.md`：
+
+- 2DD 小丑助手：钱包金额参数、文字/应用/图片/转账本地显示修改。
+- WeChatX / WeChatX(1)：朋友圈权限与精确时间、原生浮动菜单转发、全局去分割线、页面缩放、语音状态机、聊天搜索 Helper。
+- WCPulse 1.6-3：引用/边缘提示定位、独立搜索控制器、红包详情、扫码来源与通话确认。
+- WeChatEnhance：引用手势、消息屏蔽、菜单管理、群成员/关键词提醒、自动原图、通知直达和钱包局部修改。
+- 存自拍：预览长按、原生菜单、`EmoticonUploadInfoObj` 自拍上传链。
+- 微信广告：广告过滤、URL 改写、Web 调试、越狱检测与统计字段相关入口。
 
 ## 12. 下一轮真机验证顺序
 
-1. 钱包余额开关关闭、开启且已配置两种状态下都进入钱包页；开启时验证长按设置、真实余额位置、金额单位及插件版本号。
-2. 分别测试文字、引用应用、普通应用、图片和转账消息的修改菜单，确认当前 Cell 立即改变。
-3. 退出并重新进入聊天，确认所有显示修改均保持“仅当前页面本机显示”的边界。
-4. 朋友圈快捷评论开启/关闭各测试转发入口，并覆盖文字、图片、视频和结构化内容。
-5. 页面缩放测试 70%、85%、100% 与关闭恢复，重点检查聊天、设置页和网页。
-6. 微信运动确认设备对象和实际上传请求都使用当天配置步数。
-7. 测试消息屏蔽、长按菜单、群成员/关键词提醒、自动原图和通知直达。
-8. 开启防撤回气泡方案，搜索跳转并快速切换聊天，确认提示不消失且无卡顿。
-9. 测试图片编辑快捷发送与微信官方转发完全隔离。
-10. 测试设置页分类、父功能子项展开、无动画刷新与滚动位置保持。
+1. 推送并安装当前未提交搜索修复，确认点击搜索进入完整独立页面，取消后恢复聊天原导航栏。
+2. 搜索关键词、进入一条结果再返回，确认只回到搜索结果页，不出现聊天标题、返回箭头、搜索框和按钮重叠。
+3. 打开未领取、部分领取和已领完红包，确认详情单行完整显示且不重复原生“已领取”文字。
+4. 用空语音、无法识别语音和正常语音测试自动转文字，确认失败最多尝试 5 次且聊天不卡死。
+5. 点击艾特与关键词边缘提示，确认滚动到原消息并在成功后更新剩余数量。
+6. 确认设置页中已无聊天消息时间标签入口，进入聊天不再因时间标签卡死。
+7. 回归钱包余额、文字/引用应用/图片/转账显示修改及“仅当前页面本机显示”边界。
+8. 回归防撤回气泡、图片编辑快捷发送、朋友圈转发和设置页无动画刷新。
 
 若只有气泡方案开启时卡顿，优先检查 `CommonMessageCellView` 的三处低频入口和合并调度器，禁止先恢复布局 Hook。
 
@@ -299,11 +317,13 @@ ssh://git@ssh.github.com:443/qiu7c/NeoWC.git
 ```text
 继续维护 D:\Vibe\NeoWC。先完整阅读 D:\Vibe\NeoWC\HANDOFF.md，再检查 git status、最近提交和当前 diff；工作区中的所有现有修改都要保留，不得覆盖或回退。
 
-当前最高优先级是修复提交 65c75aa 后的两个真机阻断问题：开启并配置钱包余额后，余额页面无法进入；聊天记录“小丑”菜单和弹窗能出现，但确认修改后文字完全不生效。用户提供的 D:\Documents\xwechat_files\wxid_0e2foxbt1jso22_a88c\msg\file\2026-07\2DD小丑助手-arm64.deb 在同一环境中这两项功能完全生效，本地已提取到 D:\Vibe\NeoWC\.codex-analysis\2dd-joker，仅供反编译分析且不得加入提交。
+最近已推送提交为 c62cb2b。当前未提交的 Tweak.xm 包含两项真机反馈修复：聊天搜索改为通过 MsgSearchHelper getSearcherViewController 取得独立控制器并全屏模态展示，红包详情移除错误追加的原生领取状态。HANDOFF.md 和 REFERENCE_PLUGIN_ANALYSIS.md 已更新，必须保留这些修改。
 
-不要继续猜测私有 API。先精确反编译参考 dylib 中 TimeoutNumber updateNumber: 的 Hook，确认原方法参数类型、余额单位、格式和调用顺序；再逐个还原 TextMessageCellView、AppMessageCellView、WCPayTransferMessageCellView 的 joker_handleMenuItem: 及辅助函数，确认消息对象来源、字段 setter、正文控件类型和刷新入口。钱包修复前可先让 updateNumber: 原样 %orig 保证页面可进入，禁止恢复 MMUILabel 全局猜测数字，否则会再次修改插件版本号。
+参考插件的稳定结论见 D:\Vibe\NeoWC\REFERENCE_PLUGIN_ANALYSIS.md，原始反编译产物在 D:\Vibe\NeoWC\.codex-analysis，仅供本机分析且不得加入提交。后续遇到未还原、真机不生效或微信版本变化的功能时，应直接回到用户提供的参考插件 `dylib`/`deb` 和这些本地提取文件继续反编译学习，确认 Hook 注册、原方法参数类型、字段来源与替换函数调用顺序后再修改 NeoWC；不要仅根据功能名或字符串猜测私有 API。
 
-必须保留已经修好的防撤回气泡方案：禁止给 CommonMessageCellView 恢复 layoutSubviews Hook，禁止主动调用 setNeedsLayout/layoutIfNeeded，提示刷新必须弱引用且合并执行。保留图片编辑快捷发送与微信官方转发完全隔离的逻辑，保留设置页最新无动画 reloadData 与滚动位置保持方案。不要恢复长截图、Markdown 导出或已删除的诊断提示方案。
+必须保留防撤回气泡方案：禁止给 CommonMessageCellView 恢复 layoutSubviews Hook，禁止主动调用 setNeedsLayout/layoutIfNeeded，提示刷新必须弱引用且合并执行。保留图片编辑快捷发送与微信官方转发完全隔离的逻辑，保留设置页无动画 reloadData 与滚动位置保持方案。聊天消息时间标签已完整删除，不要恢复；不要恢复长截图、Markdown 导出或全局文字替换。
 
-修改后先执行 git status --short、git diff --check、git diff --stat 和约束扫描。本机没有 Theos，说明无法本地完成 iOS 私有 API 编译。未经用户明确要求不要提交或推送；推送 main 后不要查询云端构建结果。项目版本为 0.1.2，远程仓库为 git@github.com:qiu7c/NeoWC.git。
+下一轮优先推送构建并真机验证搜索的进入、取消、结果跳转后返回三条路径，以及红包未领取/部分领取/已领完三种状态。之后验证空语音重试上限、艾特/关键词边缘提示定位和已删除的消息时间入口。
+
+修改后先执行 git status --short、git diff --check、git diff --stat 和约束扫描。本机没有 Theos，无法本地完成 iOS 私有 API 编译。未经用户明确要求不要提交或推送；用户说“提交”表示提交并推送 main，推送后不要查询云端构建结果。项目版本为 0.1.2，远程为 ssh://git@ssh.github.com:443/qiu7c/NeoWC.git。
 ```

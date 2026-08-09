@@ -38,24 +38,39 @@ id NeoWCServiceForClass(Class serviceClass) {
     return ((id (*)(id, SEL, Class))objc_msgSend)(center, selector, serviceClass);
 }
 
-NSString *NeoWCCurrentUserWXID(void) {
+static id NeoWCCurrentUserContact(void) {
     Class contactManagerClass = objc_getClass("CContactMgr");
     if (!contactManagerClass) return nil;
     SEL selfContactSelector = sel_registerName("getSelfContact");
     id manager = NeoWCServiceForClass(contactManagerClass);
     if (!manager || ![manager respondsToSelector:selfContactSelector]) return nil;
-    id contact = ((id (*)(id, SEL))objc_msgSend)(manager, selfContactSelector);
-    if (!contact) return nil;
+    return ((id (*)(id, SEL))objc_msgSend)(manager, selfContactSelector);
+}
 
-    SEL userNameSelector = sel_registerName("m_nsUsrName");
+static NSString *NeoWCContactString(id contact, const char *selectorName) {
+    if (!contact || !selectorName) return nil;
+    SEL selector = sel_registerName(selectorName);
     id value = nil;
-    if ([contact respondsToSelector:userNameSelector]) {
-        value = ((id (*)(id, SEL))objc_msgSend)(contact, userNameSelector);
+    if ([contact respondsToSelector:selector]) {
+        value = ((id (*)(id, SEL))objc_msgSend)(contact, selector);
     } else {
-        @try { value = [contact valueForKey:@"m_nsUsrName"]; }
+        NSString *key = [NSString stringWithUTF8String:selectorName];
+        @try { value = [contact valueForKey:key]; }
         @catch (__unused NSException *exception) { return nil; }
     }
     if (![value isKindOfClass:[NSString class]]) return nil;
-    NSString *wxid = [(NSString *)value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    return wxid.length > 0 ? wxid : nil;
+    NSString *text = [(NSString *)value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    return text.length > 0 ? text : nil;
+}
+
+NSString *NeoWCCurrentUserWXID(void) {
+    return NeoWCContactString(NeoWCCurrentUserContact(), "m_nsUsrName");
+}
+
+NSString *NeoWCCurrentUserNickname(void) {
+    return NeoWCContactString(NeoWCCurrentUserContact(), "m_nsNickName");
+}
+
+NSString *NeoWCCurrentUserHeadImageURL(void) {
+    return NeoWCContactString(NeoWCCurrentUserContact(), "m_nsHeadImgUrl");
 }
