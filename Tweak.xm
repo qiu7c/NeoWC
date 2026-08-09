@@ -282,6 +282,8 @@ static char NeoWCChatTopOriginalNavigationTranslucentKey;
 static char NeoWCChatTopOriginalEdgesForExtendedLayoutKey;
 static char NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey;
 static char NeoWCChatTopContainerOriginalBackgroundColorKey;
+static char NeoWCChatTopBackgroundOriginalHiddenKey;
+static char NeoWCChatTopGlassEffectMarkerKey;
 static char NeoWCAtTipsViewKey;
 static char NeoWCKeywordTipsViewKey;
 static char NeoWCAtTipsMessagesKey;
@@ -3762,6 +3764,8 @@ static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectVi
     effectView.layer.cornerRadius = cornerRadius;
     effectView.layer.cornerCurve = kCACornerCurveContinuous;
     effectView.layer.borderWidth = 0.0;
+    objc_setAssociatedObject(effectView, &NeoWCChatTopGlassEffectMarkerKey,
+                             @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [container addSubview:effectView];
     [NSLayoutConstraint activateConstraints:@[
         [effectView.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
@@ -3937,24 +3941,35 @@ static void NeoWCApplyTransparentChatTopAppearance(BaseMsgContentViewController 
 }
 
 static BOOL NeoWCIsNavigationBarBackgroundView(UIView *view) {
+    if (objc_getAssociatedObject(view, &NeoWCChatTopGlassEffectMarkerKey)) return NO;
     NSString *className = NSStringFromClass(view.class);
-    return [className containsString:@"BarBackground"] ||
-           [className containsString:@"NavigationBarBackground"];
+    return [view isKindOfClass:[UIVisualEffectView class]] ||
+           [className containsString:@"Background"] ||
+           [className containsString:@"Backdrop"] ||
+           [className containsString:@"Material"];
 }
 
 static void NeoWCSetChatNavigationBackgroundHidden(UIView *view, BOOL hidden) {
     if (!view) return;
+    if (objc_getAssociatedObject(view, &NeoWCChatTopGlassEffectMarkerKey)) return;
     if (NeoWCIsNavigationBarBackgroundView(view)) {
         NSNumber *originalAlpha = objc_getAssociatedObject(view, &NeoWCChatTopBackgroundOriginalAlphaKey);
+        NSNumber *originalHidden = objc_getAssociatedObject(view, &NeoWCChatTopBackgroundOriginalHiddenKey);
         if (hidden) {
             if (!originalAlpha) {
                 objc_setAssociatedObject(view, &NeoWCChatTopBackgroundOriginalAlphaKey,
                                          @(view.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                objc_setAssociatedObject(view, &NeoWCChatTopBackgroundOriginalHiddenKey,
+                                         @(view.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             }
+            view.hidden = YES;
             view.alpha = 0.0;
         } else if (originalAlpha) {
             view.alpha = originalAlpha.doubleValue;
+            view.hidden = originalHidden.boolValue;
             objc_setAssociatedObject(view, &NeoWCChatTopBackgroundOriginalAlphaKey,
+                                     nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(view, &NeoWCChatTopBackgroundOriginalHiddenKey,
                                      nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         return;
