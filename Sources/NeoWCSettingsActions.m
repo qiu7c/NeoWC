@@ -5,6 +5,7 @@
 #import "NeoWCConfigManagerViewController.h"
 #import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
+#import "NeoWCInterfaceTweaks.h"
 #import "NeoWCCompatibility.h"
 #import "NeoWCListEditorViewController.h"
 #import "NeoWCLongPressMenuViewController.h"
