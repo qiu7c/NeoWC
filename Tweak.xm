@@ -281,6 +281,7 @@ static char NeoWCChatTopOriginalNavigationScrollEdgeAppearanceKey;
 static char NeoWCChatTopOriginalNavigationTranslucentKey;
 static char NeoWCChatTopOriginalEdgesForExtendedLayoutKey;
 static char NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey;
+static char NeoWCChatTopContainerOriginalBackgroundColorKey;
 static char NeoWCAtTipsViewKey;
 static char NeoWCKeywordTipsViewKey;
 static char NeoWCAtTipsMessagesKey;
@@ -3963,9 +3964,37 @@ static void NeoWCSetChatNavigationBackgroundHidden(UIView *view, BOOL hidden) {
     }
 }
 
+static void NeoWCSetChatNavigationContainerClear(UIView *view, BOOL clear) {
+    if (!view) return;
+    id originalColor = objc_getAssociatedObject(view, &NeoWCChatTopContainerOriginalBackgroundColorKey);
+    if (clear) {
+        if (!originalColor) {
+            objc_setAssociatedObject(view, &NeoWCChatTopContainerOriginalBackgroundColorKey,
+                                     view.backgroundColor ?: NSNull.null,
+                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        view.backgroundColor = UIColor.clearColor;
+    } else if (originalColor) {
+        view.backgroundColor = originalColor == NSNull.null ? nil : originalColor;
+        objc_setAssociatedObject(view, &NeoWCChatTopContainerOriginalBackgroundColorKey,
+                                 nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
 static void NeoWCApplyChatNavigationBackground(BaseMsgContentViewController *controller, BOOL hidden) {
     UINavigationBar *navigationBar = controller.navigationController.navigationBar;
     NeoWCSetChatNavigationBackgroundHidden(navigationBar, hidden);
+    UIView *navigationRoot = controller.navigationController.view;
+    UIView *view = navigationBar;
+    for (NSUInteger depth = 0; view && depth < 4; depth++, view = view.superview) {
+        NeoWCSetChatNavigationContainerClear(view, hidden);
+        for (UIView *sibling in view.superview.subviews) {
+            if (sibling != view && NeoWCIsNavigationBarBackgroundView(sibling)) {
+                NeoWCSetChatNavigationBackgroundHidden(sibling, hidden);
+            }
+        }
+        if (view == navigationRoot) break;
+    }
 }
 
 static void NeoWCRestoreChatNavigationPresentation(BaseMsgContentViewController *controller) {
