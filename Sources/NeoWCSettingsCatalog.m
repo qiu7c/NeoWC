@@ -10,7 +10,7 @@ NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 
-static NSString *const NeoWCSettingsVersion = @"0.1.2";
+NSString *const NeoWCDisplayVersion = @"0.1.2 beta1";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -169,9 +169,10 @@ static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
             NeoWCItem(@"界面优化", @"缩放、输入栏与入口显示", @"paintbrush", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenInterface),
             NeoWCItem(@"开发者功能", @"日志、兼容性与快捷入口", @"hammer", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenDeveloper),
         ]],
-        [NeoWCSettingSection sectionWithIdentifier:@"maintenance" title:@"维护" footer:@"NeoWC · Designed for WeChat" items:@[
+        [NeoWCSettingSection sectionWithIdentifier:@"maintenance" title:@"维护"
+                                             footer:[NSString stringWithFormat:@"NeoWC · %@", NeoWCDisplayVersion] items:@[
             NeoWCItem(@"配置管理", @"导入、导出或重置 NeoWC 配置", @"externaldrive", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionConfigManager),
-            NeoWCInfoItem(@"version", @"版本", @"NeoWC", @"shippingbox", NeoWCSettingsVersion),
+            NeoWCInfoItem(@"version", @"版本", @"NeoWC", @"shippingbox", NeoWCDisplayVersion),
         ]],
     ];
 }

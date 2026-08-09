@@ -4,6 +4,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSString *const NeoWCEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCCollapsedFeaturesKey;
+FOUNDATION_EXPORT NSString *const NeoWCDisplayVersion;
 
 FOUNDATION_EXPORT void NeoWCSettingsRegisterDefaults(void);
 FOUNDATION_EXPORT void NeoWCSettingsRegenerateDailyStepTarget(NSUserDefaults *defaults);
