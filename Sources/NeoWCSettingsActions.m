@@ -184,14 +184,21 @@
 
 - (void)presentChatTopEffectStylePicker {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSInteger current = [defaults integerForKey:NeoWCChatTopBarEffectStyleKey];
+    BOOL supportsLiquid = NeoWCSystemSupportsNativeLiquidGlass();
+    NSInteger stored = [defaults integerForKey:NeoWCChatTopBarEffectStyleKey];
+    NSInteger current = supportsLiquid && stored == NeoWCChatTopBarEffectStyleLiquid
+        ? NeoWCChatTopBarEffectStyleLiquid
+        : NeoWCChatTopBarEffectStyleMaterial;
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"模糊效果"
-                                                                    message:@"液态玻璃仅在系统支持时使用原生效果；其他系统自动使用兼容材质。"
+                                                                    message:supportsLiquid
+                                                                        ? @"液态玻璃使用 iOS 26 原生 UIGlassEffect。"
+                                                                        : @"当前系统低于 iOS 26，仅支持超薄玻璃。"
                                                              preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray *options = @[
-        @{@"title": @"超薄玻璃", @"value": @(NeoWCChatTopBarEffectStyleMaterial)},
-        @{@"title": @"液态玻璃", @"value": @(NeoWCChatTopBarEffectStyleLiquid)},
-    ];
+    NSMutableArray *options = [NSMutableArray arrayWithObject:
+        @{@"title": @"超薄玻璃", @"value": @(NeoWCChatTopBarEffectStyleMaterial)}];
+    if (supportsLiquid) {
+        [options addObject:@{@"title": @"液态玻璃", @"value": @(NeoWCChatTopBarEffectStyleLiquid)}];
+    }
     __weak typeof(self) weakSelf = self;
     for (NSDictionary *option in options) {
         NSInteger value = [option[@"value"] integerValue];

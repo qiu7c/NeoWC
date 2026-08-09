@@ -99,6 +99,7 @@ FOUNDATION_EXPORT NSString *const NeoWCMultiSelectShareCardKey;
 FOUNDATION_EXPORT NSString *const NeoWCEnhancementDidChangeNotification;
 
 FOUNDATION_EXPORT BOOL NeoWCEnhancementEnabled(NSString *key);
+FOUNDATION_EXPORT BOOL NeoWCSystemSupportsNativeLiquidGlass(void);
 FOUNDATION_EXPORT CGFloat NeoWCScalePercentForDefaultsKey(NSString *key, CGFloat defaultValue);
 FOUNDATION_EXPORT NSString *NeoWCNormalizedMomentsDateFormat(NSString *format);
 FOUNDATION_EXPORT UIColor *NeoWCColorForDefaultsKey(NSString *key, UIColor *fallbackColor);

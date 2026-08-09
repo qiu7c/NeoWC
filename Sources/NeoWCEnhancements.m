@@ -170,3 +170,8 @@ BOOL NeoWCEnhancementEnabled(NSString *key) {
     BOOL featureEnabled = featureValue ? [featureValue boolValue] : [key isEqualToString:NeoWCAntiRevokeKey];
     return masterEnabled && featureEnabled;
 }
+
+BOOL NeoWCSystemSupportsNativeLiquidGlass(void) {
+    NSOperatingSystemVersion version = NSProcessInfo.processInfo.operatingSystemVersion;
+    return version.majorVersion >= 26 && NSClassFromString(@"UIGlassEffect") != Nil;
+}

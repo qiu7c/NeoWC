@@ -7,8 +7,8 @@
 
 ## 1. 当前工作区状态
 
-- 最近已推送提交：`c62cb2b Fix chat helpers and red envelope details`。
-- 当前未提交修改位于 `Tweak.xm`：聊天搜索改为全屏模态独立控制器；红包详情移除错误追加的原生领取状态，避免重复和截断。
+- 最近已推送提交：`8bc650b Refine chat search and settings feedback`。
+- 当前未提交修改涉及搜索原生链路、iOS 26 原生液态玻璃限制、持久多选项反馈及设置首页头像信息布局。
 - `main` 的已推送部分与 `origin/main` 同步；开始新工作前仍须重新检查 `git status` 和当前 diff。
 - 提交前必须先执行 `git status --short` 和 `git diff --check`，不要覆盖用户已有修改。
 - 用户通常会明确说“推送”后再提交；推送后不主动查询 GitHub Actions 构建结果。
@@ -160,7 +160,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | 聊天记录显示修改 | `TextMessageCellView`、`AppMessageCellView`、`ImageMessageCellView`、`WCPayTransferMessageCellView` | 文字/应用/转账沿用参考插件确认的消息对象、setter 与节点刷新；图片使用当前聊天页缓存并覆盖图片 Cell、ViewModel、数据项和 `CMessageWrap` 精确读取入口 |
 | 引用回复手势 | `CommonMessageCellView onShowMsgReplyMenuItem:` | 仅横向滑动结束且超过阈值时调用微信原生回复入口；手势关闭后移除 |
 | 语音自动转文字 | `VoiceMessageCellView layoutSubviews/onVoiceTrans:` | 消息级记录完成、处理中和重试次数；同时检查本地翻译结果与加载视图；失败最多尝试 5 次，禁止空语音无限循环 |
-| 聊天搜索 | `BaseMsgContentViewController`、`MsgSearchHelper` | 独立 Helper 配置会话和父控制器；使用 `getSearcherViewController` 后全屏模态展示，禁止再走内嵌搜索或 push 到聊天导航栈 |
+| 聊天搜索 | `BaseMsgContentViewController`、`MsgSearchHelper` | 按 WCPulse 已确认路径调用 `initMsgSearchHelper:NO`，读取原生 `m_oMsgSearchHelper`，优先调用 helper 的 `pushSearchControllerWithCompletion:nil`，兼容分支调用聊天控制器 `onSearchItem`；不再使用语义不同的 `getSearcherViewController` |
 | 艾特/关键词边缘提示 | `MMEdgeTipsView`、`BaseMsgContentViewController` | 点击使用 `scrollToMessage:highlight:marginTop:animated:` 精确定位，成功调用后才移除队列消息 |
 | 红包详情 | `WCRedEnvelopesRedEnvelopesDetailViewController viewWillAppear:` | 金额单位为分；详情写 `m_receivedInfoLable`，`nickNameLabel` 只清理旧残留；不得追加原生领取状态造成重复 |
 | 消息屏蔽/关键词提醒 | `CMessageMgr AsyncOnAddMsg:MsgWrap:` | 只处理新收到的普通文字；关闭或不命中时完整执行 `%orig` |
@@ -253,16 +253,17 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 
 ### 当前静态修复，待云端编译与真机验证
 
-1. 已推送提交 `c62cb2b`
+1. 最近已推送提交 `8bc650b`
    - 语音自动转文字加入完成、处理中和最多 5 次重试状态，避免空内容或识别失败时无限循环。
    - 聊天消息时间标签已完整删除。
    - 艾特/关键词边缘提示改用 `scrollToMessage:highlight:marginTop:animated:`。
    - 红包详情已改为写入 `m_receivedInfoLable`，金额按分换算。
 
-2. 当前未提交 `Tweak.xm`
-   - 真机截图确认聊天搜索仍以内嵌层覆盖聊天页，返回后出现搜索栏、聊天标题和按钮重叠。
-   - 已按 WCPulse/WeChatX 的独立控制器分支改为 `getSearcherViewController` + `presentViewController:animated:completion:`，并设为全屏；不再调用 `pushSearchControllerWithCompletion:`，也不再 push 到聊天导航栈。
-   - 红包详情曾错误把原生“已领取 0/2 个，共……”当祝福语追加，导致重复与省略号；现固定为“总金额｜已领个数｜剩余个数 · 剩余金额”，不追加原生状态。
+2. 当前未提交修复
+   - 聊天搜索已按 WCPulse 反汇编确认的原生链路重写：`initMsgSearchHelper:NO` → `m_oMsgSearchHelper` → `pushSearchControllerWithCompletion:nil`，并保留 `onSearchItem` 兼容分支；禁止再把 `getSearcherViewController` 当作搜索页面工厂。
+   - 胶囊顶栏的液态玻璃仅允许 iOS 26 原生 `UIGlassEffect`；低版本强制使用超薄玻璃，已移除 NeoWC 自研兼容液态叠层。
+   - 设置首页头像改为 96 点圆角方形容器，并同步扩大昵称、wxid 间距和页眉高度，避免直接缩放微信内部头像 View 造成首帧裁切。
+   - 所有持久多选设置均在列表显示“当前选择：…”并在操作表中勾选当前项。
 
 3. 仍须保持的既有边界
    - 钱包只处理 `WCPayWalletEntryHeaderView` 内的 `TimeoutNumber`，金额单位为分。
@@ -283,7 +284,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 
 ## 12. 下一轮真机验证顺序
 
-1. 推送并安装当前未提交搜索修复，确认点击搜索进入完整独立页面，取消后恢复聊天原导航栏。
+1. 编译并安装当前未提交搜索修复，确认点击搜索进入微信原生搜索页面，取消后恢复聊天原导航栏。
 2. 搜索关键词、进入一条结果再返回，确认只回到搜索结果页，不出现聊天标题、返回箭头、搜索框和按钮重叠。
 3. 打开未领取、部分领取和已领完红包，确认详情单行完整显示且不重复原生“已领取”文字。
 4. 用空语音、无法识别语音和正常语音测试自动转文字，确认失败最多尝试 5 次且聊天不卡死。
@@ -317,7 +318,7 @@ ssh://git@ssh.github.com:443/qiu7c/NeoWC.git
 ```text
 继续维护 D:\Vibe\NeoWC。先完整阅读 D:\Vibe\NeoWC\HANDOFF.md，再检查 git status、最近提交和当前 diff；工作区中的所有现有修改都要保留，不得覆盖或回退。
 
-最近已推送提交为 c62cb2b。当前未提交的 Tweak.xm 包含两项真机反馈修复：聊天搜索改为通过 MsgSearchHelper getSearcherViewController 取得独立控制器并全屏模态展示，红包详情移除错误追加的原生领取状态。HANDOFF.md 和 REFERENCE_PLUGIN_ANALYSIS.md 已更新，必须保留这些修改。
+最近已推送提交为 8bc650b。当前未提交修改包含：聊天搜索按 WCPulse 的 `initMsgSearchHelper:NO`、`m_oMsgSearchHelper`、`pushSearchControllerWithCompletion:nil` 原生链路重写；液态玻璃限制为 iOS 26 原生 `UIGlassEffect`；设置首页头像与信息布局放大。HANDOFF.md 已更新，必须保留这些修改。
 
 参考插件的稳定结论见 D:\Vibe\NeoWC\REFERENCE_PLUGIN_ANALYSIS.md，原始反编译产物在 D:\Vibe\NeoWC\.codex-analysis，仅供本机分析且不得加入提交。后续遇到未还原、真机不生效或微信版本变化的功能时，应直接回到用户提供的参考插件 `dylib`/`deb` 和这些本地提取文件继续反编译学习，确认 Hook 注册、原方法参数类型、字段来源与替换函数调用顺序后再修改 NeoWC；不要仅根据功能名或字符串猜测私有 API。
 
