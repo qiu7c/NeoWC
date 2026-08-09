@@ -3557,6 +3557,14 @@ static NSString *NeoWCChatUserName(id controller) {
     return userName;
 }
 
+static void NeoWCRemoveChatSearchButton(BaseMsgContentViewController *controller) {
+    UIBarButtonItem *button = objc_getAssociatedObject(controller, &NeoWCChatSearchButtonKey);
+    if (!button || ![controller.navigationItem.rightBarButtonItems containsObject:button]) return;
+    NSMutableArray *items = [controller.navigationItem.rightBarButtonItems mutableCopy];
+    [items removeObject:button];
+    controller.navigationItem.rightBarButtonItems = items;
+}
+
 static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) {
     NeoWCLogAlways(@"聊天搜索：收到点击，controller=%@ window=%@",
                    NSStringFromClass(controller.class), NSStringFromClass(controller.view.window.class));
@@ -3587,6 +3595,32 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
     NeoWCTweakSetValue(helper, @"bUsePanCancelGesture", @YES);
     id searcher = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcher"]);
     NeoWCLogAlways(@"聊天搜索：searcher=%@", searcher ? NSStringFromClass([searcher class]) : @"<nil>");
+    SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
+    if ([searcher respondsToSelector:pushSelector]) {
+        @try {
+            NeoWCRemoveChatSearchButton(controller);
+            NeoWCLogAlways(@"聊天搜索：调用 WCDataSearcher pushSearchControllerWithCompletion:");
+            ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
+            NeoWCCompatibilityMarkTriggered(@"chat-search-button");
+            return;
+        } @catch (NSException *exception) {
+            NeoWCLogAlways(@"聊天搜索：pushSearchControllerWithCompletion: 失败：%@",
+                           exception.reason ?: exception.name);
+        }
+    }
+    SEL activeSelector = NSSelectorFromString(@"setActive:animated:completion:");
+    if ([searcher respondsToSelector:activeSelector]) {
+        @try {
+            NeoWCRemoveChatSearchButton(controller);
+            NeoWCLogAlways(@"聊天搜索：调用 WCDataSearcher setActive:animated:completion:");
+            ((void (*)(id, SEL, BOOL, BOOL, id))objc_msgSend)(searcher, activeSelector, YES, YES, nil);
+            NeoWCCompatibilityMarkTriggered(@"chat-search-button");
+            return;
+        } @catch (NSException *exception) {
+            NeoWCLogAlways(@"聊天搜索：setActive:animated:completion: 失败：%@",
+                           exception.reason ?: exception.name);
+        }
+    }
     id searchController = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcherViewController"]);
     if (![searchController isKindOfClass:[UIViewController class]]) {
         NeoWCLogAlways(@"聊天搜索：控制器获取失败，返回对象=%@",
@@ -3657,11 +3691,7 @@ static void NeoWCInstallChatSearchButton(BaseMsgContentViewController *controlle
     UIBarButtonItem *button = objc_getAssociatedObject(controller, &NeoWCChatSearchButtonKey);
     BOOL enabled = NeoWCEnhancementEnabled(NeoWCChatSearchButtonEnabledKey);
     if (!enabled) {
-        if (button && [controller.navigationItem.rightBarButtonItems containsObject:button]) {
-            NSMutableArray *items = [controller.navigationItem.rightBarButtonItems mutableCopy];
-            [items removeObject:button];
-            controller.navigationItem.rightBarButtonItems = items;
-        }
+        NeoWCRemoveChatSearchButton(controller);
         return;
     }
     if (!button) {
