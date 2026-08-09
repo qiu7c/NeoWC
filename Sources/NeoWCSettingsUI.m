@@ -80,6 +80,7 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
             stack.axis = UILayoutConstraintAxisHorizontal;
             stack.alignment = UIStackViewAlignmentCenter;
             stack.spacing = 8.0;
+            stack.frame = CGRectMake(0.0, 0.0, 72.0, 32.0);
             self.accessoryView = stack;
             self.selectionStyle = toggle.isOn ? UITableViewCellSelectionStyleDefault : UITableViewCellSelectionStyleNone;
             self.accessibilityHint = toggle.isOn ? (expanded ? @"轻点收起子选项" : @"轻点展开子选项") : nil;
@@ -203,6 +204,16 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
     CGFloat wxidHeight = [self.wxidLabel sizeThatFits:CGSizeMake(textWidth, CGFLOAT_MAX)].height;
     CGFloat textHeight = 14.0 + nicknameHeight + 4.0 + wxidHeight + 14.0;
     return MAX(MAX(86.0, 98.0 * scale), textHeight);
+}
+
+- (void)showCopyConfirmation {
+    self.wxidLabel.text = @"wxid 已复制";
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        NeoWCSettingsProfileHeaderView *strongSelf = weakSelf;
+        if (!strongSelf) return;
+        strongSelf.wxidLabel.text = strongSelf.wxid.length > 0 ? strongSelf.wxid : @"wxid 未获取";
+    });
 }
 
 @end

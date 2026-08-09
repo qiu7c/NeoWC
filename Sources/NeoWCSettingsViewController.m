@@ -142,11 +142,7 @@
 - (void)profileHeaderTapped {
     if (self.profileHeader.wxid.length == 0) return;
     UIPasteboard.generalPasteboard.string = self.profileHeader.wxid;
-    self.navigationItem.prompt = @"wxid 已复制";
-    __weak typeof(self) weakSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        weakSelf.navigationItem.prompt = nil;
-    });
+    [self.profileHeader showCopyConfirmation];
 }
 
 - (void)toggleFeature:(NeoWCSettingItem *)item {

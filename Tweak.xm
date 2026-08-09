@@ -3549,13 +3549,33 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
     NeoWCTweakSetValue(helper, @"m_bShowSearchByName", @([session hasSuffix:@"@chatroom"]));
     NeoWCTweakSetValue(helper, @"m_bShowSearchByTime", @YES);
     NeoWCTweakSetValue(helper, @"bUsePanCancelGesture", @YES);
-    (void)NeoWCTweakValueForSelectorNames(helper, @[@"getSearcher"]);
     id searchController = NeoWCTweakValueForSelectorNames(helper, @[@"getSearcherViewController"]);
-    if (![searchController isKindOfClass:[UIViewController class]] || controller.presentedViewController) return;
+    if (![searchController isKindOfClass:[UIViewController class]]) return;
     UIViewController *standaloneController = searchController;
+    if (standaloneController == controller ||
+        standaloneController == controller.navigationController ||
+        standaloneController.parentViewController ||
+        standaloneController.presentingViewController ||
+        (standaloneController.isViewLoaded && standaloneController.view.window)) return;
     standaloneController.modalPresentationStyle = UIModalPresentationFullScreen;
-    [controller presentViewController:standaloneController animated:YES completion:nil];
-    NeoWCCompatibilityMarkTriggered(@"chat-search-button");
+    __weak BaseMsgContentViewController *weakController = controller;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        BaseMsgContentViewController *strongController = weakController;
+        if (!strongController.view.window) return;
+        UIWindow *window = strongController.view.window;
+        UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
+        if (!presenter || !presenter.view.window || presenter.presentedViewController) return;
+        if (standaloneController == presenter ||
+            standaloneController.parentViewController ||
+            standaloneController.presentingViewController ||
+            (standaloneController.isViewLoaded && standaloneController.view.window)) return;
+        @try {
+            [presenter presentViewController:standaloneController animated:YES completion:nil];
+            NeoWCCompatibilityMarkTriggered(@"chat-search-button");
+        } @catch (__unused NSException *exception) {
+            return;
+        }
+    });
 }
 
 static void NeoWCInstallChatSearchButton(BaseMsgContentViewController *controller) {

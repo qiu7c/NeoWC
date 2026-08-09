@@ -16,6 +16,7 @@ typedef void (^NeoWCSettingsSwitchHandler)(NeoWCSettingItem *item, BOOL enabled)
 @interface NeoWCSettingsProfileHeaderView : UIControl
 @property (nonatomic, copy, readonly, nullable) NSString *wxid;
 - (void)refreshProfile;
+- (void)showCopyConfirmation;
 - (CGFloat)preferredHeightForWidth:(CGFloat)width scale:(CGFloat)scale;
 @end
 
