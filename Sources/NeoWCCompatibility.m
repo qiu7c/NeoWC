@@ -57,7 +57,6 @@ static NSArray<NSDictionary *> *NeoWCCompatibilityDefinitions(void) {
             @{ @"id": @"hide-screenshot-forward", @"title": @"隐藏截屏分享按钮", @"class": @"MMScreenShotViewController", @"selector": @"show" },
             @{ @"id": @"quote-jump", @"title": @"引用消息定位", @"class": @"CommonMessageCellView", @"selector": @"handleTapReferMessage" },
             @{ @"id": @"chat-search-button", @"title": @"聊天搜索按钮", @"class": @"MsgSearchHelper", @"selector": @"initWithContentsController:" },
-            @{ @"id": @"chat-message-time", @"title": @"聊天消息时间标签", @"class": @"CommonMessageCellView", @"selector": @"updateNodeStatus" },
             @{ @"id": @"group-at-tip", @"title": @"群聊艾特提示", @"class": @"MMEdgeTipsView", @"selector": @"showAnimate:parentView:finishBlock:" },
             @{ @"id": @"keyword-edge-tip", @"title": @"关键词边缘提示", @"class": @"MMEdgeTipsView", @"selector": @"showAnimate:parentView:finishBlock:" },
             @{ @"id": @"red-envelope-detail", @"title": @"红包详情显示", @"class": @"WCRedEnvelopesRedEnvelopesDetailViewController", @"selector": @"viewWillAppear:" },

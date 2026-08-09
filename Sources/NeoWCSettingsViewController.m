@@ -219,12 +219,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCQuoteJumpVideoEnabledKey: @YES,
         NeoWCChatSearchButtonEnabledKey: @NO,
         NeoWCGroupAtTipsEnabledKey: @NO,
-        NeoWCChatMessageTimeEnabledKey: @NO,
-        NeoWCChatMessageTimeBelowAvatarKey: @YES,
-        NeoWCChatMessageTimeBubbleSideKey: @NO,
-        NeoWCChatMessageTimeFormatKey: @"MM-dd HH:mm:ss",
-        NeoWCChatMessageTimeFontSizeKey: @10.0,
-        NeoWCChatMessageTimeColorKey: @"#8E8E93FF",
         NeoWCMessageBlockEnabledKey: @NO,
         NeoWCMessageBlockUsersKey: @[],
         NeoWCMessageBlockKeywordsKey: @[],
@@ -291,10 +285,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
         NeoWCCollapsedFeaturesKey: @[],
     }];
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    if ([defaults boolForKey:NeoWCChatMessageTimeBelowAvatarKey] &&
-        [defaults boolForKey:NeoWCChatMessageTimeBubbleSideKey]) {
-        [defaults setBool:NO forKey:NeoWCChatMessageTimeBubbleSideKey];
-    }
     NSSet<NSString *> *supportedMeTitles = [NSSet setWithArray:@[@"作品", @"小店与卡包", @"表情"]];
     NSArray<NSString *> *hiddenMeTitles = [defaults arrayForKey:NeoWCMeMenuHiddenTitlesKey] ?: @[];
     NSArray<NSString *> *filteredMeTitles = [hiddenMeTitles filteredArrayUsingPredicate:
@@ -380,7 +370,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
             NeoWCMultiSelectExportEnabledKey,
             NeoWCMessageBlockEnabledKey,
             NeoWCKeywordReminderEnabledKey,
-            NeoWCChatMessageTimeEnabledKey,
             NeoWCRedEnvelopeDetailEnabledKey,
             NeoWCLongPressMenuEnabledKey,
             NeoWCWalletBalanceEnabledKey,
@@ -489,12 +478,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     [messageItems addObject:item(@"引用回复手势", @"左滑消息气泡直接进入微信原生引用回复", @"arrowshape.turn.up.left", NeoWCRowKindSwitch, NeoWCReplySwipeEnabledKey, nil)];
     [messageItems addObject:item(@"引用消息定位", @"点击文字、图片或视频引用，调用微信原生定位入口", @"arrow.up.and.down.text.horizontal", NeoWCRowKindSwitch, NeoWCQuoteJumpEnabledKey, nil)];
     [messageItems addObject:item(@"聊天搜索按钮", @"在聊天页右上角加入微信原生聊天记录搜索", @"magnifyingglass", NeoWCRowKindSwitch, NeoWCChatSearchButtonEnabledKey, nil)];
-    [messageItems addObject:item(@"消息时间标签", @"按消息创建时间显示在头像下方或气泡旁", @"clock", NeoWCRowKindSwitch, NeoWCChatMessageTimeEnabledKey, nil)];
-    if ([defaults boolForKey:NeoWCChatMessageTimeEnabledKey] && [self isFeatureExpandedForKey:NeoWCChatMessageTimeEnabledKey]) {
-        [messageItems addObject:item(@"头像下方时间", @"以消息头像为锚点显示时间", @"person.crop.circle.badge.clock", NeoWCRowKindSwitch, NeoWCChatMessageTimeBelowAvatarKey, nil)];
-        [messageItems addObject:item(@"气泡旁时间", @"以消息气泡为锚点显示时间", @"message.badge", NeoWCRowKindSwitch, NeoWCChatMessageTimeBubbleSideKey, nil)];
-        [messageItems addObject:item(@"时间标签格式", @"NSDateFormatter 格式，例如 MM-dd HH:mm:ss", @"textformat", NeoWCRowKindDetail, nil, [defaults stringForKey:NeoWCChatMessageTimeFormatKey])];
-    }
     [messageItems addObject:item(@"消息屏蔽", @"按会话账号或关键词忽略新收到的普通文字消息", @"eye.slash", NeoWCRowKindSwitch, NeoWCMessageBlockEnabledKey, nil)];
     if (messageBlockEnabled && [self isFeatureExpandedForKey:NeoWCMessageBlockEnabledKey]) {
         [messageItems addObject:item(@"屏蔽会话账号", @"每行一个 wxid 或群聊账号", @"person.crop.circle.badge.xmark", NeoWCRowKindDetail, nil, NeoWCSettingsCountText(blockedUserCount))];
@@ -919,14 +902,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     if (item.defaultsKey.length == 0) return;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setBool:sender.isOn forKey:item.defaultsKey];
-    BOOL timePositionChanged = [item.defaultsKey isEqualToString:NeoWCChatMessageTimeBelowAvatarKey] ||
-                               [item.defaultsKey isEqualToString:NeoWCChatMessageTimeBubbleSideKey];
-    if (timePositionChanged) {
-        NSString *otherKey = [item.defaultsKey isEqualToString:NeoWCChatMessageTimeBelowAvatarKey]
-            ? NeoWCChatMessageTimeBubbleSideKey
-            : NeoWCChatMessageTimeBelowAvatarKey;
-        [defaults setBool:!sender.isOn forKey:otherKey];
-    }
     if (sender.isOn && [self featureHasChildrenForKey:item.defaultsKey]) {
         [self.collapsedFeatureKeys removeObject:item.defaultsKey];
         [self saveCollapsedFeatureKeys];
@@ -957,8 +932,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
                               [item.defaultsKey isEqualToString:NeoWCMultiSelectExportEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCMessageBlockEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCKeywordReminderEnabledKey] ||
-                              [item.defaultsKey isEqualToString:NeoWCChatMessageTimeEnabledKey] ||
-                              timePositionChanged ||
                               [item.defaultsKey isEqualToString:NeoWCRedEnvelopeDetailEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCLongPressMenuEnabledKey] ||
                               [item.defaultsKey isEqualToString:NeoWCAutoVoiceTranscriptionEnabledKey] ||
@@ -1286,29 +1259,6 @@ typedef NS_ENUM(NSInteger, NeoWCRowKind) {
     }
     if ([item.title isEqualToString:@"管理已发现菜单"]) {
         [self.navigationController pushViewController:[NeoWCLongPressMenuViewController new] animated:YES];
-        return;
-    }
-    if ([item.title isEqualToString:@"时间标签格式"]) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:item.title
-                                                                       message:@"例如 MM-dd HH:mm:ss"
-                                                                preferredStyle:UIAlertControllerStyleAlert];
-        [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-            textField.text = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCChatMessageTimeFormatKey] ?: @"MM-dd HH:mm:ss";
-            textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-        }];
-        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-        __weak typeof(self) weakSelf = self;
-        [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-            (void)action;
-            NSString *format = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-            if (format.length == 0 || format.length > 64) return;
-            NSDateFormatter *formatter = [NSDateFormatter new];
-            formatter.dateFormat = format;
-            if ([formatter stringFromDate:[NSDate date]].length == 0) return;
-            [[NSUserDefaults standardUserDefaults] setObject:format forKey:NeoWCChatMessageTimeFormatKey];
-            [weakSelf reloadSettingsPreservingPosition];
-        }]];
-        [self presentViewController:alert animated:YES completion:nil];
         return;
     }
     if ([item.title isEqualToString:@"我的页面入口管理"]) {
