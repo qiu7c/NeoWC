@@ -262,6 +262,9 @@ static char NeoWCVoiceTranscriptionInProgressKey;
 static char NeoWCVoiceTranscriptionRetryCountKey;
 static char NeoWCChatSearchButtonKey;
 static char NeoWCChatSearchHelperKey;
+static char NeoWCChatSearchActionTargetKey;
+static char NeoWCChatSearchControllerKey;
+static char NeoWCChatSearchPopDelegateKey;
 static char NeoWCChatSearchTransitionKey;
 static char NeoWCChatTopProfileItemKey;
 static char NeoWCChatTopCapsuleItemKey;
@@ -3720,6 +3723,64 @@ static id NeoWCFindSearchActionTarget(id root, SEL selector, NSUInteger depth,
     return nil;
 }
 
+static void NeoWCSetChatSearchPanCancellation(id object) {
+    if (!object) return;
+    for (NSString *key in @[@"bUsePanCancelGesture", @"m_bUsePanCancelGesture"]) {
+        @try {
+            [object setValue:@YES forKey:key];
+            NeoWCLogAlways(@"聊天搜索：已对 %@ 开启侧滑取消，key=%@",
+                           NSStringFromClass([object class]), key);
+            return;
+        } @catch (__unused NSException *exception) {
+        }
+    }
+}
+
+static void NeoWCCleanupNativeChatSearch(BaseMsgContentViewController *controller) {
+    id helper = objc_getAssociatedObject(controller, &NeoWCChatSearchHelperKey);
+    id actionTarget = objc_getAssociatedObject(controller, &NeoWCChatSearchActionTargetKey);
+    UIViewController *searchController = objc_getAssociatedObject(controller, &NeoWCChatSearchControllerKey);
+    SEL deactivateSelector = NSSelectorFromString(@"setActive:animated:completion:");
+    if ([searchController respondsToSelector:deactivateSelector]) {
+        @try {
+            ((void (*)(id, SEL, BOOL, BOOL, id))objc_msgSend)(searchController,
+                                                               deactivateSelector,
+                                                               NO, NO, nil);
+            NeoWCLogAlways(@"聊天搜索：已停用残留搜索控制器=%@",
+                           NSStringFromClass(searchController.class));
+        } @catch (NSException *exception) {
+            NeoWCLogAlways(@"聊天搜索：停用搜索控制器失败：%@", exception.reason ?: exception.name);
+        }
+    }
+    SEL cancelSelector = NSSelectorFromString(@"msgSearchBarCancel");
+    NSString *cancelPath = nil;
+    id cancelTarget = [actionTarget respondsToSelector:cancelSelector]
+        ? actionTarget
+        : NeoWCFindSearchActionTarget(helper, cancelSelector, 3,
+                                      [NSMutableSet set], &cancelPath);
+    if (!cancelTarget && [controller respondsToSelector:cancelSelector]) cancelTarget = controller;
+    if (cancelTarget) {
+        @try {
+            NeoWCLogAlways(@"聊天搜索：返回聊天后清理搜索栏，target=%@ path=%@",
+                           NSStringFromClass([cancelTarget class]), cancelPath ?: @"self");
+            ((void (*)(id, SEL))objc_msgSend)(cancelTarget, cancelSelector);
+        } @catch (NSException *exception) {
+            NeoWCLogAlways(@"聊天搜索：清理搜索栏失败：%@", exception.reason ?: exception.name);
+        }
+    }
+    UIGestureRecognizer *popGesture = controller.navigationController.interactivePopGestureRecognizer;
+    id savedDelegate = objc_getAssociatedObject(controller, &NeoWCChatSearchPopDelegateKey);
+    if (savedDelegate) popGesture.delegate = savedDelegate == NSNull.null ? nil : savedDelegate;
+    objc_setAssociatedObject(controller, &NeoWCChatSearchControllerKey,
+                             nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &NeoWCChatSearchPopDelegateKey,
+                             nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &NeoWCChatSearchActionTargetKey,
+                             nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &NeoWCChatSearchHelperKey,
+                             nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 static void NeoWCRemoveChatSearchButton(BaseMsgContentViewController *controller) {
     UIBarButtonItem *button = objc_getAssociatedObject(controller, &NeoWCChatSearchButtonKey);
     if (!button || ![controller.navigationItem.rightBarButtonItems containsObject:button]) return;
@@ -3807,6 +3868,7 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
                    helper ? NSStringFromClass([helper class]) : @"<nil>");
     objc_setAssociatedObject(hostController, &NeoWCChatSearchHelperKey,
                              helper, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NeoWCSetChatSearchPanCancellation(helper);
 
     SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
     NSString *pushTargetPath = nil;
@@ -3816,7 +3878,31 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
         @try {
             NeoWCLogAlways(@"聊天搜索：由内部搜索目标打开页面，target=%@ path=%@",
                            NSStringFromClass([pushTarget class]), pushTargetPath ?: @"self");
+            NeoWCSetChatSearchPanCancellation(pushTarget);
+            objc_setAssociatedObject(hostController, &NeoWCChatSearchActionTargetKey,
+                                     pushTarget, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             ((void (*)(id, SEL, id))objc_msgSend)(pushTarget, pushSelector, nil);
+            __weak BaseMsgContentViewController *weakHost = hostController;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                BaseMsgContentViewController *strongHost = weakHost;
+                if (!strongHost) return;
+                UIViewController *searchController = strongHost.presentedViewController ?:
+                    strongHost.navigationController.topViewController;
+                if (searchController == strongHost) return;
+                objc_setAssociatedObject(strongHost, &NeoWCChatSearchControllerKey,
+                                         searchController, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                NeoWCSetChatSearchPanCancellation(searchController);
+                UIGestureRecognizer *gesture = strongHost.navigationController.interactivePopGestureRecognizer;
+                id originalDelegate = gesture.delegate;
+                objc_setAssociatedObject(strongHost, &NeoWCChatSearchPopDelegateKey,
+                                         originalDelegate ?: NSNull.null,
+                                         OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                gesture.delegate = nil;
+                gesture.enabled = YES;
+                NeoWCLogAlways(@"聊天搜索：已开启原生侧滑返回，controller=%@ gesture=%@",
+                               NSStringFromClass(searchController.class),
+                               NSStringFromClass(gesture.class));
+            });
             NeoWCCompatibilityMarkTriggered(@"chat-search-button");
             return;
         } @catch (NSException *exception) {
@@ -3834,6 +3920,9 @@ static void NeoWCOpenNativeChatSearch(BaseMsgContentViewController *controller) 
         @try {
             NeoWCLogAlways(@"聊天搜索：回退到 onSearchItem，target=%@ path=%@",
                            NSStringFromClass([fallbackTarget class]), fallbackPath ?: @"self");
+            NeoWCSetChatSearchPanCancellation(fallbackTarget);
+            objc_setAssociatedObject(hostController, &NeoWCChatSearchActionTargetKey,
+                                     fallbackTarget, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             ((void (*)(id, SEL))objc_msgSend)(fallbackTarget, fallbackSelector);
             NeoWCCompatibilityMarkTriggered(@"chat-search-button");
             return;
@@ -5124,6 +5213,7 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
 - (void)viewDidAppear:(BOOL)animated {
     %orig(animated);
     if ([objc_getAssociatedObject(self, &NeoWCChatSearchTransitionKey) boolValue]) {
+        NeoWCCleanupNativeChatSearch(self);
         objc_setAssociatedObject(self, &NeoWCChatSearchTransitionKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         NeoWCUpdateChatTopBar(self);
