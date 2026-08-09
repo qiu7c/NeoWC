@@ -3819,10 +3819,10 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     UIView *container = NeoWCChatTopGlassContainer(18.0, &glass);
     UIView *content = glass.contentView;
 
-    UIImageSymbolConfiguration *backConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:16.0
-                                                                                                      weight:UIImageSymbolWeightSemibold];
-    UIImage *backImage = backItem.image ?: [UIImage systemImageNamed:@"chevron.left"
-                                                    withConfiguration:backConfiguration];
+    UIImageSymbolConfiguration *backConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:15.0
+                                                                                                      weight:UIImageSymbolWeightMedium];
+    UIImage *backImage = [UIImage systemImageNamed:@"chevron.left"
+                                  withConfiguration:backConfiguration];
     UIButton *backButton = NeoWCChatTopCapsuleButton(backImage, backItem.accessibilityLabel ?: @"返回");
     NeoWCBarButtonActionProxy *backProxy = [NeoWCBarButtonActionProxy new];
     backProxy.originalItem = backItem;
@@ -4828,7 +4828,7 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
 
 - (void)layoutSubviews {
     %orig;
-    NeoWCUpdatePinnedMessageGlass(self);
+    NeoWCUpdatePinnedMessageGlass((UIView *)self);
 }
 
 %end
