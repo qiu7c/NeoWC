@@ -10,7 +10,7 @@ NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 
-NSString *const NeoWCDisplayVersion = @"0.1.2 beta22";
+NSString *const NeoWCDisplayVersion = @"0.1.2 beta25";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -91,13 +91,11 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCQuoteJumpEnabledKey: @NO,
         NeoWCQuoteJumpImageEnabledKey: @YES,
         NeoWCQuoteJumpVideoEnabledKey: @YES,
-        NeoWCChatSearchButtonEnabledKey: @NO,
         NeoWCChatTopBarCapsuleEnabledKey: @NO,
         NeoWCChatTopBarEffectStyleKey: @(NeoWCChatTopBarEffectStyleMaterial),
         NeoWCChatTopBarShadowEnabledKey: @YES,
         NeoWCChatTopBarAvatarSizeKey: @30.0,
         NeoWCChatTopBarNicknameSizeKey: @15.0,
-        NeoWCGroupAtTipsEnabledKey: @NO,
         NeoWCMessageBlockEnabledKey: @NO,
         NeoWCMessageBlockUsersKey: @[],
         NeoWCMessageBlockKeywordsKey: @[],
@@ -107,8 +105,6 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCLongPressMenuTitleMapKey: @{},
         NeoWCLongPressMenuManualTitlesKey: @[],
         NeoWCGroupMemberReminderEnabledKey: @NO,
-        NeoWCKeywordReminderEnabledKey: @NO,
-        NeoWCKeywordReminderKeywordsKey: @[],
         NeoWCRedEnvelopeDetailEnabledKey: @NO,
         NeoWCRedEnvelopeDetailCenterKey: @NO,
         NeoWCRedEnvelopeDetailFontSizeKey: @14.0,
@@ -159,6 +155,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCChatInputOuterRoundingKey: @YES,
         NeoWCChatInputInnerRadiusKey: @18.0,
         NeoWCChatInputOuterRadiusKey: @22.0,
+        NeoWCChatInputCapsuleEnabledKey: @NO,
         NeoWCHideChatMuteIconKey: @NO,
         NeoWCExpandedCategoriesKey: @[@"messages"],
         NeoWCCollapsedFeaturesKey: @[],
@@ -239,7 +236,6 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"定位图片引用", @"允许点击图片引用定位", @"photo", NeoWCSettingRowKindSwitch, NeoWCQuoteJumpImageEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"定位视频引用", @"允许点击视频引用定位", @"video", NeoWCSettingRowKindSwitch, NeoWCQuoteJumpVideoEnabledKey, nil, NeoWCSettingActionNone),
     ], defaults, collapsed);
-    [interaction addObject:NeoWCItem(@"聊天搜索按钮", @"在聊天页加入微信原生聊天记录搜索", @"magnifyingglass", NeoWCSettingRowKindSwitch, NeoWCChatSearchButtonEnabledKey, nil, NeoWCSettingActionNone)];
     BOOL supportsLiquidGlass = NeoWCSystemSupportsNativeLiquidGlass();
     BOOL usesLiquidGlass = supportsLiquidGlass &&
         [defaults integerForKey:NeoWCChatTopBarEffectStyleKey] == NeoWCChatTopBarEffectStyleLiquid;
@@ -254,12 +250,8 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     [interaction addObject:NeoWCItem(@"输入框滑动操作", @"左滑清空，右滑粘贴", @"hand.draw", NeoWCSettingRowKindSwitch, NeoWCInputSwipeActionsEnabledKey, nil, NeoWCSettingActionNone)];
 
     NSMutableArray *reminders = [NSMutableArray arrayWithArray:@[
-        NeoWCItem(@"群成员进退群提醒", @"根据群成员列表变化显示本地提醒", @"person.2.badge.gearshape", NeoWCSettingRowKindSwitch, NeoWCGroupMemberReminderEnabledKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"群聊艾特提示", @"使用微信原生边缘提示", @"at", NeoWCSettingRowKindSwitch, NeoWCGroupAtTipsEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"群成员进退群提醒", @"根据群成员列表变化显示本地提醒", @"person.2.badge.gearshape", NeoWCSettingRowKindSwitch, NeoWCGroupMemberReminderEnabledKey, nil, NeoWCSettingActionNone)
     ]];
-    NeoWCAddFeature(reminders, NeoWCItem(@"关键词提醒", @"普通文字命中关键词时提醒", @"bell.badge", NeoWCSettingRowKindSwitch, NeoWCKeywordReminderEnabledKey, nil, NeoWCSettingActionNone), @[
-        NeoWCItem(@"提醒关键词", @"每行一个关键词，不区分大小写", @"text.magnifyingglass", NeoWCSettingRowKindDetail, nil, NeoWCCountText([defaults arrayForKey:NeoWCKeywordReminderKeywordsKey].count), NeoWCSettingActionReminderKeywords)
-    ], defaults, collapsed);
     NeoWCAddFeature(reminders, NeoWCItem(@"红包详情显示", @"显示总额、领取和剩余统计", @"envelope.open", NeoWCSettingRowKindSwitch, NeoWCRedEnvelopeDetailEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"红包详情居中", @"将补充统计信息居中显示", @"text.aligncenter", NeoWCSettingRowKindSwitch, NeoWCRedEnvelopeDetailCenterKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"红包详情字号", @"输入 10 到 24", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCRedEnvelopeDetailFontSizeKey]], NeoWCSettingActionRedEnvelopeFontSize)
@@ -335,7 +327,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     } else {
         [stepChildren addObject:NeoWCItem(@"固定步数", @"点击输入每天固定显示的步数", @"number", NeoWCSettingRowKindDetail, nil, configuredSteps > 0 ? [NSString stringWithFormat:@"已设置：%ld 步", (long)configuredSteps] : @"尚未设置", NeoWCSettingActionFixedSteps)];
     }
-    [stepChildren addObject:NeoWCItem(@"随时间逐步递增", @"关闭时直接显示目标；开启后一天内逐步增长", @"chart.line.uptrend.xyaxis", NeoWCSettingRowKindSwitch, NeoWCStepGradualEnabledKey, nil, NeoWCSettingActionNone)];
+    [stepChildren addObject:NeoWCItem(@"分时段阶段递增", @"每天分阶段更新，18:30 完成今日目标", @"chart.line.uptrend.xyaxis", NeoWCSettingRowKindSwitch, NeoWCStepGradualEnabledKey, nil, NeoWCSettingActionNone)];
     NSString *stepSummary = stepMode == NeoWCStepModeDailyRandom
         ? (today ? [NSString stringWithFormat:@"今日随机：%ld 步", (long)effectiveSteps] : @"每日随机，尚未生成")
         : (configuredSteps > 0 ? [NSString stringWithFormat:@"固定：%ld 步", (long)configuredSteps] : @"固定模式，请先设置步数");
@@ -369,6 +361,15 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
         NeoWCItem(@"全局去除分割线", @"按参考插件规则隐藏页面细线", @"rectangle.split.1x2", NeoWCSettingRowKindSwitch, NeoWCHideSeparatorLinesKey, nil, NeoWCSettingActionNone),
     ]];
     NSMutableArray *input = [NSMutableArray array];
+    BOOL supportsInputLiquidGlass = NeoWCSystemSupportsNativeLiquidGlass();
+    BOOL usesInputLiquidGlass = supportsInputLiquidGlass &&
+        [defaults integerForKey:NeoWCChatTopBarEffectStyleKey] == NeoWCChatTopBarEffectStyleLiquid;
+    NeoWCAddFeature(input,
+                    NeoWCItem(@"胶囊工具栏", @"语音与输入框、表情与更多分为左右玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatInputCapsuleEnabledKey, nil, NeoWCSettingActionNone),
+                    @[
+        NeoWCItem(@"模糊效果", supportsInputLiquidGlass ? @"与胶囊顶栏共用玻璃效果" : @"iOS 26 以下仅支持超薄玻璃", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(usesInputLiquidGlass ? @"液态玻璃" : @"超薄玻璃"), NeoWCSettingActionChatTopEffectStyle),
+        NeoWCItem(@"胶囊阴影", @"与胶囊顶栏共用轻微环境阴影", @"circle.dotted", NeoWCSettingRowKindSwitch, NeoWCChatTopBarShadowEnabledKey, nil, NeoWCSettingActionNone),
+    ], defaults, collapsed);
     NSMutableArray *roundingChildren = [NSMutableArray array];
     NeoWCSettingItem *inner = NeoWCItem(@"输入框内部圆角", @"调整文字输入区域", @"text.cursor", NeoWCSettingRowKindSwitch, NeoWCChatInputInnerRoundingKey, nil, NeoWCSettingActionNone);
     inner.hasChildren = YES;

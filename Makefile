@@ -11,6 +11,6 @@ TWEAK_NAME = NeoWC
 
 NeoWC_FILES = Tweak.xm $(wildcard Sources/*.m)
 NeoWC_CFLAGS = -fobjc-arc
-NeoWC_FRAMEWORKS = UIKit Foundation QuartzCore CoreImage UserNotifications UniformTypeIdentifiers
+NeoWC_FRAMEWORKS = UIKit Foundation QuartzCore CoreImage UniformTypeIdentifiers
 
 include $(THEOS_MAKE_PATH)/tweak.mk

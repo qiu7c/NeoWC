@@ -12,6 +12,7 @@ NSString *const NeoWCChatInputInnerRoundingKey = @"com.qiu7c.neowc.interface.cha
 NSString *const NeoWCChatInputOuterRoundingKey = @"com.qiu7c.neowc.interface.chat-input-rounding.outer";
 NSString *const NeoWCChatInputInnerRadiusKey = @"com.qiu7c.neowc.interface.chat-input-rounding.inner-radius";
 NSString *const NeoWCChatInputOuterRadiusKey = @"com.qiu7c.neowc.interface.chat-input-rounding.outer-radius";
+NSString *const NeoWCChatInputCapsuleEnabledKey = @"com.qiu7c.neowc.interface.chat-input-capsule";
 NSString *const NeoWCHideChatMuteIconKey = @"com.qiu7c.neowc.interface.hide-chat-mute-icon";
 
 static char NeoWCOriginalCornerRadiusKey;
@@ -20,6 +21,14 @@ static char NeoWCOriginalCornerCurveKey;
 static char NeoWCRoundingStateSavedKey;
 static char NeoWCRoundingAppliedToToolViewKey;
 static char NeoWCRoundingConfigurationKey;
+static char NeoWCInputCapsuleLeftViewKey;
+static char NeoWCInputCapsuleRightViewKey;
+static char NeoWCInputCapsuleConfigurationKey;
+static char NeoWCInputCapsuleOriginalOuterBackgroundKey;
+static char NeoWCInputCapsuleOriginalBarBackgroundKey;
+static char NeoWCInputCapsuleOriginalGrowBackgroundKey;
+static char NeoWCInputCapsuleOriginalBackdropAlphaKey;
+static char NeoWCInputCapsuleOriginalInputBackgroundAlphaKey;
 static char NeoWCOriginalMuteIconHiddenKey;
 static char NeoWCOriginalMuteMemberLabelHiddenKey;
 
@@ -50,6 +59,7 @@ static void NeoWCRegisterChatInputRoundingDefaults(void) {
             NeoWCChatInputOuterRoundingKey: @YES,
             NeoWCChatInputInnerRadiusKey: @18.0,
             NeoWCChatInputOuterRadiusKey: @22.0,
+            NeoWCChatInputCapsuleEnabledKey: @NO,
         }];
     });
 }
@@ -79,6 +89,166 @@ static UIView *NeoWCFindSubviewOfClassName(UIView *view, NSString *className) {
         if (match) return match;
     }
     return nil;
+}
+
+static id NeoWCNullableObject(id value) {
+    return value ?: NSNull.null;
+}
+
+static UIColor *NeoWCStoredColor(id owner, const void *key) {
+    id value = objc_getAssociatedObject(owner, key);
+    return value == NSNull.null ? nil : value;
+}
+
+static UIVisualEffectView *NeoWCInputOriginalBackdrop(UIView *outerBar) {
+    for (UIView *subview in outerBar.subviews) {
+        if ([subview isKindOfClass:UIVisualEffectView.class]) return (UIVisualEffectView *)subview;
+    }
+    return nil;
+}
+
+static UIImageView *NeoWCInputOriginalTextBackground(UIView *growTextView) {
+    for (UIView *subview in growTextView.subviews) {
+        if (![subview isKindOfClass:UIImageView.class]) continue;
+        if (CGRectGetWidth(subview.bounds) + 2.0 >= CGRectGetWidth(growTextView.bounds) &&
+            CGRectGetHeight(subview.bounds) + 2.0 >= CGRectGetHeight(growTextView.bounds)) {
+            return (UIImageView *)subview;
+        }
+    }
+    return nil;
+}
+
+static UIVisualEffect *NeoWCInputCapsuleEffect(void) {
+    NSInteger style = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCChatTopBarEffectStyleKey];
+    if (style == NeoWCChatTopBarEffectStyleLiquid && NeoWCSystemSupportsNativeLiquidGlass()) {
+        Class glassEffectClass = NSClassFromString(@"UIGlassEffect");
+        SEL factory = NSSelectorFromString(@"effectWithStyle:");
+        if (glassEffectClass && [glassEffectClass respondsToSelector:factory]) {
+            UIVisualEffect *effect = ((id (*)(id, SEL, NSInteger))objc_msgSend)(glassEffectClass,
+                                                                                factory,
+                                                                                0);
+            SEL interactiveSelector = NSSelectorFromString(@"setInteractive:");
+            if ([effect respondsToSelector:interactiveSelector]) {
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(effect, interactiveSelector, NO);
+            }
+            if (effect) return effect;
+        }
+    }
+    return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
+}
+
+static UIView *NeoWCInputCapsuleView(CGRect frame) {
+    UIView *container = [[UIView alloc] initWithFrame:frame];
+    container.userInteractionEnabled = NO;
+    container.backgroundColor = UIColor.clearColor;
+    BOOL shadowEnabled = [NSUserDefaults.standardUserDefaults boolForKey:NeoWCChatTopBarShadowEnabledKey];
+    container.layer.shadowColor = UIColor.blackColor.CGColor;
+    container.layer.shadowOpacity = shadowEnabled ? 0.04 : 0.0;
+    container.layer.shadowRadius = shadowEnabled ? 2.5 : 0.0;
+    container.layer.shadowOffset = CGSizeZero;
+
+    UIVisualEffectView *effectView = [[UIVisualEffectView alloc] initWithEffect:NeoWCInputCapsuleEffect()];
+    effectView.frame = container.bounds;
+    effectView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    effectView.userInteractionEnabled = NO;
+    effectView.clipsToBounds = YES;
+    effectView.layer.cornerRadius = CGRectGetHeight(frame) * 0.5;
+    effectView.layer.cornerCurve = kCACornerCurveContinuous;
+    effectView.layer.borderWidth = 0.0;
+    effectView.layer.borderColor = UIColor.clearColor.CGColor;
+    [container addSubview:effectView];
+    return container;
+}
+
+void NeoWCRestoreChatInputCapsulesFromToolView(UIView *inputToolView) {
+    if (!inputToolView) return;
+    UIView *outerBar = inputToolView.subviews.firstObject;
+    UIView *bar = NeoWCFindSubviewOfClassName(inputToolView, @"InputToolViewBar");
+    UIView *growTextView = NeoWCFindSubviewOfClassName(inputToolView, @"MMGrowTextView");
+    UIVisualEffectView *backdrop = NeoWCInputOriginalBackdrop(outerBar);
+    UIImageView *inputBackground = NeoWCInputOriginalTextBackground(growTextView);
+
+    [objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleLeftViewKey) removeFromSuperview];
+    [objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleRightViewKey) removeFromSuperview];
+    id outerBackground = objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalOuterBackgroundKey);
+    id barBackground = objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalBarBackgroundKey);
+    id growBackground = objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalGrowBackgroundKey);
+    NSNumber *backdropAlpha = objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalBackdropAlphaKey);
+    NSNumber *inputBackgroundAlpha = objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalInputBackgroundAlphaKey);
+    if (outerBackground) outerBar.backgroundColor = NeoWCStoredColor(inputToolView, &NeoWCInputCapsuleOriginalOuterBackgroundKey);
+    if (barBackground) bar.backgroundColor = NeoWCStoredColor(inputToolView, &NeoWCInputCapsuleOriginalBarBackgroundKey);
+    if (growBackground) growTextView.backgroundColor = NeoWCStoredColor(inputToolView, &NeoWCInputCapsuleOriginalGrowBackgroundKey);
+    if (backdropAlpha) backdrop.alpha = backdropAlpha.doubleValue;
+    if (inputBackgroundAlpha) inputBackground.alpha = inputBackgroundAlpha.doubleValue;
+
+    const void *keys[] = {&NeoWCInputCapsuleLeftViewKey, &NeoWCInputCapsuleRightViewKey,
+                          &NeoWCInputCapsuleConfigurationKey,
+                          &NeoWCInputCapsuleOriginalOuterBackgroundKey,
+                          &NeoWCInputCapsuleOriginalBarBackgroundKey,
+                          &NeoWCInputCapsuleOriginalGrowBackgroundKey,
+                          &NeoWCInputCapsuleOriginalBackdropAlphaKey,
+                          &NeoWCInputCapsuleOriginalInputBackgroundAlphaKey};
+    for (NSUInteger index = 0; index < sizeof(keys) / sizeof(keys[0]); index++) {
+        objc_setAssociatedObject(inputToolView, keys[index], nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
+void NeoWCApplyChatInputCapsulesToToolView(UIView *inputToolView) {
+    if (!inputToolView) return;
+    NeoWCRegisterChatInputRoundingDefaults();
+    BOOL enabled = NeoWCEnhancementEnabled(NeoWCChatInputCapsuleEnabledKey);
+    UIView *existingLeft = objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleLeftViewKey);
+    if (!enabled) {
+        if (existingLeft) NeoWCRestoreChatInputCapsulesFromToolView(inputToolView);
+        return;
+    }
+
+    UIView *outerBar = inputToolView.subviews.firstObject;
+    UIView *bar = NeoWCFindSubviewOfClassName(inputToolView, @"InputToolViewBar");
+    UIView *growTextView = NeoWCFindSubviewOfClassName(inputToolView, @"MMGrowTextView");
+    if (!outerBar || !bar || CGRectGetWidth(bar.bounds) < 160.0) return;
+    UIVisualEffectView *backdrop = NeoWCInputOriginalBackdrop(outerBar);
+    UIImageView *inputBackground = NeoWCInputOriginalTextBackground(growTextView);
+    NSInteger effectStyle = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCChatTopBarEffectStyleKey];
+    BOOL shadowEnabled = [NSUserDefaults.standardUserDefaults boolForKey:NeoWCChatTopBarShadowEnabledKey];
+    NSString *configuration = [NSString stringWithFormat:@"%ld:%d", (long)effectStyle, shadowEnabled];
+    if (existingLeft && [configuration isEqualToString:objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleConfigurationKey)]) return;
+    if (existingLeft) NeoWCRestoreChatInputCapsulesFromToolView(inputToolView);
+
+    objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalOuterBackgroundKey,
+                             NeoWCNullableObject(outerBar.backgroundColor), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalBarBackgroundKey,
+                             NeoWCNullableObject(bar.backgroundColor), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalGrowBackgroundKey,
+                             NeoWCNullableObject(growTextView.backgroundColor), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (backdrop) objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalBackdropAlphaKey,
+                                           @(backdrop.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (inputBackground) objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalInputBackgroundAlphaKey,
+                                                  @(inputBackground.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    outerBar.backgroundColor = UIColor.clearColor;
+    bar.backgroundColor = UIColor.clearColor;
+    growTextView.backgroundColor = UIColor.clearColor;
+    backdrop.alpha = 0.0;
+    inputBackground.alpha = 0.0;
+
+    CGFloat width = CGRectGetWidth(bar.bounds);
+    CGFloat height = MAX(32.0, CGRectGetHeight(bar.bounds) - 6.0);
+    CGFloat rightWidth = 80.0;
+    CGFloat rightX = width - rightWidth - 4.0;
+    CGFloat leftX = 4.0;
+    CGFloat leftWidth = MAX(80.0, rightX - 4.0 - leftX);
+    UIView *left = NeoWCInputCapsuleView(CGRectMake(leftX, 3.0, leftWidth, height));
+    UIView *right = NeoWCInputCapsuleView(CGRectMake(rightX, 3.0, rightWidth, height));
+    left.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    right.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleHeight;
+    [bar insertSubview:left atIndex:0];
+    [bar insertSubview:right aboveSubview:left];
+    objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleLeftViewKey, left, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleRightViewKey, right, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleConfigurationKey,
+                             configuration, OBJC_ASSOCIATION_COPY_NONATOMIC);
+    NeoWCCompatibilityMarkTriggered(@"input-capsule");
 }
 
 static void NeoWCSetRoundedState(UIView *view, BOOL enabled, CGFloat maximumRadius) {

@@ -3,7 +3,6 @@
 #import "NeoWCAccount.h"
 #import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
-#import "NeoWCReminder.h"
 
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -212,28 +211,6 @@ BOOL NeoWCShouldBlockIncomingMessage(NSString *sessionUserName, id message) {
     if (!blockedUser && blockedKeyword.length == 0) return NO;
     NeoWCLog(@"已屏蔽一条新收到的普通文字消息（会话：%@）", session ?: @"未知");
     return YES;
-}
-
-void NeoWCHandleIncomingKeywordReminder(NSString *sessionUserName, id message) {
-    if (!NeoWCEnhancementEnabled(NeoWCKeywordReminderEnabledKey) ||
-        NeoWCMessageType(message) != 1 ||
-        !NeoWCMessageIsIncoming(message)) return;
-
-    NSString *session = NeoWCMessageSession(sessionUserName, message);
-    NSString *content = NeoWCMessageDisplayContent(message, session);
-    NSString *matchedKeyword = NeoWCRuntimeMatchedTerm(content, NeoWCKeywordReminderKeywordsKey);
-    if (matchedKeyword.length == 0) return;
-
-    NSString *sender = NeoWCRuntimeStringValue(message, @"m_nsRealChatUsr");
-    if (sender.length == 0) sender = NeoWCRuntimeStringValue(message, @"m_nsFromUsr");
-    NSString *body = content.length > 120 ? [[content substringToIndex:120] stringByAppendingString:@"…"] : content;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        id manager = NeoWCContactManager();
-        NSString *displayName = NeoWCContactDisplayName(NeoWCContactForUserNameWithManager(manager, sender), sender);
-        NeoWCDeliverReminder([NSString stringWithFormat:@"关键词提醒 · %@", displayName],
-                             body,
-                             session);
-    });
 }
 
 static NSMutableDictionary<NSString *, NSString *> *NeoWCGroupMemberListCache(void) {

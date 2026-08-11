@@ -346,7 +346,6 @@
         case NeoWCSettingActionConfigManager: [self push:[NeoWCConfigManagerViewController new]]; break;
         case NeoWCSettingActionBlockUsers: [self push:[[NeoWCListEditorViewController alloc] initWithTitle:item.title subtitle:@"每行填写一个 wxid 或以 @chatroom 结尾的群聊账号" defaultsKey:NeoWCMessageBlockUsersKey mode:NeoWCListEditorModeList]]; break;
         case NeoWCSettingActionBlockKeywords: [self push:[[NeoWCListEditorViewController alloc] initWithTitle:item.title subtitle:@"仅匹配新收到的普通文字消息，每行填写一个关键词" defaultsKey:NeoWCMessageBlockKeywordsKey mode:NeoWCListEditorModeList]]; break;
-        case NeoWCSettingActionReminderKeywords: [self push:[[NeoWCListEditorViewController alloc] initWithTitle:item.title subtitle:@"命中任意一项即提醒，每行填写一个关键词" defaultsKey:NeoWCKeywordReminderKeywordsKey mode:NeoWCListEditorModeList]]; break;
         case NeoWCSettingActionLongPressMenus: [self push:[NeoWCLongPressMenuViewController new]]; break;
         case NeoWCSettingActionMeMenu: [self push:[NeoWCMeMenuViewController new]]; break;
         case NeoWCSettingActionRevokePromptStyle: [self presentRevokePromptStylePicker]; break;

@@ -7,8 +7,8 @@
 
 ## 1. 当前工作区状态
 
-- 最近已推送提交：`8bc650b Refine chat search and settings feedback`。
-- 当前未提交修改涉及搜索原生链路、iOS 26 原生液态玻璃限制、持久多选项反馈及设置首页头像信息布局。
+- 最近已推送提交：`9baa029 Fix native chat search cleanup`。
+- 当前未提交修改包含微信运动分时段递增、完整删除聊天搜索/关键词提醒/群聊艾特提醒，以及新增胶囊工具栏。
 - `main` 的已推送部分与 `origin/main` 同步；开始新工作前仍须重新检查 `git status` 和当前 diff。
 - 提交前必须先执行 `git status --short` 和 `git diff --check`，不要覆盖用户已有修改。
 - 用户通常会明确说“推送”后再提交；推送后不主动查询 GitHub Actions 构建结果。
@@ -68,7 +68,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | `Sources/NeoWCAntiRevoke.m` | 防撤回解析、消息查询、本地提示、回复、记录中心和配置 |
 | `Sources/NeoWCAntiRevokeTemplateEditor.m` | 防撤回模板编辑 |
 | `Sources/NeoWCChatExport.m` | 多选纯文本、图片保存和分享卡片 |
-| `Sources/NeoWCInterfaceTweaks.m` | 输入栏圆角、免打扰图标隐藏与原状态恢复 |
+| `Sources/NeoWCInterfaceTweaks.m` | 胶囊工具栏、输入栏圆角、免打扰图标隐藏与原状态恢复 |
 | `Sources/NeoWCEnhancements.m` | 功能键、颜色工具和总开关判断 |
 | `Sources/NeoWCDebug.m` | 日志、悬浮按钮、调试中心和 View 选择器 |
 | `Sources/NeoWCCompatibility.m` | Runtime 类/Selector/触发状态检查 |
@@ -93,11 +93,10 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 - 聊天记录显示修改：长按文字、应用、图片或转账消息，仅修改当前页面本机显示
 - 语音自动转文字，可分别忽略群聊、私聊和自己发送
 - 引用回复手势复用微信原生回复入口
-- 引用消息定位、聊天搜索按钮
-- 群聊艾特与关键词边缘提示
+- 引用消息定位
 - 红包详情显示与通话二次确认
 - 普通文字消息屏蔽、长按菜单管理
-- 群成员进退群提醒与关键词提醒
+- 群成员进退群提醒
 - 自动选择原图
 - 通知点击直接进入对应聊天
 - 输入框左滑清空、右滑粘贴
@@ -123,6 +122,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 
 ### 界面优化
 
+- 胶囊工具栏：左侧语音与输入框、右侧表情与更多，共用顶栏玻璃效果和阴影配置
 - 输入框内部圆角
 - 外部工具栏圆角
 - 内外圆角 0–40 自定义
@@ -149,6 +149,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | 快捷发送菜单 | `WCActionSheet showInView:` | 只在聊天编辑上下文和有效会话中增加按钮 |
 | 快捷发送确认 | `SharePreConfirmSheetView onConfirmButtonClick/onCancelButtonClick` | 不干扰微信官方转发实例和代理 |
 | 输入栏圆角 | `MMInputToolView didMoveToWindow` | 不 Hook `layoutSubviews`；相同配置只应用一次 |
+| 胶囊工具栏 | `MMInputToolView didMoveToWindow` | 只透明化原背景并在原控件后加入两个不接收触摸的玻璃胶囊；不移动或替换微信按钮 |
 | 输入框滑动 | `MMGrowTextView didMoveToWindow` | 手势只安装一次，`cancelsTouchesInView=NO` |
 | 免打扰图标 | `UIImageView setAccessibilityLabel:/didMoveToWindow/setHidden:` | 仅处理标签严格等于“免打扰”的已管理图片 |
 | 多选导出 | `BaseMsgContentViewController`、`MMScrollActionSheet` | 只在多选“更多”菜单构建期间插入项目 |
@@ -160,16 +161,14 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | 聊天记录显示修改 | `TextMessageCellView`、`AppMessageCellView`、`ImageMessageCellView`、`WCPayTransferMessageCellView` | 文字/应用/转账沿用参考插件确认的消息对象、setter 与节点刷新；图片使用当前聊天页缓存并覆盖图片 Cell、ViewModel、数据项和 `CMessageWrap` 精确读取入口 |
 | 引用回复手势 | `CommonMessageCellView onShowMsgReplyMenuItem:` | 仅横向滑动结束且超过阈值时调用微信原生回复入口；手势关闭后移除 |
 | 语音自动转文字 | `VoiceMessageCellView layoutSubviews/onVoiceTrans:` | 消息级记录完成、处理中和重试次数；同时检查本地翻译结果与加载视图；失败最多尝试 5 次，禁止空语音无限循环 |
-| 聊天搜索 | `BaseMsgContentViewController`、`MsgSearchHelper` | 按 WCPulse 已确认路径调用 `initMsgSearchHelper:NO`，读取原生 `m_oMsgSearchHelper`，优先调用 helper 的 `pushSearchControllerWithCompletion:nil`，兼容分支调用聊天控制器 `onSearchItem`；不再使用语义不同的 `getSearcherViewController` |
-| 艾特/关键词边缘提示 | `MMEdgeTipsView`、`BaseMsgContentViewController` | 点击使用 `scrollToMessage:highlight:marginTop:animated:` 精确定位，成功调用后才移除队列消息 |
 | 红包详情 | `WCRedEnvelopesRedEnvelopesDetailViewController viewWillAppear:` | 金额单位为分；详情写 `m_receivedInfoLable`，`nickNameLabel` 只清理旧残留；不得追加原生领取状态造成重复 |
-| 消息屏蔽/关键词提醒 | `CMessageMgr AsyncOnAddMsg:MsgWrap:` | 只处理新收到的普通文字；关闭或不命中时完整执行 `%orig` |
+| 消息屏蔽 | `CMessageMgr AsyncOnAddMsg:MsgWrap:` | 只处理新收到的普通文字；关闭或不命中时完整执行 `%orig` |
 | 长按菜单管理 | 各消息 Cell 的 `operationMenuItems` | 只管理已存在菜单项；关闭时恢复原始标题 |
 | 群成员提醒 | `CContactMgr printContactImportantChangeData:oldContact:` | 原调用前后比较群成员列表，本地提醒不写回联系人 |
 | 自动原图 | `MMAssetPickerController`、`MMImagePreviewBrowserController viewDidLoad` | 只调用已确认的 `setIsOriginSelected:` |
 | 通知直达聊天 | `NotificationActionsMgr`、`MicroMessengerAppDelegate` 通知回调 | 只接管含有效会话字段 `u` 的通知，其他通知完整回退微信 |
 | 钱包余额显示 | `TimeoutNumber updateNumber:/defaultNumber:`、`WCPayWalletEntryHeaderView` | 已确认参数为 `unsigned long long` 且单位为分；仅钱包头部替换后调用原 IMP，禁止恢复 `MMUILabel` 全局数字猜测 |
-| 微信运动步数 | `WCDeviceStepObject`、`UploadDeviceStepReq`、`WCDataItem` | Getter/Setter 均使用当天配置值；关闭、未配置或跨日时返回原值 |
+| 微信运动步数 | `WCDeviceStepObject`、`UploadDeviceStepReq`、`WCDataItem` | Getter/Setter 均使用当天配置值；关闭、未配置或跨日时返回原值；阶段递增只在读取时按固定时段计算，不创建定时器，18:30 达到当天目标 |
 | 页面缩放 | `MMThemeManager`、`CLocalInfo`、`WKWebView`、`WAThemeProxy` | 只缩放 `#font_set` 的 `alllevel/chatLevel` 与网页文字，不修改窗口 transform，不按账号硬编码 |
 | 好友数量显示 | `MMUILabel setText:` | 必须匹配“个朋友”等明确文案，禁止无条件全局替换 |
 | 广告 | `WCDataItem`、`WAAppTaskSplashADConfig` | 关闭状态返回微信原值 |
@@ -260,7 +259,8 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
    - 红包详情已改为写入 `m_receivedInfoLable`，金额按分换算。
 
 2. 当前未提交修复
-   - 聊天搜索已补齐 WCPulse/WeChatX 的控制器归一化、导航前处理及 `object_getIvar` 内部目标解析：从 Helper 的对象 ivar 中寻找真正实现搜索跳转的内部目标，对 Helper、内部目标和搜索控制器开启侧滑取消及原生 `interactivePopGestureRecognizer`；beta22 改为优先调用聊天控制器自身的 `msgSearchBarCancel`，并在 `WCSearchController` 失活或消失时主动退出残留搜索层、恢复手势代理和胶囊顶栏。
+   - beta25 已按要求完整删除聊天搜索、关键词提醒和群聊艾特提醒，包括设置 Key、设置项、运行时处理、边缘提示 UI、搜索控制器 Hook 与兼容性登记。
+   - 新增胶囊工具栏：隐藏底部整条模糊背景，保留微信原语音、输入、表情和更多控件，只在其背后按左右两组增加玻璃胶囊；效果与阴影配置和胶囊顶栏共用。
    - 胶囊顶栏的液态玻璃仅允许 iOS 26 原生 `UIGlassEffect`；低版本强制使用超薄玻璃，已移除 NeoWC 自研兼容液态叠层。
    - 设置首页头像改为 96 点圆角方形容器，并同步扩大昵称、wxid 间距和页眉高度，避免直接缩放微信内部头像 View 造成首帧裁切。
    - 所有持久多选设置均在列表显示“当前选择：…”并在操作表中勾选当前项。
@@ -276,20 +276,20 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 完整稳定结论见 `REFERENCE_PLUGIN_ANALYSIS.md`：
 
 - 2DD 小丑助手：钱包金额参数、文字/应用/图片/转账本地显示修改。
-- WeChatX / WeChatX(1)：朋友圈权限与精确时间、原生浮动菜单转发、全局去分割线、页面缩放、语音状态机、聊天搜索 Helper。
-- WCPulse 1.6-3：引用/边缘提示定位、独立搜索控制器、红包详情、扫码来源与通话确认。
-- WeChatEnhance：引用手势、消息屏蔽、菜单管理、群成员/关键词提醒、自动原图、通知直达和钱包局部修改。
+- WeChatX / WeChatX(1)：朋友圈权限与精确时间、原生浮动菜单转发、全局去分割线、页面缩放、语音状态机。
+- WCPulse 1.6-3：引用定位、红包详情、扫码来源与通话确认。
+- WeChatEnhance：引用手势、消息屏蔽、菜单管理、群成员提醒、自动原图、通知直达和钱包局部修改。
 - 存自拍：预览长按、原生菜单、`EmoticonUploadInfoObj` 自拍上传链。
 - 微信广告：广告过滤、URL 改写、Web 调试、越狱检测与统计字段相关入口。
 
 ## 12. 下一轮真机验证顺序
 
-1. 编译并安装当前未提交搜索修复，确认点击搜索进入微信原生搜索页面，取消后恢复聊天原导航栏。
-2. 搜索关键词、进入一条结果再返回，确认只回到搜索结果页，不出现聊天标题、返回箭头、搜索框和按钮重叠。
-3. 打开未领取、部分领取和已领完红包，确认详情单行完整显示且不重复原生“已领取”文字。
-4. 用空语音、无法识别语音和正常语音测试自动转文字，确认失败最多尝试 5 次且聊天不卡死。
-5. 点击艾特与关键词边缘提示，确认滚动到原消息并在成功后更新剩余数量。
-6. 确认设置页中已无聊天消息时间标签入口，进入聊天不再因时间标签卡死。
+1. 编译并安装 beta25，确认设置页、聊天页和运行时均不再出现搜索、关键词提醒或群聊艾特提醒。
+2. 开启胶囊工具栏，验证文字输入、按住说话、表情、更多、发送按钮、键盘切换和多行输入全部保持微信原行为。
+3. 分别验证超薄玻璃、iOS 26 原生液态玻璃、阴影开关、深色模式及关闭功能后的原样恢复。
+4. 打开未领取、部分领取和已领完红包，确认详情单行完整显示且不重复原生“已领取”文字。
+5. 用空语音、无法识别语音和正常语音测试自动转文字，确认失败最多尝试 5 次且聊天不卡死。
+6. 验证微信运动各时间阶段、跨日重置及 18:30 达到当天目标。
 7. 回归钱包余额、文字/引用应用/图片/转账显示修改及“仅当前页面本机显示”边界。
 8. 回归防撤回气泡、图片编辑快捷发送、朋友圈转发和设置页无动画刷新。
 
@@ -318,13 +318,13 @@ ssh://git@ssh.github.com:443/qiu7c/NeoWC.git
 ```text
 继续维护 D:\Vibe\NeoWC。先完整阅读 D:\Vibe\NeoWC\HANDOFF.md，再检查 git status、最近提交和当前 diff；工作区中的所有现有修改都要保留，不得覆盖或回退。
 
-最近已推送提交为 8bc650b。当前未提交修改包含：聊天搜索按 WCPulse 的 `initMsgSearchHelper:NO`、`m_oMsgSearchHelper`、`pushSearchControllerWithCompletion:nil` 原生链路重写；液态玻璃限制为 iOS 26 原生 `UIGlassEffect`；设置首页头像与信息布局放大。HANDOFF.md 已更新，必须保留这些修改。
+最近已推送提交为 9baa029。当前未提交修改包含：微信运动改为分时段阶段递增并在 18:30 达到目标；聊天搜索、关键词提醒和群聊艾特提醒已完整删除；胶囊工具栏已加入但仍待 Theos 编译和真机验证。HANDOFF.md 已更新，必须保留这些修改。
 
 参考插件的稳定结论见 D:\Vibe\NeoWC\REFERENCE_PLUGIN_ANALYSIS.md，原始反编译产物在 D:\Vibe\NeoWC\.codex-analysis，仅供本机分析且不得加入提交。后续遇到未还原、真机不生效或微信版本变化的功能时，应直接回到用户提供的参考插件 `dylib`/`deb` 和这些本地提取文件继续反编译学习，确认 Hook 注册、原方法参数类型、字段来源与替换函数调用顺序后再修改 NeoWC；不要仅根据功能名或字符串猜测私有 API。
 
 必须保留防撤回气泡方案：禁止给 CommonMessageCellView 恢复 layoutSubviews Hook，禁止主动调用 setNeedsLayout/layoutIfNeeded，提示刷新必须弱引用且合并执行。保留图片编辑快捷发送与微信官方转发完全隔离的逻辑，保留设置页无动画 reloadData 与滚动位置保持方案。聊天消息时间标签已完整删除，不要恢复；不要恢复长截图、Markdown 导出或全局文字替换。
 
-下一轮优先推送构建并真机验证搜索的进入、取消、结果跳转后返回三条路径，以及红包未领取/部分领取/已领完三种状态。之后验证空语音重试上限、艾特/关键词边缘提示定位和已删除的消息时间入口。
+下一轮优先推送构建并真机验证红包未领取/部分领取/已领完三种状态、空语音重试上限、微信运动分阶段结果，以及已删除功能不再出现入口或运行时行为。
 
 修改后先执行 git status --short、git diff --check、git diff --stat 和约束扫描。本机没有 Theos，无法本地完成 iOS 私有 API 编译。未经用户明确要求不要提交或推送；用户说“提交”表示提交并推送 main，推送后不要查询云端构建结果。项目版本为 0.1.2，远程为 ssh://git@ssh.github.com:443/qiu7c/NeoWC.git。
 ```
