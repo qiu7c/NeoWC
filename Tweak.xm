@@ -268,6 +268,7 @@ static char NeoWCChatTopGlassEffectMarkerKey;
 static char NeoWCChatTopGlassEffectAnimatorKey;
 static char NeoWCChatTopTypingActiveKey;
 static char NeoWCChatTopStableDisplayNameKey;
+static char NeoWCChatTypingStatusLabelMarkerKey;
 static char NeoWCChatGlassAppliedStyleKey;
 static char NeoWCChatTopOriginalClipsToBoundsKey;
 static char NeoWCChatTopOriginalBorderWidthKey;
@@ -294,6 +295,8 @@ static BOOL NeoWCMomentsDispatchingQuickComment = NO;
 
 static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
 static void NeoWCRefreshChatTopBarAfterWechatUpdate(BaseMsgContentViewController *controller);
+static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView);
+static BaseMsgContentViewController *NeoWCResolveVisibleChatController(void);
 
 @interface NeoWCBarButtonActionProxy : NSObject
 @property (nonatomic, strong) UIBarButtonItem *originalItem;
@@ -2773,6 +2776,66 @@ static UIWindow *NeoWCActiveApplicationWindow(void) {
     return UIApplication.sharedApplication.windows.firstObject;
 }
 
+static BaseMsgContentViewController *NeoWCChatControllerInControllerTree(UIViewController *controller) {
+    if (!controller) return nil;
+    BaseMsgContentViewController *match = nil;
+    if (controller.presentedViewController) {
+        match = NeoWCChatControllerInControllerTree(controller.presentedViewController);
+        if (match) return match;
+    }
+    if ([controller isKindOfClass:UINavigationController.class]) {
+        match = NeoWCChatControllerInControllerTree(((UINavigationController *)controller).visibleViewController);
+        if (match) return match;
+    }
+    if ([controller isKindOfClass:UITabBarController.class]) {
+        match = NeoWCChatControllerInControllerTree(((UITabBarController *)controller).selectedViewController);
+        if (match) return match;
+    }
+    if ([controller isKindOfClass:NSClassFromString(@"BaseMsgContentViewController")] &&
+        controller.isViewLoaded && controller.view.window &&
+        (!controller.navigationController || controller.navigationController.topViewController == controller)) {
+        return (BaseMsgContentViewController *)controller;
+    }
+    for (UIViewController *child in controller.childViewControllers.reverseObjectEnumerator) {
+        match = NeoWCChatControllerInControllerTree(child);
+        if (match) return match;
+    }
+    return nil;
+}
+
+static BaseMsgContentViewController *NeoWCResolveVisibleChatController(void) {
+    BaseMsgContentViewController *cached = NeoWCVisibleChatController;
+    if (cached.isViewLoaded && cached.view.window &&
+        (!cached.navigationController || cached.navigationController.topViewController == cached)) return cached;
+
+    NSMutableOrderedSet<UIWindow *> *windows = [NSMutableOrderedSet orderedSet];
+    if (@available(iOS 13.0, *)) {
+        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if (![scene isKindOfClass:UIWindowScene.class]) continue;
+            [windows addObjectsFromArray:((UIWindowScene *)scene).windows];
+        }
+    }
+    [windows addObjectsFromArray:UIApplication.sharedApplication.windows ?: @[]];
+    for (UIWindow *window in windows.reverseObjectEnumerator) {
+        if (window.hidden || window.alpha <= 0.0) continue;
+        BaseMsgContentViewController *controller =
+            NeoWCChatControllerInControllerTree(window.rootViewController);
+        if (controller) {
+            NeoWCVisibleChatController = controller;
+            return controller;
+        }
+    }
+    return nil;
+}
+
+static void NeoWCRefreshPinnedMessageGlassInView(UIView *view) {
+    if (!view) return;
+    if ([view isKindOfClass:NSClassFromString(@"MMMsgCommonTipsView")]) {
+        NeoWCUpdatePinnedMessageGlass(view);
+    }
+    for (UIView *subview in view.subviews) NeoWCRefreshPinnedMessageGlassInView(subview);
+}
+
 static void NeoWCRefreshAntiRevokeCellsInView(UIView *view) {
     if (!view) return;
     Class cellClass = NSClassFromString(@"CommonMessageCellView");
@@ -3253,8 +3316,9 @@ static void NeoWCRegisterPlugin(void) {
                             [changedKey isEqualToString:NeoWCChatGlassTintOpacityKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarAvatarSizeKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarNicknameSizeKey];
-                        if (refreshChatTop && NeoWCVisibleChatController) {
-                            NeoWCUpdateChatTopBar(NeoWCVisibleChatController);
+                        BaseMsgContentViewController *visibleChat = NeoWCResolveVisibleChatController();
+                        if (refreshChatTop && visibleChat) {
+                            NeoWCUpdateChatTopBar(visibleChat);
                         }
                         BOOL refreshChatInput = !changedKey ||
                             [changedKey isEqualToString:NeoWCEnabledKey] ||
@@ -3263,8 +3327,8 @@ static void NeoWCRegisterPlugin(void) {
                             [changedKey isEqualToString:NeoWCChatTopBarShadowEnabledKey] ||
                             [changedKey isEqualToString:NeoWCChatGlassBlurIntensityKey] ||
                             [changedKey isEqualToString:NeoWCChatGlassTintOpacityKey];
-                        if (refreshChatInput && NeoWCVisibleChatController) {
-                            UIView *inputToolView = NeoWCTweakValueForSelectorNames(NeoWCVisibleChatController,
+                        if (refreshChatInput && visibleChat) {
+                            UIView *inputToolView = NeoWCTweakValueForSelectorNames(visibleChat,
                                 @[@"m_inputToolView", @"inputToolView"]);
                             if ([inputToolView isKindOfClass:NSClassFromString(@"MMInputToolView")]) {
                                 NeoWCApplyChatInputCapsulesToToolView(inputToolView);
@@ -3273,26 +3337,32 @@ static void NeoWCRegisterPlugin(void) {
                     }];
 
         void (^refreshVisibleChatChrome)(void) = ^{
-            BaseMsgContentViewController *controller = NeoWCVisibleChatController;
-            if (!controller || !controller.view.window) return;
+            BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
+            if (!controller) return;
             NeoWCRefreshChatTopBarAfterWechatUpdate(controller);
             UIView *inputToolView = NeoWCTweakValueForSelectorNames(controller,
                 @[@"m_inputToolView", @"inputToolView"]);
             if ([inputToolView isKindOfClass:NSClassFromString(@"MMInputToolView")]) {
                 NeoWCApplyChatInputCapsulesToToolView(inputToolView);
             }
+            NeoWCRefreshPinnedMessageGlassInView(controller.view);
         };
-        [[NSNotificationCenter defaultCenter]
-            addObserverForName:UIApplicationDidBecomeActiveNotification
-                        object:nil
-                         queue:[NSOperationQueue mainQueue]
-                    usingBlock:^(__unused NSNotification *note) {
-                        refreshVisibleChatChrome();
-                        // WeChat may restore its own bar imagery shortly after activation.
-                        // Replay once after that pass without forcing a layout cycle.
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
-                                       dispatch_get_main_queue(), refreshVisibleChatChrome);
-                    }];
+        for (NSNotificationName lifecycleName in @[UIApplicationDidBecomeActiveNotification,
+                                                    UIApplicationProtectedDataDidBecomeAvailable]) {
+            [[NSNotificationCenter defaultCenter]
+                addObserverForName:lifecycleName
+                            object:nil
+                             queue:[NSOperationQueue mainQueue]
+                        usingBlock:^(__unused NSNotification *note) {
+                            refreshVisibleChatChrome();
+                            // WeChat restores different background layers in separate passes.
+                            // Replay after both passes without forcing a layout cycle.
+                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
+                                           dispatch_get_main_queue(), refreshVisibleChatChrome);
+                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                                           dispatch_get_main_queue(), refreshVisibleChatChrome);
+                        }];
+        }
 
         __block BOOL lastFloatingDebugState = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCDebugFloatingEnabledKey];
         [[NSNotificationCenter defaultCenter]
@@ -4663,7 +4733,13 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
 
 - (void)viewWillAppear:(BOOL)animated {
     %orig(animated);
+    NeoWCVisibleChatController = self;
     NeoWCUpdateChatTopBar(self);
+    UIView *inputToolView = NeoWCTweakValueForSelectorNames(self,
+        @[@"m_inputToolView", @"inputToolView"]);
+    if ([inputToolView isKindOfClass:NSClassFromString(@"MMInputToolView")]) {
+        NeoWCApplyChatInputCapsulesToToolView(inputToolView);
+    }
 }
 
 - (void)updateTitleView:(id)titleView {
@@ -4737,6 +4813,11 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
 - (void)viewDidLayoutSubviews {
     %orig;
     NeoWCRefreshChatTopBarAfterWechatUpdate(self);
+    UIView *inputToolView = NeoWCTweakValueForSelectorNames(self,
+        @[@"m_inputToolView", @"inputToolView"]);
+    if ([inputToolView isKindOfClass:NSClassFromString(@"MMInputToolView")]) {
+        NeoWCApplyChatInputCapsulesToToolView(inputToolView);
+    }
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
@@ -5779,6 +5860,45 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 
 %end
 
+static BOOL NeoWCViewIsInsideNavigationChrome(UIView *view,
+                                               BaseMsgContentViewController *controller) {
+    UINavigationBar *navigationBar = controller.navigationController.navigationBar;
+    for (UIView *ancestor = view; ancestor; ancestor = ancestor.superview) {
+        if (ancestor == navigationBar ||
+            [NSStringFromClass(ancestor.class) containsString:@"NavigationBar"]) return YES;
+    }
+    return NO;
+}
+
+static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
+    BOOL typing = [text isKindOfClass:NSString.class] && [text containsString:@"正在输入"];
+    BOOL tracked = [objc_getAssociatedObject(label, &NeoWCChatTypingStatusLabelMarkerKey) boolValue];
+    if (!typing && !tracked) return;
+
+    if (typing && !label.window) {
+        objc_setAssociatedObject(label, &NeoWCChatTypingStatusLabelMarkerKey,
+                                 @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return;
+    }
+
+    BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
+    if (!controller) return;
+    if (typing && !NeoWCViewIsInsideNavigationChrome(label, controller)) {
+        objc_setAssociatedObject(label, &NeoWCChatTypingStatusLabelMarkerKey,
+                                 nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return;
+    }
+
+    objc_setAssociatedObject(label, &NeoWCChatTypingStatusLabelMarkerKey,
+                             typing ? @YES : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (!NeoWCSetChatTypingState(controller, label)) return;
+    __weak BaseMsgContentViewController *weakController = controller;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        BaseMsgContentViewController *strongController = weakController;
+        if (strongController && strongController.view.window) NeoWCUpdateChatTopBar(strongController);
+    });
+}
+
 %hook MMUILabel
 
 - (void)setText:(NSString *)text {
@@ -5788,14 +5908,18 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     if (contactsText.length > 0 && ![contactsText isEqualToString:text]) {
         NeoWCCompatibilityMarkTriggered(@"contacts-count");
     }
-    %orig(contactsText ?: text);
+    NSString *resolvedText = contactsText ?: text;
+    %orig(resolvedText);
+    NeoWCObserveTypingStatusLabel(self, resolvedText);
 }
 
 - (void)didMoveToWindow {
     %orig;
-    if (!self.window || !NeoWCResponderIsInsideControllerClass(self, @"ContactsViewController")) return;
-    NSString *contactsText = NeoWCContactsCountTextForOriginal(self.text);
-    if (contactsText.length > 0 && ![contactsText isEqualToString:self.text]) self.text = contactsText;
+    if (self.window && NeoWCResponderIsInsideControllerClass(self, @"ContactsViewController")) {
+        NSString *contactsText = NeoWCContactsCountTextForOriginal(self.text);
+        if (contactsText.length > 0 && ![contactsText isEqualToString:self.text]) self.text = contactsText;
+    }
+    NeoWCObserveTypingStatusLabel(self, self.text);
 }
 
 %end
