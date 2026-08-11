@@ -25,6 +25,7 @@ static char NeoWCInputCapsuleLeftViewKey;
 static char NeoWCInputCapsuleRightViewKey;
 static char NeoWCInputCapsuleExpandedViewKey;
 static char NeoWCInputCapsuleConfigurationKey;
+static char NeoWCInputCapsuleOriginalToolBackgroundKey;
 static char NeoWCInputCapsuleOriginalOuterBackgroundKey;
 static char NeoWCInputCapsuleOriginalBarBackgroundKey;
 static char NeoWCInputCapsuleOriginalGrowBackgroundKey;
@@ -100,6 +101,20 @@ static id NeoWCNullableObject(id value) {
 static UIColor *NeoWCStoredColor(id owner, const void *key) {
     id value = objc_getAssociatedObject(owner, key);
     return value == NSNull.null ? nil : value;
+}
+
+static void NeoWCUpdateExpandedInputGlassFrame(UIView *inputToolView,
+                                                UIView *outerBar,
+                                                UIView *bar,
+                                                UIVisualEffectView *expanded) {
+    if (!inputToolView || !outerBar || !bar || !expanded) return;
+    CGFloat safeAreaBottom = MAX(0.0, inputToolView.safeAreaInsets.bottom);
+    CGFloat expandedY = CGRectGetMaxY(bar.frame);
+    CGFloat expandedHeight = MAX(0.0,
+        CGRectGetHeight(outerBar.bounds) - expandedY - safeAreaBottom);
+    expanded.frame = CGRectMake(0.0, expandedY,
+                                CGRectGetWidth(outerBar.bounds), expandedHeight);
+    expanded.hidden = expandedHeight <= 1.0;
 }
 
 static UIVisualEffectView *NeoWCInputOriginalBackdrop(UIView *outerBar) {
@@ -247,11 +262,13 @@ void NeoWCRestoreChatInputCapsulesFromToolView(UIView *inputToolView) {
     [objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleLeftViewKey) removeFromSuperview];
     [objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleRightViewKey) removeFromSuperview];
     [objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleExpandedViewKey) removeFromSuperview];
+    id toolBackground = objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalToolBackgroundKey);
     id outerBackground = objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalOuterBackgroundKey);
     id barBackground = objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalBarBackgroundKey);
     id growBackground = objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalGrowBackgroundKey);
     NSNumber *backdropAlpha = objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalBackdropAlphaKey);
     NSArray<NSDictionary *> *imageAlphas = objc_getAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalImageAlphasKey);
+    if (toolBackground) inputToolView.backgroundColor = NeoWCStoredColor(inputToolView, &NeoWCInputCapsuleOriginalToolBackgroundKey);
     if (outerBackground) outerBar.backgroundColor = NeoWCStoredColor(inputToolView, &NeoWCInputCapsuleOriginalOuterBackgroundKey);
     if (barBackground) bar.backgroundColor = NeoWCStoredColor(inputToolView, &NeoWCInputCapsuleOriginalBarBackgroundKey);
     if (growBackground) growTextView.backgroundColor = NeoWCStoredColor(inputToolView, &NeoWCInputCapsuleOriginalGrowBackgroundKey);
@@ -267,6 +284,7 @@ void NeoWCRestoreChatInputCapsulesFromToolView(UIView *inputToolView) {
     const void *keys[] = {&NeoWCInputCapsuleLeftViewKey, &NeoWCInputCapsuleRightViewKey,
                           &NeoWCInputCapsuleExpandedViewKey,
                           &NeoWCInputCapsuleConfigurationKey,
+                          &NeoWCInputCapsuleOriginalToolBackgroundKey,
                           &NeoWCInputCapsuleOriginalOuterBackgroundKey,
                           &NeoWCInputCapsuleOriginalBarBackgroundKey,
                           &NeoWCInputCapsuleOriginalGrowBackgroundKey,
@@ -324,14 +342,18 @@ void NeoWCApplyChatInputCapsulesToToolView(UIView *inputToolView) {
         }
         objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalImageAlphasKey,
                                  storedAlphas, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        inputToolView.backgroundColor = UIColor.clearColor;
         outerBar.backgroundColor = UIColor.clearColor;
         bar.backgroundColor = UIColor.clearColor;
         growTextView.backgroundColor = UIColor.clearColor;
         backdrop.alpha = 0.0;
+        NeoWCUpdateExpandedInputGlassFrame(inputToolView, outerBar, bar, existingExpanded);
         return;
     }
     if (existingLeft) NeoWCRestoreChatInputCapsulesFromToolView(inputToolView);
 
+    objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalToolBackgroundKey,
+                             NeoWCNullableObject(inputToolView.backgroundColor), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalOuterBackgroundKey,
                              NeoWCNullableObject(outerBar.backgroundColor), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalBarBackgroundKey,
@@ -347,6 +369,7 @@ void NeoWCApplyChatInputCapsulesToToolView(UIView *inputToolView) {
     objc_setAssociatedObject(inputToolView, &NeoWCInputCapsuleOriginalImageAlphasKey,
                              imageAlphas, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
+    inputToolView.backgroundColor = UIColor.clearColor;
     outerBar.backgroundColor = UIColor.clearColor;
     bar.backgroundColor = UIColor.clearColor;
     growTextView.backgroundColor = UIColor.clearColor;
@@ -361,14 +384,11 @@ void NeoWCApplyChatInputCapsulesToToolView(UIView *inputToolView) {
     CGFloat leftWidth = MAX(80.0, rightX - 4.0 - leftX);
     UIView *left = NeoWCInputCapsuleView(CGRectMake(leftX, 3.0, leftWidth, height));
     UIView *right = NeoWCInputCapsuleView(CGRectMake(rightX, 3.0, rightWidth, height));
-    CGFloat safeAreaBottom = MAX(0.0, inputToolView.safeAreaInsets.bottom);
-    CGFloat expandedY = CGRectGetMaxY(bar.frame);
-    CGFloat expandedHeight = MAX(0.0, CGRectGetHeight(outerBar.bounds) - expandedY - safeAreaBottom);
     UIVisualEffectView *expanded = [[UIVisualEffectView alloc] initWithEffect:nil];
     NeoWCConfigureInputCapsuleEffectView(expanded);
-    expanded.frame = CGRectMake(0.0, expandedY, CGRectGetWidth(outerBar.bounds), expandedHeight);
-    expanded.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    expanded.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     expanded.userInteractionEnabled = NO;
+    NeoWCUpdateExpandedInputGlassFrame(inputToolView, outerBar, bar, expanded);
     left.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     // Quote/reply bars increase InputToolViewBar's height. Keep the emoji/more
     // capsule at its original control height instead of stretching it vertically.
