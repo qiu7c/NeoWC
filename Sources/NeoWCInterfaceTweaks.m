@@ -126,7 +126,8 @@ static void NeoWCCollectLargeImageViews(UIView *view, NSMutableArray<UIImageView
         if ([subview isKindOfClass:UIImageView.class] &&
             CGRectGetWidth(subview.bounds) >= 60.0 &&
             CGRectGetHeight(subview.bounds) >= 60.0) {
-            if (![results containsObject:subview]) [results addObject:(UIImageView *)subview];
+            UIImageView *imageView = (UIImageView *)subview;
+            if (![results containsObject:imageView]) [results addObject:imageView];
             continue;
         }
         NeoWCCollectLargeImageViews(subview, results);
@@ -145,7 +146,8 @@ static NSArray<UIImageView *> *NeoWCInputCapsuleBackgroundImages(UIView *bar,
         for (UIView *buttonSubview in subview.subviews) {
             if (![buttonSubview isKindOfClass:UIImageView.class] ||
                 CGRectGetWidth(buttonSubview.bounds) + 2.0 < CGRectGetWidth(subview.bounds)) continue;
-            if (![images containsObject:buttonSubview]) [images addObject:(UIImageView *)buttonSubview];
+            UIImageView *imageView = (UIImageView *)buttonSubview;
+            if (![images containsObject:imageView]) [images addObject:imageView];
         }
     }
 
