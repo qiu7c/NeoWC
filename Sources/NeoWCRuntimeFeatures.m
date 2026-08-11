@@ -175,11 +175,6 @@ static NSString *NeoWCMessageDisplayContent(id message, NSString *sessionUserNam
     return content;
 }
 
-static id NeoWCContactManager(void) {
-    Class managerClass = objc_getClass("CContactMgr");
-    return managerClass ? NeoWCServiceForClass(managerClass) : nil;
-}
-
 static id NeoWCContactForUserNameWithManager(id manager, NSString *userName) {
     SEL selector = sel_registerName("getContactByName:");
     if (!manager || userName.length == 0 || ![manager respondsToSelector:selector]) return nil;
