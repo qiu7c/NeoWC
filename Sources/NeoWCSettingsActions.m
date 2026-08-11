@@ -124,6 +124,7 @@
         NSString *raw = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
         CGFloat fallback = minimum == 70.0 && maximum == 100.0 ? 100.0 : 0.0;
         if ([key isEqualToString:NeoWCRedEnvelopeDetailFontSizeKey]) fallback = 14.0;
+        if ([key isEqualToString:NeoWCChatGlassBlurIntensityKey]) fallback = 100.0;
         CGFloat value = MIN(maximum, MAX(minimum, raw.length > 0 ? raw.doubleValue : fallback));
         [NSUserDefaults.standardUserDefaults setDouble:value forKey:key];
         if (notifyChange) [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:key];
@@ -375,6 +376,8 @@
         case NeoWCSettingActionChatTopAvatarSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 24 到 34 之间的头像大小" key:NeoWCChatTopBarAvatarSizeKey minimum:24 maximum:34 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatTopNicknameSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 12 到 18 之间的昵称字号" key:NeoWCChatTopBarNicknameSizeKey minimum:12 maximum:18 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatTopEffectStyle: [self presentChatTopEffectStylePicker]; break;
+        case NeoWCSettingActionChatGlassBlurIntensity: [self presentNumberEditorWithTitle:item.title message:@"请输入 20 到 100 之间的百分比" key:NeoWCChatGlassBlurIntensityKey minimum:20 maximum:100 notifyChange:YES applyScale:NO]; break;
+        case NeoWCSettingActionChatGlassTintOpacity: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 30 之间的百分比；0 表示不额外染色" key:NeoWCChatGlassTintOpacityKey minimum:0 maximum:30 notifyChange:YES applyScale:NO]; break;
         default: break;
     }
 }

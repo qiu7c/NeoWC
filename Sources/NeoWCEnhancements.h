@@ -21,6 +21,8 @@ FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpVideoEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarCapsuleEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarEffectStyleKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarShadowEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCChatGlassBlurIntensityKey;
+FOUNDATION_EXPORT NSString *const NeoWCChatGlassTintOpacityKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarAvatarSizeKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarNicknameSizeKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageBlockEnabledKey;

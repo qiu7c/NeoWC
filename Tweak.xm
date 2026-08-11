@@ -265,6 +265,9 @@ static char NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey;
 static char NeoWCChatTopContainerOriginalBackgroundColorKey;
 static char NeoWCChatTopBackgroundOriginalHiddenKey;
 static char NeoWCChatTopGlassEffectMarkerKey;
+static char NeoWCChatTopGlassEffectAnimatorKey;
+static char NeoWCChatTopTypingActiveKey;
+static char NeoWCChatTopStableDisplayNameKey;
 static char NeoWCChatGlassAppliedStyleKey;
 static char NeoWCChatTopOriginalClipsToBoundsKey;
 static char NeoWCChatTopOriginalBorderWidthKey;
@@ -290,6 +293,7 @@ static __weak id NeoWCCurrentEditImageLogicController;
 static BOOL NeoWCMomentsDispatchingQuickComment = NO;
 
 static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
+static void NeoWCRefreshChatTopBarAfterWechatUpdate(BaseMsgContentViewController *controller);
 
 @interface NeoWCBarButtonActionProxy : NSObject
 @property (nonatomic, strong) UIBarButtonItem *originalItem;
@@ -3245,6 +3249,8 @@ static void NeoWCRegisterPlugin(void) {
                             [changedKey isEqualToString:NeoWCChatTopBarCapsuleEnabledKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarEffectStyleKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarShadowEnabledKey] ||
+                            [changedKey isEqualToString:NeoWCChatGlassBlurIntensityKey] ||
+                            [changedKey isEqualToString:NeoWCChatGlassTintOpacityKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarAvatarSizeKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarNicknameSizeKey];
                         if (refreshChatTop && NeoWCVisibleChatController) {
@@ -3254,7 +3260,9 @@ static void NeoWCRegisterPlugin(void) {
                             [changedKey isEqualToString:NeoWCEnabledKey] ||
                             [changedKey isEqualToString:NeoWCChatInputCapsuleEnabledKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarEffectStyleKey] ||
-                            [changedKey isEqualToString:NeoWCChatTopBarShadowEnabledKey];
+                            [changedKey isEqualToString:NeoWCChatTopBarShadowEnabledKey] ||
+                            [changedKey isEqualToString:NeoWCChatGlassBlurIntensityKey] ||
+                            [changedKey isEqualToString:NeoWCChatGlassTintOpacityKey];
                         if (refreshChatInput && NeoWCVisibleChatController) {
                             UIView *inputToolView = NeoWCTweakValueForSelectorNames(NeoWCVisibleChatController,
                                 @[@"m_inputToolView", @"inputToolView"]);
@@ -3262,6 +3270,28 @@ static void NeoWCRegisterPlugin(void) {
                                 NeoWCApplyChatInputCapsulesToToolView(inputToolView);
                             }
                         }
+                    }];
+
+        void (^refreshVisibleChatChrome)(void) = ^{
+            BaseMsgContentViewController *controller = NeoWCVisibleChatController;
+            if (!controller || !controller.view.window) return;
+            NeoWCRefreshChatTopBarAfterWechatUpdate(controller);
+            UIView *inputToolView = NeoWCTweakValueForSelectorNames(controller,
+                @[@"m_inputToolView", @"inputToolView"]);
+            if ([inputToolView isKindOfClass:NSClassFromString(@"MMInputToolView")]) {
+                NeoWCApplyChatInputCapsulesToToolView(inputToolView);
+            }
+        };
+        [[NSNotificationCenter defaultCenter]
+            addObserverForName:UIApplicationDidBecomeActiveNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(__unused NSNotification *note) {
+                        refreshVisibleChatChrome();
+                        // WeChat may restore its own bar imagery shortly after activation.
+                        // Replay once after that pass without forcing a layout cycle.
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
+                                       dispatch_get_main_queue(), refreshVisibleChatChrome);
                     }];
 
         __block BOOL lastFloatingDebugState = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCDebugFloatingEnabledKey];
@@ -3704,10 +3734,43 @@ static UIView *NeoWCChatTopAvatarView(id contact, NSString *userName) {
 static NSString *NeoWCChatTopDisplayName(BaseMsgContentViewController *controller, id contact) {
     for (NSString *key in @[@"m_nsRemark", @"m_nsNickName", @"m_nsAlias"]) {
         NSString *value = NeoWCTweakSafeValue(contact, key);
-        if ([value isKindOfClass:[NSString class]] && value.length > 0) return value;
+        if ([value isKindOfClass:[NSString class]] && value.length > 0) {
+            objc_setAssociatedObject(controller, &NeoWCChatTopStableDisplayNameKey,
+                                     value, OBJC_ASSOCIATION_COPY_NONATOMIC);
+            return value;
+        }
     }
+    NSString *stableName = objc_getAssociatedObject(controller, &NeoWCChatTopStableDisplayNameKey);
+    BOOL typing = [objc_getAssociatedObject(controller, &NeoWCChatTopTypingActiveKey) boolValue];
+    if (typing && stableName.length > 0) return stableName;
     NSString *title = controller.navigationItem.title ?: controller.title;
-    return title.length > 0 ? title : @"聊天";
+    if (title.length > 0 && ![title containsString:@"正在输入"]) {
+        objc_setAssociatedObject(controller, &NeoWCChatTopStableDisplayNameKey,
+                                 title, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        return title;
+    }
+    return stableName.length > 0 ? stableName : @"聊天";
+}
+
+static BOOL NeoWCChatTitleViewShowsTypingStatus(id titleView) {
+    if ([titleView isKindOfClass:UILabel.class]) {
+        NSString *text = ((UILabel *)titleView).text;
+        return [text isKindOfClass:NSString.class] && [text containsString:@"正在输入"];
+    }
+    if (![titleView isKindOfClass:UIView.class]) return NO;
+    for (UIView *subview in ((UIView *)titleView).subviews) {
+        if (NeoWCChatTitleViewShowsTypingStatus(subview)) return YES;
+    }
+    return NO;
+}
+
+static BOOL NeoWCSetChatTypingState(BaseMsgContentViewController *controller, id titleView) {
+    BOOL typing = NeoWCChatTitleViewShowsTypingStatus(titleView);
+    BOOL previous = [objc_getAssociatedObject(controller, &NeoWCChatTopTypingActiveKey) boolValue];
+    if (typing == previous) return NO;
+    objc_setAssociatedObject(controller, &NeoWCChatTopTypingActiveKey,
+                             @(typing), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return YES;
 }
 
 static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibilityLabel);
@@ -3738,7 +3801,42 @@ static UIVisualEffect *NeoWCChatTopVisualEffect(void) {
     return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
 }
 
+static CGFloat NeoWCChatGlassPercent(NSString *key, CGFloat fallback,
+                                     CGFloat minimum, CGFloat maximum) {
+    id stored = [NSUserDefaults.standardUserDefaults objectForKey:key];
+    CGFloat value = [stored respondsToSelector:@selector(doubleValue)] ? [stored doubleValue] : fallback;
+    return MIN(maximum, MAX(minimum, value));
+}
+
 static void NeoWCConfigureChatTopGlassLayer(UIVisualEffectView *effectView) {
+    UIVisualEffect *effect = NeoWCChatTopVisualEffect();
+    CGFloat blurIntensity = NeoWCChatGlassPercent(NeoWCChatGlassBlurIntensityKey,
+                                                  100.0, 20.0, 100.0) / 100.0;
+    if (blurIntensity >= 0.999) {
+        effectView.effect = effect;
+    } else {
+        effectView.effect = nil;
+        __weak UIVisualEffectView *weakEffectView = effectView;
+        UIViewPropertyAnimator *animator = [[UIViewPropertyAnimator alloc]
+            initWithDuration:1.0 curve:UIViewAnimationCurveLinear animations:^{
+                weakEffectView.effect = effect;
+            }];
+        [animator startAnimation];
+        [animator pauseAnimation];
+        animator.fractionComplete = blurIntensity;
+        objc_setAssociatedObject(effectView, &NeoWCChatTopGlassEffectAnimatorKey,
+                                 animator, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+
+    CGFloat tintOpacity = NeoWCChatGlassPercent(NeoWCChatGlassTintOpacityKey,
+                                                0.0, 0.0, 30.0) / 100.0;
+    if (tintOpacity > 0.001) {
+        UIView *tintView = [[UIView alloc] initWithFrame:effectView.contentView.bounds];
+        tintView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        tintView.userInteractionEnabled = NO;
+        tintView.backgroundColor = [UIColor.systemBackgroundColor colorWithAlphaComponent:tintOpacity];
+        [effectView.contentView insertSubview:tintView atIndex:0];
+    }
     effectView.layer.borderWidth = 0.0;
     effectView.layer.borderColor = UIColor.clearColor.CGColor;
 }
@@ -3755,8 +3853,7 @@ static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectVi
     objc_setAssociatedObject(container, &NeoWCChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
-    UIVisualEffectView *effectView = [[UIVisualEffectView alloc]
-        initWithEffect:NeoWCChatTopVisualEffect()];
+    UIVisualEffectView *effectView = [[UIVisualEffectView alloc] initWithEffect:nil];
     effectView.translatesAutoresizingMaskIntoConstraints = NO;
     effectView.clipsToBounds = YES;
     effectView.layer.cornerRadius = cornerRadius;
@@ -3834,11 +3931,35 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     label.accessibilityLabel = displayName;
     [content addSubview:label];
 
+    BOOL typing = [objc_getAssociatedObject(controller, &NeoWCChatTopTypingActiveKey) boolValue];
+    UILabel *typingIndicator = nil;
+    if (typing) {
+        typingIndicator = [UILabel new];
+        typingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+        typingIndicator.text = @"•••";
+        typingIndicator.font = [UIFont systemFontOfSize:8.0 weight:UIFontWeightSemibold];
+        typingIndicator.textColor = UIColor.systemGreenColor;
+        typingIndicator.accessibilityLabel = @"对方正在输入";
+        typingIndicator.isAccessibilityElement = YES;
+        [typingIndicator setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                                         forAxis:UILayoutConstraintAxisHorizontal];
+        [content addSubview:typingIndicator];
+        CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"opacity"];
+        pulse.fromValue = @0.35;
+        pulse.toValue = @1.0;
+        pulse.duration = 0.65;
+        pulse.autoreverses = YES;
+        pulse.repeatCount = HUGE_VALF;
+        [typingIndicator.layer addAnimation:pulse forKey:@"neowc.typing-pulse"];
+    }
+
     CGFloat labelWidth = ceil([displayName sizeWithAttributes:@{NSFontAttributeName: label.font}].width);
     CGFloat avatarDelta = avatarSize - 30.0;
-    CGFloat width = MIN(availableWidth, MAX(96.0 + avatarDelta, 85.0 + avatarDelta + labelWidth));
+    CGFloat typingWidth = typing ? 22.0 : 0.0;
+    CGFloat width = MIN(availableWidth, MAX(96.0 + avatarDelta,
+                                           85.0 + avatarDelta + labelWidth + typingWidth));
 
-    [NSLayoutConstraint activateConstraints:@[
+    NSMutableArray<NSLayoutConstraint *> *constraints = [NSMutableArray arrayWithArray:@[
         [container.widthAnchor constraintEqualToConstant:width],
         [container.heightAnchor constraintEqualToConstant:capsuleHeight],
         [backButton.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
@@ -3854,9 +3975,18 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
         [avatarSource.widthAnchor constraintEqualToConstant:avatarSize],
         [avatarSource.heightAnchor constraintEqualToConstant:avatarSize],
         [label.leadingAnchor constraintEqualToAnchor:avatar.trailingAnchor constant:8.0],
-        [label.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-10.0],
         [label.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
     ]];
+    if (typingIndicator) {
+        [constraints addObjectsFromArray:@[
+            [label.trailingAnchor constraintLessThanOrEqualToAnchor:typingIndicator.leadingAnchor constant:-4.0],
+            [typingIndicator.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-10.0],
+            [typingIndicator.centerYAnchor constraintEqualToAnchor:content.centerYAnchor constant:1.0],
+        ]];
+    } else {
+        [constraints addObject:[label.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-10.0]];
+    }
+    [NSLayoutConstraint activateConstraints:constraints];
     return [[UIBarButtonItem alloc] initWithCustomView:container];
 }
 
@@ -4537,13 +4667,17 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
 }
 
 - (void)updateTitleView:(id)titleView {
+    BOOL typingChanged = NeoWCSetChatTypingState(self, titleView);
     %orig(titleView);
-    NeoWCRefreshChatTopBarAfterWechatUpdate(self);
+    if (typingChanged) NeoWCUpdateChatTopBar(self);
+    else NeoWCRefreshChatTopBarAfterWechatUpdate(self);
 }
 
 - (void)updateTitleView:(id)titleView ignoreAnimation:(BOOL)ignoreAnimation {
+    BOOL typingChanged = NeoWCSetChatTypingState(self, titleView);
     %orig(titleView, ignoreAnimation);
-    NeoWCRefreshChatTopBarAfterWechatUpdate(self);
+    if (typingChanged) NeoWCUpdateChatTopBar(self);
+    else NeoWCRefreshChatTopBarAfterWechatUpdate(self);
 }
 
 - (void)ShowMultiSelectMoreOperation:(id)argument {

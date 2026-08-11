@@ -10,7 +10,7 @@ NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 
-NSString *const NeoWCDisplayVersion = @"0.1.2 beta26";
+NSString *const NeoWCDisplayVersion = @"0.1.2 beta31";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -94,6 +94,8 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCChatTopBarCapsuleEnabledKey: @NO,
         NeoWCChatTopBarEffectStyleKey: @(NeoWCChatTopBarEffectStyleMaterial),
         NeoWCChatTopBarShadowEnabledKey: @YES,
+        NeoWCChatGlassBlurIntensityKey: @100.0,
+        NeoWCChatGlassTintOpacityKey: @0.0,
         NeoWCChatTopBarAvatarSizeKey: @30.0,
         NeoWCChatTopBarNicknameSizeKey: @15.0,
         NeoWCMessageBlockEnabledKey: @NO,
@@ -171,7 +173,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
                                              footer:nil items:@[
             NeoWCItem(@"聊天增强", @"消息、编辑、提醒与导出", @"bubble.left.and.bubble.right", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenMessages),
             NeoWCItem(@"常用增强", @"朋友圈、扫码、运动与本地显示", @"bolt", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenEnhancements),
-            NeoWCItem(@"界面优化", @"缩放、输入栏与入口显示", @"paintbrush", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenInterface),
+            NeoWCItem(@"界面优化", @"胶囊、缩放与入口显示", @"paintbrush", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenInterface),
             NeoWCItem(@"开发者功能", @"日志、兼容性与快捷入口", @"hammer", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenDeveloper),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"maintenance" title:@"维护"
@@ -235,17 +237,6 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     NeoWCAddFeature(interaction, NeoWCItem(@"引用消息定位", @"点击引用定位原消息", @"arrow.up.and.down.text.horizontal", NeoWCSettingRowKindSwitch, NeoWCQuoteJumpEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"定位图片引用", @"允许点击图片引用定位", @"photo", NeoWCSettingRowKindSwitch, NeoWCQuoteJumpImageEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"定位视频引用", @"允许点击视频引用定位", @"video", NeoWCSettingRowKindSwitch, NeoWCQuoteJumpVideoEnabledKey, nil, NeoWCSettingActionNone),
-    ], defaults, collapsed);
-    BOOL supportsLiquidGlass = NeoWCSystemSupportsNativeLiquidGlass();
-    BOOL usesLiquidGlass = supportsLiquidGlass &&
-        [defaults integerForKey:NeoWCChatTopBarEffectStyleKey] == NeoWCChatTopBarEffectStyleLiquid;
-    NeoWCAddFeature(interaction,
-                    NeoWCItem(@"胶囊顶栏", @"隐藏整条顶栏背景，左右使用玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatTopBarCapsuleEnabledKey, nil, NeoWCSettingActionNone),
-                    @[
-        NeoWCItem(@"模糊效果", supportsLiquidGlass ? @"在超薄玻璃与 iOS 26 原生液态玻璃之间切换" : @"iOS 26 以下仅支持超薄玻璃", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(usesLiquidGlass ? @"液态玻璃" : @"超薄玻璃"), NeoWCSettingActionChatTopEffectStyle),
-        NeoWCItem(@"胶囊阴影", @"轻微环境阴影，不产生底部切割线", @"circle.dotted", NeoWCSettingRowKindSwitch, NeoWCChatTopBarShadowEnabledKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"头像大小", @"限制在 24 到 34 之间", @"person.crop.circle", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarAvatarSizeKey]], NeoWCSettingActionChatTopAvatarSize),
-        NeoWCItem(@"昵称字号", @"限制在 12 到 18 之间", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarNicknameSizeKey]], NeoWCSettingActionChatTopNicknameSize),
     ], defaults, collapsed);
     [interaction addObject:NeoWCItem(@"输入框滑动操作", @"左滑清空，右滑粘贴", @"hand.draw", NeoWCSettingRowKindSwitch, NeoWCInputSwipeActionsEnabledKey, nil, NeoWCSettingActionNone)];
 
@@ -360,16 +351,24 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
         NeoWCItem(@"隐藏截屏分享按钮", @"不显示右下角截图转发浮层", @"rectangle.on.rectangle.slash", NeoWCSettingRowKindSwitch, NeoWCHideScreenshotForwardKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"全局去除分割线", @"按参考插件规则隐藏页面细线", @"rectangle.split.1x2", NeoWCSettingRowKindSwitch, NeoWCHideSeparatorLinesKey, nil, NeoWCSettingActionNone),
     ]];
-    NSMutableArray *input = [NSMutableArray array];
-    BOOL supportsInputLiquidGlass = NeoWCSystemSupportsNativeLiquidGlass();
-    BOOL usesInputLiquidGlass = supportsInputLiquidGlass &&
+    NSMutableArray *chatCapsules = [NSMutableArray array];
+    BOOL supportsLiquidGlass = NeoWCSystemSupportsNativeLiquidGlass();
+    BOOL usesLiquidGlass = supportsLiquidGlass &&
         [defaults integerForKey:NeoWCChatTopBarEffectStyleKey] == NeoWCChatTopBarEffectStyleLiquid;
-    NeoWCAddFeature(input,
-                    NeoWCItem(@"胶囊工具栏", @"语音与输入框、表情与更多分为左右玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatInputCapsuleEnabledKey, nil, NeoWCSettingActionNone),
+    NeoWCAddFeature(chatCapsules,
+                    NeoWCItem(@"胶囊顶栏", @"隐藏整条顶栏背景，左右使用玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatTopBarCapsuleEnabledKey, nil, NeoWCSettingActionNone),
                     @[
-        NeoWCItem(@"模糊效果", supportsInputLiquidGlass ? @"与胶囊顶栏共用玻璃效果" : @"iOS 26 以下仅支持超薄玻璃", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(usesInputLiquidGlass ? @"液态玻璃" : @"超薄玻璃"), NeoWCSettingActionChatTopEffectStyle),
-        NeoWCItem(@"胶囊阴影", @"与胶囊顶栏共用轻微环境阴影", @"circle.dotted", NeoWCSettingRowKindSwitch, NeoWCChatTopBarShadowEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"头像大小", @"限制在 24 到 34 之间", @"person.crop.circle", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarAvatarSizeKey]], NeoWCSettingActionChatTopAvatarSize),
+        NeoWCItem(@"昵称字号", @"限制在 12 到 18 之间", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarNicknameSizeKey]], NeoWCSettingActionChatTopNicknameSize),
     ], defaults, collapsed);
+    [chatCapsules addObject:NeoWCItem(@"胶囊工具栏", @"语音与输入框、表情与更多分为左右玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatInputCapsuleEnabledKey, nil, NeoWCSettingActionNone)];
+    [chatCapsules addObjectsFromArray:@[
+        NeoWCItem(@"玻璃类型", supportsLiquidGlass ? @"顶栏与工具栏共同使用" : @"iOS 26 以下仅支持超薄玻璃", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(usesLiquidGlass ? @"液态玻璃" : @"超薄玻璃"), NeoWCSettingActionChatTopEffectStyle),
+        NeoWCItem(@"模糊强度", @"顶栏与工具栏共同使用，限制在 20% 到 100%", @"drop.halffull", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassBlurIntensityKey]], NeoWCSettingActionChatGlassBlurIntensity),
+        NeoWCItem(@"染色强度", @"使用系统背景色轻微统一玻璃明暗，限制在 0% 到 30%", @"paintpalette", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassTintOpacityKey]], NeoWCSettingActionChatGlassTintOpacity),
+        NeoWCItem(@"胶囊阴影", @"顶栏与工具栏共同使用的轻微环境阴影", @"circle.dotted", NeoWCSettingRowKindSwitch, NeoWCChatTopBarShadowEnabledKey, nil, NeoWCSettingActionNone),
+    ]];
+    NSMutableArray *input = [NSMutableArray array];
     NSMutableArray *roundingChildren = [NSMutableArray array];
     NeoWCSettingItem *inner = NeoWCItem(@"输入框内部圆角", @"调整文字输入区域", @"text.cursor", NeoWCSettingRowKindSwitch, NeoWCChatInputInnerRoundingKey, nil, NeoWCSettingActionNone);
     inner.hasChildren = YES;
@@ -387,6 +386,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
     ];
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"display" title:@"显示" footer:@"关闭后恢复微信原始样式。" items:display],
+        [NeoWCSettingSection sectionWithIdentifier:@"chat-capsules" title:@"聊天胶囊" footer:@"玻璃参数由顶栏与工具栏共同使用。" items:chatCapsules],
         [NeoWCSettingSection sectionWithIdentifier:@"input" title:@"输入栏" footer:nil items:input],
         [NeoWCSettingSection sectionWithIdentifier:@"entry-management" title:@"入口管理" footer:nil items:management],
     ];
