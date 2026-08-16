@@ -25,6 +25,7 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
 - (instancetype)initWithCategory:(NeoWCSettingsCategory)category;
 - (void)presentReleaseNotesIfNeeded;
 - (void)quickSwitchLongPressed:(UILongPressGestureRecognizer *)gesture;
+- (void)showQuickSwitchToast:(NSString *)message;
 @end
 
 @implementation NeoWCSettingsViewController
@@ -264,6 +265,7 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
         NeoWCPluginManagerSetQuickSwitchRegistered(item.defaultsKey, item.title, !registered);
         UINotificationFeedbackGenerator *feedback = [UINotificationFeedbackGenerator new];
         [feedback notificationOccurred:UINotificationFeedbackTypeSuccess];
+        [self showQuickSwitchToast:registered ? @"已从插件管理移除" : @"已添加到插件管理"];
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     UIPopoverPresentationController *popover = sheet.popoverPresentationController;
@@ -273,6 +275,51 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
         popover.sourceRect = (cell ?: self.tableView).bounds;
     }
     [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)showQuickSwitchToast:(NSString *)message {
+    if (message.length == 0) return;
+    const NSInteger toastTag = 0x4E575154;
+    [[self.view viewWithTag:toastTag] removeFromSuperview];
+
+    UILabel *toast = [UILabel new];
+    toast.tag = toastTag;
+    toast.text = message;
+    toast.textAlignment = NSTextAlignmentCenter;
+    toast.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    toast.adjustsFontForContentSizeCategory = YES;
+    toast.textColor = UIColor.whiteColor;
+    toast.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.88];
+    toast.layer.cornerRadius = 12.0;
+    toast.layer.cornerCurve = kCACornerCurveContinuous;
+    toast.layer.masksToBounds = YES;
+    toast.userInteractionEnabled = NO;
+    toast.translatesAutoresizingMaskIntoConstraints = NO;
+    toast.alpha = 0.0;
+    toast.transform = CGAffineTransformMakeTranslation(0.0, 6.0);
+    [self.view addSubview:toast];
+    [NSLayoutConstraint activateConstraints:@[
+        [toast.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [toast.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-22.0],
+        [toast.heightAnchor constraintGreaterThanOrEqualToConstant:36.0],
+        [toast.widthAnchor constraintGreaterThanOrEqualToConstant:132.0],
+        [toast.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:24.0],
+        [toast.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-24.0]
+    ]];
+
+    [UIView animateWithDuration:0.18 animations:^{
+        toast.alpha = 1.0;
+        toast.transform = CGAffineTransformIdentity;
+    } completion:^(__unused BOOL finished) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [UIView animateWithDuration:0.2 animations:^{
+                toast.alpha = 0.0;
+                toast.transform = CGAffineTransformMakeTranslation(0.0, 5.0);
+            } completion:^(__unused BOOL hidden) {
+                [toast removeFromSuperview];
+            }];
+        });
+    }];
 }
 
 - (void)openCategory:(NeoWCSettingsCategory)category {

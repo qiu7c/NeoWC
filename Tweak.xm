@@ -5204,9 +5204,37 @@ static void NeoWCInjectRawIDCell(id controller, BOOL group) {
     NeoWCCompatibilityMarkTriggered(@"raw-contact-id");
 }
 
-static id NeoWCHomeSessionCellData(UITableView *tableView, NSIndexPath *indexPath) {
+static id NeoWCHomeObjectAtIndexPath(id target, NSArray<NSString *> *selectorNames, NSIndexPath *indexPath) {
+    if (!target || !indexPath) return nil;
+    for (NSString *selectorName in selectorNames) {
+        SEL selector = NSSelectorFromString(selectorName);
+        if (![target respondsToSelector:selector]) continue;
+        @try {
+            id value = ((id (*)(id, SEL, NSIndexPath *))objc_msgSend)(target, selector, indexPath);
+            if (value) return value;
+        } @catch (__unused NSException *exception) {
+        }
+    }
+    return nil;
+}
+
+static id NeoWCHomeSessionCellData(id owner, UITableView *tableView, NSIndexPath *indexPath) {
+    // WeChatX uses these two native main-frame accessors. Reading through the
+    // controller first avoids depending on a particular reused cell subclass.
+    id data = NeoWCHomeObjectAtIndexPath(owner,
+                                         @[@"getCellDataAtIndexPath:", @"getSessionInfoAtIndexPath:"],
+                                         indexPath);
+    if (data) return data;
     UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
-    return NeoWCTweakValueForSelectorNames(cell, @[@"m_cellData", @"cellData", @"sessionInfo"]);
+    data = NeoWCTweakValueForSelectorNames(cell, @[@"m_cellData", @"cellData", @"m_sessionInfo", @"sessionInfo"]);
+    if (data) return data;
+    id delegate = tableView.delegate;
+    if (delegate && delegate != owner) {
+        data = NeoWCHomeObjectAtIndexPath(delegate,
+                                          @[@"getCellDataAtIndexPath:", @"getSessionInfoAtIndexPath:"],
+                                          indexPath);
+    }
+    return data;
 }
 
 static NSString *NeoWCHomeSessionUserName(id data) {
@@ -5299,9 +5327,15 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
     if (!NeoWCEnhancementEnabled(NeoWCHomeSwipeActionsEnabledKey)) {
         return NeoWCOriginalHomeLeadingSwipe ? NeoWCOriginalHomeLeadingSwipe(owner, selector, tableView, indexPath) : nil;
     }
-    id data = NeoWCHomeSessionCellData(tableView, indexPath);
+    id data = NeoWCHomeSessionCellData(owner, tableView, indexPath);
     NSString *userName = NeoWCHomeSessionUserName(data);
     if (userName.length == 0 || [userName isEqualToString:@"filehelper"] || [userName hasPrefix:@"gh_"]) {
+        if (userName.length == 0) {
+            NeoWCLog(@"主页右滑：未取得会话数据，owner=%@ delegate=%@ row=%ld",
+                     NSStringFromClass([owner class]),
+                     NSStringFromClass([tableView.delegate class]),
+                     (long)indexPath.row);
+        }
         return NeoWCOriginalHomeLeadingSwipe ? NeoWCOriginalHomeLeadingSwipe(owner, selector, tableView, indexPath) : nil;
     }
     id contact = NeoWCContactForUserName(userName) ?: data;
@@ -5408,6 +5442,15 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         NeoWCTryInstallHomeLeadingSwipe();
     });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        NeoWCTryInstallHomeLeadingSwipe();
+    });
+    [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidBecomeActiveNotification
+                                                    object:nil
+                                                     queue:NSOperationQueue.mainQueue
+                                                usingBlock:^(__unused NSNotification *note) {
+        NeoWCTryInstallHomeLeadingSwipe();
+    }];
 }
 
 %hook WeixinContactInfoAssist
