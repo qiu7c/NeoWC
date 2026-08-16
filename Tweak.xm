@@ -9,7 +9,6 @@
 #import "Sources/NeoWCSettingsViewController.h"
 #import "Sources/NeoWCSettingsCatalog.h"
 #import "Sources/NeoWCAccount.h"
-#import "Sources/NeoWCAuthorization.h"
 #import "Sources/NeoWCAntiRevoke.h"
 #import "Sources/NeoWCChatExport.h"
 #import "Sources/NeoWCCompatibility.h"
@@ -1186,7 +1185,7 @@ static void NeoWCRecordMeMenuTitle(NSString *title) {
 static BOOL NeoWCHidesMeMenuTitle(NSString *title) {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     id master = [defaults objectForKey:@"com.qiu7c.neowc.enabled"];
-    return NeoWCAuthorizationAllowsCoreFeatures() && title.length > 0 && (!master || [master boolValue]) &&
+    return title.length > 0 && (!master || [master boolValue]) &&
            [[defaults arrayForKey:NeoWCMeMenuHiddenTitlesKey] containsObject:title];
 }
 
@@ -3644,8 +3643,6 @@ static void NeoWCRegisterPlugin(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         NeoWCRegisterPlugin();
         NeoWCRefreshDailyStepOverride();
-        NeoWCPresentPermanentBlacklistBlockerIfNeeded();
-        if (NeoWCAuthorizationIsPermanentlyBlacklisted()) NeoWCRefreshCurrentAuthorization();
 
         [[NSNotificationCenter defaultCenter]
             addObserverForName:UIApplicationDidFinishLaunchingNotification
@@ -3654,10 +3651,6 @@ static void NeoWCRegisterPlugin(void) {
                     usingBlock:^(__unused NSNotification *note) {
                         NeoWCRegisterPlugin();
                         NeoWCRefreshDailyStepOverride();
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                            NeoWCPresentPermanentBlacklistBlockerIfNeeded();
-                            if (NeoWCAuthorizationIsPermanentlyBlacklisted()) NeoWCRefreshCurrentAuthorization();
-                        });
                         [[NeoWCDebugManager sharedManager] applySavedState];
                     }];
 
@@ -3691,18 +3684,6 @@ static void NeoWCRegisterPlugin(void) {
                         }
                     }];
 
-        [[NSNotificationCenter defaultCenter]
-            addObserverForName:NeoWCAuthorizationStateDidChangeNotification
-                        object:nil
-                         queue:[NSOperationQueue mainQueue]
-                    usingBlock:^(__unused NSNotification *note) {
-                        [[NeoWCDebugManager sharedManager] applySavedState];
-                        NeoWCSynchronizeVisibleMomentsCells();
-                        NeoWCSynchronizeVisibleReplyGestures();
-                        BaseMsgContentViewController *visibleChat = NeoWCResolveVisibleChatController();
-                        if (visibleChat) NeoWCUpdateChatTopBar(visibleChat);
-                    }];
-
         void (^refreshVisibleChatChrome)(void) = ^{
             BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
             if (!controller) return;
@@ -3716,8 +3697,6 @@ static void NeoWCRegisterPlugin(void) {
                             object:nil
                              queue:[NSOperationQueue mainQueue]
                         usingBlock:^(__unused NSNotification *note) {
-                            if (NeoWCAuthorizationIsPermanentlyBlacklisted()) NeoWCRefreshCurrentAuthorization();
-                            NeoWCPresentPermanentBlacklistBlockerIfNeeded();
                             refreshVisibleChatChrome();
                             // WeChat restores different background layers in separate passes.
                             // Replay after both passes without forcing a layout cycle.

@@ -189,8 +189,9 @@ static void NeoWCRefreshMessageTimeLabels(UIView *cell) {
             avatarLabel.text = text;
             avatarLabel.font = font;
             avatarLabel.textColor = color;
+            CGFloat avatarSpacing = MIN(8.0, MAX(-6.0, [defaults doubleForKey:NeoWCChatMessageTimeAvatarSpacingKey]));
             avatarLabel.frame = CGRectMake(CGRectGetMidX(frame) - labelWidth * 0.5,
-                                           CGRectGetMaxY(frame) + 2.0,
+                                           CGRectGetMaxY(frame) + avatarSpacing,
                                            labelWidth,
                                            labelHeight);
             avatarLabel.hidden = NO;

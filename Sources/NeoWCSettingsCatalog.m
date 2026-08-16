@@ -92,6 +92,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCChatMessageTimeFontSizeKey: @10.0,
         NeoWCChatMessageTimeColorKey: @"#8E8E93FF",
         NeoWCChatMessageTimeBubbleVerticalPositionKey: @2,
+        NeoWCChatMessageTimeAvatarSpacingKey: @0.0,
         NeoWCEmoticonToSelfieEnabledKey: @NO,
         NeoWCMomentsForwardEnabledKey: @NO,
         NeoWCReplySwipeEnabledKey: @NO,
@@ -182,14 +183,6 @@ static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
     NeoWCSettingSection *maintenance = [NeoWCSettingSection sectionWithIdentifier:@"maintenance" title:@"维护"
                                                                            footer:[NSString stringWithFormat:@"NeoWC · %@", NeoWCDisplayVersion]
                                                                             items:maintenanceItems];
-    if (NeoWCAuthorizationIsPermanentlyBlacklisted()) {
-        return @[
-            [NeoWCSettingSection sectionWithIdentifier:@"authorization" title:nil footer:@"黑名单状态会停用 NeoWC；解除后将在后台检查中自动恢复。" items:@[
-                NeoWCInfoItem(@"authorization-status", @"当前账号已被限制使用", @"该账号位于黑名单中", @"hand.raised.slash", nil),
-            ]],
-            maintenance,
-        ];
-    }
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"master" title:nil
                                              footer:@"关闭后仅保留设置入口，所有增强功能停止生效。"
@@ -263,6 +256,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     NeoWCAddFeature(interaction, NeoWCItem(@"消息时间显示", @"在头像下方或消息旁显示发送时间", @"clock", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"显示模式", @"头像下方与消息旁严格二选一", @"rectangle.2.swap", NeoWCSettingRowKindDetail, nil, messageTimeBubbleMode ? @"消息旁" : @"头像下方", NeoWCSettingActionMessageTimeMode),
         NeoWCItem(@"消息旁位置", @"默认位于消息底部，避开居中的防撤回提示", @"arrow.up.and.down.text.horizontal", NeoWCSettingRowKindDetail, nil, messageTimePositionNames[messageTimePosition], NeoWCSettingActionMessageTimePosition),
+        NeoWCItem(@"头像时间间距", @"负值向上、正值向下，范围 -6 到 8", @"arrow.up.and.down", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatMessageTimeAvatarSpacingKey]], NeoWCSettingActionMessageTimeAvatarSpacing),
         NeoWCItem(@"时间格式", @"支持 yyyy、MM、dd、E、HH、mm、ss", @"textformat", NeoWCSettingRowKindDetail, nil, messageTimeFormat, NeoWCSettingActionMessageTimeFormat),
         NeoWCItem(@"时间字号", @"限制在 8 到 18 点", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatMessageTimeFontSizeKey]], NeoWCSettingActionMessageTimeFontSize),
         NeoWCItem(@"时间颜色", @"支持透明度并适配不同聊天背景", @"paintpalette", NeoWCSettingRowKindDetail, nil, messageTimeColor.uppercaseString, NeoWCSettingActionMessageTimeColor),

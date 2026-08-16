@@ -20,6 +20,7 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
 @property (nonatomic, strong) NeoWCSettingsProfileHeaderView *profileHeader;
 @property (nonatomic, assign) BOOL attemptedReleaseNotes;
 @property (nonatomic, assign) BOOL displayedBlacklistedState;
+@property (nonatomic, assign) BOOL requestedAuthorizationCheck;
 - (instancetype)initWithCategory:(NeoWCSettingsCategory)category;
 - (void)presentReleaseNotesIfNeeded;
 @end
@@ -110,10 +111,6 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
     self.tableView.estimatedSectionHeaderHeight = MAX(28.0, 36.0 * scale);
     self.tableView.estimatedSectionFooterHeight = MAX(28.0, 36.0 * scale);
     if (self.profileHeader) {
-        if (!NeoWCAuthorizationAllowsCoreFeatures()) {
-            self.tableView.tableHeaderView = nil;
-            return;
-        }
         CGFloat width = CGRectGetWidth(self.tableView.bounds);
         CGFloat height = [self.profileHeader preferredHeightForWidth:width scale:scale];
         self.profileHeader.frame = CGRectMake(0.0, 0.0, width, height);
@@ -131,7 +128,10 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
     [self.profileHeader refreshProfile];
     if (self.category != NeoWCSettingsCategoryRoot) return;
     [self presentReleaseNotesIfNeeded];
-    NeoWCRefreshCurrentAuthorizationIfNeeded();
+    if (!self.requestedAuthorizationCheck) {
+        self.requestedAuthorizationCheck = YES;
+        NeoWCRefreshCurrentAuthorization();
+    }
 }
 
 - (void)presentReleaseNotesIfNeeded {
@@ -165,10 +165,6 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     if (!self.profileHeader) return;
-    if (!NeoWCAuthorizationAllowsCoreFeatures()) {
-        self.tableView.tableHeaderView = nil;
-        return;
-    }
     CGFloat width = CGRectGetWidth(self.tableView.bounds);
     if (fabs(CGRectGetWidth(self.profileHeader.frame) - width) < 0.5) return;
     CGFloat height = [self.profileHeader preferredHeightForWidth:width scale:[self settingsPageScale]];

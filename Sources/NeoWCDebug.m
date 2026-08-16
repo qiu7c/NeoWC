@@ -1,6 +1,4 @@
 #import "NeoWCDebug.h"
-#import "NeoWCAuthorization.h"
-
 #import <objc/runtime.h>
 #import <mach-o/dyld.h>
 
@@ -258,7 +256,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 - (void)setFloatingEnabled:(BOOL)enabled {
     dispatch_async(dispatch_get_main_queue(), ^{
         [[NSUserDefaults standardUserDefaults] setBool:enabled forKey:NeoWCDebugFloatingEnabledKey];
-        if (!enabled || !NeoWCAuthorizationAllowsCoreFeatures()) {
+        if (!enabled) {
             self.floatingWindow.hidden = YES;
             self.floatingWindow = nil;
             self.floatingButton = nil;

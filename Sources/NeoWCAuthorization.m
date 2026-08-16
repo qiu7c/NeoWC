@@ -1,5 +1,6 @@
 #import "NeoWCAuthorization.h"
 #import "NeoWCAccount.h"
+#import "NeoWCSettingsCatalog.h"
 
 #import <CommonCrypto/CommonDigest.h>
 #import <stdlib.h>
@@ -10,15 +11,10 @@ static NSString *const NeoWCAdministratorWXIDHash = @"93773e983ed1f93c28c5e98e71
 static NSString *const NeoWCAuthorizationCachedStateKey = @"com.qiu7c.neowc.authorization.cached-state";
 static NSString *const NeoWCAuthorizationCachedMessageKey = @"com.qiu7c.neowc.authorization.cached-message";
 static NSString *const NeoWCAuthorizationCachedIdentityHashKey = @"com.qiu7c.neowc.authorization.cached-identity-hash";
-static NSString *const NeoWCAuthorizationLastRefreshDateKey = @"com.qiu7c.neowc.authorization.last-refresh-date";
 static NSString *const NeoWCAuthorizationPermanentBlacklistKey = @"com.qiu7c.neowc.authorization.permanent-blacklist";
-static NSTimeInterval const NeoWCAuthorizationRefreshInterval = 12.0 * 60.0 * 60.0;
-static __weak UIAlertController *NeoWCPermanentBlacklistAlert;
-static BOOL NeoWCPermanentBlacklistAlertPresenting = NO;
 static NSString *NeoWCAuthorizationRuntimeIdentityHash;
 static atomic_bool NeoWCAuthorizationRuntimeBlacklist;
 static dispatch_once_t NeoWCAuthorizationRuntimeBlacklistOnceToken;
-static void NeoWCDismissPermanentBlacklistBlocker(void);
 NSNotificationName const NeoWCAuthorizationStateDidChangeNotification = @"NeoWCAuthorizationStateDidChangeNotification";
 
 static NSString *NeoWCTrimmedAuthorizationID(NSString *value) {
@@ -128,8 +124,6 @@ static NSDictionary *NeoWCJSONObjectDictionary(NSData *data) {
 @property (atomic, assign) NeoWCAuthorizationState state;
 @property (atomic, copy) NSString *checkedWXID;
 @property (atomic, copy) NSString *message;
-@property (atomic, assign) BOOL recoveryCheckInFlight;
-@property (atomic, strong) NSDate *lastRecoveryCheckDate;
 - (void)updateState:(NeoWCAuthorizationState)state message:(NSString *)message;
 @end
 
@@ -165,10 +159,6 @@ static NSDictionary *NeoWCJSONObjectDictionary(NSData *data) {
 }
 
 - (void)updateState:(NeoWCAuthorizationState)state message:(NSString *)message {
-    if (NeoWCAuthorizationIsPermanentlyBlacklisted()) {
-        state = NeoWCAuthorizationStateBlacklisted;
-        message = @"当前账号已被限制使用";
-    }
     self.state = state;
     self.message = message ?: @"";
     NeoWCSetAuthorizationRuntimeBlacklistActive(state == NeoWCAuthorizationStateBlacklisted);
@@ -181,7 +171,12 @@ static NSDictionary *NeoWCJSONObjectDictionary(NSData *data) {
     }
     dispatch_async(dispatch_get_main_queue(), ^{
         [NSNotificationCenter.defaultCenter postNotificationName:NeoWCAuthorizationStateDidChangeNotification object:nil];
-        if (state == NeoWCAuthorizationStateBlacklisted) NeoWCPresentPermanentBlacklistBlockerIfNeeded();
+        if (state == NeoWCAuthorizationStateBlacklisted) {
+            NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+            [defaults setBool:NO forKey:NeoWCEnabledKey];
+            [defaults synchronize];
+            exit(EXIT_FAILURE);
+        }
     });
 }
 
@@ -194,25 +189,16 @@ static NSDictionary *NeoWCJSONObjectDictionary(NSData *data) {
         [self updateState:NeoWCAuthorizationStateFailed message:@"无法获取当前账号 wxid"];
         return;
     }
-    if (recoveringFromBlacklist) {
-        if (self.recoveryCheckInFlight && [self.checkedWXID isEqualToString:wxid]) return;
-        if (self.lastRecoveryCheckDate &&
-            [[NSDate date] timeIntervalSinceDate:self.lastRecoveryCheckDate] < 300.0) return;
-        self.recoveryCheckInFlight = YES;
-        self.lastRecoveryCheckDate = NSDate.date;
-    } else if (self.state == NeoWCAuthorizationStateLoading && [self.checkedWXID isEqualToString:wxid]) {
+    if (self.state == NeoWCAuthorizationStateLoading && [self.checkedWXID isEqualToString:wxid]) {
         return;
     }
     self.checkedWXID = wxid;
     BOOL preservePersistedState = !recoveringFromBlacklist && NeoWCAuthorizationHasCompletedInitialCheckForCurrentUser();
     if (!preservePersistedState) [self updateState:NeoWCAuthorizationStateLoading message:@"正在验证授权…"];
-    [NSUserDefaults.standardUserDefaults setObject:NSDate.date forKey:NeoWCAuthorizationLastRefreshDateKey];
-
     NSURLComponents *components = [NSURLComponents componentsWithString:[NeoWCAuthorizationBaseURL stringByAppendingString:@"/auth.php"]];
     components.queryItems = @[[NSURLQueryItem queryItemWithName:@"id" value:wxid]];
     NSURL *URL = components.URL;
     if (!URL) {
-        self.recoveryCheckInFlight = NO;
         [self updateState:NeoWCAuthorizationStateFailed message:@"授权接口地址无效"];
         return;
     }
@@ -224,7 +210,6 @@ static NSDictionary *NeoWCJSONObjectDictionary(NSData *data) {
     [[NeoWCAuthorizationSession() dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         NeoWCAuthorizationService *strongSelf = weakSelf;
         if (!strongSelf || ![strongSelf.checkedWXID isEqualToString:wxid]) return;
-        strongSelf.recoveryCheckInFlight = NO;
         if (error) {
             if (preservePersistedState) return;
             NSString *message = error.code == NSURLErrorTimedOut ? @"授权验证超时" : @"授权验证网络错误";
@@ -248,7 +233,6 @@ static NSDictionary *NeoWCJSONObjectDictionary(NSData *data) {
         if (explicitlyRemovedFromBlacklist) {
             [NSUserDefaults.standardUserDefaults removeObjectForKey:NeoWCAuthorizationPermanentBlacklistKey];
             NeoWCSetAuthorizationRuntimeBlacklistActive(NO);
-            NeoWCDismissPermanentBlacklistBlocker();
         }
         if (!JSON || !hasAuthorized || !hasBlacklisted) {
             if (preservePersistedState) return;
@@ -272,13 +256,6 @@ NeoWCAuthorizationState NeoWCCurrentAuthorizationState(void) {
     return [NeoWCAuthorizationService sharedService].state;
 }
 
-BOOL NeoWCAuthorizationAllowsCoreFeatures(void) {
-    // Authorization is informational. Only the persistent blacklist is allowed
-    // to disable NeoWC features. This memory-only flag avoids creating the
-    // authorization service from WeChat's home/message processing hot paths.
-    return !NeoWCAuthorizationRuntimeBlacklistActive();
-}
-
 BOOL NeoWCAuthorizationIsPermanentlyBlacklisted(void) {
     return NeoWCAuthorizationRuntimeBlacklistActive();
 }
@@ -290,68 +267,6 @@ NSString *NeoWCCurrentAuthorizationMessage(void) {
 void NeoWCRefreshCurrentAuthorization(void) {
     dispatch_async(NeoWCAuthorizationWorkerQueue(), ^{
         [[NeoWCAuthorizationService sharedService] refresh];
-    });
-}
-
-void NeoWCRefreshCurrentAuthorizationIfNeeded(void) {
-    if (NeoWCAuthorizationIsPermanentlyBlacklisted()) {
-        NeoWCRefreshCurrentAuthorization();
-        return;
-    }
-    NSString *wxid = NeoWCTrimmedAuthorizationID(NeoWCCurrentUserWXID());
-    if (wxid.length == 0) return;
-    NeoWCSetAuthorizationRuntimeIdentity(wxid);
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSString *cachedHash = [defaults stringForKey:NeoWCAuthorizationCachedIdentityHashKey] ?: @"";
-    NSString *currentHash = wxid.length > 0 ? NeoWCSHA256Hex(wxid) : @"";
-    NSDate *lastRefreshDate = [defaults objectForKey:NeoWCAuthorizationLastRefreshDateKey];
-    BOOL sameIdentity = currentHash.length > 0 && [currentHash.lowercaseString isEqualToString:cachedHash.lowercaseString];
-    BOOL fresh = [lastRefreshDate isKindOfClass:NSDate.class] &&
-        [NSDate.date timeIntervalSinceDate:lastRefreshDate] >= 0.0 &&
-        [NSDate.date timeIntervalSinceDate:lastRefreshDate] < NeoWCAuthorizationRefreshInterval;
-    if (sameIdentity && fresh && NeoWCAuthorizationHasCompletedInitialCheckForCurrentUser()) return;
-    NeoWCRefreshCurrentAuthorization();
-}
-
-static UIViewController *NeoWCAuthorizationTopViewController(UIViewController *controller) {
-    if (!controller) return nil;
-    if (controller.presentedViewController) return NeoWCAuthorizationTopViewController(controller.presentedViewController);
-    if ([controller isKindOfClass:UINavigationController.class]) return NeoWCAuthorizationTopViewController(((UINavigationController *)controller).visibleViewController);
-    if ([controller isKindOfClass:UITabBarController.class]) return NeoWCAuthorizationTopViewController(((UITabBarController *)controller).selectedViewController);
-    return controller;
-}
-
-static void NeoWCDismissPermanentBlacklistBlocker(void) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIAlertController *alert = NeoWCPermanentBlacklistAlert;
-        NeoWCPermanentBlacklistAlert = nil;
-        NeoWCPermanentBlacklistAlertPresenting = NO;
-        if (alert.presentingViewController) [alert dismissViewControllerAnimated:YES completion:nil];
-    });
-}
-
-void NeoWCPresentPermanentBlacklistBlockerIfNeeded(void) {
-    if (!NeoWCAuthorizationIsPermanentlyBlacklisted()) return;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (NeoWCPermanentBlacklistAlertPresenting) return;
-        UIWindow *targetWindow = nil;
-        for (UIWindow *window in UIApplication.sharedApplication.windows.reverseObjectEnumerator) {
-            if (!window.hidden && window.alpha > 0.0 && window.windowLevel == UIWindowLevelNormal && window.rootViewController) {
-                targetWindow = window;
-                break;
-            }
-        }
-        UIViewController *presenter = NeoWCAuthorizationTopViewController(targetWindow.rootViewController);
-        if (!presenter || !presenter.view.window) return;
-        NeoWCPermanentBlacklistAlertPresenting = YES;
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"NeoWC 已停用"
-                                                                       message:@"当前账号已被限制使用"
-                                                                preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"退出" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
-            exit(EXIT_SUCCESS);
-        }]];
-        NeoWCPermanentBlacklistAlert = alert;
-        [presenter presentViewController:alert animated:YES completion:nil];
     });
 }
 

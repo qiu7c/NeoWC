@@ -1,5 +1,4 @@
 #import "NeoWCEnhancements.h"
-#import "NeoWCAuthorization.h"
 #import <math.h>
 
 NSString *const NeoWCAutoDeviceLoginKey = @"com.qiu7c.neowc.enhance.auto-device-login";
@@ -33,6 +32,7 @@ NSString *const NeoWCChatMessageTimeFormatKey = @"com.qiu7c.neowc.chat.message-t
 NSString *const NeoWCChatMessageTimeFontSizeKey = @"com.qiu7c.neowc.chat.message-time.font-size";
 NSString *const NeoWCChatMessageTimeColorKey = @"com.qiu7c.neowc.chat.message-time.color";
 NSString *const NeoWCChatMessageTimeBubbleVerticalPositionKey = @"com.qiu7c.neowc.chat.message-time.bubble-vertical-position";
+NSString *const NeoWCChatMessageTimeAvatarSpacingKey = @"com.qiu7c.neowc.chat.message-time.avatar-spacing";
 NSString *const NeoWCQuoteJumpEnabledKey = @"com.qiu7c.neowc.chat.quote-jump";
 NSString *const NeoWCQuoteJumpImageEnabledKey = @"com.qiu7c.neowc.chat.quote-jump.image";
 NSString *const NeoWCQuoteJumpVideoEnabledKey = @"com.qiu7c.neowc.chat.quote-jump.video";
@@ -178,7 +178,6 @@ NSString *NeoWCHexStringFromColor(UIColor *color) {
 }
 
 BOOL NeoWCEnhancementEnabled(NSString *key) {
-    if (!NeoWCAuthorizationAllowsCoreFeatures()) return NO;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     id masterValue = [defaults objectForKey:@"com.qiu7c.neowc.enabled"];
     BOOL masterEnabled = masterValue ? [masterValue boolValue] : YES;

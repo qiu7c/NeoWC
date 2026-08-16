@@ -93,7 +93,7 @@
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
         field.text = [NSString stringWithFormat:@"%.0f", [NSUserDefaults.standardUserDefaults doubleForKey:key]];
-        field.keyboardType = UIKeyboardTypeDecimalPad;
+        field.keyboardType = minimum < 0.0 ? UIKeyboardTypeNumbersAndPunctuation : UIKeyboardTypeDecimalPad;
         field.clearButtonMode = UITextFieldViewModeWhileEditing;
     }];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
@@ -495,6 +495,7 @@
         case NeoWCSettingActionMessageTimeMode: [self presentMessageTimeModePicker]; break;
         case NeoWCSettingActionMessageTimeColor: [self presentMessageTimeColorPicker]; break;
         case NeoWCSettingActionMessageTimePosition: [self presentMessageTimePositionPicker]; break;
+        case NeoWCSettingActionMessageTimeAvatarSpacing: [self presentNumberEditorWithTitle:item.title message:@"请输入 -6 到 8 之间的数值；负值向上，正值向下" key:NeoWCChatMessageTimeAvatarSpacingKey minimum:-6 maximum:8 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionPluginManager: [self push:[WCPluginsViewController new]]; break;
         case NeoWCSettingActionHapticIntensity: [self presentHapticIntensityPicker]; break;
         case NeoWCSettingActionStepMode: [self presentStepModePicker]; break;
