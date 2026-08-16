@@ -124,6 +124,8 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
 @property (nonatomic, strong) UILabel *authorizationLabel;
 @property (nonatomic, strong) UIStackView *metadataStack;
 @property (nonatomic, copy) NSArray<NSLayoutConstraint *> *avatarConstraints;
+@property (nonatomic, copy) NSString *appliedAvatarWXID;
+@property (nonatomic, copy) NSString *appliedHeadURL;
 - (void)applyProfileWithWXID:(nullable NSString *)wxid
                     nickname:(nullable NSString *)nickname
                      headURL:(nullable NSString *)headURL;
@@ -169,7 +171,9 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
     _metadataStack.alignment = UIStackViewAlignmentCenter;
     _metadataStack.spacing = 14.0;
     [self addSubview:_metadataStack];
-    [self applyProfileWithWXID:nil nickname:nil headURL:nil];
+    // Account and authorization values are persisted. Apply them before the
+    // header first appears so it never renders an empty placeholder frame.
+    [self refreshProfile];
     return self;
 }
 
@@ -179,12 +183,21 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
     fallback.tintColor = UIColor.tertiaryLabelColor;
     fallback.contentMode = UIViewContentModeScaleAspectFill;
     fallback.clipsToBounds = YES;
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSString *cachedURL = [defaults stringForKey:@"com.qiu7c.neowc.ui.cached-avatar-url"];
+    NSData *cachedImageData = [defaults dataForKey:@"com.qiu7c.neowc.ui.cached-avatar-data"];
+    if (headURL.length > 0 && [cachedURL isEqualToString:headURL] && cachedImageData.length > 0) {
+        UIImage *cachedImage = [UIImage imageWithData:cachedImageData];
+        if (cachedImage) fallback.image = cachedImage;
+    }
     NSURL *URL = headURL.length > 0 ? [NSURL URLWithString:headURL] : nil;
     if (URL) {
         __weak UIImageView *weakImageView = fallback;
         [[[NSURLSession sharedSession] dataTaskWithURL:URL completionHandler:^(NSData *data, __unused NSURLResponse *response, __unused NSError *error) {
             UIImage *image = data.length > 0 ? [UIImage imageWithData:data] : nil;
             if (!image) return;
+            [NSUserDefaults.standardUserDefaults setObject:headURL forKey:@"com.qiu7c.neowc.ui.cached-avatar-url"];
+            [NSUserDefaults.standardUserDefaults setObject:data forKey:@"com.qiu7c.neowc.ui.cached-avatar-data"];
             dispatch_async(dispatch_get_main_queue(), ^{ weakImageView.image = image; });
         }] resume];
     }
@@ -241,6 +254,12 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
                                self.wxidLabel.text, self.authorizationLabel.text];
     self.accessibilityHint = self.wxid.length > 0 ? @"轻点复制 wxid" : nil;
 
+    BOOL avatarNeedsUpdate = !self.avatarView ||
+        ![(self.appliedAvatarWXID ?: @"") isEqualToString:(self.wxid ?: @"")] ||
+        ![(self.appliedHeadURL ?: @"") isEqualToString:(headURL ?: @"")];
+    if (!avatarNeedsUpdate) return;
+    self.appliedAvatarWXID = self.wxid ?: @"";
+    self.appliedHeadURL = headURL ?: @"";
     [NSLayoutConstraint deactivateConstraints:self.avatarConstraints ?: @[]];
     [self.avatarView removeFromSuperview];
     UIView *avatarContent = [self makeAvatarViewWithWXID:self.wxid headURL:headURL];

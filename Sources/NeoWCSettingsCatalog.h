@@ -10,6 +10,5 @@ FOUNDATION_EXPORT void NeoWCSettingsRegisterDefaults(void);
 FOUNDATION_EXPORT void NeoWCSettingsRegenerateDailyStepTarget(NSUserDefaults *defaults);
 FOUNDATION_EXPORT NSArray<NeoWCSettingSection *> *NeoWCSettingsBuildSections(NeoWCSettingsCategory category,
                                                                             NSSet<NSString *> *collapsedFeatureKeys);
-FOUNDATION_EXPORT NSArray<NeoWCSettingSection *> *NeoWCSettingsBuildSearchSections(NeoWCSettingsCategory category);
 
 NS_ASSUME_NONNULL_END

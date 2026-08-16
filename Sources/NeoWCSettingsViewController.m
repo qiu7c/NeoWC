@@ -10,18 +10,18 @@
 #import "NeoWCInterfaceTweaks.h"
 #import <math.h>
 
-@interface NeoWCSettingsViewController () <UISearchResultsUpdating, UISearchControllerDelegate>
+static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.ui.last-shown-release-notes-version";
+
+@interface NeoWCSettingsViewController ()
 @property (nonatomic, assign) NeoWCSettingsCategory category;
 @property (nonatomic, copy) NSArray<NeoWCSettingSection *> *sections;
 @property (nonatomic, strong) NSMutableSet<NSString *> *collapsedFeatureKeys;
 @property (nonatomic, strong) NeoWCSettingsActions *actions;
 @property (nonatomic, strong) NeoWCSettingsProfileHeaderView *profileHeader;
-@property (nonatomic, strong) UISearchController *searchController;
-@property (nonatomic, copy) NSString *searchQuery;
-@property (nonatomic, assign) BOOL requestedAuthorization;
+@property (nonatomic, assign) BOOL attemptedReleaseNotes;
+@property (nonatomic, assign) BOOL displayedBlacklistedState;
 - (instancetype)initWithCategory:(NeoWCSettingsCategory)category;
-- (void)updateSearchAvailability;
-- (void)searchButtonTapped;
+- (void)presentReleaseNotesIfNeeded;
 @end
 
 @implementation NeoWCSettingsViewController
@@ -81,15 +81,6 @@
     if (self.category == NeoWCSettingsCategoryRoot) {
         self.profileHeader = [[NeoWCSettingsProfileHeaderView alloc] initWithFrame:CGRectZero];
         [self.profileHeader addTarget:self action:@selector(profileHeaderTapped) forControlEvents:UIControlEventTouchUpInside];
-        self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
-        self.searchController.obscuresBackgroundDuringPresentation = NO;
-        self.searchController.searchResultsUpdater = self;
-        self.searchController.delegate = self;
-        self.searchController.searchBar.placeholder = @"搜索 NeoWC 功能";
-        self.searchController.searchBar.backgroundColor = UIColor.clearColor;
-        self.searchController.searchBar.searchTextField.backgroundColor = UIColor.secondarySystemFillColor;
-        self.navigationItem.searchController = self.searchController;
-        self.navigationItem.hidesSearchBarWhenScrolling = YES;
         UINavigationBarAppearance *appearance = [UINavigationBarAppearance new];
         [appearance configureWithOpaqueBackground];
         appearance.backgroundColor = UIColor.systemGroupedBackgroundColor;
@@ -97,11 +88,10 @@
         self.navigationItem.standardAppearance = appearance;
         self.navigationItem.scrollEdgeAppearance = appearance;
         self.navigationItem.compactAppearance = appearance;
-        self.definesPresentationContext = YES;
-        [self updateSearchAvailability];
     }
     [self applySettingsPageScale];
     [self rebuildSections];
+    self.displayedBlacklistedState = NeoWCAuthorizationIsPermanentlyBlacklisted();
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(authorizationStateDidChange:) name:NeoWCAuthorizationStateDidChangeNotification object:nil];
 }
 
@@ -139,50 +129,37 @@
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     [self.profileHeader refreshProfile];
-    if (self.category != NeoWCSettingsCategoryRoot || self.requestedAuthorization) return;
-    self.requestedAuthorization = YES;
-    NeoWCRefreshCurrentAuthorization();
+    if (self.category != NeoWCSettingsCategoryRoot) return;
+    [self presentReleaseNotesIfNeeded];
+    NeoWCRefreshCurrentAuthorizationIfNeeded();
+}
+
+- (void)presentReleaseNotesIfNeeded {
+    if (self.attemptedReleaseNotes || self.category != NeoWCSettingsCategoryRoot || !self.view.window) return;
+    self.attemptedReleaseNotes = YES;
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSString *shownVersion = [defaults stringForKey:NeoWCLastShownReleaseNotesVersionKey];
+    if ([shownVersion isEqualToString:NeoWCDisplayVersion]) return;
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"NeoWC %@", NeoWCDisplayVersion]
+                                                                   message:@"本次更新\n\n• 恢复头像下方与气泡旁消息时间显示\n• 授权资料与状态改为本地持久化、后台静默校验\n• 普通授权仅作状态展示，黑名单限制继续保留\n• 移除设置页功能搜索并优化页面稳定性"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+    [defaults setObject:NeoWCDisplayVersion forKey:NeoWCLastShownReleaseNotesVersionKey];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)authorizationStateDidChange:(__unused NSNotification *)notification {
-    if (self.category != NeoWCSettingsCategoryRoot && !NeoWCAuthorizationAllowsCoreFeatures()) {
+    BOOL blacklisted = NeoWCAuthorizationIsPermanentlyBlacklisted();
+    if (self.category != NeoWCSettingsCategoryRoot && blacklisted) {
         [self.navigationController popViewControllerAnimated:YES];
         return;
     }
     [self.profileHeader refreshProfile];
-    [self updateSearchAvailability];
-    [self reloadSettingsPreservingPositionApplyScale:YES];
-}
-
-- (void)updateSearchAvailability {
-    if (self.category != NeoWCSettingsCategoryRoot) return;
-    if (!NeoWCAuthorizationAllowsCoreFeatures()) {
-        if (self.searchController.active) self.searchController.active = NO;
-        self.navigationItem.rightBarButtonItem = nil;
-        return;
+    if (blacklisted != self.displayedBlacklistedState) {
+        self.displayedBlacklistedState = blacklisted;
+        [self reloadSettingsPreservingPositionApplyScale:YES];
     }
-    UIBarButtonItem *searchButton = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass"] style:UIBarButtonItemStylePlain target:self action:@selector(searchButtonTapped)];
-    searchButton.accessibilityLabel = @"搜索 NeoWC 功能";
-    self.navigationItem.rightBarButtonItem = searchButton;
-}
-
-- (void)searchButtonTapped {
-    if (!NeoWCAuthorizationAllowsCoreFeatures()) return;
-    self.searchController.active = YES;
-    dispatch_async(dispatch_get_main_queue(), ^{ [self.searchController.searchBar becomeFirstResponder]; });
-}
-
-- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
-    self.searchQuery = [searchController.searchBar.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    [self rebuildSections];
-    [self.tableView reloadData];
-}
-
-- (void)willDismissSearchController:(UISearchController *)searchController {
-    (void)searchController;
-    self.searchQuery = @"";
-    [self rebuildSections];
-    [self.tableView reloadData];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -200,30 +177,7 @@
 }
 
 - (void)rebuildSections {
-    if (self.category != NeoWCSettingsCategoryRoot || self.searchQuery.length == 0 || !NeoWCAuthorizationAllowsCoreFeatures()) {
-        self.sections = NeoWCSettingsBuildSections(self.category, self.collapsedFeatureKeys);
-        return;
-    }
-    NSMutableArray<NeoWCSettingItem *> *matches = [NSMutableArray array];
-    NSMutableSet<NSString *> *seen = [NSMutableSet set];
-    NSArray<NSNumber *> *categories = @[@(NeoWCSettingsCategoryRoot), @(NeoWCSettingsCategoryMessages), @(NeoWCSettingsCategoryEnhancements), @(NeoWCSettingsCategoryInterface), @(NeoWCSettingsCategoryDeveloper)];
-    for (NSNumber *categoryValue in categories) {
-        NSArray<NeoWCSettingSection *> *candidateSections = NeoWCSettingsBuildSearchSections((NeoWCSettingsCategory)categoryValue.integerValue);
-        for (NeoWCSettingSection *section in candidateSections) {
-            for (NeoWCSettingItem *item in section.items) {
-                if (item.action == NeoWCSettingActionNone && item.defaultsKey.length == 0) continue;
-                NSString *haystack = [NSString stringWithFormat:@"%@ %@ %@", item.title ?: @"", item.subtitle ?: @"", item.value ?: @""];
-                if ([haystack rangeOfString:self.searchQuery options:NSCaseInsensitiveSearch].location == NSNotFound) continue;
-                if ([seen containsObject:item.identifier]) continue;
-                [seen addObject:item.identifier];
-                [matches addObject:item];
-            }
-        }
-    }
-    self.sections = @[[NeoWCSettingSection sectionWithIdentifier:@"search-results"
-                                                            title:@"搜索结果"
-                                                           footer:matches.count ? nil : @"没有找到匹配的 NeoWC 功能。"
-                                                            items:matches]];
+    self.sections = NeoWCSettingsBuildSections(self.category, self.collapsedFeatureKeys);
 }
 
 - (void)reloadSettingsPreservingPositionApplyScale:(BOOL)applyScale {
@@ -330,7 +284,6 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NeoWCSettingItem *item = [self itemAtIndexPath:indexPath];
-    if (self.searchController.active) self.searchController.active = NO;
     if (item.kind == NeoWCSettingRowKindSwitch) {
         [self toggleFeature:item];
         return;

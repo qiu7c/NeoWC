@@ -395,6 +395,15 @@ static UIControl *NeoWCFirstControlInView(UIView *view) {
 @implementation NeoWCMomentsFloatMenuSnapshot
 @end
 
+static UIViewController *NeoWCViewControllerForResponder(id responderObject) {
+    UIResponder *responder = [responderObject isKindOfClass:[UIResponder class]] ? (UIResponder *)responderObject : nil;
+    while (responder) {
+        if ([responder isKindOfClass:[UIViewController class]]) return (UIViewController *)responder;
+        responder = responder.nextResponder;
+    }
+    return nil;
+}
+
 @interface NeoWCReplyPanGestureDelegate : NSObject <UIGestureRecognizerDelegate>
 @property (nonatomic, weak) UIView *cell;
 @end
@@ -411,7 +420,10 @@ static UIControl *NeoWCFirstControlInView(UIView *view) {
     if (NeoWCMessageSwipeAction((CommonMessageCellView *)self.cell, velocity.x > 0.0) == NeoWCReplySwipeActionNone) return NO;
     CGPoint location = [pan locationInView:self.cell];
     CGFloat width = CGRectGetWidth(self.cell.bounds);
-    return location.x >= 24.0 && location.x <= MAX(24.0, width - 24.0);
+    // Preserve the native interactive-pop edge. A rightward message action must
+    // start farther inside the chat so returning cannot accidentally trigger it.
+    CGFloat minimumX = velocity.x > 0.0 ? 44.0 : 24.0;
+    return location.x >= minimumX && location.x <= MAX(minimumX, width - 24.0);
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
@@ -463,6 +475,11 @@ static void NeoWCSynchronizeReplyGesture(CommonMessageCellView *cell) {
         panRecognizer.delaysTouchesBegan = NO;
         panRecognizer.delaysTouchesEnded = NO;
         [cell addGestureRecognizer:panRecognizer];
+        UIViewController *controller = NeoWCViewControllerForResponder(cell);
+        UIGestureRecognizer *popGesture = controller.navigationController.interactivePopGestureRecognizer;
+        if (popGesture && popGesture != panRecognizer) {
+            [panRecognizer requireGestureRecognizerToFail:popGesture];
+        }
         objc_setAssociatedObject(cell, &NeoWCReplyPanRecognizerKey, panRecognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(cell, &NeoWCReplyPanDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
@@ -1319,12 +1336,7 @@ static NSString *NeoWCDisplayTextForJokerMessage(id message) {
 }
 
 static UIViewController *NeoWCJokerPresenterForCell(id cell) {
-    UIResponder *responder = [cell isKindOfClass:[UIResponder class]] ? (UIResponder *)cell : nil;
-    while (responder) {
-        if ([responder isKindOfClass:[UIViewController class]]) return (UIViewController *)responder;
-        responder = responder.nextResponder;
-    }
-    return nil;
+    return NeoWCViewControllerForResponder(cell);
 }
 
 static void NeoWCReloadJokerCell(id cell, id message, UIViewController *controller) {
@@ -3220,6 +3232,7 @@ static void NeoWCSynchronizeReplyGesturesInView(UIView *view) {
     Class cellClass = NSClassFromString(@"CommonMessageCellView");
     if (cellClass && [view isKindOfClass:cellClass]) {
         NeoWCSynchronizeReplyGesture((CommonMessageCellView *)view);
+        NeoWCScheduleMessageTimeRefresh(view);
     }
     for (UIView *subview in view.subviews) NeoWCSynchronizeReplyGesturesInView(subview);
 }

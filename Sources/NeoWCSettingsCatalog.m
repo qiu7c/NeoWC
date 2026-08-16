@@ -9,9 +9,8 @@
 NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
-static NSString *const NeoWCSearchAllChildrenMarker = @"__neowc_search_all_children__";
 
-NSString *const NeoWCDisplayVersion = @"0.1.2 beta59";
+NSString *const NeoWCDisplayVersion = @"0.1.3";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -34,9 +33,8 @@ static void NeoWCAddFeature(NSMutableArray<NeoWCSettingItem *> *items,
                             NSSet<NSString *> *collapsedFeatureKeys) {
     parent.hasChildren = children.count > 0;
     [items addObject:parent];
-    BOOL searchIncludesChildren = [collapsedFeatureKeys containsObject:NeoWCSearchAllChildrenMarker];
-    if (parent.defaultsKey.length > 0 && (searchIncludesChildren || [defaults boolForKey:parent.defaultsKey]) &&
-        (searchIncludesChildren || ![collapsedFeatureKeys containsObject:parent.defaultsKey])) {
+    if (parent.defaultsKey.length > 0 && [defaults boolForKey:parent.defaultsKey] &&
+        ![collapsedFeatureKeys containsObject:parent.defaultsKey]) {
         for (NeoWCSettingItem *child in children) child.child = YES;
         [items addObjectsFromArray:children];
     }
@@ -93,6 +91,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCChatMessageTimeFormatKey: @"MM-dd HH:mm:ss",
         NeoWCChatMessageTimeFontSizeKey: @10.0,
         NeoWCChatMessageTimeColorKey: @"#8E8E93FF",
+        NeoWCChatMessageTimeBubbleVerticalPositionKey: @2,
         NeoWCEmoticonToSelfieEnabledKey: @NO,
         NeoWCMomentsForwardEnabledKey: @NO,
         NeoWCReplySwipeEnabledKey: @NO,
@@ -257,11 +256,16 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     ], defaults, collapsed);
     NSString *messageTimeFormat = [defaults stringForKey:NeoWCChatMessageTimeFormatKey];
     if (messageTimeFormat.length == 0) messageTimeFormat = @"MM-dd HH:mm:ss";
-    NeoWCAddFeature(interaction, NeoWCItem(@"消息时间显示", @"在头像下方或气泡旁显示发送时间", @"clock", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeEnabledKey, nil, NeoWCSettingActionNone), @[
-        NeoWCItem(@"头像下方时间", @"在头像下方紧凑显示", @"person.crop.circle.badge.clock", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeBelowAvatarKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"气泡旁时间", @"空间不足时自动隐藏，避免遮挡消息", @"bubble.left.and.text.bubble.right", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeBubbleSideKey, nil, NeoWCSettingActionNone),
+    BOOL messageTimeBubbleMode = [defaults boolForKey:NeoWCChatMessageTimeBubbleSideKey];
+    NSInteger messageTimePosition = MIN(2, MAX(0, [defaults integerForKey:NeoWCChatMessageTimeBubbleVerticalPositionKey]));
+    NSArray<NSString *> *messageTimePositionNames = @[@"顶部", @"中间", @"底部"];
+    NSString *messageTimeColor = [defaults stringForKey:NeoWCChatMessageTimeColorKey] ?: @"#8E8E93FF";
+    NeoWCAddFeature(interaction, NeoWCItem(@"消息时间显示", @"在头像之间或消息旁显示发送时间", @"clock", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeEnabledKey, nil, NeoWCSettingActionNone), @[
+        NeoWCItem(@"显示模式", @"头像之间与消息旁严格二选一", @"rectangle.2.swap", NeoWCSettingRowKindDetail, nil, messageTimeBubbleMode ? @"消息旁" : @"头像之间", NeoWCSettingActionMessageTimeMode),
+        NeoWCItem(@"消息旁位置", @"默认位于消息底部，避开居中的防撤回提示", @"arrow.up.and.down.text.horizontal", NeoWCSettingRowKindDetail, nil, messageTimePositionNames[messageTimePosition], NeoWCSettingActionMessageTimePosition),
         NeoWCItem(@"时间格式", @"支持 yyyy、MM、dd、E、HH、mm、ss", @"textformat", NeoWCSettingRowKindDetail, nil, messageTimeFormat, NeoWCSettingActionMessageTimeFormat),
         NeoWCItem(@"时间字号", @"限制在 8 到 18 点", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatMessageTimeFontSizeKey]], NeoWCSettingActionMessageTimeFontSize),
+        NeoWCItem(@"时间颜色", @"支持透明度并适配不同聊天背景", @"paintpalette", NeoWCSettingRowKindDetail, nil, messageTimeColor.uppercaseString, NeoWCSettingActionMessageTimeColor),
     ], defaults, collapsed);
     NSInteger selfSwipeAction = [defaults integerForKey:NeoWCReplySwipeSelfActionKey];
     NSInteger otherSwipeAction = [defaults integerForKey:NeoWCReplySwipeOtherActionKey];
@@ -472,9 +476,4 @@ NSArray<NeoWCSettingSection *> *NeoWCSettingsBuildSections(NeoWCSettingsCategory
         case NeoWCSettingsCategoryRoot:
         default: return NeoWCRootSections();
     }
-}
-
-NSArray<NeoWCSettingSection *> *NeoWCSettingsBuildSearchSections(NeoWCSettingsCategory category) {
-    if (category == NeoWCSettingsCategoryRoot) return NeoWCRootSections();
-    return NeoWCSettingsBuildSections(category, [NSSet setWithObject:NeoWCSearchAllChildrenMarker]);
 }

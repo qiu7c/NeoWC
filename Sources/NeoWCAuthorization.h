@@ -20,6 +20,9 @@ FOUNDATION_EXPORT BOOL NeoWCAuthorizationIsPermanentlyBlacklisted(void);
 FOUNDATION_EXPORT NeoWCAuthorizationState NeoWCCurrentAuthorizationState(void);
 FOUNDATION_EXPORT NSString *NeoWCCurrentAuthorizationMessage(void);
 FOUNDATION_EXPORT void NeoWCRefreshCurrentAuthorization(void);
+/// Uses the persisted state immediately and only performs a silent network
+/// refresh when the saved result is stale or belongs to another account.
+FOUNDATION_EXPORT void NeoWCRefreshCurrentAuthorizationIfNeeded(void);
 FOUNDATION_EXPORT void NeoWCPresentPermanentBlacklistBlockerIfNeeded(void);
 
 @interface NeoWCAuthorizationManagerViewController : UITableViewController

@@ -14,9 +14,10 @@
 #import "NeoWCPluginManager.h"
 #import <math.h>
 
-@interface NeoWCSettingsActions ()
+@interface NeoWCSettingsActions () <UIColorPickerViewControllerDelegate>
 @property (nonatomic, weak) UIViewController *viewController;
 @property (nonatomic, copy) NeoWCSettingsReloadHandler reloadHandler;
+@property (nonatomic, copy) NSString *activeColorDefaultsKey;
 @end
 
 
@@ -173,6 +174,80 @@
         [weakSelf reload];
     }]];
     [self.viewController presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentMessageTimeModePicker {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    BOOL bubbleMode = [defaults boolForKey:NeoWCChatMessageTimeBubbleSideKey];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"消息时间显示模式"
+                                                                    message:@"两种模式互斥；头像模式位于相邻头像之间，消息旁模式支持全部消息类型。"
+                                                             preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSDictionary *> *options = @[
+        @{@"title": @"头像之间", @"bubble": @NO},
+        @{@"title": @"消息旁", @"bubble": @YES},
+    ];
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary *option in options) {
+        BOOL value = [option[@"bubble"] boolValue];
+        NSString *title = value == bubbleMode ? [NSString stringWithFormat:@"✓  %@", option[@"title"]] : option[@"title"];
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [defaults setBool:!value forKey:NeoWCChatMessageTimeBelowAvatarKey];
+            [defaults setBool:value forKey:NeoWCChatMessageTimeBubbleSideKey];
+            [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:NeoWCChatMessageTimeBubbleSideKey];
+            [weakSelf reload];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentSheet:sheet];
+}
+
+- (void)presentMessageTimePositionPicker {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSInteger current = MIN(2, MAX(0, [defaults integerForKey:NeoWCChatMessageTimeBubbleVerticalPositionKey]));
+    NSArray<NSString *> *names = @[@"顶部", @"中间", @"底部"];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"消息旁时间位置"
+                                                                    message:@"底部可避开默认位于中间的防撤回提示。"
+                                                             preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    [names enumerateObjectsUsingBlock:^(NSString *name, NSUInteger index, __unused BOOL *stop) {
+        NSString *title = (NSInteger)index == current ? [NSString stringWithFormat:@"✓  %@", name] : name;
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [defaults setInteger:(NSInteger)index forKey:NeoWCChatMessageTimeBubbleVerticalPositionKey];
+            [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:NeoWCChatMessageTimeBubbleVerticalPositionKey];
+            [weakSelf reload];
+        }]];
+    }];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentSheet:sheet];
+}
+
+- (void)presentMessageTimeColorPicker {
+    self.activeColorDefaultsKey = NeoWCChatMessageTimeColorKey;
+    UIColorPickerViewController *picker = [UIColorPickerViewController new];
+    picker.title = @"消息时间颜色";
+    picker.supportsAlpha = YES;
+    picker.selectedColor = NeoWCColorForDefaultsKey(NeoWCChatMessageTimeColorKey, UIColor.secondaryLabelColor);
+    picker.delegate = self;
+    [self.viewController presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)colorPickerViewControllerDidFinish:(UIColorPickerViewController *)viewController {
+    if (self.activeColorDefaultsKey.length == 0) return;
+    UIColor *resolved = [viewController.selectedColor resolvedColorWithTraitCollection:self.viewController.traitCollection];
+    CGFloat red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0;
+    if (![resolved getRed:&red green:&green blue:&blue alpha:&alpha]) {
+        CGFloat white = 0.0;
+        if ([resolved getWhite:&white alpha:&alpha]) red = green = blue = white;
+    }
+    NSString *hex = [NSString stringWithFormat:@"#%02X%02X%02X%02X",
+                     (NSInteger)lrint(MIN(1.0, MAX(0.0, red)) * 255.0),
+                     (NSInteger)lrint(MIN(1.0, MAX(0.0, green)) * 255.0),
+                     (NSInteger)lrint(MIN(1.0, MAX(0.0, blue)) * 255.0),
+                     (NSInteger)lrint(MIN(1.0, MAX(0.0, alpha)) * 255.0)];
+    [NSUserDefaults.standardUserDefaults setObject:hex forKey:self.activeColorDefaultsKey];
+    [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:self.activeColorDefaultsKey];
+    self.activeColorDefaultsKey = nil;
+    [self reload];
 }
 
 - (void)presentHapticIntensityPicker {
@@ -417,6 +492,9 @@
         case NeoWCSettingActionMomentsDateFormat: [self presentMomentsDateFormatEditor]; break;
         case NeoWCSettingActionMessageTimeFormat: [self presentMessageTimeFormatEditor]; break;
         case NeoWCSettingActionMessageTimeFontSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 8 到 18 之间的字号" key:NeoWCChatMessageTimeFontSizeKey minimum:8 maximum:18 notifyChange:YES applyScale:NO]; break;
+        case NeoWCSettingActionMessageTimeMode: [self presentMessageTimeModePicker]; break;
+        case NeoWCSettingActionMessageTimeColor: [self presentMessageTimeColorPicker]; break;
+        case NeoWCSettingActionMessageTimePosition: [self presentMessageTimePositionPicker]; break;
         case NeoWCSettingActionPluginManager: [self push:[WCPluginsViewController new]]; break;
         case NeoWCSettingActionHapticIntensity: [self presentHapticIntensityPicker]; break;
         case NeoWCSettingActionStepMode: [self presentStepModePicker]; break;

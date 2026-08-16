@@ -30,6 +30,7 @@ FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeBubbleSideKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeFormatKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeFontSizeKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeColorKey;
+FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeBubbleVerticalPositionKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpImageEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpVideoEnabledKey;
