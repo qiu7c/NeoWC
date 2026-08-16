@@ -140,6 +140,41 @@
     [self.viewController presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)presentMessageTimeFormatEditor {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSString *saved = [defaults stringForKey:NeoWCChatMessageTimeFormatKey];
+    if (saved.length == 0) saved = @"MM-dd HH:mm:ss";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"消息时间格式"
+                                                                   message:@"仅支持 yyyy、MM、dd、E、HH、mm、ss，区分大小写；留空恢复默认格式"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.text = saved;
+        field.placeholder = @"MM-dd HH:mm:ss";
+        field.autocorrectionType = UITextAutocorrectionTypeNo;
+        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *raw = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        NSString *normalized = raw.length == 0 ? @"MM-dd HH:mm:ss" : NeoWCNormalizedMomentsDateFormat(raw);
+        if (!normalized) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                UIAlertController *error = [UIAlertController alertControllerWithTitle:@"时间格式不支持"
+                                                                                message:@"格式最长 64 个字符，只能使用支持的日期符号及普通分隔文字。"
+                                                                         preferredStyle:UIAlertControllerStyleAlert];
+                [error addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+                [weakSelf.viewController presentViewController:error animated:YES completion:nil];
+            });
+            return;
+        }
+        [defaults setObject:normalized forKey:NeoWCChatMessageTimeFormatKey];
+        [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:NeoWCChatMessageTimeFormatKey];
+        [weakSelf reload];
+    }]];
+    [self.viewController presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)presentHapticIntensityPicker {
     CGFloat current = [NSUserDefaults.standardUserDefaults doubleForKey:NeoWCMomentsLikeHapticIntensityKey];
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"点赞震动力度" message:@"选择双击点赞时的触感强度" preferredStyle:UIAlertControllerStyleActionSheet];
@@ -380,6 +415,8 @@
         case NeoWCSettingActionInnerRadius: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 40 之间的数值；0 表示直角" key:NeoWCChatInputInnerRadiusKey minimum:0 maximum:40 notifyChange:NO applyScale:NO]; break;
         case NeoWCSettingActionOuterRadius: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 40 之间的数值；0 表示直角" key:NeoWCChatInputOuterRadiusKey minimum:0 maximum:40 notifyChange:NO applyScale:NO]; break;
         case NeoWCSettingActionMomentsDateFormat: [self presentMomentsDateFormatEditor]; break;
+        case NeoWCSettingActionMessageTimeFormat: [self presentMessageTimeFormatEditor]; break;
+        case NeoWCSettingActionMessageTimeFontSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 8 到 18 之间的字号" key:NeoWCChatMessageTimeFontSizeKey minimum:8 maximum:18 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionPluginManager: [self push:[WCPluginsViewController new]]; break;
         case NeoWCSettingActionHapticIntensity: [self presentHapticIntensityPicker]; break;
         case NeoWCSettingActionStepMode: [self presentStepModePicker]; break;

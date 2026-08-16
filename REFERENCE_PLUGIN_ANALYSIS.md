@@ -51,6 +51,9 @@
 - 艾特与关键词边缘提示定位调用 `scrollToMessage:highlight:marginTop:animated:`，`marginTop` 为屏幕高度三分之一；关键词命中后可通过 `getChatCellWithMsg:` 和 `highLightSearchKeyWords:` 高亮。
 - 引用位置跳转与边缘提示是两条不同路径，不能统一强行调用 `returnToOriginalMsg:`。
 - 聊天搜索入口先让聊天控制器执行 `initMsgSearchHelper:`，再读取其原生 `m_oMsgSearchHelper`；打开路径优先使用 `pushSearchControllerWithCompletion:`，兼容分支调用 `onSearchItem`。该实现未调用 `getSearcherViewController` 或自行 `presentViewController:`。
+- 聊天消息时间实现位于 WCPulse 的消息 Cell 运行时配置链。它缓存 `runtimeTimeLabelConfigReady`、开关、字号、粗体及明暗颜色，读取 `cell.viewModel.messageWrap.m_uiCreateTime`，通过 `wcpulse_formatTimeWithStrftime:` 生成文字，并复用 tag 为 `10086` 的标签。
+- 该实现只处理 `TextMessageSubViewModel`，要求 `startHeight == 0`，通过 `getHeadImageView` 取得可见头像；若头像或 Cell 的 `contextString` 是非空纯数字则跳过。标签放在独立容器内并复用，标签高度为 `max(12, fontSize * 1.5)`、宽度至少 50 点，横向以头像中心对齐，纵向放在头像底部附近。
+- WCPulse 二进制中确认到的是“头像下方时间”，没有确认到 NeoWC 旧版的“气泡旁时间”。因此 NeoWC 恢复时，头像模式按上述真实链路收敛；气泡模式仍是独立适配，并在可用横向空间不足时隐藏，不能宣称为 WCPulse 原实现。
 - 红包详情 Hook 是 `WCRedEnvelopesRedEnvelopesDetailViewController viewWillAppear:`。数据链为 `m_delegate` -> `m_data` -> `m_oWCRedEnvelopesDetailInfo`。
 - 红包金额字段 `m_lTotalAmount`、`m_lRecAmount` 单位为分；数量字段为 `m_lTotalNum`、`m_lRecNum`。
 - `nickNameLabel` 仅用于清理旧的 `\n(¥` 残留；详情应写入 `m_receivedInfoLable` 的 attributedText。默认格式为“总金额、已领个数、剩余个数、剩余金额”，不能把原生领取状态再次当祝福语追加。

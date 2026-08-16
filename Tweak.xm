@@ -18,6 +18,7 @@
 #import "Sources/NeoWCPluginManager.h"
 #import "Sources/NeoWCRuntimeFeatures.h"
 #import "Sources/NeoWCInterfaceTweaks.h"
+#import "Sources/NeoWCMessageTime.h"
 
 @interface WCActionSheet : NSObject
 - (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
@@ -5890,17 +5891,21 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 
 - (void)setViewModel:(id)viewModel {
     %orig;
+    NeoWCHideMessageTimeLabels(self);
+    NeoWCScheduleMessageTimeRefresh(self);
     NeoWCSynchronizeReplyGesture(self);
     [self neowc_scheduleAntiRevokeSidePromptRefresh];
 }
 
 - (void)updateStatus {
     %orig;
+    NeoWCScheduleMessageTimeRefresh(self);
     [self neowc_scheduleAntiRevokeSidePromptRefresh];
 }
 
 - (void)updateNodeStatus {
     %orig;
+    NeoWCScheduleMessageTimeRefresh(self);
     [self neowc_scheduleAntiRevokeSidePromptRefresh];
 }
 
@@ -5908,8 +5913,10 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     %orig;
     NeoWCSynchronizeReplyGesture(self);
     if (self.window) {
+        NeoWCScheduleMessageTimeRefresh(self);
         [self neowc_scheduleAntiRevokeSidePromptRefresh];
     } else {
+        NeoWCHideMessageTimeLabels(self);
         UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
         if (label && !label.hidden) label.hidden = YES;
     }

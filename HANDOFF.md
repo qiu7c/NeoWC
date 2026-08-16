@@ -239,7 +239,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 - 多选批量保存文件附件不实现，只保存已下载图片。
 - View 选择器不提供“复制 Hook”。
 - 不使用全局手势启动调试悬浮窗。
-- 聊天消息时间标签已于 2026-08-09 完整删除，包括 Hook、设置项、配置键和兼容性条目；重构完成前不要恢复。
+- 聊天消息时间标签曾于 2026-08-09 删除；用户于 2026-08-16 明确要求重新启动开发，因此该旧限制已解除。恢复时必须继续禁止 `CommonMessageCellView layoutSubviews` Hook 和主动布局调用。
 
 ## 11. 已知限制
 
@@ -253,7 +253,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 
 1. 最近已推送提交 `8bc650b`
    - 语音自动转文字加入完成、处理中和最多 5 次重试状态，避免空内容或识别失败时无限循环。
-   - 聊天消息时间标签已完整删除。
+   - 聊天消息时间标签曾完整删除，beta58 已按用户新指示恢复开发。
    - 艾特/关键词边缘提示改用 `scrollToMessage:highlight:marginTop:animated:`。
    - 红包详情已改为写入 `m_receivedInfoLable`，金额按分换算。
 
@@ -285,6 +285,8 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
    - beta55 消除从插件管理页进入 NeoWC 时的主线程授权阻塞：设置页构建与转场阶段只读取本地授权快照，不再同步访问微信联系人服务；账号身份解析、授权请求和个人资料读取均在页面完成显示后进入独立后台队列，主线程仅接收状态和 UI 更新。管理员入口在本次后台解析出当前 wxid 后出现，首次验证弹窗仍由页面显示完成后触发。
    - beta56 将授权身份获取改为完全被动缓存：仅在微信自身调用 `CContactMgr getSelfContact` 时记录 wxid、昵称和头像地址，设置页、授权线程和个人信息页眉均不再主动访问联系人私有服务；头像改用普通 `NSURLSession` 异步加载。首次验证不再弹出不可关闭弹窗，根页面始终可操作；缓存身份缺失、未授权、断网或格式错误时只隐藏核心功能并显示状态，不阻塞页面或微信进程。
    - beta57 将插件管理顶部图标的默认选项改为“宫格”，插件入口图标默认值保持微信原生不变；用户明确选择微信原生顶部图标时，将小尺寸微信资源居中绘制在 72 点透明画布内并限制为 36 点显示，避免直接放大造成模糊。已有明确保存的顶部图标选项继续保留。
+   - beta58 恢复两种消息时间显示：保留原有配置 Key 与默认值；头像下方模式依据 WCPulse 已确认的 `m_uiCreateTime`、头像锚点、标签复用与尺寸公式实现，气泡旁模式作为 NeoWC 独立适配并在空间不足时隐藏。刷新只接入 `setViewModel:`、`updateStatus`、`updateNodeStatus` 和 `didMoveToWindow`，不恢复布局 Hook，也不主动触发布局。
+   - beta59 取消 wxid 普通授权对功能的所有限制：已授权、未授权、加载、断网、超时和响应异常均可正常进入页面并使用功能，授权结果仅影响个人信息区的一行状态文字。`NeoWCAuthorizationAllowsCoreFeatures()` 现在只拒绝永久黑名单；服务端黑名单命中仍写入本地永久状态、停用功能并展示不可关闭的退出弹窗，后台确认解除黑名单后继续清除该状态。
 
 3. 仍须保持的既有边界
    - 钱包只处理 `WCPayWalletEntryHeaderView` 内的 `TimeoutNumber`，金额单位为分。
@@ -347,7 +349,7 @@ ssh://git@ssh.github.com:443/qiu7c/NeoWC.git
 
 参考插件的稳定结论见 D:\Vibe\NeoWC\REFERENCE_PLUGIN_ANALYSIS.md，原始反编译产物在 D:\Vibe\NeoWC\.codex-analysis，仅供本机分析且不得加入提交。后续遇到未还原、真机不生效或微信版本变化的功能时，应直接回到用户提供的参考插件 `dylib`/`deb` 和这些本地提取文件继续反编译学习，确认 Hook 注册、原方法参数类型、字段来源与替换函数调用顺序后再修改 NeoWC；不要仅根据功能名或字符串猜测私有 API。
 
-必须保留防撤回气泡方案：禁止给 CommonMessageCellView 恢复 layoutSubviews Hook，禁止主动调用 setNeedsLayout/layoutIfNeeded，提示刷新必须弱引用且合并执行。保留图片编辑快捷发送与微信官方转发完全隔离的逻辑，保留设置页无动画 reloadData 与滚动位置保持方案。聊天消息时间标签已完整删除，不要恢复；不要恢复长截图、Markdown 导出或全局文字替换。
+必须保留防撤回气泡方案：禁止给 CommonMessageCellView 恢复 layoutSubviews Hook，禁止主动调用 setNeedsLayout/layoutIfNeeded，提示刷新必须弱引用且合并执行。保留图片编辑快捷发送与微信官方转发完全隔离的逻辑，保留设置页无动画 reloadData 与滚动位置保持方案。消息时间标签已由用户明确要求恢复，但仍只能使用低频状态入口和弱引用合并刷新；不要恢复长截图、Markdown 导出或全局文字替换。
 
 下一轮优先推送构建并真机验证红包未领取/部分领取/已领完三种状态、空语音重试上限、微信运动分阶段结果，以及已删除功能不再出现入口或运行时行为。
 

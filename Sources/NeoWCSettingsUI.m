@@ -219,8 +219,23 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
         self.nicknameLabel.text = displayNickname;
     }
     self.wxidLabel.text = self.wxid.length > 0 ? self.wxid : @"wxid 未获取";
-    self.authorizationLabel.text = NeoWCAuthorizationAllowsCoreFeatures() ? @"✓ 已授权" : @"未授权";
-    self.authorizationLabel.textColor = NeoWCAuthorizationAllowsCoreFeatures() ? UIColor.systemGreenColor : UIColor.systemRedColor;
+    NeoWCAuthorizationState authorizationState = NeoWCCurrentAuthorizationState();
+    if (authorizationState == NeoWCAuthorizationStateAuthorized) {
+        self.authorizationLabel.text = @"✓ 已授权";
+        self.authorizationLabel.textColor = UIColor.systemGreenColor;
+    } else if (authorizationState == NeoWCAuthorizationStateBlacklisted || NeoWCAuthorizationIsPermanentlyBlacklisted()) {
+        self.authorizationLabel.text = @"已限制使用";
+        self.authorizationLabel.textColor = UIColor.systemRedColor;
+    } else if (authorizationState == NeoWCAuthorizationStateLoading || authorizationState == NeoWCAuthorizationStateUnknown) {
+        self.authorizationLabel.text = @"授权状态检测中";
+        self.authorizationLabel.textColor = UIColor.secondaryLabelColor;
+    } else if (authorizationState == NeoWCAuthorizationStateFailed) {
+        self.authorizationLabel.text = @"授权状态暂不可用";
+        self.authorizationLabel.textColor = UIColor.secondaryLabelColor;
+    } else {
+        self.authorizationLabel.text = @"未授权";
+        self.authorizationLabel.textColor = UIColor.secondaryLabelColor;
+    }
     self.accessibilityLabel = [NSString stringWithFormat:@"%@%@，%@，%@",
                                displayNickname, isAuthor ? @"，作者" : @"",
                                self.wxidLabel.text, self.authorizationLabel.text];

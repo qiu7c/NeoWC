@@ -36,6 +36,7 @@ static NSArray<NSDictionary *> *NeoWCCompatibilityDefinitions(void) {
             @{ @"id": @"image-joker", @"title": @"图片记录伪装", @"class": @"ImageMessageCellView", @"selector": @"operationMenuItems" },
             @{ @"id": @"emoticon-to-selfie", @"title": @"表情存入自拍", @"class": @"EmoticonMessageCellView", @"selector": @"filteredMenuItems:" },
             @{ @"id": @"reply-swipe", @"title": @"消息手势", @"class": @"CommonMessageCellView", @"selector": @"onShowMsgReplyMenuItem:" },
+            @{ @"id": @"chat-message-time", @"title": @"消息时间显示", @"class": @"CommonMessageCellView", @"selector": @"updateNodeStatus" },
             @{ @"id": @"message-block", @"title": @"消息屏蔽", @"class": @"CMessageMgr", @"selector": @"AsyncOnAddMsg:MsgWrap:" },
             @{ @"id": @"long-press-menu", @"title": @"长按菜单管理", @"class": @"BaseMessageCellView", @"selector": @"filteredMenuItems:" },
             @{ @"id": @"group-member-reminder", @"title": @"群成员进退群提醒", @"class": @"CContactMgr", @"selector": @"printContactImportantChangeData:oldContact:" },

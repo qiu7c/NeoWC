@@ -11,7 +11,7 @@ NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-featu
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 static NSString *const NeoWCSearchAllChildrenMarker = @"__neowc_search_all_children__";
 
-NSString *const NeoWCDisplayVersion = @"0.1.2 beta57";
+NSString *const NeoWCDisplayVersion = @"0.1.2 beta59";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -87,6 +87,12 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCAntiRevokePersistRecordsKey: @NO,
         NeoWCImageEditQuickSendEnabledKey: @NO,
         NeoWCChatJokerEnabledKey: @NO,
+        NeoWCChatMessageTimeEnabledKey: @NO,
+        NeoWCChatMessageTimeBelowAvatarKey: @YES,
+        NeoWCChatMessageTimeBubbleSideKey: @NO,
+        NeoWCChatMessageTimeFormatKey: @"MM-dd HH:mm:ss",
+        NeoWCChatMessageTimeFontSizeKey: @10.0,
+        NeoWCChatMessageTimeColorKey: @"#8E8E93FF",
         NeoWCEmoticonToSelfieEnabledKey: @NO,
         NeoWCMomentsForwardEnabledKey: @NO,
         NeoWCReplySwipeEnabledKey: @NO,
@@ -168,7 +174,6 @@ void NeoWCSettingsRegisterDefaults(void) {
 
 static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
     BOOL administrator = NeoWCAuthorizationIsCurrentUserAdministrator();
-    NeoWCAuthorizationState authorizationState = NeoWCCurrentAuthorizationState();
     NSMutableArray<NeoWCSettingItem *> *maintenanceItems = [NSMutableArray arrayWithObjects:
         NeoWCItem(@"配置管理", @"导入、导出或重置 NeoWC 配置", @"externaldrive", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionConfigManager),
         NeoWCInfoItem(@"version", @"版本", @"NeoWC", @"shippingbox", NeoWCDisplayVersion), nil];
@@ -178,25 +183,10 @@ static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
     NeoWCSettingSection *maintenance = [NeoWCSettingSection sectionWithIdentifier:@"maintenance" title:@"维护"
                                                                            footer:[NSString stringWithFormat:@"NeoWC · %@", NeoWCDisplayVersion]
                                                                             items:maintenanceItems];
-    if (!NeoWCAuthorizationAllowsCoreFeatures()) {
-        NSString *title = @"授权验证";
-        NSString *message = NeoWCCurrentAuthorizationMessage();
-        NSString *symbol = @"lock.shield";
-        if (authorizationState == NeoWCAuthorizationStateLoading || authorizationState == NeoWCAuthorizationStateUnknown) {
-            message = @"正在验证授权…";
-            symbol = @"hourglass";
-        } else if (authorizationState == NeoWCAuthorizationStateBlacklisted) {
-            message = @"当前账号已被限制使用";
-            symbol = @"hand.raised.slash";
-        } else if (authorizationState == NeoWCAuthorizationStateUnauthorized) {
-            message = message.length ? message : @"当前账号未授权";
-        } else {
-            message = message.length ? message : @"授权验证失败，请检查网络后重试";
-            symbol = @"wifi.exclamationmark";
-        }
+    if (NeoWCAuthorizationIsPermanentlyBlacklisted()) {
         return @[
-            [NeoWCSettingSection sectionWithIdentifier:@"authorization" title:nil footer:@"仅在服务端确认已授权且未被拉黑后启用核心功能。" items:@[
-                NeoWCInfoItem(@"authorization-status", title, message, symbol, nil),
+            [NeoWCSettingSection sectionWithIdentifier:@"authorization" title:nil footer:@"黑名单状态会停用 NeoWC；解除后将在后台检查中自动恢复。" items:@[
+                NeoWCInfoItem(@"authorization-status", @"当前账号已被限制使用", @"该账号位于黑名单中", @"hand.raised.slash", nil),
             ]],
             maintenance,
         ];
@@ -264,6 +254,14 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"忽略群聊语音", @"群聊中的语音保持原样", @"person.3", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnoreGroupKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"忽略私聊语音", @"私聊中的语音保持原样", @"person", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnorePrivateKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"忽略自己发送", @"不转换自己发出的语音", @"person.crop.circle", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnoreSelfKey, nil, NeoWCSettingActionNone),
+    ], defaults, collapsed);
+    NSString *messageTimeFormat = [defaults stringForKey:NeoWCChatMessageTimeFormatKey];
+    if (messageTimeFormat.length == 0) messageTimeFormat = @"MM-dd HH:mm:ss";
+    NeoWCAddFeature(interaction, NeoWCItem(@"消息时间显示", @"在头像下方或气泡旁显示发送时间", @"clock", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeEnabledKey, nil, NeoWCSettingActionNone), @[
+        NeoWCItem(@"头像下方时间", @"在头像下方紧凑显示", @"person.crop.circle.badge.clock", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeBelowAvatarKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"气泡旁时间", @"空间不足时自动隐藏，避免遮挡消息", @"bubble.left.and.text.bubble.right", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeBubbleSideKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"时间格式", @"支持 yyyy、MM、dd、E、HH、mm、ss", @"textformat", NeoWCSettingRowKindDetail, nil, messageTimeFormat, NeoWCSettingActionMessageTimeFormat),
+        NeoWCItem(@"时间字号", @"限制在 8 到 18 点", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatMessageTimeFontSizeKey]], NeoWCSettingActionMessageTimeFontSize),
     ], defaults, collapsed);
     NSInteger selfSwipeAction = [defaults integerForKey:NeoWCReplySwipeSelfActionKey];
     NSInteger otherSwipeAction = [defaults integerForKey:NeoWCReplySwipeOtherActionKey];

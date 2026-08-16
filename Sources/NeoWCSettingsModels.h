@@ -41,6 +41,8 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionInnerRadius,
     NeoWCSettingActionOuterRadius,
     NeoWCSettingActionMomentsDateFormat,
+    NeoWCSettingActionMessageTimeFormat,
+    NeoWCSettingActionMessageTimeFontSize,
     NeoWCSettingActionPluginManager,
     NeoWCSettingActionHapticIntensity,
     NeoWCSettingActionStepMode,

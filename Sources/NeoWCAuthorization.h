@@ -13,6 +13,7 @@ typedef NS_ENUM(NSInteger, NeoWCAuthorizationState) {
 
 FOUNDATION_EXPORT NSNotificationName const NeoWCAuthorizationStateDidChangeNotification;
 FOUNDATION_EXPORT BOOL NeoWCAuthorizationIsCurrentUserAdministrator(void);
+/// Ordinary authorization is display-only; this returns NO only for the persistent blacklist.
 FOUNDATION_EXPORT BOOL NeoWCAuthorizationAllowsCoreFeatures(void);
 FOUNDATION_EXPORT BOOL NeoWCAuthorizationHasCompletedInitialCheckForCurrentUser(void);
 FOUNDATION_EXPORT BOOL NeoWCAuthorizationIsPermanentlyBlacklisted(void);
