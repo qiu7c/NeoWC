@@ -8,6 +8,7 @@ static NSString *const NeoWCAuthorizationBaseURL = @"https://api.ovoy.cc/api";
 static NSString *const NeoWCAdministratorWXIDHash = @"93773e983ed1f93c28c5e98e712049bf50ec0caddc367e3cfbd9548e19f82346";
 static NSString *const NeoWCAuthorizationCachedStateKey = @"com.qiu7c.neowc.authorization.cached-state";
 static NSString *const NeoWCAuthorizationCachedMessageKey = @"com.qiu7c.neowc.authorization.cached-message";
+static NSString *const NeoWCAuthorizationCachedIdentityHashKey = @"com.qiu7c.neowc.authorization.cached-identity-hash";
 static NSString *const NeoWCAuthorizationPermanentBlacklistKey = @"com.qiu7c.neowc.authorization.permanent-blacklist";
 NSNotificationName const NeoWCAuthorizationStateDidChangeNotification = @"NeoWCAuthorizationStateDidChangeNotification";
 
@@ -34,6 +35,14 @@ BOOL NeoWCAuthorizationIsCurrentUserAdministrator(void) {
     return [[NeoWCSHA256Hex(wxid) lowercaseString] isEqualToString:NeoWCAdministratorWXIDHash];
 }
 
+static BOOL NeoWCAuthorizationHasCachedGrantForCurrentUser(void) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    if ([defaults integerForKey:NeoWCAuthorizationCachedStateKey] != NeoWCAuthorizationStateAuthorized) return NO;
+    NSString *wxid = NeoWCTrimmedAuthorizationID(NeoWCCurrentUserWXID());
+    NSString *cachedHash = [defaults stringForKey:NeoWCAuthorizationCachedIdentityHashKey];
+    return wxid.length > 0 && cachedHash.length > 0 && [[NeoWCSHA256Hex(wxid) lowercaseString] isEqualToString:cachedHash.lowercaseString];
+}
+
 static NSURLSession *NeoWCAuthorizationSession(void) {
     static NSURLSession *session;
     static dispatch_once_t onceToken;
@@ -58,6 +67,7 @@ static NSDictionary *NeoWCJSONObjectDictionary(NSData *data) {
 @property (atomic, assign) NeoWCAuthorizationState state;
 @property (atomic, copy) NSString *checkedWXID;
 @property (atomic, copy) NSString *message;
+@property (atomic, assign) BOOL retainsCachedGrantDuringRefresh;
 - (void)updateState:(NeoWCAuthorizationState)state message:(NSString *)message;
 @end
 
@@ -73,7 +83,8 @@ static NSDictionary *NeoWCJSONObjectDictionary(NSData *data) {
             service.state = NeoWCAuthorizationStateBlacklisted;
         } else {
             NSInteger cachedState = [defaults integerForKey:NeoWCAuthorizationCachedStateKey];
-            service.state = cachedState >= NeoWCAuthorizationStateUnknown && cachedState <= NeoWCAuthorizationStateFailed
+            BOOL cachedStateIsValid = cachedState >= NeoWCAuthorizationStateUnknown && cachedState <= NeoWCAuthorizationStateFailed;
+            service.state = cachedStateIsValid && (cachedState != NeoWCAuthorizationStateAuthorized || NeoWCAuthorizationHasCachedGrantForCurrentUser())
                 ? (NeoWCAuthorizationState)cachedState : NeoWCAuthorizationStateUnknown;
         }
         service.checkedWXID = @"";
@@ -89,10 +100,12 @@ static NSDictionary *NeoWCJSONObjectDictionary(NSData *data) {
     }
     self.state = state;
     self.message = message ?: @"";
+    if (state != NeoWCAuthorizationStateLoading) self.retainsCachedGrantDuringRefresh = NO;
     if (state != NeoWCAuthorizationStateLoading) {
         NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
         [defaults setInteger:state forKey:NeoWCAuthorizationCachedStateKey];
         [defaults setObject:self.message forKey:NeoWCAuthorizationCachedMessageKey];
+        if (self.checkedWXID.length > 0) [defaults setObject:NeoWCSHA256Hex(self.checkedWXID) forKey:NeoWCAuthorizationCachedIdentityHashKey];
         if (state == NeoWCAuthorizationStateBlacklisted) [defaults setBool:YES forKey:NeoWCAuthorizationPermanentBlacklistKey];
     }
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -114,6 +127,7 @@ static NSDictionary *NeoWCJSONObjectDictionary(NSData *data) {
     }
     if (self.state == NeoWCAuthorizationStateLoading && [self.checkedWXID isEqualToString:wxid]) return;
     self.checkedWXID = wxid;
+    self.retainsCachedGrantDuringRefresh = NeoWCAuthorizationHasCachedGrantForCurrentUser();
     [self updateState:NeoWCAuthorizationStateLoading message:@"正在验证授权…"];
 
     NSURLComponents *components = [NSURLComponents componentsWithString:[NeoWCAuthorizationBaseURL stringByAppendingString:@"/auth.php"]];
@@ -161,7 +175,10 @@ NeoWCAuthorizationState NeoWCCurrentAuthorizationState(void) {
 }
 
 BOOL NeoWCAuthorizationAllowsCoreFeatures(void) {
-    return NeoWCCurrentAuthorizationState() == NeoWCAuthorizationStateAuthorized;
+    NeoWCAuthorizationService *service = [NeoWCAuthorizationService sharedService];
+    NeoWCAuthorizationState state = service.state;
+    return state == NeoWCAuthorizationStateAuthorized ||
+           (state == NeoWCAuthorizationStateLoading && service.retainsCachedGrantDuringRefresh);
 }
 
 BOOL NeoWCAuthorizationIsPermanentlyBlacklisted(void) {

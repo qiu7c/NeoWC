@@ -58,7 +58,6 @@
 - (id)operateBtnImage:(BOOL)spring isSpringStyle:(BOOL)springStyle;
 - (void)neowc_handleMomentsDoubleTap;
 - (void)neowc_handleMomentsForward:(id)sender;
-- (void)neowc_handleMomentsForwardLongPress:(UILongPressGestureRecognizer *)recognizer;
 @end
 
 @interface WCTimeLineOperateButtonView : UIButton
@@ -71,7 +70,6 @@
 - (void)showWithItemData:(id)item tipPoint:(CGPoint)tipPoint;
 - (void)hide;
 - (void)neowc_handleMomentsForward:(id)sender;
-- (void)neowc_handleMomentsForwardLongPress:(UILongPressGestureRecognizer *)recognizer;
 @end
 
 @interface CommonMessageCellView : UIView
@@ -230,6 +228,7 @@ static char NeoWCMessageTripleTapRecognizerKey;
 static char NeoWCReplyOriginalTransformKey;
 static char NeoWCReplyFeedbackGeneratorKey;
 static char NeoWCReplyFeedbackTriggeredKey;
+static char NeoWCReplyPanRightwardKey;
 static char NeoWCSeparatorOriginalHiddenKey;
 static char NeoWCVoiceTranscriptionScheduledKey;
 static char NeoWCVoiceTranscriptionDoneKey;
@@ -327,6 +326,12 @@ static NeoWCReplySwipeAction NeoWCMessageGestureAction(CommonMessageCellView *ce
     return (NeoWCReplySwipeAction)action;
 }
 
+static NeoWCReplySwipeAction NeoWCMessageSwipeAction(CommonMessageCellView *cell, BOOL rightward) {
+    return NeoWCMessageGestureAction(cell,
+                                     rightward ? NeoWCReplySwipeRightSelfActionKey : NeoWCReplySwipeSelfActionKey,
+                                     rightward ? NeoWCReplySwipeRightOtherActionKey : NeoWCReplySwipeOtherActionKey);
+}
+
 static CGFloat NeoWCReplySwipeTriggerDistance(void) {
     CGFloat value = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCReplySwipeTriggerDistanceKey];
     if (value <= 0.0) value = 56.0;
@@ -399,12 +404,10 @@ static UIControl *NeoWCFirstControlInView(UIView *view) {
     if (!NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey) ||
         !self.cell.window ||
         ![recognizer isKindOfClass:[UIPanGestureRecognizer class]]) return NO;
-    if (NeoWCMessageGestureAction((CommonMessageCellView *)self.cell,
-                                  NeoWCReplySwipeSelfActionKey,
-                                  NeoWCReplySwipeOtherActionKey) == NeoWCReplySwipeActionNone) return NO;
     UIPanGestureRecognizer *pan = (UIPanGestureRecognizer *)recognizer;
     CGPoint velocity = [pan velocityInView:self.cell];
-    if (velocity.x >= 0.0 || fabs(velocity.x) <= fabs(velocity.y)) return NO;
+    if (fabs(velocity.x) <= fabs(velocity.y)) return NO;
+    if (NeoWCMessageSwipeAction((CommonMessageCellView *)self.cell, velocity.x > 0.0) == NeoWCReplySwipeActionNone) return NO;
     CGPoint location = [pan locationInView:self.cell];
     CGFloat width = CGRectGetWidth(self.cell.bounds);
     return location.x >= 24.0 && location.x <= MAX(24.0, width - 24.0);
@@ -425,9 +428,9 @@ static void NeoWCSynchronizeReplyGesture(CommonMessageCellView *cell) {
     UITapGestureRecognizer *doubleRecognizer = objc_getAssociatedObject(cell, &NeoWCMessageDoubleTapRecognizerKey);
     UITapGestureRecognizer *tripleRecognizer = objc_getAssociatedObject(cell, &NeoWCMessageTripleTapRecognizerKey);
     BOOL enabled = NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey) && cell.window;
-    NeoWCReplySwipeAction swipeAction = enabled
-        ? NeoWCMessageGestureAction(cell, NeoWCReplySwipeSelfActionKey, NeoWCReplySwipeOtherActionKey)
-        : NeoWCReplySwipeActionNone;
+    NeoWCReplySwipeAction leftSwipeAction = enabled ? NeoWCMessageSwipeAction(cell, NO) : NeoWCReplySwipeActionNone;
+    NeoWCReplySwipeAction rightSwipeAction = enabled ? NeoWCMessageSwipeAction(cell, YES) : NeoWCReplySwipeActionNone;
+    BOOL hasSwipeAction = leftSwipeAction != NeoWCReplySwipeActionNone || rightSwipeAction != NeoWCReplySwipeActionNone;
     NeoWCReplySwipeAction doubleAction = enabled
         ? NeoWCMessageGestureAction(cell, NeoWCMessageDoubleTapSelfActionKey, NeoWCMessageDoubleTapOtherActionKey)
         : NeoWCReplySwipeActionNone;
@@ -435,7 +438,7 @@ static void NeoWCSynchronizeReplyGesture(CommonMessageCellView *cell) {
         ? NeoWCMessageGestureAction(cell, NeoWCMessageTripleTapSelfActionKey, NeoWCMessageTripleTapOtherActionKey)
         : NeoWCReplySwipeActionNone;
 
-    if (swipeAction == NeoWCReplySwipeActionNone) {
+    if (!hasSwipeAction) {
         if (panRecognizer) {
             NSValue *originalTransform = objc_getAssociatedObject(cell, &NeoWCReplyOriginalTransformKey);
             if (originalTransform) cell.transform = originalTransform.CGAffineTransformValue;
@@ -446,9 +449,10 @@ static void NeoWCSynchronizeReplyGesture(CommonMessageCellView *cell) {
         objc_setAssociatedObject(cell, &NeoWCReplyOriginalTransformKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(cell, &NeoWCReplyFeedbackGeneratorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(cell, &NeoWCReplyFeedbackTriggeredKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &NeoWCReplyPanRightwardKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         panRecognizer = nil;
     }
-    if (!panRecognizer && swipeAction != NeoWCReplySwipeActionNone) {
+    if (!panRecognizer && hasSwipeAction) {
         NeoWCReplyPanGestureDelegate *delegate = [NeoWCReplyPanGestureDelegate new];
         delegate.cell = cell;
         panRecognizer = [[UIPanGestureRecognizer alloc] initWithTarget:cell action:@selector(neowc_handleReplyPan:)];
@@ -2295,240 +2299,6 @@ static NSString *NeoWCMomentsExistingMediaPath(id mediaItem, NSArray<NSString *>
     return nil;
 }
 
-static void NeoWCForwardMomentToFriend(id dataItem, id contact, UIViewController *presenter);
-
-static id NeoWCMomentsContactFromSelection(id value, NSUInteger depth) {
-    if (!value || depth > 5) return nil;
-    if ([value isKindOfClass:[NSArray class]]) {
-        for (id candidate in value) {
-            id contact = NeoWCMomentsContactFromSelection(candidate, depth + 1);
-            if (contact) return contact;
-        }
-        return nil;
-    }
-    if ([value isKindOfClass:[NSDictionary class]]) {
-        for (id candidate in [(NSDictionary *)value allValues]) {
-            id contact = NeoWCMomentsContactFromSelection(candidate, depth + 1);
-            if (contact) return contact;
-        }
-        return nil;
-    }
-    id userName = NeoWCTweakSafeValue(value, @"m_nsUsrName") ?: NeoWCTweakSafeValue(value, @"userName");
-    if ([userName isKindOfClass:[NSString class]] && [userName length] > 0) return value;
-    for (NSString *selectorName in @[@"getCContact", @"getContact", @"contact", @"getItem",
-                                     @"getData", @"getCellData", @"getContactItem", @"getResult"]) {
-        id candidate = NeoWCMomentsObjectForSelector(value, selectorName);
-        id contact = NeoWCMomentsContactFromSelection(candidate, depth + 1);
-        if (contact) return contact;
-    }
-    return nil;
-}
-
-@interface NeoWCMomentsContactPickerController : UIViewController
-@property (nonatomic, strong) UIView *selectView;
-@property (nonatomic, strong) id dataItem;
-@property (nonatomic, weak) UIViewController *sourcePresenter;
-@property (nonatomic, assign) BOOL completed;
-- (void)cancelSelection;
-- (void)completeWithSelection:(id)selection;
-@end
-
-
-@implementation NeoWCMomentsContactPickerController
-
-- (UIViewController *)getViewController { return self; }
-- (UIViewController *)getSafeSearchViewController { return self; }
-
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.title = @"选择好友";
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
-    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc]
-        initWithBarButtonSystemItem:UIBarButtonSystemItemCancel target:self action:@selector(cancelSelection)];
-
-    Class selectClass = NSClassFromString(@"ContactSelectView");
-    SEL initializer = NSSelectorFromString(@"initWithFrame:delegate:");
-    id selectView = nil;
-    if (selectClass && [selectClass instancesRespondToSelector:initializer]) {
-        selectView = ((id (*)(id, SEL, CGRect, id))objc_msgSend)([selectClass alloc], initializer,
-                                                                 self.view.bounds, self);
-    } else if (selectClass) {
-        selectView = [[selectClass alloc] initWithFrame:self.view.bounds];
-    }
-    if (![selectView isKindOfClass:[UIView class]]) {
-        NeoWCShowTransientMessage(@"当前微信版本无法打开好友选择页", NO);
-        [self cancelSelection];
-        return;
-    }
-    self.selectView = selectView;
-    self.selectView.frame = self.view.bounds;
-    self.selectView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:self.selectView];
-    NeoWCTweakSetValue(selectView, @"m_delegate", self);
-    NeoWCTweakSetValue(selectView, @"m_bMultiSelect", @NO);
-    for (NSString *key in @[@"m_bShowHistoryGroup", @"m_bShowContactTag", @"m_bShowRadarCreateRoom",
-                             @"m_bShowOpenIMContactGroup", @"m_onlyImportChatRoom", @"m_bShowSelectFromGroup",
-                             @"m_bSearchSnsContact", @"m_bShowContactRecommend", @"m_bShowMomentStatus",
-                             @"m_bShowBlackListBlockFromTL", @"m_bShowBlackListHideFromTL", @"m_bHideSearchBar"]) {
-        NeoWCTweakSetValue(selectView, key, @NO);
-    }
-    NeoWCTweakSetValue(selectView, @"m_bUseSystemIndexBar", @YES);
-    NeoWCTweakSetValue(selectView, @"useNewSearchBar", @YES);
-    SEL initDataSelector = NSSelectorFromString(@"initData:");
-    if ([selectView respondsToSelector:initDataSelector]) {
-        ((void (*)(id, SEL, NSUInteger))objc_msgSend)(selectView, initDataSelector, 0);
-    }
-    for (NSString *selectorName in @[@"initView", @"reloadTableView"]) {
-        SEL selector = NSSelectorFromString(selectorName);
-        if ([selectView respondsToSelector:selector]) ((void (*)(id, SEL))objc_msgSend)(selectView, selector);
-    }
-}
-
-- (void)cancelSelection {
-    UIViewController *presentedRoot = self.navigationController ?: self;
-    [presentedRoot dismissViewControllerAnimated:YES completion:nil];
-}
-
-- (void)completeWithSelection:(id)selection {
-    if (self.completed) return;
-    id contact = NeoWCMomentsContactFromSelection(selection, 0);
-    if (!contact) return;
-    self.completed = YES;
-    id dataItem = self.dataItem;
-    UIViewController *presenter = self.sourcePresenter;
-    UIViewController *presentedRoot = self.navigationController ?: self;
-    [presentedRoot dismissViewControllerAnimated:YES completion:^{
-        if (dataItem && presenter.view.window) NeoWCForwardMomentToFriend(dataItem, contact, presenter);
-    }];
-}
-
-- (void)onSelectContact:(id)value { [self completeWithSelection:value]; }
-- (void)didSelectContact:(id)value { [self completeWithSelection:value]; }
-- (void)onContactSelected:(id)value { [self completeWithSelection:value]; }
-- (void)didClickContact:(id)value { [self completeWithSelection:value]; }
-- (void)onSelectContact:(id)value fromView:(__unused id)view { [self completeWithSelection:value]; }
-- (void)didSelectContact:(id)value fromView:(__unused id)view { [self completeWithSelection:value]; }
-- (void)didSearchViewTableSelect:(id)value { [self completeWithSelection:value]; }
-- (void)onSelectContactReturn:(id)value { [self completeWithSelection:value]; }
-- (void)onSelectContactReturn:(id)value atScene:(__unused NSUInteger)scene { [self completeWithSelection:value]; }
-- (void)onSelectSessionReturn:(id)value { [self completeWithSelection:value]; }
-- (void)onSelectSessionReturn:(id)value atScene:(__unused NSUInteger)scene { [self completeWithSelection:value]; }
-
-@end
-
-
-static void NeoWCPresentMomentsContactPicker(id dataItem, UIViewController *presenter) {
-    if (!dataItem || !presenter.view.window) return;
-    if (!NSClassFromString(@"ContactSelectView")) {
-        NeoWCShowTransientMessage(@"当前微信版本不支持好友选择", NO);
-        return;
-    }
-    NeoWCMomentsContactPickerController *picker = [NeoWCMomentsContactPickerController new];
-    picker.dataItem = dataItem;
-    picker.sourcePresenter = presenter;
-    Class navigationClass = NSClassFromString(@"MMUINavigationController") ?: UINavigationController.class;
-    UINavigationController *navigation = [[navigationClass alloc] initWithRootViewController:picker];
-    navigation.modalPresentationStyle = UIModalPresentationFullScreen;
-    [presenter presentViewController:navigation animated:YES completion:nil];
-}
-
-@interface NeoWCMomentsFriendForwardSession : NSObject
-@property (nonatomic, strong) id forwardLogic;
-@property (nonatomic, strong) NSArray *messages;
-@property (nonatomic, strong) id contact;
-@property (nonatomic, weak) UIViewController *presenter;
-@property (nonatomic, assign) BOOL finished;
-@property (nonatomic, assign) BOOL sendButtonTapped;
-- (void)finishSession;
-- (void)OnForwardMessageCancel:(id)logic;
-@end
-
-@implementation NeoWCMomentsFriendForwardSession
-
-- (UIViewController *)getCurrentViewController { return self.presenter; }
-- (UIViewController *)GetCurrentViewController { return self.presenter; }
-- (BOOL)shouldShowSendSuccessView:(__unused id)logic { return YES; }
-
-- (void)finishSession {
-    if (self.finished) return;
-    self.finished = YES;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [NeoWCActiveQuickSendSessions() removeObject:self];
-        self.forwardLogic = nil;
-        self.messages = nil;
-        self.contact = nil;
-    });
-}
-
-- (void)OnForwardMessageSend:(__unused id)logic {
-    if (self.finished) return;
-    id confirmSheet = NeoWCTweakSafeValue(self.forwardLogic, @"confirmSheetView");
-    if (!self.sendButtonTapped && ![NeoWCTweakSafeValue(confirmSheet, @"isClickedSend") boolValue]) return;
-    [self finishSession];
-}
-
-- (void)OnForwardMessageCancel:(__unused id)logic { [self finishSession]; }
-- (void)OnForwardMessageConfirmCanceled:(id)logic { [self OnForwardMessageCancel:logic]; }
-
-@end
-
-static id NeoWCMomentsTextMessage(NSString *text, id contact) {
-    if (text.length == 0 || !contact) return nil;
-    Class messageClass = NSClassFromString(@"CMessageWrap");
-    SEL initializer = NSSelectorFromString(@"initWithMsgType:");
-    if (!messageClass || ![messageClass instancesRespondToSelector:initializer]) return nil;
-    id message = ((id (*)(id, SEL, NSUInteger))objc_msgSend)([messageClass alloc], initializer, 1);
-    NSString *toUser = NeoWCTweakSafeValue(contact, @"m_nsUsrName");
-    NeoWCTweakSetValue(message, @"m_nsFromUsr", NeoWCCurrentUserWXID() ?: @"");
-    NeoWCTweakSetValue(message, @"m_nsToUsr", toUser ?: @"");
-    NeoWCTweakSetValue(message, @"m_nsContent", text);
-    NeoWCTweakSetValue(message, @"m_uiCreateTime", @((NSUInteger)NSDate.date.timeIntervalSince1970));
-    return message;
-}
-
-static id NeoWCMomentsImageMessage(UIImage *image, id contact) {
-    if (!image || !contact) return nil;
-    Class providerClass = NSClassFromString(@"PasteboardMsgProvider");
-    for (NSString *selectorName in @[@"GetMessageFromImage:contact:", @"GetMessageFromImage:"]) {
-        SEL selector = NSSelectorFromString(selectorName);
-        if (![providerClass respondsToSelector:selector]) continue;
-        return [selectorName hasSuffix:@"contact:"]
-            ? ((id (*)(id, SEL, id, id))objc_msgSend)(providerClass, selector, image, contact)
-            : ((id (*)(id, SEL, id))objc_msgSend)(providerClass, selector, image);
-    }
-    return nil;
-}
-
-static BOOL NeoWCSendMomentsMessagesToFriend(NSArray *messages,
-                                              id contact,
-                                              UIViewController *presenter) {
-    if (messages.count == 0 || !contact || !presenter.view.window) return NO;
-    Class forwardClass = NSClassFromString(@"ForwardMessageLogicController");
-    SEL forwardSelector = NSSelectorFromString(@"forwardMsgList:msgOriginList:toContacts:ignoreTips:showConfirmView:");
-    SEL delegateSelector = NSSelectorFromString(@"setDelegate:");
-    id logic = [forwardClass new];
-    if (!logic || ![logic respondsToSelector:forwardSelector] || ![logic respondsToSelector:delegateSelector]) return NO;
-    NeoWCMomentsFriendForwardSession *session = [NeoWCMomentsFriendForwardSession new];
-    session.forwardLogic = logic;
-    session.messages = messages;
-    session.contact = contact;
-    session.presenter = presenter;
-    ((void (*)(id, SEL, id))objc_msgSend)(logic, delegateSelector, session);
-    NeoWCTweakSetValue(logic, @"bSpecificContact", @YES);
-    NeoWCTweakSetValue(logic, @"bPresent", @YES);
-    NeoWCTweakSetValue(logic, @"bAnimation", @YES);
-    [NeoWCActiveQuickSendSessions() addObject:session];
-    ((void (*)(id, SEL, id, id, id, BOOL, BOOL))objc_msgSend)(logic, forwardSelector,
-                                                               messages, nil, @[contact], NO, YES);
-    __weak NeoWCMomentsFriendForwardSession *weakSession = session;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300.0 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        NeoWCMomentsFriendForwardSession *activeSession = weakSession;
-        if (activeSession && !activeSession.finished) [activeSession finishSession];
-    });
-    return YES;
-}
-
 @interface NeoWCMomentsForwardTask : NSObject
 @property (nonatomic, strong) id dataItem;
 @property (nonatomic, weak) UIViewController *presenter;
@@ -2538,8 +2308,6 @@ static BOOL NeoWCSendMomentsMessagesToFriend(NSArray *messages,
 @property (nonatomic, assign) NSUInteger remainingDownloads;
 @property (nonatomic, assign) BOOL video;
 @property (nonatomic, assign) BOOL failed;
-@property (nonatomic, assign) BOOL sendToFriend;
-@property (nonatomic, strong) id friendContact;
 - (void)start;
 @end
 
@@ -2668,48 +2436,6 @@ static BOOL NeoWCSendMomentsMessagesToFriend(NSArray *messages,
     [self presentController:controller applyBody:YES];
 }
 
-- (NSString *)friendShareText {
-    NSString *body = NeoWCMomentsBodyText(self.dataItem) ?: @"";
-    id contentObject = NeoWCMomentsContentObject(self.dataItem);
-    NSString *link = nil;
-    for (NSString *selectorName in @[@"linkUrl", @"contentUrl", @"shareUrl", @"url"]) {
-        id value = NeoWCMomentsObjectForSelector(contentObject, selectorName);
-        if ([value isKindOfClass:[NSURL class]]) value = [value absoluteString];
-        if ([value isKindOfClass:[NSString class]] && [value length] > 0) {
-            link = value;
-            break;
-        }
-    }
-    if (body.length > 0 && link.length > 0) return [NSString stringWithFormat:@"%@\n%@", body, link];
-    return body.length > 0 ? body : link;
-}
-
-- (void)sendResolvedContentToFriend {
-    NSMutableArray *messages = [NSMutableArray array];
-    NSString *shareText = [self friendShareText];
-    id textMessage = NeoWCMomentsTextMessage(shareText, self.friendContact);
-    if (textMessage) [messages addObject:textMessage];
-    if (!self.video) {
-        for (id value in self.resolvedPaths) {
-            NSString *path = [value isKindOfClass:[NSString class]] ? value : nil;
-            UIImage *image = path.length > 0 ? [UIImage imageWithContentsOfFile:path] : nil;
-            id imageMessage = NeoWCMomentsImageMessage(image, self.friendContact);
-            if (imageMessage) [messages addObject:imageMessage];
-        }
-    }
-    if (self.video && messages.count == 0) {
-        NeoWCShowTransientMessage(@"当前微信版本暂不支持将该朋友圈视频发送给好友", NO);
-        [self releasePresenterRetention];
-        return;
-    }
-    if (!NeoWCSendMomentsMessagesToFriend(messages, self.friendContact, self.presenter)) {
-        NeoWCShowTransientMessage(@"无法打开微信好友转发确认页", NO);
-    } else {
-        NeoWCCompatibilityMarkTriggered(@"moments-forward");
-    }
-    [self releasePresenterRetention];
-}
-
 - (void)finishMediaResolutionIfNeeded {
     if (self.remainingDownloads > 0) return;
     if (self.failed) {
@@ -2717,8 +2443,7 @@ static BOOL NeoWCSendMomentsMessagesToFriend(NSArray *messages,
         [self releasePresenterRetention];
         return;
     }
-    if (self.sendToFriend) [self sendResolvedContentToFriend];
-    else if (self.video) [self presentVideoCommit];
+    if (self.video) [self presentVideoCommit];
     else [self presentImageCommit];
 }
 
@@ -2777,16 +2502,12 @@ static BOOL NeoWCSendMomentsMessagesToFriend(NSArray *messages,
 - (void)start {
     id contentObject = NeoWCMomentsContentObject(self.dataItem);
     NSArray *mediaItems = NeoWCMomentsMediaItems(self.dataItem);
-    if (self.sendToFriend && NeoWCMomentsHasStructuredContent(contentObject)) {
-        [self sendResolvedContentToFriend];
-    } else if (NeoWCMomentsHasStructuredContent(contentObject)) {
+    if (NeoWCMomentsHasStructuredContent(contentObject)) {
         [self presentStructuredForward];
     } else if (NeoWCMomentsBoolForSelector(contentObject, @"isVideoType") && mediaItems.count > 0) {
         [self startMediaResolution:mediaItems video:YES];
     } else if (NeoWCMomentsBoolForSelector(contentObject, @"isPhotoType") && mediaItems.count > 0) {
         [self startMediaResolution:mediaItems video:NO];
-    } else if (self.sendToFriend && NeoWCMomentCanForward(self.dataItem)) {
-        [self sendResolvedContentToFriend];
     } else if (NeoWCMomentCanForward(self.dataItem)) {
         [self presentTextCommit];
     } else {
@@ -2810,22 +2531,7 @@ static void NeoWCForwardMoment(id dataItem, UIViewController *presenter) {
     [task start];
 }
 
-static void NeoWCForwardMomentToFriend(id dataItem, id contact, UIViewController *presenter) {
-    if (!NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey) || !presenter.view.window || !contact) return;
-    if (!NeoWCMomentCanForward(dataItem)) {
-        NeoWCShowTransientMessage(@"当前朋友圈类型暂不支持发送给好友", NO);
-        return;
-    }
-    NeoWCMomentsForwardTask *task = [NeoWCMomentsForwardTask new];
-    task.dataItem = dataItem;
-    task.presenter = presenter;
-    task.friendContact = contact;
-    task.sendToFriend = YES;
-    objc_setAssociatedObject(presenter, &NeoWCMomentsForwardTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    [task start];
-}
-
-static UIButton *NeoWCMomentsForwardButton(id target, SEL action, SEL longPressAction) {
+static UIButton *NeoWCMomentsForwardButton(id target, SEL action) {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:13.0 weight:UIImageSymbolWeightRegular];
     UIImage *icon = [UIImage systemImageNamed:@"arrow.turn.up.right" withConfiguration:configuration] ?:
@@ -2838,11 +2544,6 @@ static UIButton *NeoWCMomentsForwardButton(id target, SEL action, SEL longPressA
     button.accessibilityLabel = @"转发";
     button.layer.zPosition = 1000.0;
     [button addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
-    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc]
-        initWithTarget:target action:longPressAction];
-    longPress.minimumPressDuration = 0.45;
-    longPress.cancelsTouchesInView = YES;
-    [button addGestureRecognizer:longPress];
     return button;
 }
 
@@ -2886,9 +2587,7 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
         return;
     }
     if (!button) {
-        button = NeoWCMomentsForwardButton(cell,
-                                           @selector(neowc_handleMomentsForward:),
-                                           @selector(neowc_handleMomentsForwardLongPress:));
+        button = NeoWCMomentsForwardButton(cell, @selector(neowc_handleMomentsForward:));
         objc_setAssociatedObject(cell, &NeoWCMomentsForwardButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     if (button.superview != cell) {
@@ -3148,11 +2847,6 @@ static void NeoWCPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
         button.imageEdgeInsets = UIEdgeInsetsMake(0.0, -3.0, 0.0, 3.0);
         button.titleEdgeInsets = UIEdgeInsetsMake(0.0, 3.0, 0.0, -3.0);
         [button addTarget:floatView action:@selector(neowc_handleMomentsForward:) forControlEvents:UIControlEventTouchUpInside];
-        UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc]
-            initWithTarget:floatView action:@selector(neowc_handleMomentsForwardLongPress:)];
-        longPress.minimumPressDuration = 0.45;
-        longPress.cancelsTouchesInView = YES;
-        [button addGestureRecognizer:longPress];
         objc_setAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     UIButton *anchorButton = [anchor isKindOfClass:[UIButton class]] ? (UIButton *)anchor : nil;
@@ -5895,19 +5589,6 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
     NeoWCForwardMoment(dataItem, presenter);
 }
 
-%new
-- (void)neowc_handleMomentsForwardLongPress:(UILongPressGestureRecognizer *)recognizer {
-    if (recognizer.state != UIGestureRecognizerStateBegan ||
-        !NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey)) return;
-    id dataItem = NeoWCMomentsObjectForName(self, @"m_dataItem");
-    UIViewController *presenter = NeoWCJokerPresenterForCell(self);
-    if (!NeoWCMomentCanForward(dataItem) || !presenter) return;
-    UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc]
-        initWithStyle:UIImpactFeedbackStyleLight];
-    [feedback impactOccurred];
-    NeoWCPresentMomentsContactPicker(dataItem, presenter);
-}
-
 - (id)operateBtnImage:(BOOL)spring isSpringStyle:(BOOL)springStyle {
     if (NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey)) {
         UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:16.0 weight:UIImageSymbolWeightMedium];
@@ -5976,20 +5657,6 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
     if (!dataItem || !presenter) return;
     [self hide];
     NeoWCForwardMoment(dataItem, presenter);
-}
-
-%new
-- (void)neowc_handleMomentsForwardLongPress:(UILongPressGestureRecognizer *)recognizer {
-    if (recognizer.state != UIGestureRecognizerStateBegan ||
-        !NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey)) return;
-    id dataItem = objc_getAssociatedObject(self, &NeoWCMomentsFloatDataItemKey);
-    UIViewController *presenter = NeoWCJokerPresenterForCell(self);
-    if (!NeoWCMomentCanForward(dataItem) || !presenter) return;
-    UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc]
-        initWithStyle:UIImpactFeedbackStyleLight];
-    [feedback impactOccurred];
-    [self hide];
-    NeoWCPresentMomentsContactPicker(dataItem, presenter);
 }
 
 %end
@@ -6252,15 +5919,14 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 %new
 - (void)neowc_handleReplyPan:(UIPanGestureRecognizer *)recognizer {
     if (!NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey)) return;
-    NeoWCReplySwipeAction action = NeoWCMessageGestureAction(self,
-                                                             NeoWCReplySwipeSelfActionKey,
-                                                             NeoWCReplySwipeOtherActionKey);
-    if (action == NeoWCReplySwipeActionNone) return;
     CGPoint translation = [recognizer translationInView:self];
     CGPoint velocity = [recognizer velocityInView:self];
     CGFloat triggerDistance = NeoWCReplySwipeTriggerDistance();
 
     if (recognizer.state == UIGestureRecognizerStateBegan) {
+        BOOL rightward = velocity.x > 0.0;
+        if (NeoWCMessageSwipeAction(self, rightward) == NeoWCReplySwipeActionNone) return;
+        objc_setAssociatedObject(self, &NeoWCReplyPanRightwardKey, @(rightward), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(self,
                                  &NeoWCReplyOriginalTransformKey,
                                  [NSValue valueWithCGAffineTransform:self.transform],
@@ -6276,13 +5942,14 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     CGAffineTransform originalTransform = originalTransformValue
         ? originalTransformValue.CGAffineTransformValue
         : CGAffineTransformIdentity;
+    BOOL rightward = [objc_getAssociatedObject(self, &NeoWCReplyPanRightwardKey) boolValue];
 
     if (recognizer.state == UIGestureRecognizerStateChanged) {
-        CGFloat distance = MAX(0.0, -translation.x);
+        CGFloat distance = MAX(0.0, rightward ? translation.x : -translation.x);
         if (distance > triggerDistance) {
             distance = triggerDistance + MIN(10.0, (distance - triggerDistance) * 0.18);
         }
-        self.transform = CGAffineTransformTranslate(originalTransform, -distance, 0.0);
+        self.transform = CGAffineTransformTranslate(originalTransform, rightward ? distance : -distance, 0.0);
         if (distance >= triggerDistance &&
             ![objc_getAssociatedObject(self, &NeoWCReplyFeedbackTriggeredKey) boolValue]) {
             UIImpactFeedbackGenerator *feedback = objc_getAssociatedObject(self, &NeoWCReplyFeedbackGeneratorKey);
@@ -6298,15 +5965,15 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 
     BOOL shouldTrigger = recognizer.state == UIGestureRecognizerStateEnded &&
                          fabs(translation.x) > fabs(translation.y) &&
-                         (translation.x <= -triggerDistance || velocity.x <= -700.0);
+                         (rightward
+                              ? (translation.x >= triggerDistance || velocity.x >= 700.0)
+                              : (translation.x <= -triggerDistance || velocity.x <= -700.0));
     __weak CommonMessageCellView *weakCell = self;
     if (shouldTrigger && self.window && NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey)) {
         dispatch_async(dispatch_get_main_queue(), ^{
             CommonMessageCellView *cell = weakCell;
             if (!cell.window || !NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey)) return;
-            NeoWCReplySwipeAction currentAction = NeoWCMessageGestureAction(cell,
-                                                                            NeoWCReplySwipeSelfActionKey,
-                                                                            NeoWCReplySwipeOtherActionKey);
+            NeoWCReplySwipeAction currentAction = NeoWCMessageSwipeAction(cell, rightward);
             NeoWCPerformMessageGestureAction(cell, currentAction);
         });
     }
@@ -6325,6 +5992,7 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
                           objc_setAssociatedObject(cell, &NeoWCReplyOriginalTransformKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                           objc_setAssociatedObject(cell, &NeoWCReplyFeedbackGeneratorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                           objc_setAssociatedObject(cell, &NeoWCReplyFeedbackTriggeredKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                          objc_setAssociatedObject(cell, &NeoWCReplyPanRightwardKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                       }];
 }
 

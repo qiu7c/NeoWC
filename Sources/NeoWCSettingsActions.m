@@ -323,6 +323,7 @@
     NSString *defaultsKey = item.defaultsKey;
     if (defaultsKey.length == 0) return;
     BOOL selfMessage = [defaultsKey isEqualToString:NeoWCReplySwipeSelfActionKey] ||
+                       [defaultsKey isEqualToString:NeoWCReplySwipeRightSelfActionKey] ||
                        [defaultsKey isEqualToString:NeoWCMessageDoubleTapSelfActionKey] ||
                        [defaultsKey isEqualToString:NeoWCMessageTripleTapSelfActionKey];
     NSInteger current = [NSUserDefaults.standardUserDefaults integerForKey:defaultsKey];

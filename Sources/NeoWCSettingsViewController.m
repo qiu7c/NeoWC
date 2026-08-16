@@ -19,9 +19,12 @@
 @property (nonatomic, strong) UISearchController *searchController;
 @property (nonatomic, copy) NSString *searchQuery;
 @property (nonatomic, assign) BOOL requestedAuthorization;
+@property (nonatomic, strong) UIAlertController *authorizationValidationAlert;
 - (instancetype)initWithCategory:(NeoWCSettingsCategory)category;
 - (void)updateSearchAvailability;
 - (void)searchButtonTapped;
+- (void)presentAuthorizationValidationAlertIfNeeded;
+- (void)dismissAuthorizationValidationAlertIfNeeded;
 @end
 
 @implementation NeoWCSettingsViewController
@@ -86,8 +89,17 @@
         self.searchController.searchResultsUpdater = self;
         self.searchController.delegate = self;
         self.searchController.searchBar.placeholder = @"搜索 NeoWC 功能";
+        self.searchController.searchBar.backgroundColor = UIColor.clearColor;
+        self.searchController.searchBar.searchTextField.backgroundColor = UIColor.secondarySystemFillColor;
         self.navigationItem.searchController = self.searchController;
         self.navigationItem.hidesSearchBarWhenScrolling = YES;
+        UINavigationBarAppearance *appearance = [UINavigationBarAppearance new];
+        [appearance configureWithOpaqueBackground];
+        appearance.backgroundColor = UIColor.systemGroupedBackgroundColor;
+        appearance.shadowColor = UIColor.clearColor;
+        self.navigationItem.standardAppearance = appearance;
+        self.navigationItem.scrollEdgeAppearance = appearance;
+        self.navigationItem.compactAppearance = appearance;
         self.definesPresentationContext = YES;
         [self updateSearchAvailability];
     }
@@ -124,21 +136,48 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    if (self.category == NeoWCSettingsCategoryRoot && !self.requestedAuthorization) {
-        self.requestedAuthorization = YES;
-        NeoWCRefreshCurrentAuthorization();
-    }
     [self.profileHeader refreshProfile];
     [self reloadSettingsPreservingPositionApplyScale:YES];
 }
 
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    if (self.category != NeoWCSettingsCategoryRoot || self.requestedAuthorization) return;
+    BOOL hasLocalAuthorization = NeoWCAuthorizationAllowsCoreFeatures();
+    self.requestedAuthorization = YES;
+    NeoWCRefreshCurrentAuthorization();
+    if (!hasLocalAuthorization) dispatch_async(dispatch_get_main_queue(), ^{ [self presentAuthorizationValidationAlertIfNeeded]; });
+}
+
 - (void)authorizationStateDidChange:(__unused NSNotification *)notification {
+    if (NeoWCCurrentAuthorizationState() != NeoWCAuthorizationStateLoading) [self dismissAuthorizationValidationAlertIfNeeded];
     if (self.category != NeoWCSettingsCategoryRoot && !NeoWCAuthorizationAllowsCoreFeatures()) {
         [self.navigationController popViewControllerAnimated:YES];
         return;
     }
+    [self.profileHeader refreshProfile];
     [self updateSearchAvailability];
     [self reloadSettingsPreservingPositionApplyScale:YES];
+}
+
+- (void)presentAuthorizationValidationAlertIfNeeded {
+    if (self.category != NeoWCSettingsCategoryRoot ||
+        self.authorizationValidationAlert ||
+        self.presentedViewController ||
+        NeoWCCurrentAuthorizationState() != NeoWCAuthorizationStateLoading ||
+        NeoWCAuthorizationAllowsCoreFeatures()) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"授权验证"
+                                                                   message:@"正在验证当前账号，请稍候…"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    self.authorizationValidationAlert = alert;
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)dismissAuthorizationValidationAlertIfNeeded {
+    UIAlertController *alert = self.authorizationValidationAlert;
+    if (!alert) return;
+    self.authorizationValidationAlert = nil;
+    [alert dismissViewControllerAnimated:YES completion:nil];
 }
 
 - (void)updateSearchAvailability {

@@ -17,6 +17,8 @@ FOUNDATION_EXPORT NSString *const NeoWCEmoticonToSelfieEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCReplySwipeEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCReplySwipeSelfActionKey;
 FOUNDATION_EXPORT NSString *const NeoWCReplySwipeOtherActionKey;
+FOUNDATION_EXPORT NSString *const NeoWCReplySwipeRightSelfActionKey;
+FOUNDATION_EXPORT NSString *const NeoWCReplySwipeRightOtherActionKey;
 FOUNDATION_EXPORT NSString *const NeoWCReplySwipeTriggerDistanceKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageDoubleTapSelfActionKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageDoubleTapOtherActionKey;

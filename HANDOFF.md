@@ -7,9 +7,9 @@
 
 ## 1. 当前工作区状态
 
-- 最近已推送提交：`4efad74 Fix collapsed capsule toolbar background`。
-- 当前未提交修改包含：完整删除有严重兼容问题的胶囊工具栏；扩展“广告精简”；朋友圈转发按钮长按后可选择好友并进入微信官方发送确认流程。
-- `main` 的已推送部分与 `origin/main` 同步；开始新工作前仍须重新检查 `git status` 和当前 diff。
+- 最近本地提交：`6c19524 Expand NeoWC authorization and chat controls`；当前本地 `main` 尚领先 `origin/main`。
+- 当前未提交修改包含：完整删除有严重兼容问题的胶囊工具栏；扩展“广告精简”；完整删除朋友圈转发按钮长按发送指定好友，只保留普通朋友圈转发；设置首页个人信息区改为居中头像、昵称、wxid 和授权状态，仅作者 wxid 命中管理员哈希时将真实昵称显示为金色并标注“作者”。
+- 开始新工作前仍须重新检查 `git status`、最近提交和当前 diff。
 - 提交前必须先执行 `git status --short` 和 `git diff --check`，不要覆盖用户已有修改。
 - 用户通常会明确说“推送”后再提交；推送后不主动查询 GitHub Actions 构建结果。
 
@@ -112,7 +112,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 - 游戏扫码授权自动允许
 - 朋友圈双击点赞、爱心动画和震动强度
 - 朋友圈操作按钮直接评论
-- 朋友圈转发：快捷评论开启时独立按钮，关闭时加入微信原操作菜单；长按转发入口可选择好友发送
+- 朋友圈转发：快捷评论开启时独立按钮，关闭时加入微信原操作菜单；仅保留短按进入朋友圈发布页
 - 长按朋友圈头像，将微信原“设置权限/投诉”菜单替换为 4 个原生权限快捷项和投诉
 - 朋友圈显示精确发布时间，可展开设置 `yyyy-MM-dd HH:mm:ss` 等自定义格式
 - 自定义微信运动步数，同时覆盖设备对象与上传请求的三个精确步数字段
@@ -153,7 +153,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | 免打扰图标 | `UIImageView setAccessibilityLabel:/didMoveToWindow/setHidden:` | 仅处理标签严格等于“免打扰”的已管理图片 |
 | 多选导出 | `BaseMsgContentViewController`、`MMScrollActionSheet` | 只在多选“更多”菜单构建期间插入项目 |
 | 朋友圈 | `WCTimeLineCellView`、`WCTimeLineOperateButtonView` | 所有逻辑必须受开关控制 |
-| 朋友圈转发 | `WCTimeLineCellView`、`WCOperateFloatView` | 短按保持原朋友圈转发；长按使用原生联系人选择和 `ForwardMessageLogicController` 官方确认页发送给指定好友；图片编辑快捷发送会话保持隔离 |
+| 朋友圈转发 | `WCTimeLineCellView`、`WCOperateFloatView` | 只保留短按进入朋友圈发布页；长按选择好友、私聊发送及其联系人选择/运行时会话已完整删除；图片编辑快捷发送会话保持隔离 |
 | 朋友圈头像快捷权限 | `WCTimeLineCellView editBlackList`、`WCActionSheet showInView:` | 只识别原生“设置权限/设置 + 投诉”两项菜单；失败时完整保留原菜单；权限动作仅调用已从参考插件确认的 `opAllPermission`、`opSocialBlackPermission`、`opOutsider:`、`opWCBlacklist:` |
 | 朋友圈精确时间 | `WCTimeLineCellView initTimeLabel/updateWithDataItem:actionAreaVM:` | 时间源严格使用 `m_dataItem.createtime` 的 Unix 秒并只写 `m_timeLabel`；禁止增加 `layoutSubviews` Hook，禁止调用 `setNeedsLayout/layoutIfNeeded` |
 | 游戏选择 | `CMessageMgr AddEmoticonMsg:MsgWrap:` | 非游戏消息和关闭状态直接 `%orig` |
@@ -261,7 +261,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
    - beta34 已按要求完整删除聊天搜索、关键词提醒和群聊艾特提醒，包括设置 Key、设置项、运行时处理、边缘提示 UI、搜索控制器 Hook 与兼容性登记；同时移除删除提醒模块后遗留的未使用 `NeoWCContactManager`，修复 Theos `-Werror,-Wunused-function` 构建失败。
    - beta35 按要求完整删除胶囊工具栏的 Key、默认值、设置项、UI 实现、生命周期重放和兼容性登记；胶囊顶栏与普通输入栏圆角保持独立可用。
    - beta35 扩展原 `NeoWCAdBlockerKey` 为“广告精简”，覆盖朋友圈广告配置/卡片、视频号广告开关、广告推送、小程序启动广告及广告评论元数据；没有加入参考插件的关注公众号限制。
-   - beta35 为朋友圈转发入口增加长按：调用原生联系人选择页，选择好友后将文字和图片组装为微信消息并交给 `ForwardMessageLogicController` 官方确认页；短按原朋友圈转发行为不变。
+   - beta35 曾加入朋友圈转发长按选择好友，已在 beta47 按要求完整删除；短按原朋友圈转发行为不变。
    - beta36 按 `storage.dylib` 的真实调用链内置插件管理：工程提供兼容的 `WCPluginModel` / `WCPluginsMgr` 注册接口，在 `MoreViewController addFunctionSection` 完成后向第 3 个原生 section 插入唯一“插件”行，并通过 `CAppViewControllerManager` 当前导航控制器打开管理页。管理页保留参考插件的分类增删改、插件改名/版本、收纳恢复、排序、分页、顶部文字/图标/圆角、入口图标和清空配置；持久化沿用 `WCPluginsMgr.*` Key。旧的标题过滤式“插件显示管理”和 `NeoWCPluginShortcuts` 多入口注册已完整删除，NeoWC 设置只作为管理器中的单一 Controller 项注册。
    - 胶囊顶栏的液态玻璃仅允许 iOS 26 原生 `UIGlassEffect`；低版本强制使用超薄玻璃，已移除 NeoWC 自研兼容液态叠层。
    - 设置首页头像改为 96 点圆角方形容器，并同步扩大昵称、wxid 间距和页眉高度，避免直接缩放微信内部头像 View 造成首帧裁切。
@@ -270,6 +270,11 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
    - beta40 依据 WeChatX 二进制中的 `ForwardMsgUtil canBeForwardWithMsg:` 与 `ForwardMessageLogicController forwardNoConfirmForMsgList:toContacts:` 完善复读：直接把原 `CMessageWrap` 交给微信官方无确认转发引擎并发送回当前会话，覆盖微信允许转发的文字、图片、链接/小程序、文件、视频和表情等类型；仅当官方转发入口不可用时对普通文字使用 `CMessageMgr AddMsg:MsgWrap:` 兜底，避免自行拼接媒体 XML 或错误复用附件路径。
    - beta41 完整核对 WeChatX 的语音复读分支后补齐语音：语音消息不走普通转发，而是复制原 `CMessageWrap`、清空本地/服务端 ID、重新绑定当前发送者与会话并设置语音转发标记；随后通过 `CMessageMgr getVoicePath` / `getPathOfAudio:` 复制语音文件（复制失败时以 `SaveMesVoice:MsgWrap:` 保存数据），最后交给 `AudioSender ResendVoiceMsg:MsgWrap:`，必要时由 `uploaderForMsgWrap:` 取得上传器后重发。所有私有入口均先检查运行时能力，未找到本地语音文件时拒绝生成空消息。
    - beta42 完善 wxid 授权管理：普通检测继续严格按 `blacklisted` 优先、仅 `authorized=true && blacklisted=false` 放行；管理员入口只以当前 wxid 的 SHA-256 与内置管理员哈希比较。管理页以“已授权 / 黑名单”双列表展示，两个列表统一实时搜索和手动刷新；新增黑名单列表与解除黑名单接口，添加、删除、拉黑、解除后自动刷新两边，并补齐管理员自删/自拉黑保护、二次确认、HTTP 405 与超时状态。管理员密钥只保存在管理控制器内存中，退出页面即清除。
+   - beta43 将插件管理改为真正的全屏 push 页面：入栈前使用 `hidesBottomBarWhenPushed` 隐藏微信底部 TabBar，返回后交由 UIKit 自动恢复；保留居中头像、标题/副标题、分类切换器、设置入口与插件卡片列表，版本号置于行尾，原有排序、收纳和信息编辑逻辑保留。NeoWC 搜索激活态的导航区、搜索框与内容页统一使用系统 grouped 背景，去除顶部白块与正文灰底的割裂。
+   - beta44 消息手势新增独立的“右滑 · 自己 / 右滑 · 对方”动作配置，与左滑共享触发距离、阻尼、震动和回弹，可选引用、复制、删除、复读，自己消息额外支持撤回。新增键默认为“不设置”，不改变旧用户现有左滑行为。
+   - beta45 授权请求不再阻塞 NeoWC 设置页进入：本地已授权且当前 wxid 的 SHA-256 与缓存匹配时，先正常展示功能并在后台静默刷新，加载期不会暂时收起功能；首次、旧缓存或本地未授权时先完成页面 push，再显示小型“授权验证”弹窗。服务端返回未授权、拉黑或请求异常后才更新本地状态并停用核心功能；永久黑名单启动拦截保持不变。
+   - beta46 消息手势的左滑、右滑、双击和三击共八个自己/对方配置项，统一在标题下方以小字显示“当前状态：…”；选择动作后随设置列表刷新立即更新，不再在行尾重复显示。
+   - beta47 完整删除朋友圈转发按钮长按发送指定好友：移除联系人选择控制器、长按手势、好友消息组装、转发会话和两个运行时处理方法，只保留短按进入朋友圈发布页。设置首页个人信息区改为居中圆角头像、真实昵称、wxid 和“已授权”；仅当前 wxid 命中管理员哈希时把真实昵称显示为金色并追加“作者”，不写死作者昵称。
 
 3. 仍须保持的既有边界
    - 钱包只处理 `WCPayWalletEntryHeaderView` 内的 `TimeoutNumber`，金额单位为分。
@@ -292,7 +297,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 
 1. 编译并安装 beta36，确认设置页不再出现胶囊工具栏，聊天底部工具栏完全使用微信原实现。
 2. 开关“广告精简”，分别验证朋友圈、视频号、广告推送和小程序启动广告，关闭后确认微信原行为恢复。
-3. 短按朋友圈转发确认原朋友圈发布页不变；长按后验证联系人选择、取消、文字、单图、多图及官方发送确认页。
+3. 短按朋友圈转发确认原朋友圈发布页不变；长按确认不再触发好友选择或私聊发送。
 4. 分别验证胶囊顶栏的超薄玻璃、iOS 26 原生液态玻璃、阴影开关、深色模式及关闭功能后的原样恢复。
 5. 打开未领取、部分领取和已领完红包，确认详情单行完整显示且不重复原生“已领取”文字。
 6. 用空语音、无法识别语音和正常语音测试自动转文字，确认失败最多尝试 5 次且聊天不卡死。
@@ -328,7 +333,7 @@ ssh://git@ssh.github.com:443/qiu7c/NeoWC.git
 ```text
 继续维护 D:\Vibe\NeoWC。先完整阅读 D:\Vibe\NeoWC\HANDOFF.md，再检查 git status、最近提交和当前 diff；工作区中的所有现有修改都要保留，不得覆盖或回退。
 
-最近已推送提交为 4efad74。当前未提交修改包含：胶囊工具栏已完整删除；广告精简已扩展；朋友圈转发按钮长按可选择好友并进入微信官方确认发送流程；`storage.dylib` 插件管理逻辑已内置并替代旧插件隐藏/多快捷入口。HANDOFF.md 已更新，必须保留这些修改。
+最近本地提交为 6c19524，当前本地 main 尚领先 origin/main。当前未提交修改包含：胶囊工具栏已完整删除；广告精简已扩展；朋友圈转发按钮长按发送好友已完整删除，只保留短按发布页；`storage.dylib` 插件管理逻辑已内置并替代旧插件隐藏/多快捷入口；设置首页个人信息区已加入授权状态，并仅对作者 wxid 的真实昵称显示金色“作者”标识。HANDOFF.md 已更新，必须保留这些修改。
 
 参考插件的稳定结论见 D:\Vibe\NeoWC\REFERENCE_PLUGIN_ANALYSIS.md，原始反编译产物在 D:\Vibe\NeoWC\.codex-analysis，仅供本机分析且不得加入提交。后续遇到未还原、真机不生效或微信版本变化的功能时，应直接回到用户提供的参考插件 `dylib`/`deb` 和这些本地提取文件继续反编译学习，确认 Hook 注册、原方法参数类型、字段来源与替换函数调用顺序后再修改 NeoWC；不要仅根据功能名或字符串猜测私有 API。
 

@@ -11,7 +11,7 @@ NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-featu
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 static NSString *const NeoWCSearchAllChildrenMarker = @"__neowc_search_all_children__";
 
-NSString *const NeoWCDisplayVersion = @"0.1.2 beta42";
+NSString *const NeoWCDisplayVersion = @"0.1.2 beta47";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -92,6 +92,8 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCReplySwipeEnabledKey: @NO,
         NeoWCReplySwipeSelfActionKey: @(NeoWCReplySwipeActionQuote),
         NeoWCReplySwipeOtherActionKey: @(NeoWCReplySwipeActionQuote),
+        NeoWCReplySwipeRightSelfActionKey: @(NeoWCReplySwipeActionNone),
+        NeoWCReplySwipeRightOtherActionKey: @(NeoWCReplySwipeActionNone),
         NeoWCReplySwipeTriggerDistanceKey: @56.0,
         NeoWCMessageDoubleTapSelfActionKey: @(NeoWCReplySwipeActionNone),
         NeoWCMessageDoubleTapOtherActionKey: @(NeoWCReplySwipeActionNone),
@@ -176,7 +178,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
     NeoWCSettingSection *maintenance = [NeoWCSettingSection sectionWithIdentifier:@"maintenance" title:@"维护"
                                                                            footer:[NSString stringWithFormat:@"NeoWC · %@", NeoWCDisplayVersion]
                                                                             items:maintenanceItems];
-    if (authorizationState != NeoWCAuthorizationStateAuthorized) {
+    if (!NeoWCAuthorizationAllowsCoreFeatures()) {
         NSString *title = @"授权验证";
         NSString *message = NeoWCCurrentAuthorizationMessage();
         NSString *symbol = @"lock.shield";
@@ -265,6 +267,8 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     ], defaults, collapsed);
     NSInteger selfSwipeAction = [defaults integerForKey:NeoWCReplySwipeSelfActionKey];
     NSInteger otherSwipeAction = [defaults integerForKey:NeoWCReplySwipeOtherActionKey];
+    NSInteger selfRightSwipeAction = [defaults integerForKey:NeoWCReplySwipeRightSelfActionKey];
+    NSInteger otherRightSwipeAction = [defaults integerForKey:NeoWCReplySwipeRightOtherActionKey];
     NSArray<NSString *> *swipeActionNames = @[@"不设置", @"引用", @"撤回", @"复制", @"删除", @"复读"];
     NSString *(^gestureActionName)(NSInteger, BOOL) = ^NSString *(NSInteger action, BOOL selfMessage) {
         if (action < 0 || action >= (NSInteger)swipeActionNames.count || (!selfMessage && action == NeoWCReplySwipeActionRevoke)) return @"不设置";
@@ -272,20 +276,24 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     };
     NSString *selfSwipeName = gestureActionName(selfSwipeAction, YES);
     NSString *otherSwipeName = gestureActionName(otherSwipeAction, NO);
+    NSString *selfRightSwipeName = gestureActionName(selfRightSwipeAction, YES);
+    NSString *otherRightSwipeName = gestureActionName(otherRightSwipeAction, NO);
     NSInteger selfDoubleAction = [defaults integerForKey:NeoWCMessageDoubleTapSelfActionKey];
     NSInteger otherDoubleAction = [defaults integerForKey:NeoWCMessageDoubleTapOtherActionKey];
     NSInteger selfTripleAction = [defaults integerForKey:NeoWCMessageTripleTapSelfActionKey];
     NSInteger otherTripleAction = [defaults integerForKey:NeoWCMessageTripleTapOtherActionKey];
     NeoWCAddFeature(interaction,
-                    NeoWCItem(@"消息手势", [NSString stringWithFormat:@"左滑｜自己：%@ · 对方：%@", selfSwipeName, otherSwipeName], @"hand.draw", NeoWCSettingRowKindSwitch, NeoWCReplySwipeEnabledKey, nil, NeoWCSettingActionNone),
+                    NeoWCItem(@"消息手势", [NSString stringWithFormat:@"左滑 %@/%@ · 右滑 %@/%@", selfSwipeName, otherSwipeName, selfRightSwipeName, otherRightSwipeName], @"hand.draw", NeoWCSettingRowKindSwitch, NeoWCReplySwipeEnabledKey, nil, NeoWCSettingActionNone),
                     @[
-        NeoWCItem(@"左滑 · 自己", @"自己发送消息的左滑动作", @"arrow.left", NeoWCSettingRowKindDetail, NeoWCReplySwipeSelfActionKey, NeoWCCurrentSelection(selfSwipeName), NeoWCSettingActionMessageGestureAction),
-        NeoWCItem(@"左滑 · 对方", @"收到消息的左滑动作", @"arrow.left", NeoWCSettingRowKindDetail, NeoWCReplySwipeOtherActionKey, NeoWCCurrentSelection(otherSwipeName), NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"左滑 · 自己", [NSString stringWithFormat:@"当前状态：%@", selfSwipeName], @"arrow.left", NeoWCSettingRowKindDetail, NeoWCReplySwipeSelfActionKey, nil, NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"左滑 · 对方", [NSString stringWithFormat:@"当前状态：%@", otherSwipeName], @"arrow.left", NeoWCSettingRowKindDetail, NeoWCReplySwipeOtherActionKey, nil, NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"右滑 · 自己", [NSString stringWithFormat:@"当前状态：%@", selfRightSwipeName], @"arrow.right", NeoWCSettingRowKindDetail, NeoWCReplySwipeRightSelfActionKey, nil, NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"右滑 · 对方", [NSString stringWithFormat:@"当前状态：%@", otherRightSwipeName], @"arrow.right", NeoWCSettingRowKindDetail, NeoWCReplySwipeRightOtherActionKey, nil, NeoWCSettingActionMessageGestureAction),
         NeoWCItem(@"触发距离", @"限制在 36 到 100 点，越小越灵敏", @"arrow.left.and.right", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCReplySwipeTriggerDistanceKey]], NeoWCSettingActionReplySwipeTriggerDistance),
-        NeoWCItem(@"双击 · 自己", @"默认不接管微信双击行为", @"hand.tap", NeoWCSettingRowKindDetail, NeoWCMessageDoubleTapSelfActionKey, NeoWCCurrentSelection(gestureActionName(selfDoubleAction, YES)), NeoWCSettingActionMessageGestureAction),
-        NeoWCItem(@"双击 · 对方", @"撤回不适用于对方消息", @"hand.tap", NeoWCSettingRowKindDetail, NeoWCMessageDoubleTapOtherActionKey, NeoWCCurrentSelection(gestureActionName(otherDoubleAction, NO)), NeoWCSettingActionMessageGestureAction),
-        NeoWCItem(@"三击 · 自己", @"默认不接管微信三击行为", @"hand.tap", NeoWCSettingRowKindDetail, NeoWCMessageTripleTapSelfActionKey, NeoWCCurrentSelection(gestureActionName(selfTripleAction, YES)), NeoWCSettingActionMessageGestureAction),
-        NeoWCItem(@"三击 · 对方", @"撤回不适用于对方消息", @"hand.tap", NeoWCSettingRowKindDetail, NeoWCMessageTripleTapOtherActionKey, NeoWCCurrentSelection(gestureActionName(otherTripleAction, NO)), NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"双击 · 自己", [NSString stringWithFormat:@"当前状态：%@", gestureActionName(selfDoubleAction, YES)], @"hand.tap", NeoWCSettingRowKindDetail, NeoWCMessageDoubleTapSelfActionKey, nil, NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"双击 · 对方", [NSString stringWithFormat:@"当前状态：%@", gestureActionName(otherDoubleAction, NO)], @"hand.tap", NeoWCSettingRowKindDetail, NeoWCMessageDoubleTapOtherActionKey, nil, NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"三击 · 自己", [NSString stringWithFormat:@"当前状态：%@", gestureActionName(selfTripleAction, YES)], @"hand.tap", NeoWCSettingRowKindDetail, NeoWCMessageTripleTapSelfActionKey, nil, NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"三击 · 对方", [NSString stringWithFormat:@"当前状态：%@", gestureActionName(otherTripleAction, NO)], @"hand.tap", NeoWCSettingRowKindDetail, NeoWCMessageTripleTapOtherActionKey, nil, NeoWCSettingActionMessageGestureAction),
     ], defaults, collapsed);
     NeoWCAddFeature(interaction, NeoWCItem(@"引用消息定位", @"点击引用定位原消息", @"arrow.up.and.down.text.horizontal", NeoWCSettingRowKindSwitch, NeoWCQuoteJumpEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"定位图片引用", @"允许点击图片引用定位", @"photo", NeoWCSettingRowKindSwitch, NeoWCQuoteJumpImageEnabledKey, nil, NeoWCSettingActionNone),
@@ -341,7 +349,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     NeoWCAddFeature(moments, NeoWCItem(@"朋友圈双击点赞", @"双击好友朋友圈内容直接点赞", @"hand.thumbsup", NeoWCSettingRowKindSwitch, NeoWCMomentsDoubleTapLikeKey, nil, NeoWCSettingActionNone), likeChildren, defaults, collapsed);
     [moments addObjectsFromArray:@[
         NeoWCItem(@"朋友圈操作按钮替换为评论", @"点击后直接进入评论", @"bubble.middle.bottom", NeoWCSettingRowKindSwitch, NeoWCMomentsQuickCommentKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"朋友圈转发", @"点击转发朋友圈，长按选择好友发送", @"arrowshape.turn.up.right", NeoWCSettingRowKindSwitch, NeoWCMomentsForwardEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"朋友圈转发", @"点击进入朋友圈转发发布页", @"arrowshape.turn.up.right", NeoWCSettingRowKindSwitch, NeoWCMomentsForwardEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"朋友圈头像快捷权限", @"长按头像切换朋友权限", @"person.crop.circle.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCMomentsQuickPermissionsKey, nil, NeoWCSettingActionNone),
     ]];
     NSString *dateFormat = NeoWCNormalizedMomentsDateFormat([defaults stringForKey:NeoWCMomentsPreciseTimeFormatKey]) ?: NeoWCMomentsPreciseTimeDefaultFormat;
