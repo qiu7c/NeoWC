@@ -136,12 +136,12 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    [self.profileHeader refreshProfile];
     [self reloadSettingsPreservingPositionApplyScale:YES];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    [self.profileHeader refreshProfile];
     if (self.category != NeoWCSettingsCategoryRoot || self.requestedAuthorization) return;
     BOOL needsInitialAuthorization = !NeoWCAuthorizationHasCompletedInitialCheckForCurrentUser();
     self.requestedAuthorization = YES;

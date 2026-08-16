@@ -32,6 +32,22 @@ static UIImage *WCPBuiltinPluginIcon(NSInteger style) {
     return [UIImage systemImageNamed:symbols[index]];
 }
 
+static UIFont *WCPScaledFont(UIFontTextStyle textStyle, CGFloat size, UIFontWeight weight) {
+    UIFont *font = [UIFont systemFontOfSize:size weight:weight];
+    return [[UIFontMetrics metricsForTextStyle:textStyle] scaledFontForFont:font];
+}
+
+static UIColor *WCPPluginCardColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+            return traits.userInterfaceStyle == UIUserInterfaceStyleDark
+                ? UIColor.secondarySystemGroupedBackgroundColor
+                : UIColor.whiteColor;
+        }];
+    }
+    return UIColor.whiteColor;
+}
+
 static NSDictionary *WCPDictionary(NSString *key) {
     NSDictionary *value = [NSUserDefaults.standardUserDefaults dictionaryForKey:key];
     return [value isKindOfClass:NSDictionary.class] ? value : @{};
@@ -148,7 +164,7 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
     [super viewDidLoad]; self.title = @"插件"; self.currentPage = 0;
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"gearshape"] style:UIBarButtonItemStylePlain target:self action:@selector(presentSettingsMenu)];
-    self.tableView.rowHeight = 62.0; self.tableView.estimatedRowHeight = 62.0;
+    self.tableView.rowHeight = 56.0; self.tableView.estimatedRowHeight = 56.0;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self buildHeader];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(registryChanged:) name:WCPDidChangeNotification object:nil];
@@ -161,9 +177,9 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
 - (void)buildHeader {
     UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 270.0)]; header.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     self.heroIcon = [UIImageView new]; self.heroIcon.translatesAutoresizingMaskIntoConstraints = NO; self.heroIcon.contentMode = UIViewContentModeScaleAspectFill; self.heroIcon.clipsToBounds = YES; [header addSubview:self.heroIcon];
-    self.heroTitle = [UILabel new]; self.heroTitle.translatesAutoresizingMaskIntoConstraints = NO; self.heroTitle.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle2]; self.heroTitle.adjustsFontForContentSizeCategory = YES; self.heroTitle.textAlignment = NSTextAlignmentCenter; [header addSubview:self.heroTitle];
-    self.heroSubtitle = [UILabel new]; self.heroSubtitle.translatesAutoresizingMaskIntoConstraints = NO; self.heroSubtitle.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline]; self.heroSubtitle.adjustsFontForContentSizeCategory = YES; self.heroSubtitle.textColor = UIColor.secondaryLabelColor; self.heroSubtitle.textAlignment = NSTextAlignmentCenter; [header addSubview:self.heroSubtitle];
-    self.categoryControl = [UISegmentedControl new]; self.categoryControl.translatesAutoresizingMaskIntoConstraints = NO; [self.categoryControl addTarget:self action:@selector(categoryChanged:) forControlEvents:UIControlEventValueChanged]; [header addSubview:self.categoryControl];
+    self.heroTitle = [UILabel new]; self.heroTitle.translatesAutoresizingMaskIntoConstraints = NO; self.heroTitle.font = WCPScaledFont(UIFontTextStyleHeadline, 19.0, UIFontWeightSemibold); self.heroTitle.adjustsFontForContentSizeCategory = YES; self.heroTitle.textAlignment = NSTextAlignmentCenter; [header addSubview:self.heroTitle];
+    self.heroSubtitle = [UILabel new]; self.heroSubtitle.translatesAutoresizingMaskIntoConstraints = NO; self.heroSubtitle.font = WCPScaledFont(UIFontTextStyleSubheadline, 14.0, UIFontWeightRegular); self.heroSubtitle.adjustsFontForContentSizeCategory = YES; self.heroSubtitle.textColor = UIColor.secondaryLabelColor; self.heroSubtitle.textAlignment = NSTextAlignmentCenter; [header addSubview:self.heroSubtitle];
+    self.categoryControl = [UISegmentedControl new]; self.categoryControl.translatesAutoresizingMaskIntoConstraints = NO; [self.categoryControl setTitleTextAttributes:@{NSFontAttributeName: WCPScaledFont(UIFontTextStyleSubheadline, 14.0, UIFontWeightRegular)} forState:UIControlStateNormal]; [self.categoryControl setTitleTextAttributes:@{NSFontAttributeName: WCPScaledFont(UIFontTextStyleSubheadline, 14.0, UIFontWeightSemibold)} forState:UIControlStateSelected]; [self.categoryControl addTarget:self action:@selector(categoryChanged:) forControlEvents:UIControlEventValueChanged]; [header addSubview:self.categoryControl];
     [header addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(headerLongPressed:)]];
     [NSLayoutConstraint activateConstraints:@[
         [self.heroIcon.centerXAnchor constraintEqualToAnchor:header.centerXAnchor], [self.heroIcon.topAnchor constraintEqualToAnchor:header.topAnchor constant:24], [self.heroIcon.widthAnchor constraintEqualToConstant:72], [self.heroIcon.heightAnchor constraintEqualToConstant:72],
@@ -220,14 +236,14 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section { return self.allVisibleModels.count ? nil : @"暂无已注册的插件"; }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PluginValueCell"]; if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"PluginValueCell"];
-    WCPluginModel *model = self.pageModels[indexPath.row]; cell.textLabel.text = [self displayNameForModel:model]; cell.textLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody]; cell.textLabel.adjustsFontForContentSizeCategory = YES; NSString *version = [self displayVersionForModel:model]; cell.detailTextLabel.text = version.length ? version : nil; cell.detailTextLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody]; cell.detailTextLabel.adjustsFontForContentSizeCategory = YES; cell.imageView.image = nil;
+    WCPluginModel *model = self.pageModels[indexPath.row]; cell.textLabel.text = [self displayNameForModel:model]; cell.textLabel.font = WCPScaledFont(UIFontTextStyleBody, 16.0, UIFontWeightRegular); cell.textLabel.adjustsFontForContentSizeCategory = YES; NSString *version = [self displayVersionForModel:model]; cell.detailTextLabel.text = version.length ? version : nil; cell.detailTextLabel.font = WCPScaledFont(UIFontTextStyleSubheadline, 15.0, UIFontWeightRegular); cell.detailTextLabel.adjustsFontForContentSizeCategory = YES; cell.imageView.image = nil;
     BOOL firstRow = indexPath.row == 0;
     BOOL lastRow = indexPath.row + 1 == (NSInteger)self.pageModels.count;
     CACornerMask corners = 0;
     if (firstRow) corners |= kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
     if (lastRow) corners |= kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
     UIView *cardBackground = [UIView new];
-    cardBackground.backgroundColor = UIColor.systemBackgroundColor;
+    cardBackground.backgroundColor = WCPPluginCardColor();
     cardBackground.layer.cornerRadius = (firstRow || lastRow) ? 16.0 : 0.0;
     cardBackground.layer.cornerCurve = kCACornerCurveContinuous;
     cardBackground.layer.maskedCorners = corners;

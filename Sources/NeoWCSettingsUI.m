@@ -126,6 +126,9 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
 @property (nonatomic, strong) UILabel *authorizationLabel;
 @property (nonatomic, strong) UIStackView *metadataStack;
 @property (nonatomic, copy) NSArray<NSLayoutConstraint *> *avatarConstraints;
+- (void)applyProfileWithWXID:(nullable NSString *)wxid
+                    nickname:(nullable NSString *)nickname
+                     headURL:(nullable NSString *)headURL;
 @end
 
 @implementation NeoWCSettingsProfileHeaderView
@@ -168,7 +171,7 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
     _metadataStack.alignment = UIStackViewAlignmentCenter;
     _metadataStack.spacing = 14.0;
     [self addSubview:_metadataStack];
-    [self refreshProfile];
+    [self applyProfileWithWXID:nil nickname:nil headURL:nil];
     return self;
 }
 
@@ -186,9 +189,21 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
 }
 
 - (void)refreshProfile {
-    self.wxid = NeoWCCurrentUserWXID();
-    NSString *nickname = NeoWCCurrentUserNickname();
-    NSString *headURL = NeoWCCurrentUserHeadImageURL();
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSString *wxid = NeoWCCurrentUserWXID();
+        NSString *nickname = NeoWCCurrentUserNickname();
+        NSString *headURL = NeoWCCurrentUserHeadImageURL();
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf applyProfileWithWXID:wxid nickname:nickname headURL:headURL];
+        });
+    });
+}
+
+- (void)applyProfileWithWXID:(NSString *)wxid
+                    nickname:(NSString *)nickname
+                     headURL:(NSString *)headURL {
+    self.wxid = wxid;
     NSString *displayNickname = nickname.length > 0 ? nickname : @"微信用户";
     BOOL isAuthor = NeoWCAuthorizationIsCurrentUserAdministrator();
     if (isAuthor) {
