@@ -15,6 +15,13 @@ FOUNDATION_EXPORT NSString *const NeoWCGameSelectorKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatJokerEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCEmoticonToSelfieEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCReplySwipeEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCReplySwipeSelfActionKey;
+FOUNDATION_EXPORT NSString *const NeoWCReplySwipeOtherActionKey;
+FOUNDATION_EXPORT NSString *const NeoWCReplySwipeTriggerDistanceKey;
+FOUNDATION_EXPORT NSString *const NeoWCMessageDoubleTapSelfActionKey;
+FOUNDATION_EXPORT NSString *const NeoWCMessageDoubleTapOtherActionKey;
+FOUNDATION_EXPORT NSString *const NeoWCMessageTripleTapSelfActionKey;
+FOUNDATION_EXPORT NSString *const NeoWCMessageTripleTapOtherActionKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpImageEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpVideoEnabledKey;
@@ -66,6 +73,15 @@ FOUNDATION_EXPORT NSString *const NeoWCHideScreenshotForwardKey;
 typedef NS_ENUM(NSInteger, NeoWCStepMode) {
     NeoWCStepModeDailyFixed = 0,
     NeoWCStepModeDailyRandom = 1,
+};
+
+typedef NS_ENUM(NSInteger, NeoWCReplySwipeAction) {
+    NeoWCReplySwipeActionNone = 0,
+    NeoWCReplySwipeActionQuote = 1,
+    NeoWCReplySwipeActionRevoke = 2,
+    NeoWCReplySwipeActionCopy = 3,
+    NeoWCReplySwipeActionDelete = 4,
+    NeoWCReplySwipeActionRepeat = 5,
 };
 
 typedef NS_ENUM(NSInteger, NeoWCChatTopBarEffectStyle) {

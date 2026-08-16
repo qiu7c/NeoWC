@@ -36,14 +36,12 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionRevokeReplyTemplate,
     NeoWCSettingActionDebugCenter,
     NeoWCSettingActionCompatibility,
-    NeoWCSettingActionPluginShortcutTitle,
-    NeoWCSettingActionPluginShortcutClass,
     NeoWCSettingActionGlobalScale,
     NeoWCSettingActionSettingsScale,
     NeoWCSettingActionInnerRadius,
     NeoWCSettingActionOuterRadius,
     NeoWCSettingActionMomentsDateFormat,
-    NeoWCSettingActionPluginVisibility,
+    NeoWCSettingActionPluginManager,
     NeoWCSettingActionHapticIntensity,
     NeoWCSettingActionStepMode,
     NeoWCSettingActionFixedSteps,
@@ -57,6 +55,9 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionChatTopEffectStyle,
     NeoWCSettingActionChatGlassBlurIntensity,
     NeoWCSettingActionChatGlassTintOpacity,
+    NeoWCSettingActionAuthorizationManager,
+    NeoWCSettingActionMessageGestureAction,
+    NeoWCSettingActionReplySwipeTriggerDistance,
 };
 
 @interface NeoWCSettingItem : NSObject

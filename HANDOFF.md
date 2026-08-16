@@ -1,14 +1,14 @@
 # NeoWC 项目交接文档
 
-更新时间：2026-08-09
+更新时间：2026-08-16
 项目版本：0.1.2
 仓库：`git@github.com:qiu7c/NeoWC.git`
 主分支：`main`
 
 ## 1. 当前工作区状态
 
-- 最近已推送提交：`9baa029 Fix native chat search cleanup`。
-- 当前未提交修改包含微信运动分时段递增、完整删除聊天搜索/关键词提醒/群聊艾特提醒，以及新增胶囊工具栏。
+- 最近已推送提交：`4efad74 Fix collapsed capsule toolbar background`。
+- 当前未提交修改包含：完整删除有严重兼容问题的胶囊工具栏；扩展“广告精简”；朋友圈转发按钮长按后可选择好友并进入微信官方发送确认流程。
 - `main` 的已推送部分与 `origin/main` 同步；开始新工作前仍须重新检查 `git status` 和当前 diff。
 - 提交前必须先执行 `git status --short` 和 `git diff --check`，不要覆盖用户已有修改。
 - 用户通常会明确说“推送”后再提交；推送后不主动查询 GitHub Actions 构建结果。
@@ -68,7 +68,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | `Sources/NeoWCAntiRevoke.m` | 防撤回解析、消息查询、本地提示、回复、记录中心和配置 |
 | `Sources/NeoWCAntiRevokeTemplateEditor.m` | 防撤回模板编辑 |
 | `Sources/NeoWCChatExport.m` | 多选纯文本、图片保存和分享卡片 |
-| `Sources/NeoWCInterfaceTweaks.m` | 胶囊工具栏、输入栏圆角、免打扰图标隐藏与原状态恢复 |
+| `Sources/NeoWCInterfaceTweaks.m` | 输入栏圆角、免打扰图标隐藏与原状态恢复 |
 | `Sources/NeoWCEnhancements.m` | 功能键、颜色工具和总开关判断 |
 | `Sources/NeoWCDebug.m` | 日志、悬浮按钮、调试中心和 View 选择器 |
 | `Sources/NeoWCCompatibility.m` | Runtime 类/Selector/触发状态检查 |
@@ -112,17 +112,17 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 - 游戏扫码授权自动允许
 - 朋友圈双击点赞、爱心动画和震动强度
 - 朋友圈操作按钮直接评论
-- 朋友圈转发：快捷评论开启时独立按钮，关闭时加入微信原操作菜单
+- 朋友圈转发：快捷评论开启时独立按钮，关闭时加入微信原操作菜单；长按转发入口可选择好友发送
 - 长按朋友圈头像，将微信原“设置权限/投诉”菜单替换为 4 个原生权限快捷项和投诉
 - 朋友圈显示精确发布时间，可展开设置 `yyyy-MM-dd HH:mm:ss` 等自定义格式
 - 自定义微信运动步数，同时覆盖设备对象与上传请求的三个精确步数字段
 - 钱包余额本地显示：设置页只提供开关，余额必须在钱包页长按入口或余额数字设置，仅替换本机界面文字
 - 好友数量本地显示：仅替换“个朋友”等明确好友数量文案
-- 朋友圈与小程序启动广告净化
+- 广告精简：朋友圈、视频号、广告推送与小程序启动广告
 
 ### 界面优化
 
-- 胶囊工具栏：左侧语音与输入框、右侧表情与更多，共用顶栏玻璃效果和阴影配置
+- 胶囊顶栏：隐藏整条聊天顶栏背景，左右保留独立玻璃胶囊
 - 输入框内部圆角
 - 外部工具栏圆角
 - 内外圆角 0–40 自定义
@@ -149,12 +149,11 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | 快捷发送菜单 | `WCActionSheet showInView:` | 只在聊天编辑上下文和有效会话中增加按钮 |
 | 快捷发送确认 | `SharePreConfirmSheetView onConfirmButtonClick/onCancelButtonClick` | 不干扰微信官方转发实例和代理 |
 | 输入栏圆角 | `MMInputToolView didMoveToWindow` | 不 Hook `layoutSubviews`；相同配置只应用一次 |
-| 胶囊工具栏 | `MMInputToolView didMoveToWindow` | 只透明化原背景并在原控件后加入两个不接收触摸的玻璃胶囊；不移动或替换微信按钮 |
 | 输入框滑动 | `MMGrowTextView didMoveToWindow` | 手势只安装一次，`cancelsTouchesInView=NO` |
 | 免打扰图标 | `UIImageView setAccessibilityLabel:/didMoveToWindow/setHidden:` | 仅处理标签严格等于“免打扰”的已管理图片 |
 | 多选导出 | `BaseMsgContentViewController`、`MMScrollActionSheet` | 只在多选“更多”菜单构建期间插入项目 |
 | 朋友圈 | `WCTimeLineCellView`、`WCTimeLineOperateButtonView` | 所有逻辑必须受开关控制 |
-| 朋友圈转发 | `WCTimeLineCellView`、`WCOperateFloatView` | 快捷评论开启时显示独立转发按钮；关闭时在原浮动菜单中增加“转发”；媒体仅使用参考插件确认的下载器、路径和发布控制器 |
+| 朋友圈转发 | `WCTimeLineCellView`、`WCOperateFloatView` | 短按保持原朋友圈转发；长按使用原生联系人选择和 `ForwardMessageLogicController` 官方确认页发送给指定好友；图片编辑快捷发送会话保持隔离 |
 | 朋友圈头像快捷权限 | `WCTimeLineCellView editBlackList`、`WCActionSheet showInView:` | 只识别原生“设置权限/设置 + 投诉”两项菜单；失败时完整保留原菜单；权限动作仅调用已从参考插件确认的 `opAllPermission`、`opSocialBlackPermission`、`opOutsider:`、`opWCBlacklist:` |
 | 朋友圈精确时间 | `WCTimeLineCellView initTimeLabel/updateWithDataItem:actionAreaVM:` | 时间源严格使用 `m_dataItem.createtime` 的 Unix 秒并只写 `m_timeLabel`；禁止增加 `layoutSubviews` Hook，禁止调用 `setNeedsLayout/layoutIfNeeded` |
 | 游戏选择 | `CMessageMgr AddEmoticonMsg:MsgWrap:` | 非游戏消息和关闭状态直接 `%orig` |
@@ -171,7 +170,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 | 微信运动步数 | `WCDeviceStepObject`、`UploadDeviceStepReq`、`WCDataItem` | Getter/Setter 均使用当天配置值；关闭、未配置或跨日时返回原值；阶段递增只在读取时按固定时段计算，不创建定时器，18:30 达到当天目标 |
 | 页面缩放 | `MMThemeManager`、`CLocalInfo`、`WKWebView`、`WAThemeProxy` | 只缩放 `#font_set` 的 `alllevel/chatLevel` 与网页文字，不修改窗口 transform，不按账号硬编码 |
 | 好友数量显示 | `MMUILabel setText:` | 必须匹配“个朋友”等明确文案，禁止无条件全局替换 |
-| 广告 | `WCDataItem`、`WAAppTaskSplashADConfig` | 关闭状态返回微信原值 |
+| 广告精简 | `BrandTLExptConfig`、`BSTLExptConfig`、`BrandTimelineMsgMgr`、`MagicAdPushMgrService`、`WAAppTaskSplashADConfig` 等 | 所有 Hook 受原 `NeoWCAdBlockerKey` 控制，关闭状态返回微信原值；不复制参考插件的关注公众号限制 |
 
 私有类不要以强链接符号方式引用。优先使用 `NSClassFromString`、`objc_getClass`、`sel_registerName` 和类型明确的 `objc_msgSend`。
 
@@ -260,10 +259,17 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 
 2. 当前未提交修复
    - beta34 已按要求完整删除聊天搜索、关键词提醒和群聊艾特提醒，包括设置 Key、设置项、运行时处理、边缘提示 UI、搜索控制器 Hook 与兼容性登记；同时移除删除提醒模块后遗留的未使用 `NeoWCContactManager`，修复 Theos `-Werror,-Wunused-function` 构建失败。
-   - 新增胶囊工具栏：隐藏底部整条模糊背景，保留微信原语音、输入、表情和更多控件，只在其背后按左右两组增加玻璃胶囊；效果与阴影配置和胶囊顶栏共用。beta27 进一步按抓取层级透明化宽语音按钮与语音转述中的白色 `UIImageView`，并为展开的表情/更多区域补充独立模糊背景；beta28 让右侧表情/更多胶囊保持固定高度，引用回复条增高时不再纵向拉伸；beta29 在回到前台和锁屏解锁后的 `DidBecomeActive` 阶段立即并延迟幂等重放顶栏与输入栏胶囊状态，覆盖微信稍后的背景 alpha 重置且不触发布局调用；beta30 将胶囊顶栏移动到“界面优化 → 聊天胶囊”，并为顶栏和工具栏增加共享的 20%–100% 模糊强度、0%–30% 系统背景染色强度与现有阴影配置；beta31 监听微信传入的“对方正在输入…”标题状态，昵称保持不变，仅在昵称右侧显示绿色三点呼吸提示，状态结束后自动移除；beta32 修复输入栏背景图片集合在 Xcode 16.4 下触发的 Objective-C 轻量泛型指针类型 `-Werror`；beta33 改为遍历活动 Window 控制器树恢复聊天胶囊，在应用激活和受保护数据恢复后分三次幂等重放顶栏、底栏与置顶玻璃，并直接监听导航栏 `MMUILabel` 的输入状态文本；beta34 仅修复底部工具栏：未展开的表情/更多区域完全隐藏模糊 View、清除 `MMInputToolView` 自身背景，并在聊天页布局后幂等恢复透明状态。
+   - beta35 按要求完整删除胶囊工具栏的 Key、默认值、设置项、UI 实现、生命周期重放和兼容性登记；胶囊顶栏与普通输入栏圆角保持独立可用。
+   - beta35 扩展原 `NeoWCAdBlockerKey` 为“广告精简”，覆盖朋友圈广告配置/卡片、视频号广告开关、广告推送、小程序启动广告及广告评论元数据；没有加入参考插件的关注公众号限制。
+   - beta35 为朋友圈转发入口增加长按：调用原生联系人选择页，选择好友后将文字和图片组装为微信消息并交给 `ForwardMessageLogicController` 官方确认页；短按原朋友圈转发行为不变。
+   - beta36 按 `storage.dylib` 的真实调用链内置插件管理：工程提供兼容的 `WCPluginModel` / `WCPluginsMgr` 注册接口，在 `MoreViewController addFunctionSection` 完成后向第 3 个原生 section 插入唯一“插件”行，并通过 `CAppViewControllerManager` 当前导航控制器打开管理页。管理页保留参考插件的分类增删改、插件改名/版本、收纳恢复、排序、分页、顶部文字/图标/圆角、入口图标和清空配置；持久化沿用 `WCPluginsMgr.*` Key。旧的标题过滤式“插件显示管理”和 `NeoWCPluginShortcuts` 多入口注册已完整删除，NeoWC 设置只作为管理器中的单一 Controller 项注册。
    - 胶囊顶栏的液态玻璃仅允许 iOS 26 原生 `UIGlassEffect`；低版本强制使用超薄玻璃，已移除 NeoWC 自研兼容液态叠层。
    - 设置首页头像改为 96 点圆角方形容器，并同步扩大昵称、wxid 间距和页眉高度，避免直接缩放微信内部头像 View 造成首帧裁切。
    - 所有持久多选设置均在列表显示“当前选择：…”并在操作表中勾选当前项。
+   - beta39 将原引用左滑升级为“消息手势”：左滑、双击、三击均可分别配置自己和对方消息，动作包含不设置、引用、撤回、复制、删除、复读；对方消息在设置和运行时两层禁止撤回。左滑默认保留引用并支持 36–100 点触发距离，双击和三击默认不设置，避免默认抢占微信原生行为。引用、撤回、复制、删除只调用参考二进制已确认的 `onShowMsgReplyMenuItem:`、`onRevokeMsg:`、`onCopy:`、`onDelete:` / `onDeleteMessage:`，调用前仍检查 `respondsToSelector:`；复读不依赖 WeChatX 自定义的 `wx_repeatLongPressPlusOne:`，只对普通文字使用消息管理器发送，不强制复读媒体消息。
+   - beta40 依据 WeChatX 二进制中的 `ForwardMsgUtil canBeForwardWithMsg:` 与 `ForwardMessageLogicController forwardNoConfirmForMsgList:toContacts:` 完善复读：直接把原 `CMessageWrap` 交给微信官方无确认转发引擎并发送回当前会话，覆盖微信允许转发的文字、图片、链接/小程序、文件、视频和表情等类型；仅当官方转发入口不可用时对普通文字使用 `CMessageMgr AddMsg:MsgWrap:` 兜底，避免自行拼接媒体 XML 或错误复用附件路径。
+   - beta41 完整核对 WeChatX 的语音复读分支后补齐语音：语音消息不走普通转发，而是复制原 `CMessageWrap`、清空本地/服务端 ID、重新绑定当前发送者与会话并设置语音转发标记；随后通过 `CMessageMgr getVoicePath` / `getPathOfAudio:` 复制语音文件（复制失败时以 `SaveMesVoice:MsgWrap:` 保存数据），最后交给 `AudioSender ResendVoiceMsg:MsgWrap:`，必要时由 `uploaderForMsgWrap:` 取得上传器后重发。所有私有入口均先检查运行时能力，未找到本地语音文件时拒绝生成空消息。
+   - beta42 完善 wxid 授权管理：普通检测继续严格按 `blacklisted` 优先、仅 `authorized=true && blacklisted=false` 放行；管理员入口只以当前 wxid 的 SHA-256 与内置管理员哈希比较。管理页以“已授权 / 黑名单”双列表展示，两个列表统一实时搜索和手动刷新；新增黑名单列表与解除黑名单接口，添加、删除、拉黑、解除后自动刷新两边，并补齐管理员自删/自拉黑保护、二次确认、HTTP 405 与超时状态。管理员密钥只保存在管理控制器内存中，退出页面即清除。
 
 3. 仍须保持的既有边界
    - 钱包只处理 `WCPayWalletEntryHeaderView` 内的 `TimeoutNumber`，金额单位为分。
@@ -284,14 +290,18 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
 
 ## 12. 下一轮真机验证顺序
 
-1. 编译并安装 beta34，确认设置页、聊天页和运行时均不再出现搜索、关键词提醒或群聊艾特提醒。
-2. 开启胶囊工具栏，验证文字输入、按住说话、表情、更多、发送按钮、键盘切换和多行输入全部保持微信原行为。
-3. 分别验证超薄玻璃、iOS 26 原生液态玻璃、阴影开关、深色模式及关闭功能后的原样恢复。
-4. 打开未领取、部分领取和已领完红包，确认详情单行完整显示且不重复原生“已领取”文字。
-5. 用空语音、无法识别语音和正常语音测试自动转文字，确认失败最多尝试 5 次且聊天不卡死。
-6. 验证微信运动各时间阶段、跨日重置及 18:30 达到当天目标。
-7. 回归钱包余额、文字/引用应用/图片/转账显示修改及“仅当前页面本机显示”边界。
-8. 回归防撤回气泡、图片编辑快捷发送、朋友圈转发和设置页无动画刷新。
+1. 编译并安装 beta36，确认设置页不再出现胶囊工具栏，聊天底部工具栏完全使用微信原实现。
+2. 开关“广告精简”，分别验证朋友圈、视频号、广告推送和小程序启动广告，关闭后确认微信原行为恢复。
+3. 短按朋友圈转发确认原朋友圈发布页不变；长按后验证联系人选择、取消、文字、单图、多图及官方发送确认页。
+4. 分别验证胶囊顶栏的超薄玻璃、iOS 26 原生液态玻璃、阴影开关、深色模式及关闭功能后的原样恢复。
+5. 打开未领取、部分领取和已领完红包，确认详情单行完整显示且不重复原生“已领取”文字。
+6. 用空语音、无法识别语音和正常语音测试自动转文字，确认失败最多尝试 5 次且聊天不卡死。
+7. 验证微信运动各时间阶段、跨日重置及 18:30 达到当天目标。
+8. 回归钱包余额、文字/引用应用/图片/转账显示修改及“仅当前页面本机显示”边界。
+9. 回归防撤回气泡、图片编辑快捷发送和设置页无动画刷新。
+10. 在“我”页确认只出现一个“插件”入口；验证 Controller 与 Switch 注册、默认“美化/功能/定制”分类、分类增删改、改名/版本、收纳恢复、拖动及序号排序、分页、顶部设置和清空配置。若设备仍安装原 `storage.dylib`，必须先移除，避免同名 `WCPluginsMgr` / `WCPluginsViewController` Runtime 类冲突。
+11. 开启“消息手势”，分别用自己和对方的文字、图片、语音消息验证左滑、双击、三击；确认对方撤回不可选，删除/撤回仍走微信确认流程，文字和微信允许转发的媒体可复读，语音复读会生成一条新的可播放语音且不会改动原消息。
+12. 授权回归：分别用已授权、未授权、黑名单和断网账号进入设置页，确认仅服务端明确授权且未拉黑时显示核心功能。管理员进入“授权管理”后输入临时密钥，验证双列表加载、切换、实时搜索和刷新；依次添加测试 wxid、删除授权、重新添加并拉黑、切换黑名单后解除，确认每步均有二次确认且成功后两个列表和总数一起更新；再用 401/403/404/405/500 或超时响应验证对应提示，并确认当前管理员行不可删除或拉黑。
 
 若只有气泡方案开启时卡顿，优先检查 `CommonMessageCellView` 的三处低频入口和合并调度器，禁止先恢复布局 Hook。
 
@@ -318,7 +328,7 @@ ssh://git@ssh.github.com:443/qiu7c/NeoWC.git
 ```text
 继续维护 D:\Vibe\NeoWC。先完整阅读 D:\Vibe\NeoWC\HANDOFF.md，再检查 git status、最近提交和当前 diff；工作区中的所有现有修改都要保留，不得覆盖或回退。
 
-最近已推送提交为 9baa029。当前未提交修改包含：微信运动改为分时段阶段递增并在 18:30 达到目标；聊天搜索、关键词提醒和群聊艾特提醒已完整删除；胶囊工具栏已加入但仍待 Theos 编译和真机验证。HANDOFF.md 已更新，必须保留这些修改。
+最近已推送提交为 4efad74。当前未提交修改包含：胶囊工具栏已完整删除；广告精简已扩展；朋友圈转发按钮长按可选择好友并进入微信官方确认发送流程；`storage.dylib` 插件管理逻辑已内置并替代旧插件隐藏/多快捷入口。HANDOFF.md 已更新，必须保留这些修改。
 
 参考插件的稳定结论见 D:\Vibe\NeoWC\REFERENCE_PLUGIN_ANALYSIS.md，原始反编译产物在 D:\Vibe\NeoWC\.codex-analysis，仅供本机分析且不得加入提交。后续遇到未还原、真机不生效或微信版本变化的功能时，应直接回到用户提供的参考插件 `dylib`/`deb` 和这些本地提取文件继续反编译学习，确认 Hook 注册、原方法参数类型、字段来源与替换函数调用顺序后再修改 NeoWC；不要仅根据功能名或字符串猜测私有 API。
 

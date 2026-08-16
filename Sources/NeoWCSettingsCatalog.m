@@ -1,16 +1,17 @@
 #import "NeoWCSettingsCatalog.h"
 #import "NeoWCAccount.h"
+#import "NeoWCAuthorization.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCInterfaceTweaks.h"
 #import "NeoWCDebug.h"
-#import "NeoWCPluginShortcuts.h"
 #import <stdlib.h>
 
 NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
+static NSString *const NeoWCSearchAllChildrenMarker = @"__neowc_search_all_children__";
 
-NSString *const NeoWCDisplayVersion = @"0.1.2 beta34";
+NSString *const NeoWCDisplayVersion = @"0.1.2 beta42";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -33,8 +34,9 @@ static void NeoWCAddFeature(NSMutableArray<NeoWCSettingItem *> *items,
                             NSSet<NSString *> *collapsedFeatureKeys) {
     parent.hasChildren = children.count > 0;
     [items addObject:parent];
-    if (parent.defaultsKey.length > 0 && [defaults boolForKey:parent.defaultsKey] &&
-        ![collapsedFeatureKeys containsObject:parent.defaultsKey]) {
+    BOOL searchIncludesChildren = [collapsedFeatureKeys containsObject:NeoWCSearchAllChildrenMarker];
+    if (parent.defaultsKey.length > 0 && (searchIncludesChildren || [defaults boolForKey:parent.defaultsKey]) &&
+        (searchIncludesChildren || ![collapsedFeatureKeys containsObject:parent.defaultsKey])) {
         for (NeoWCSettingItem *child in children) child.child = YES;
         [items addObjectsFromArray:children];
     }
@@ -88,6 +90,13 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCEmoticonToSelfieEnabledKey: @NO,
         NeoWCMomentsForwardEnabledKey: @NO,
         NeoWCReplySwipeEnabledKey: @NO,
+        NeoWCReplySwipeSelfActionKey: @(NeoWCReplySwipeActionQuote),
+        NeoWCReplySwipeOtherActionKey: @(NeoWCReplySwipeActionQuote),
+        NeoWCReplySwipeTriggerDistanceKey: @56.0,
+        NeoWCMessageDoubleTapSelfActionKey: @(NeoWCReplySwipeActionNone),
+        NeoWCMessageDoubleTapOtherActionKey: @(NeoWCReplySwipeActionNone),
+        NeoWCMessageTripleTapSelfActionKey: @(NeoWCReplySwipeActionNone),
+        NeoWCMessageTripleTapOtherActionKey: @(NeoWCReplySwipeActionNone),
         NeoWCQuoteJumpEnabledKey: @NO,
         NeoWCQuoteJumpImageEnabledKey: @YES,
         NeoWCQuoteJumpVideoEnabledKey: @YES,
@@ -144,20 +153,11 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCMultiSelectSaveImagesKey: @YES,
         NeoWCMultiSelectShareCardKey: @YES,
         NeoWCDebugLoggingEnabledKey: @YES,
-        NeoWCPluginShortcutsEnabledKey: @NO,
-        NeoWCPluginShortcutLoggingKey: @YES,
-        NeoWCPluginShortcutFloatingDebugKey: @NO,
-        NeoWCPluginShortcutDebugCenterKey: @YES,
-        NeoWCPluginShortcutRevokeRecordsKey: @NO,
-        NeoWCPluginShortcutCustomPageKey: @NO,
-        NeoWCPluginShortcutCustomTitleKey: @"快捷页面",
-        NeoWCPluginShortcutCustomClassKey: @"",
         NeoWCChatInputRoundingEnabledKey: @NO,
         NeoWCChatInputInnerRoundingKey: @YES,
         NeoWCChatInputOuterRoundingKey: @YES,
         NeoWCChatInputInnerRadiusKey: @18.0,
         NeoWCChatInputOuterRadiusKey: @22.0,
-        NeoWCChatInputCapsuleEnabledKey: @NO,
         NeoWCHideChatMuteIconKey: @NO,
         NeoWCExpandedCategoriesKey: @[@"messages"],
         NeoWCCollapsedFeaturesKey: @[],
@@ -165,6 +165,40 @@ void NeoWCSettingsRegisterDefaults(void) {
 }
 
 static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
+    BOOL administrator = NeoWCAuthorizationIsCurrentUserAdministrator();
+    NeoWCAuthorizationState authorizationState = NeoWCCurrentAuthorizationState();
+    NSMutableArray<NeoWCSettingItem *> *maintenanceItems = [NSMutableArray arrayWithObjects:
+        NeoWCItem(@"配置管理", @"导入、导出或重置 NeoWC 配置", @"externaldrive", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionConfigManager),
+        NeoWCInfoItem(@"version", @"版本", @"NeoWC", @"shippingbox", NeoWCDisplayVersion), nil];
+    if (administrator) {
+        [maintenanceItems insertObject:NeoWCItem(@"授权管理", @"管理授权列表与黑名单", @"person.badge.key", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionAuthorizationManager) atIndex:0];
+    }
+    NeoWCSettingSection *maintenance = [NeoWCSettingSection sectionWithIdentifier:@"maintenance" title:@"维护"
+                                                                           footer:[NSString stringWithFormat:@"NeoWC · %@", NeoWCDisplayVersion]
+                                                                            items:maintenanceItems];
+    if (authorizationState != NeoWCAuthorizationStateAuthorized) {
+        NSString *title = @"授权验证";
+        NSString *message = NeoWCCurrentAuthorizationMessage();
+        NSString *symbol = @"lock.shield";
+        if (authorizationState == NeoWCAuthorizationStateLoading || authorizationState == NeoWCAuthorizationStateUnknown) {
+            message = @"正在验证授权…";
+            symbol = @"hourglass";
+        } else if (authorizationState == NeoWCAuthorizationStateBlacklisted) {
+            message = @"当前账号已被限制使用";
+            symbol = @"hand.raised.slash";
+        } else if (authorizationState == NeoWCAuthorizationStateUnauthorized) {
+            message = message.length ? message : @"当前账号未授权";
+        } else {
+            message = message.length ? message : @"授权验证失败，请检查网络后重试";
+            symbol = @"wifi.exclamationmark";
+        }
+        return @[
+            [NeoWCSettingSection sectionWithIdentifier:@"authorization" title:nil footer:@"仅在服务端确认已授权且未被拉黑后启用核心功能。" items:@[
+                NeoWCInfoItem(@"authorization-status", title, message, symbol, nil),
+            ]],
+            maintenance,
+        ];
+    }
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"master" title:nil
                                              footer:@"关闭后仅保留设置入口，所有增强功能停止生效。"
@@ -176,11 +210,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
             NeoWCItem(@"界面优化", @"胶囊、缩放与入口显示", @"paintbrush", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenInterface),
             NeoWCItem(@"开发者功能", @"日志、兼容性与快捷入口", @"hammer", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenDeveloper),
         ]],
-        [NeoWCSettingSection sectionWithIdentifier:@"maintenance" title:@"维护"
-                                             footer:[NSString stringWithFormat:@"NeoWC · %@", NeoWCDisplayVersion] items:@[
-            NeoWCItem(@"配置管理", @"导入、导出或重置 NeoWC 配置", @"externaldrive", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionConfigManager),
-            NeoWCInfoItem(@"version", @"版本", @"NeoWC", @"shippingbox", NeoWCDisplayVersion),
-        ]],
+        maintenance,
     ];
 }
 
@@ -233,7 +263,30 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"忽略私聊语音", @"私聊中的语音保持原样", @"person", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnorePrivateKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"忽略自己发送", @"不转换自己发出的语音", @"person.crop.circle", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnoreSelfKey, nil, NeoWCSettingActionNone),
     ], defaults, collapsed);
-    [interaction addObject:NeoWCItem(@"引用回复手势", @"左滑消息气泡进入微信原生引用回复", @"arrowshape.turn.up.left", NeoWCSettingRowKindSwitch, NeoWCReplySwipeEnabledKey, nil, NeoWCSettingActionNone)];
+    NSInteger selfSwipeAction = [defaults integerForKey:NeoWCReplySwipeSelfActionKey];
+    NSInteger otherSwipeAction = [defaults integerForKey:NeoWCReplySwipeOtherActionKey];
+    NSArray<NSString *> *swipeActionNames = @[@"不设置", @"引用", @"撤回", @"复制", @"删除", @"复读"];
+    NSString *(^gestureActionName)(NSInteger, BOOL) = ^NSString *(NSInteger action, BOOL selfMessage) {
+        if (action < 0 || action >= (NSInteger)swipeActionNames.count || (!selfMessage && action == NeoWCReplySwipeActionRevoke)) return @"不设置";
+        return swipeActionNames[action];
+    };
+    NSString *selfSwipeName = gestureActionName(selfSwipeAction, YES);
+    NSString *otherSwipeName = gestureActionName(otherSwipeAction, NO);
+    NSInteger selfDoubleAction = [defaults integerForKey:NeoWCMessageDoubleTapSelfActionKey];
+    NSInteger otherDoubleAction = [defaults integerForKey:NeoWCMessageDoubleTapOtherActionKey];
+    NSInteger selfTripleAction = [defaults integerForKey:NeoWCMessageTripleTapSelfActionKey];
+    NSInteger otherTripleAction = [defaults integerForKey:NeoWCMessageTripleTapOtherActionKey];
+    NeoWCAddFeature(interaction,
+                    NeoWCItem(@"消息手势", [NSString stringWithFormat:@"左滑｜自己：%@ · 对方：%@", selfSwipeName, otherSwipeName], @"hand.draw", NeoWCSettingRowKindSwitch, NeoWCReplySwipeEnabledKey, nil, NeoWCSettingActionNone),
+                    @[
+        NeoWCItem(@"左滑 · 自己", @"自己发送消息的左滑动作", @"arrow.left", NeoWCSettingRowKindDetail, NeoWCReplySwipeSelfActionKey, NeoWCCurrentSelection(selfSwipeName), NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"左滑 · 对方", @"收到消息的左滑动作", @"arrow.left", NeoWCSettingRowKindDetail, NeoWCReplySwipeOtherActionKey, NeoWCCurrentSelection(otherSwipeName), NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"触发距离", @"限制在 36 到 100 点，越小越灵敏", @"arrow.left.and.right", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCReplySwipeTriggerDistanceKey]], NeoWCSettingActionReplySwipeTriggerDistance),
+        NeoWCItem(@"双击 · 自己", @"默认不接管微信双击行为", @"hand.tap", NeoWCSettingRowKindDetail, NeoWCMessageDoubleTapSelfActionKey, NeoWCCurrentSelection(gestureActionName(selfDoubleAction, YES)), NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"双击 · 对方", @"撤回不适用于对方消息", @"hand.tap", NeoWCSettingRowKindDetail, NeoWCMessageDoubleTapOtherActionKey, NeoWCCurrentSelection(gestureActionName(otherDoubleAction, NO)), NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"三击 · 自己", @"默认不接管微信三击行为", @"hand.tap", NeoWCSettingRowKindDetail, NeoWCMessageTripleTapSelfActionKey, NeoWCCurrentSelection(gestureActionName(selfTripleAction, YES)), NeoWCSettingActionMessageGestureAction),
+        NeoWCItem(@"三击 · 对方", @"撤回不适用于对方消息", @"hand.tap", NeoWCSettingRowKindDetail, NeoWCMessageTripleTapOtherActionKey, NeoWCCurrentSelection(gestureActionName(otherTripleAction, NO)), NeoWCSettingActionMessageGestureAction),
+    ], defaults, collapsed);
     NeoWCAddFeature(interaction, NeoWCItem(@"引用消息定位", @"点击引用定位原消息", @"arrow.up.and.down.text.horizontal", NeoWCSettingRowKindSwitch, NeoWCQuoteJumpEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"定位图片引用", @"允许点击图片引用定位", @"photo", NeoWCSettingRowKindSwitch, NeoWCQuoteJumpImageEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"定位视频引用", @"允许点击视频引用定位", @"video", NeoWCSettingRowKindSwitch, NeoWCQuoteJumpVideoEnabledKey, nil, NeoWCSettingActionNone),
@@ -288,7 +341,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     NeoWCAddFeature(moments, NeoWCItem(@"朋友圈双击点赞", @"双击好友朋友圈内容直接点赞", @"hand.thumbsup", NeoWCSettingRowKindSwitch, NeoWCMomentsDoubleTapLikeKey, nil, NeoWCSettingActionNone), likeChildren, defaults, collapsed);
     [moments addObjectsFromArray:@[
         NeoWCItem(@"朋友圈操作按钮替换为评论", @"点击后直接进入评论", @"bubble.middle.bottom", NeoWCSettingRowKindSwitch, NeoWCMomentsQuickCommentKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"朋友圈转发", @"按快捷评论状态选择独立按钮或原菜单", @"arrowshape.turn.up.right", NeoWCSettingRowKindSwitch, NeoWCMomentsForwardEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"朋友圈转发", @"点击转发朋友圈，长按选择好友发送", @"arrowshape.turn.up.right", NeoWCSettingRowKindSwitch, NeoWCMomentsForwardEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"朋友圈头像快捷权限", @"长按头像切换朋友权限", @"person.crop.circle.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCMomentsQuickPermissionsKey, nil, NeoWCSettingActionNone),
     ]];
     NSString *dateFormat = NeoWCNormalizedMomentsDateFormat([defaults stringForKey:NeoWCMomentsPreciseTimeFormatKey]) ?: NeoWCMomentsPreciseTimeDefaultFormat;
@@ -330,7 +383,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     NeoWCAddFeature(local, NeoWCItem(@"好友数量本地显示", @"替换明确的好友数量文案", @"person.2", NeoWCSettingRowKindSwitch, NeoWCContactsCountEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"设置好友数量", @"输入本机显示的好友数量", @"number", NeoWCSettingRowKindDetail, nil, contacts > 0 ? [NSString stringWithFormat:@"%ld 个", (long)contacts] : @"设置", NeoWCSettingActionContactsCount)
     ], defaults, collapsed);
-    [local addObject:NeoWCItem(@"广告净化", @"拦截朋友圈与小程序启动广告", @"rectangle.badge.xmark", NeoWCSettingRowKindSwitch, NeoWCAdBlockerKey, nil, NeoWCSettingActionNone)];
+    [local addObject:NeoWCItem(@"广告精简", @"精简朋友圈、视频号、广告推送与小程序启动广告", @"rectangle.badge.xmark", NeoWCSettingRowKindSwitch, NeoWCAdBlockerKey, nil, NeoWCSettingActionNone)];
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"automation" title:@"自动化" footer:@"自动登录和授权会跳过手动确认，请只在可信环境开启。" items:automation],
         [NeoWCSettingSection sectionWithIdentifier:@"moments" title:@"朋友圈" footer:nil items:moments],
@@ -361,12 +414,11 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
         NeoWCItem(@"头像大小", @"限制在 24 到 34 之间", @"person.crop.circle", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarAvatarSizeKey]], NeoWCSettingActionChatTopAvatarSize),
         NeoWCItem(@"昵称字号", @"限制在 12 到 18 之间", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarNicknameSizeKey]], NeoWCSettingActionChatTopNicknameSize),
     ], defaults, collapsed);
-    [chatCapsules addObject:NeoWCItem(@"胶囊工具栏", @"语音与输入框、表情与更多分为左右玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatInputCapsuleEnabledKey, nil, NeoWCSettingActionNone)];
     [chatCapsules addObjectsFromArray:@[
-        NeoWCItem(@"玻璃类型", supportsLiquidGlass ? @"顶栏与工具栏共同使用" : @"iOS 26 以下仅支持超薄玻璃", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(usesLiquidGlass ? @"液态玻璃" : @"超薄玻璃"), NeoWCSettingActionChatTopEffectStyle),
-        NeoWCItem(@"模糊强度", @"顶栏与工具栏共同使用，限制在 20% 到 100%", @"drop.halffull", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassBlurIntensityKey]], NeoWCSettingActionChatGlassBlurIntensity),
+        NeoWCItem(@"玻璃类型", supportsLiquidGlass ? @"用于胶囊顶栏" : @"iOS 26 以下仅支持超薄玻璃", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(usesLiquidGlass ? @"液态玻璃" : @"超薄玻璃"), NeoWCSettingActionChatTopEffectStyle),
+        NeoWCItem(@"模糊强度", @"胶囊顶栏使用，限制在 20% 到 100%", @"drop.halffull", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassBlurIntensityKey]], NeoWCSettingActionChatGlassBlurIntensity),
         NeoWCItem(@"染色强度", @"使用系统背景色轻微统一玻璃明暗，限制在 0% 到 30%", @"paintpalette", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassTintOpacityKey]], NeoWCSettingActionChatGlassTintOpacity),
-        NeoWCItem(@"胶囊阴影", @"顶栏与工具栏共同使用的轻微环境阴影", @"circle.dotted", NeoWCSettingRowKindSwitch, NeoWCChatTopBarShadowEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"胶囊阴影", @"胶囊顶栏的轻微环境阴影", @"circle.dotted", NeoWCSettingRowKindSwitch, NeoWCChatTopBarShadowEnabledKey, nil, NeoWCSettingActionNone),
     ]];
     NSMutableArray *input = [NSMutableArray array];
     NSMutableArray *roundingChildren = [NSMutableArray array];
@@ -382,11 +434,11 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
     NSUInteger hiddenMeCount = [defaults arrayForKey:NeoWCMeMenuHiddenTitlesKey].count;
     NSArray *management = @[
         NeoWCItem(@"我的页面入口管理", @"隐藏作品、小店与卡包或表情入口", @"person.crop.rectangle.stack", NeoWCSettingRowKindDetail, nil, NeoWCCountText(hiddenMeCount), NeoWCSettingActionMeMenu),
-        NeoWCItem(@"插件显示管理", @"隐藏其他插件入口并检测加载状态", @"square.stack.3d.up", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionPluginVisibility),
+        NeoWCItem(@"插件管理", @"分类、排序、收纳与统一插件入口", @"square.stack.3d.up", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionPluginManager),
     ];
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"display" title:@"显示" footer:@"关闭后恢复微信原始样式。" items:display],
-        [NeoWCSettingSection sectionWithIdentifier:@"chat-capsules" title:@"聊天胶囊" footer:@"玻璃参数由顶栏与工具栏共同使用。" items:chatCapsules],
+        [NeoWCSettingSection sectionWithIdentifier:@"chat-capsules" title:@"聊天胶囊" footer:@"玻璃参数仅作用于胶囊顶栏。" items:chatCapsules],
         [NeoWCSettingSection sectionWithIdentifier:@"input" title:@"输入栏" footer:nil items:input],
         [NeoWCSettingSection sectionWithIdentifier:@"entry-management" title:@"入口管理" footer:nil items:management],
     ];
@@ -399,25 +451,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCDeveloperSections(NSUserDefaults *de
         NeoWCItem(@"调试中心", @"视图检查、Runtime 搜索与日志", @"ladybug", NeoWCSettingRowKindDetail, nil, @"打开", NeoWCSettingActionDebugCenter),
         NeoWCItem(@"功能兼容性", @"检查类、Selector 与触发状态", @"checklist", NeoWCSettingRowKindDetail, nil, @"检查", NeoWCSettingActionCompatibility),
     ]];
-    NSMutableArray *shortcutChildren = [NSMutableArray arrayWithArray:@[
-        NeoWCItem(@"快捷日志开关", @"在插件管理页直接开关日志", @"text.alignleft", NeoWCSettingRowKindSwitch, NeoWCPluginShortcutLoggingKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"快捷悬浮窗开关", @"在插件管理页直接开关悬浮窗", @"wrench.and.screwdriver", NeoWCSettingRowKindSwitch, NeoWCPluginShortcutFloatingDebugKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"直达调试中心", @"增加独立页面入口", @"ladybug", NeoWCSettingRowKindSwitch, NeoWCPluginShortcutDebugCenterKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"直达防撤回记录", @"增加撤回记录入口", @"tray.full", NeoWCSettingRowKindSwitch, NeoWCPluginShortcutRevokeRecordsKey, nil, NeoWCSettingActionNone),
-    ]];
-    NeoWCSettingItem *custom = NeoWCItem(@"自定义页面入口", @"输入 Controller 或 View 类名", @"rectangle.and.hand.point.up.left", NeoWCSettingRowKindSwitch, NeoWCPluginShortcutCustomPageKey, nil, NeoWCSettingActionNone);
-    custom.hasChildren = YES;
-    [shortcutChildren addObject:custom];
-    if ([defaults boolForKey:NeoWCPluginShortcutCustomPageKey] && ![collapsed containsObject:NeoWCPluginShortcutCustomPageKey]) {
-        NSString *title = [defaults stringForKey:NeoWCPluginShortcutCustomTitleKey] ?: @"快捷页面";
-        NSString *className = [defaults stringForKey:NeoWCPluginShortcutCustomClassKey] ?: @"";
-        [shortcutChildren addObjectsFromArray:@[
-            NeoWCItem(@"自定义入口名称", @"显示在插件管理页面中的名称", @"textformat", NeoWCSettingRowKindDetail, nil, title, NeoWCSettingActionPluginShortcutTitle),
-            NeoWCItem(@"页面 Runtime 类名", @"支持 UIViewController 或 UIView 子类", @"chevron.left.forwardslash.chevron.right", NeoWCSettingRowKindDetail, nil, className.length ? className : @"输入", NeoWCSettingActionPluginShortcutClass),
-        ]];
-    }
-    NeoWCAddFeature(items, NeoWCItem(@"插件管理快捷入口", @"注册常用开关或页面", @"bolt.badge.clock", NeoWCSettingRowKindSwitch, NeoWCPluginShortcutsEnabledKey, nil, NeoWCSettingActionNone), shortcutChildren, defaults, collapsed);
-    return @[[NeoWCSettingSection sectionWithIdentifier:@"developer" title:nil footer:@"快捷入口关闭或改名后，重启微信即可彻底移除旧入口。" items:items]];
+    return @[[NeoWCSettingSection sectionWithIdentifier:@"developer" title:nil footer:nil items:items]];
 }
 
 NSArray<NeoWCSettingSection *> *NeoWCSettingsBuildSections(NeoWCSettingsCategory category,
@@ -432,4 +466,9 @@ NSArray<NeoWCSettingSection *> *NeoWCSettingsBuildSections(NeoWCSettingsCategory
         case NeoWCSettingsCategoryRoot:
         default: return NeoWCRootSections();
     }
+}
+
+NSArray<NeoWCSettingSection *> *NeoWCSettingsBuildSearchSections(NeoWCSettingsCategory category) {
+    if (category == NeoWCSettingsCategoryRoot) return NeoWCRootSections();
+    return NeoWCSettingsBuildSections(category, [NSSet setWithObject:NeoWCSearchAllChildrenMarker]);
 }

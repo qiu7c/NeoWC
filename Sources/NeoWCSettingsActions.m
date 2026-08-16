@@ -1,6 +1,7 @@
 #import "NeoWCSettingsActions.h"
 #import "NeoWCSettingsCatalog.h"
 #import "NeoWCAntiRevoke.h"
+#import "NeoWCAuthorization.h"
 #import "NeoWCAntiRevokeTemplateEditor.h"
 #import "NeoWCConfigManagerViewController.h"
 #import "NeoWCDebug.h"
@@ -10,8 +11,7 @@
 #import "NeoWCListEditorViewController.h"
 #import "NeoWCLongPressMenuViewController.h"
 #import "NeoWCMeMenuViewController.h"
-#import "NeoWCPluginVisibility.h"
-#import "NeoWCPluginShortcuts.h"
+#import "NeoWCPluginManager.h"
 #import <math.h>
 
 @interface NeoWCSettingsActions ()
@@ -86,29 +86,6 @@
 - (void)presentTemplateWithTitle:(NSString *)title key:(NSString *)key defaultValue:(NSString *)defaultValue {
     NSString *colorKey = [key isEqualToString:NeoWCAntiRevokeLocalTemplateKey] ? NeoWCAntiRevokeLocalTextColorKey : nil;
     [self push:[[NeoWCAntiRevokeTemplateEditorViewController alloc] initWithTitle:title defaultsKey:key defaultValue:defaultValue colorKey:colorKey]];
-}
-
-- (void)presentTextEditorForKey:(NSString *)key title:(NSString *)title placeholder:(NSString *)placeholder {
-    BOOL editingClass = [key isEqualToString:NeoWCPluginShortcutCustomClassKey];
-    NSString *message = editingClass ? @"输入 Objective-C Runtime 类名；支持 UIViewController 或 UIView 子类。修改已注册的类名后建议重启微信。" : @"此名称会显示在插件管理页面中。";
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
-        field.text = [NSUserDefaults.standardUserDefaults stringForKey:key];
-        field.placeholder = placeholder;
-        field.clearButtonMode = UITextFieldViewModeWhileEditing;
-        field.autocorrectionType = UITextAutocorrectionTypeNo;
-        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
-    }];
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    __weak typeof(self) weakSelf = self;
-    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        NSString *value = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        if (!editingClass && value.length == 0) value = @"快捷页面";
-        [NSUserDefaults.standardUserDefaults setObject:value ?: @"" forKey:key];
-        NeoWCRegisterPluginShortcutsIfAvailable();
-        [weakSelf reload];
-    }]];
-    [self.viewController presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)presentNumberEditorWithTitle:(NSString *)title message:(NSString *)message key:(NSString *)key minimum:(CGFloat)minimum maximum:(CGFloat)maximum notifyChange:(BOOL)notifyChange applyScale:(BOOL)applyScale {
@@ -342,6 +319,46 @@
     [self.viewController presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)presentMessageGestureActionPickerForItem:(NeoWCSettingItem *)item {
+    NSString *defaultsKey = item.defaultsKey;
+    if (defaultsKey.length == 0) return;
+    BOOL selfMessage = [defaultsKey isEqualToString:NeoWCReplySwipeSelfActionKey] ||
+                       [defaultsKey isEqualToString:NeoWCMessageDoubleTapSelfActionKey] ||
+                       [defaultsKey isEqualToString:NeoWCMessageTripleTapSelfActionKey];
+    NSInteger current = [NSUserDefaults.standardUserDefaults integerForKey:defaultsKey];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:item.title
+                                                                   message:selfMessage ? @"选择自己消息触发的动作" : @"选择对方消息触发的动作；不支持撤回"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSDictionary *> *options = selfMessage
+        ? @[
+            @{@"title": @"不设置", @"value": @(NeoWCReplySwipeActionNone)},
+            @{@"title": @"引用", @"value": @(NeoWCReplySwipeActionQuote)},
+            @{@"title": @"撤回", @"value": @(NeoWCReplySwipeActionRevoke)},
+            @{@"title": @"复制", @"value": @(NeoWCReplySwipeActionCopy)},
+            @{@"title": @"删除", @"value": @(NeoWCReplySwipeActionDelete)},
+            @{@"title": @"复读", @"value": @(NeoWCReplySwipeActionRepeat)},
+        ]
+        : @[
+            @{@"title": @"不设置", @"value": @(NeoWCReplySwipeActionNone)},
+            @{@"title": @"引用", @"value": @(NeoWCReplySwipeActionQuote)},
+            @{@"title": @"复制", @"value": @(NeoWCReplySwipeActionCopy)},
+            @{@"title": @"删除", @"value": @(NeoWCReplySwipeActionDelete)},
+            @{@"title": @"复读", @"value": @(NeoWCReplySwipeActionRepeat)},
+        ];
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary *option in options) {
+        NSInteger value = [option[@"value"] integerValue];
+        NSString *title = value == current ? [@"✓  " stringByAppendingString:option[@"title"]] : option[@"title"];
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [NSUserDefaults.standardUserDefaults setInteger:value forKey:defaultsKey];
+            [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:NeoWCReplySwipeEnabledKey];
+            [weakSelf reload];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentSheet:sheet];
+}
+
 - (void)performActionForItem:(NeoWCSettingItem *)item {
     switch (item.action) {
         case NeoWCSettingActionConfigManager: [self push:[NeoWCConfigManagerViewController new]]; break;
@@ -357,14 +374,12 @@
         case NeoWCSettingActionRevokeReplyTemplate: [self presentTemplateWithTitle:item.title key:NeoWCAntiRevokeReplyTemplateKey defaultValue:@"【捕捉到一条撤回消息】\n操作用户：{用户名}\n发送时间：{yyyy}-{MM}-{dd} {HH}:{mm}:{ss}\n撤回内容：{内容}\n\n撤回无效，消息已保存"]; break;
         case NeoWCSettingActionDebugCenter: [[NeoWCDebugManager sharedManager] presentDashboardFromViewController:self.viewController]; break;
         case NeoWCSettingActionCompatibility: [self push:[NeoWCCompatibilityViewController new]]; break;
-        case NeoWCSettingActionPluginShortcutTitle: [self presentTextEditorForKey:NeoWCPluginShortcutCustomTitleKey title:item.title placeholder:@"快捷页面"]; break;
-        case NeoWCSettingActionPluginShortcutClass: [self presentTextEditorForKey:NeoWCPluginShortcutCustomClassKey title:item.title placeholder:@"例如 NewSettingViewController"]; break;
         case NeoWCSettingActionGlobalScale: [self presentNumberEditorWithTitle:item.title message:@"请输入 70 到 100 之间的百分比" key:NeoWCPageScaleGlobalPercentKey minimum:70 maximum:100 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionSettingsScale: [self presentNumberEditorWithTitle:item.title message:@"请输入 70 到 100 之间的百分比" key:NeoWCSettingsPageScalePercentKey minimum:70 maximum:100 notifyChange:YES applyScale:YES]; break;
         case NeoWCSettingActionInnerRadius: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 40 之间的数值；0 表示直角" key:NeoWCChatInputInnerRadiusKey minimum:0 maximum:40 notifyChange:NO applyScale:NO]; break;
         case NeoWCSettingActionOuterRadius: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 40 之间的数值；0 表示直角" key:NeoWCChatInputOuterRadiusKey minimum:0 maximum:40 notifyChange:NO applyScale:NO]; break;
         case NeoWCSettingActionMomentsDateFormat: [self presentMomentsDateFormatEditor]; break;
-        case NeoWCSettingActionPluginVisibility: [self push:[NeoWCPluginVisibilityViewController new]]; break;
+        case NeoWCSettingActionPluginManager: [self push:[WCPluginsViewController new]]; break;
         case NeoWCSettingActionHapticIntensity: [self presentHapticIntensityPicker]; break;
         case NeoWCSettingActionStepMode: [self presentStepModePicker]; break;
         case NeoWCSettingActionFixedSteps: [self presentFixedStepsEditor]; break;
@@ -378,6 +393,11 @@
         case NeoWCSettingActionChatTopEffectStyle: [self presentChatTopEffectStylePicker]; break;
         case NeoWCSettingActionChatGlassBlurIntensity: [self presentNumberEditorWithTitle:item.title message:@"请输入 20 到 100 之间的百分比" key:NeoWCChatGlassBlurIntensityKey minimum:20 maximum:100 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatGlassTintOpacity: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 30 之间的百分比；0 表示不额外染色" key:NeoWCChatGlassTintOpacityKey minimum:0 maximum:30 notifyChange:YES applyScale:NO]; break;
+        case NeoWCSettingActionAuthorizationManager:
+            if (NeoWCAuthorizationIsCurrentUserAdministrator()) [self push:[NeoWCAuthorizationManagerViewController new]];
+            break;
+        case NeoWCSettingActionMessageGestureAction: [self presentMessageGestureActionPickerForItem:item]; break;
+        case NeoWCSettingActionReplySwipeTriggerDistance: [self presentNumberEditorWithTitle:item.title message:@"请输入 36 到 100 之间的触发距离；数值越小越容易触发" key:NeoWCReplySwipeTriggerDistanceKey minimum:36 maximum:100 notifyChange:YES applyScale:NO]; break;
         default: break;
     }
 }

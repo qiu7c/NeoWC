@@ -93,6 +93,8 @@
 参考文件：
 
 - `微信广告.dylib`
+- `com.ylr.wcsurfacetrim_1.0_iphoneos-arm64.deb`
+- `storage.dylib`
 - 本地文件：`.codex-analysis/wechat-ad.dylib`、`wechat-ad-hooks.txt`、`wechat-ad-core-disasm.txt`、`wechat-ad-url-disasm.txt`、`wechat-ad-stats-disasm.txt`
 
 分析中观察到的功能面：
@@ -102,7 +104,11 @@
 - 越狱检测绕过。
 - 部分统计字段改写。
 
-NeoWC 当前把这些入口归入“去广告”，但必须保持开关关闭时完整返回微信原逻辑。URL、越狱与统计相关 Hook 风险和版本敏感度较高，不能从字符串命中推断调用签名；后续修改前必须重新确认原方法参数与返回类型。
+`WCSurfaceTrim` 的 Hook 注册进一步确认了广告精简入口：`BrandTLExptConfig` / `BSTLExptConfig isExptNotShowAd`、朋友圈广告卡片管理器、三个 Timeline Flutter 控制器的 `enableAd`、`MagicAdPushMgrService`、小程序启动广告处理器及 `WCUserComment` 的广告标记。`storage.dylib` 主要提供 `WCPluginsMgr` 插件注册基础设施，不是广告过滤实现。参考包包含的关注公众号限制不属于广告精简，禁止迁入 NeoWC。
+
+`storage.dylib` 的插件管理链路已经进一步确认：构造器延迟等待 `MoreViewController`，替换 `addFunctionSection` 后先调用原实现，再从 `m_tableViewMgr` 取得第 3 个 section，使用 `WCTableViewCellManager normalCellForSel:target:leftImage:title:WithDisclosureIndicator:` 插入唯一“插件”行；点击后新建 `WCPluginsViewController`，通过 `CAppViewControllerManager getCurrentNavigationController` 和 `PushViewController:animated:` 打开。注册接口为 `WCPluginsMgr sharedInstance`、`registerControllerWithTitle:version:controller:` 与 `registerSwitchWithTitle:key:`，模型字段为 `isController/title/version/controller/key`。配置 Key 完整集合为 `WCPluginsMgr.IconStyle`、`PluginCategories`、`CustomCategories`、`PluginDisplayNames`、`PluginDisplayVersions`、`PluginOrderIndexes`、`HiddenPlugins`、`PluginsPerPage`、`HeaderTitle`、`HeaderSubtitle`、`HeaderIconImageData`、`HeaderIconCornerRadius`。
+
+NeoWC 当前把这些入口归入“广告精简”，但必须保持开关关闭时完整返回微信原逻辑。URL、越狱与统计相关 Hook 风险和版本敏感度较高，不能从字符串命中推断调用签名；后续修改前必须重新确认原方法参数与返回类型。
 
 ## 7. 使用原则
 

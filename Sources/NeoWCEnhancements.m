@@ -1,4 +1,5 @@
 #import "NeoWCEnhancements.h"
+#import "NeoWCAuthorization.h"
 #import <math.h>
 
 NSString *const NeoWCAutoDeviceLoginKey = @"com.qiu7c.neowc.enhance.auto-device-login";
@@ -16,6 +17,13 @@ NSString *const NeoWCGameSelectorKey = @"com.qiu7c.neowc.enhance.game-selector";
 NSString *const NeoWCChatJokerEnabledKey = @"com.qiu7c.neowc.enhance.chat-joker";
 NSString *const NeoWCEmoticonToSelfieEnabledKey = @"com.qiu7c.neowc.enhance.emoticon-to-selfie";
 NSString *const NeoWCReplySwipeEnabledKey = @"com.qiu7c.neowc.chat.reply-swipe";
+NSString *const NeoWCReplySwipeSelfActionKey = @"com.qiu7c.neowc.chat.reply-swipe.self-action";
+NSString *const NeoWCReplySwipeOtherActionKey = @"com.qiu7c.neowc.chat.reply-swipe.other-action";
+NSString *const NeoWCReplySwipeTriggerDistanceKey = @"com.qiu7c.neowc.chat.reply-swipe.trigger-distance";
+NSString *const NeoWCMessageDoubleTapSelfActionKey = @"com.qiu7c.neowc.chat.message-gesture.double-tap.self-action";
+NSString *const NeoWCMessageDoubleTapOtherActionKey = @"com.qiu7c.neowc.chat.message-gesture.double-tap.other-action";
+NSString *const NeoWCMessageTripleTapSelfActionKey = @"com.qiu7c.neowc.chat.message-gesture.triple-tap.self-action";
+NSString *const NeoWCMessageTripleTapOtherActionKey = @"com.qiu7c.neowc.chat.message-gesture.triple-tap.other-action";
 NSString *const NeoWCQuoteJumpEnabledKey = @"com.qiu7c.neowc.chat.quote-jump";
 NSString *const NeoWCQuoteJumpImageEnabledKey = @"com.qiu7c.neowc.chat.quote-jump.image";
 NSString *const NeoWCQuoteJumpVideoEnabledKey = @"com.qiu7c.neowc.chat.quote-jump.video";
@@ -161,6 +169,7 @@ NSString *NeoWCHexStringFromColor(UIColor *color) {
 }
 
 BOOL NeoWCEnhancementEnabled(NSString *key) {
+    if (!NeoWCAuthorizationAllowsCoreFeatures()) return NO;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     id masterValue = [defaults objectForKey:@"com.qiu7c.neowc.enabled"];
     BOOL masterEnabled = masterValue ? [masterValue boolValue] : YES;

@@ -6,6 +6,7 @@
 static NSString *const NeoWCDefaultsPrefix = @"com.qiu7c.neowc.";
 static BOOL NeoWCIsManagedDefaultsKey(NSString *key) {
     if (![key hasPrefix:NeoWCDefaultsPrefix]) return NO;
+    if ([key hasPrefix:@"com.qiu7c.neowc.authorization."]) return NO;
     static NSSet<NSString *> *excludedKeys;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -13,7 +14,6 @@ static BOOL NeoWCIsManagedDefaultsKey(NSString *key) {
             @"com.qiu7c.neowc.message.anti-revoke.archive",
             @"com.qiu7c.neowc.message.anti-revoke.local-prompt-contents",
             @"com.qiu7c.neowc.message.anti-revoke.side-records",
-            @"com.qiu7c.neowc.plugins.known",
         ]];
     });
     return ![excludedKeys containsObject:key];
