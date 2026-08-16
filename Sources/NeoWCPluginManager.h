@@ -15,6 +15,7 @@ NS_ASSUME_NONNULL_BEGIN
 + (instancetype)sharedInstance;
 - (void)registerControllerWithTitle:(NSString *)title version:(nullable NSString *)version controller:(NSString *)controller;
 - (void)registerSwitchWithTitle:(NSString *)title key:(NSString *)key;
+- (void)removeSwitchWithKey:(NSString *)key;
 @end
 
 @interface WCPluginsViewController : UITableViewController
@@ -26,5 +27,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT void NeoWCInstallPluginManagerEntry(id moreViewController);
 FOUNDATION_EXPORT void NeoWCPushPluginManager(id sender);
+FOUNDATION_EXPORT BOOL NeoWCPluginManagerIsQuickSwitchRegistered(NSString *key);
+FOUNDATION_EXPORT void NeoWCPluginManagerSetQuickSwitchRegistered(NSString *key, NSString *title, BOOL registered);
+FOUNDATION_EXPORT void NeoWCPluginManagerRegisterSavedQuickSwitches(void);
 
 NS_ASSUME_NONNULL_END

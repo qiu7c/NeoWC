@@ -80,6 +80,9 @@ FOUNDATION_EXPORT NSString *const NeoWCAutoVoiceTranscriptionIgnoreGroupKey;
 FOUNDATION_EXPORT NSString *const NeoWCAutoVoiceTranscriptionIgnorePrivateKey;
 FOUNDATION_EXPORT NSString *const NeoWCAutoVoiceTranscriptionIgnoreSelfKey;
 FOUNDATION_EXPORT NSString *const NeoWCHideScreenshotForwardKey;
+FOUNDATION_EXPORT NSString *const NeoWCMultiSelectLimitEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCShowRawContactIDEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCHomeSwipeActionsEnabledKey;
 
 typedef NS_ENUM(NSInteger, NeoWCStepMode) {
     NeoWCStepModeDailyFixed = 0,

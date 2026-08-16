@@ -8,6 +8,7 @@ FOUNDATION_EXPORT NSString *const NeoWCDisplayVersion;
 
 FOUNDATION_EXPORT void NeoWCSettingsRegisterDefaults(void);
 FOUNDATION_EXPORT void NeoWCSettingsRegenerateDailyStepTarget(NSUserDefaults *defaults);
+FOUNDATION_EXPORT void NeoWCSettingsHandleSwitchChange(NSString *key, BOOL enabled);
 FOUNDATION_EXPORT NSArray<NeoWCSettingSection *> *NeoWCSettingsBuildSections(NeoWCSettingsCategory category,
                                                                             NSSet<NSString *> *collapsedFeatureKeys);
 

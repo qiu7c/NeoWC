@@ -130,6 +130,20 @@
 - (void)insertCell:(id)cell At:(NSUInteger)index;
 @end
 
+@interface WeixinContactInfoAssist : NSObject
+- (void)neowc_copyRawContactID;
+@end
+
+@interface ChatRoomInfoViewController : UIViewController
+- (void)neowc_copyRawContactID;
+@end
+
+@interface SessionSelectController : UIViewController
+@end
+
+@interface ShortVideoToolbar : UIView
+@end
+
 @interface MMScreenShotViewController : UIViewController
 - (void)show;
 @end
@@ -233,7 +247,7 @@ static char NeoWCSeparatorOriginalHiddenKey;
 static char NeoWCVoiceTranscriptionScheduledKey;
 static char NeoWCVoiceTranscriptionDoneKey;
 static char NeoWCVoiceTranscriptionInProgressKey;
-static char NeoWCVoiceTranscriptionRetryCountKey;
+static char NeoWCVoiceTranscriptionAttemptedKey;
 static char NeoWCChatTopProfileItemKey;
 static char NeoWCChatTopCapsuleItemKey;
 static char NeoWCChatTopOriginalLeftItemsKey;
@@ -1227,7 +1241,7 @@ static BOOL NeoWCShouldAutoTranscribeVoiceCell(id cell, id message) {
     if (isSender && [defaults boolForKey:NeoWCAutoVoiceTranscriptionIgnoreSelfKey]) return NO;
     if ([objc_getAssociatedObject(message, &NeoWCVoiceTranscriptionDoneKey) boolValue] ||
         [objc_getAssociatedObject(message, &NeoWCVoiceTranscriptionInProgressKey) boolValue] ||
-        [objc_getAssociatedObject(message, &NeoWCVoiceTranscriptionRetryCountKey) unsignedIntegerValue] >= 5) return NO;
+        [objc_getAssociatedObject(message, &NeoWCVoiceTranscriptionAttemptedKey) boolValue]) return NO;
     if (NeoWCVoiceTranscriptionHasResult(cell, message)) {
         objc_setAssociatedObject(message, &NeoWCVoiceTranscriptionDoneKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return NO;
@@ -1251,9 +1265,8 @@ static void NeoWCScheduleVoiceTranscription(VoiceMessageCellView *cell, id messa
         SEL selector = NSSelectorFromString(@"onVoiceTrans:");
         if (![strongCell respondsToSelector:selector]) return;
         id button = NeoWCTweakSafeValue(strongCell, @"m_quickTransTipButton") ?: strongCell;
+        objc_setAssociatedObject(strongMessage, &NeoWCVoiceTranscriptionAttemptedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(strongMessage, &NeoWCVoiceTranscriptionInProgressKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        NSUInteger retries = [objc_getAssociatedObject(strongMessage, &NeoWCVoiceTranscriptionRetryCountKey) unsignedIntegerValue];
-        objc_setAssociatedObject(strongMessage, &NeoWCVoiceTranscriptionRetryCountKey, @(retries + 1), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         ((void (*)(id, SEL, id))objc_msgSend)(strongCell, selector, button);
         NeoWCCompatibilityMarkTriggered(@"auto-voice-transcription");
         __weak VoiceMessageCellView *checkingCell = strongCell;
@@ -3620,6 +3633,8 @@ static BOOL NeoWCTryAuthorizeGame(MMAuthorizeUserInfoViewController *controller)
 static void NeoWCRegisterPlugin(void) {
     if (NeoWCDidRegister) return;
 
+    NeoWCSettingsRegisterDefaults();
+
     Class managerClass = NSClassFromString(@"WCPluginsMgr");
     if (!managerClass || ![managerClass respondsToSelector:@selector(sharedInstance)]) return;
 
@@ -3629,8 +3644,9 @@ static void NeoWCRegisterPlugin(void) {
     [manager registerControllerWithTitle:@"NeoWC"
                                  version:NeoWCDisplayVersion
                               controller:NSStringFromClass([NeoWCSettingsViewController class])];
+    NeoWCPluginManagerRegisterSavedQuickSwitches();
     NeoWCDidRegister = YES;
-    NeoWCLog(@"已注册插件管理单入口");
+    NeoWCLog(@"已注册插件管理入口与用户选择的快捷开关");
 }
 
 @interface NeoWCEntryLoader : NSObject
@@ -5047,6 +5063,429 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
     NeoWCSetPinnedMessageDescendantBackgroundsClear(tipsView, blurView, YES);
 }
 
+static char NeoWCRawContactIDKey;
+static char NeoWCRawContactIDCellMarkerKey;
+
+static NSUInteger NeoWCCallUnsignedSelector(id object, NSString *selectorName) {
+    SEL selector = NSSelectorFromString(selectorName);
+    if (!object || ![object respondsToSelector:selector]) return 0;
+    @try {
+        return ((NSUInteger (*)(id, SEL))objc_msgSend)(object, selector);
+    } @catch (__unused NSException *exception) {
+        return 0;
+    }
+}
+
+static id NeoWCTableSectionAtIndex(id tableInfo, NSUInteger index) {
+    SEL selector = NSSelectorFromString(@"getSectionAt:");
+    if (!tableInfo || ![tableInfo respondsToSelector:selector]) return nil;
+    @try {
+        return ((id (*)(id, SEL, NSUInteger))objc_msgSend)(tableInfo, selector, index);
+    } @catch (__unused NSException *exception) {
+        return nil;
+    }
+}
+
+static id NeoWCTableCellAtIndex(id section, NSUInteger index) {
+    for (NSString *name in @[@"getCellAt:", @"cellAtIndex:"]) {
+        SEL selector = NSSelectorFromString(name);
+        if (![section respondsToSelector:selector]) continue;
+        @try {
+            return ((id (*)(id, SEL, NSUInteger))objc_msgSend)(section, selector, index);
+        } @catch (__unused NSException *exception) {
+        }
+    }
+    NSArray *cells = NeoWCTweakValueForSelectorNames(section, @[@"cells", @"cellArray", @"m_arrCells"]);
+    return [cells isKindOfClass:NSArray.class] && index < cells.count ? cells[index] : nil;
+}
+
+static NSUInteger NeoWCTableCellCount(id section) {
+    for (NSString *name in @[@"getCellCount", @"cellCount"]) {
+        SEL selector = NSSelectorFromString(name);
+        if (![section respondsToSelector:selector]) continue;
+        @try {
+            return ((NSUInteger (*)(id, SEL))objc_msgSend)(section, selector);
+        } @catch (__unused NSException *exception) {
+        }
+    }
+    NSArray *cells = NeoWCTweakValueForSelectorNames(section, @[@"cells", @"cellArray", @"m_arrCells"]);
+    return [cells isKindOfClass:NSArray.class] ? cells.count : 0;
+}
+
+static NSString *NeoWCTableCellTitle(id cell) {
+    id title = NeoWCTweakValueForSelectorNames(cell, @[@"title", @"m_title", @"leftTitle", @"text"]);
+    if ([title isKindOfClass:NSString.class]) return title;
+    UILabel *label = NeoWCTweakValueForSelectorNames(cell, @[@"titleLabel", @"m_titleLabel", @"leftLabel"]);
+    return [label isKindOfClass:UILabel.class] ? label.text : nil;
+}
+
+static BOOL NeoWCSectionContainsRawIDCell(id section, NSString *title) {
+    NSUInteger count = NeoWCTableCellCount(section);
+    for (NSUInteger index = 0; index < count; index++) {
+        id cell = NeoWCTableCellAtIndex(section, index);
+        if ([objc_getAssociatedObject(cell, &NeoWCRawContactIDCellMarkerKey) boolValue]) return YES;
+        NSString *cellTitle = NeoWCTableCellTitle(cell);
+        if ([cellTitle isEqualToString:title]) return YES;
+    }
+    return NO;
+}
+
+static id NeoWCCreateRawIDCell(id target, NSString *title, NSString *rawID) {
+    Class cellClass = NSClassFromString(@"WCTableViewCellManager");
+    SEL copyFactory = NSSelectorFromString(@"normalCellForSel:target:title:rightValue:canRightValueCopy:");
+    SEL basicFactory = NSSelectorFromString(@"normalCellForSel:target:title:rightValue:");
+    id cell = nil;
+    if ([cellClass respondsToSelector:copyFactory]) {
+        cell = ((id (*)(id, SEL, SEL, id, NSString *, NSString *, BOOL))objc_msgSend)(cellClass,
+                                                                                     copyFactory,
+                                                                                     @selector(neowc_copyRawContactID),
+                                                                                     target,
+                                                                                     title,
+                                                                                     rawID,
+                                                                                     YES);
+    } else if ([cellClass respondsToSelector:basicFactory]) {
+        cell = ((id (*)(id, SEL, SEL, id, NSString *, NSString *))objc_msgSend)(cellClass,
+                                                                                basicFactory,
+                                                                                @selector(neowc_copyRawContactID),
+                                                                                target,
+                                                                                title,
+                                                                                rawID);
+    }
+    return cell;
+}
+
+static void NeoWCInjectRawIDCell(id controller, BOOL group) {
+    if (!NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey) || !controller) return;
+    NSString *contactKey = group ? @"m_chatRoomContact" : @"m_contact";
+    id contact = NeoWCTweakSafeValue(controller, contactKey);
+    if (!contact) contact = NeoWCTweakValueForSelectorNames(controller, @[contactKey, @"contact", @"chatRoomContact"]);
+    NSString *rawID = NeoWCTweakValueForSelectorNames(contact, @[@"m_nsUsrName", @"userName"]);
+    if (![rawID isKindOfClass:NSString.class] || rawID.length == 0) return;
+
+    id tableInfo = NeoWCTweakValueForSelectorNames(controller, @[@"m_tableViewInfo", @"tableViewInfo", @"m_tableViewMgr"]);
+    NSUInteger sectionCount = NeoWCCallUnsignedSelector(tableInfo, @"getSectionCount");
+    if (!tableInfo || sectionCount == 0) return;
+    NSString *title = group ? @"原始群号码" : @"原始号码";
+    id targetSection = nil;
+    NSUInteger targetIndex = NSNotFound;
+    for (NSUInteger sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++) {
+        id section = NeoWCTableSectionAtIndex(tableInfo, sectionIndex);
+        if (!section) continue;
+        if (NeoWCSectionContainsRawIDCell(section, title)) return;
+        NSUInteger cellCount = NeoWCTableCellCount(section);
+        for (NSUInteger cellIndex = 0; cellIndex < cellCount; cellIndex++) {
+            NSString *cellTitle = NeoWCTableCellTitle(NeoWCTableCellAtIndex(section, cellIndex));
+            if ([cellTitle containsString:@"微信号"] || [cellTitle containsString:@"群聊名称"] ||
+                [cellTitle containsString:@"朋友资料"]) {
+                targetSection = section;
+                targetIndex = cellIndex + 1;
+            }
+        }
+    }
+    if (!targetSection) {
+        targetSection = NeoWCTableSectionAtIndex(tableInfo, MIN((NSUInteger)1, sectionCount - 1));
+        targetIndex = NeoWCTableCellCount(targetSection);
+    }
+    id cell = NeoWCCreateRawIDCell(controller, title, rawID);
+    if (!cell || !targetSection) return;
+    objc_setAssociatedObject(cell, &NeoWCRawContactIDCellMarkerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSUInteger count = NeoWCTableCellCount(targetSection);
+    if (targetIndex == NSNotFound || targetIndex > count) targetIndex = count;
+    SEL insertSelector = NSSelectorFromString(@"insertCell:At:");
+    SEL addSelector = NSSelectorFromString(@"addCell:");
+    if ([targetSection respondsToSelector:insertSelector]) {
+        ((void (*)(id, SEL, id, NSUInteger))objc_msgSend)(targetSection, insertSelector, cell, targetIndex);
+    } else if ([targetSection respondsToSelector:addSelector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(targetSection, addSelector, cell);
+    } else {
+        return;
+    }
+    objc_setAssociatedObject(controller, &NeoWCRawContactIDKey, rawID, OBJC_ASSOCIATION_COPY_NONATOMIC);
+    NeoWCCompatibilityMarkTriggered(@"raw-contact-id");
+}
+
+static id NeoWCHomeSessionCellData(UITableView *tableView, NSIndexPath *indexPath) {
+    UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
+    return NeoWCTweakValueForSelectorNames(cell, @[@"m_cellData", @"cellData", @"sessionInfo"]);
+}
+
+static NSString *NeoWCHomeSessionUserName(id data) {
+    NSString *userName = NeoWCTweakValueForSelectorNames(data, @[@"m_nsUsrName", @"m_nsUserName", @"userName"]);
+    if (userName.length == 0) {
+        id sessionInfo = NeoWCTweakValueForSelectorNames(data, @[@"m_sessionInfo", @"sessionInfo"]);
+        userName = NeoWCTweakValueForSelectorNames(sessionInfo, @[@"m_nsUsrName", @"m_nsUserName", @"userName"]);
+    }
+    return userName;
+}
+
+static BOOL NeoWCHomeBooleanValue(id object, NSArray<NSString *> *names) {
+    for (NSString *name in names) {
+        SEL selector = NSSelectorFromString(name);
+        if ([object respondsToSelector:selector]) {
+            @try { return ((BOOL (*)(id, SEL))objc_msgSend)(object, selector); }
+            @catch (__unused NSException *exception) {}
+        }
+        id value = NeoWCTweakSafeValue(object, name);
+        if ([value respondsToSelector:@selector(boolValue)]) return [value boolValue];
+    }
+    return NO;
+}
+
+static BOOL NeoWCHomeSessionMuted(id data) {
+    if ([data respondsToSelector:NSSelectorFromString(@"isSilent")]) {
+        return NeoWCHomeBooleanValue(data, @[@"isSilent"]);
+    }
+    if ([data respondsToSelector:NSSelectorFromString(@"isChatStatusNotifyOpen")]) {
+        return !NeoWCHomeBooleanValue(data, @[@"isChatStatusNotifyOpen"]);
+    }
+    return NeoWCHomeBooleanValue(data, @[@"m_bIsSilent", @"m_isSilent"]);
+}
+
+static void NeoWCPushHomeController(id owner, id controller) {
+    if (![owner isKindOfClass:UIViewController.class] || ![controller isKindOfClass:UIViewController.class]) return;
+    UIViewController *presenter = owner;
+    UINavigationController *navigationController = presenter.navigationController;
+    if (navigationController) [navigationController pushViewController:controller animated:YES];
+    else [presenter presentViewController:controller animated:YES completion:nil];
+}
+
+static void NeoWCOpenHomeRemark(id owner, id contact, BOOL group) {
+    Class controllerClass = NSClassFromString(group ? @"ChatRoomRemarkEditViewController" : @"NewRemarkViewController");
+    id controller = controllerClass ? [controllerClass new] : nil;
+    if (!controller) return;
+    NeoWCTweakSetValue(controller, group ? @"chatRoomContact" : @"m_contact", contact);
+    NeoWCTweakSetValue(controller, group ? @"m_chatRoomContact" : @"contact", contact);
+    SEL editSelector = NSSelectorFromString(@"setNeedEditState:");
+    if ([controller respondsToSelector:editSelector]) ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, editSelector, YES);
+    NeoWCPushHomeController(owner, controller);
+}
+
+static void NeoWCOpenHomeMoments(id owner, id contact) {
+    Class controllerClass = NSClassFromString(@"WCListViewController");
+    id controller = controllerClass ? [controllerClass new] : nil;
+    if (!controller) return;
+    NeoWCTweakSetValue(controller, @"m_contact", contact);
+    NeoWCPushHomeController(owner, controller);
+}
+
+static id NeoWCHomeSessionInfoController(id contact, BOOL group) {
+    Class controllerClass = NSClassFromString(group ? @"ChatRoomInfoViewController" : @"AddContactToChatRoomViewController");
+    id controller = controllerClass ? [controllerClass new] : nil;
+    if (!controller) return nil;
+    NeoWCTweakSetValue(controller, group ? @"m_chatRoomContact" : @"m_contact", contact);
+    return controller;
+}
+
+static void NeoWCCommitHomeSessionToggle(id contact, BOOL group, NSString *selectorName, BOOL enabled) {
+    id controller = NeoWCHomeSessionInfoController(contact, group);
+    SEL selector = NSSelectorFromString(selectorName);
+    if (!controller || ![controller respondsToSelector:selector]) return;
+    @try {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, selector, enabled);
+        SEL willDisappear = @selector(viewWillDisappear:);
+        SEL didDisappear = @selector(viewDidDisappear:);
+        if ([controller respondsToSelector:willDisappear]) ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, willDisappear, YES);
+        if ([controller respondsToSelector:didDisappear]) ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, didDisappear, YES);
+    } @catch (__unused NSException *exception) {
+    }
+}
+
+typedef UISwipeActionsConfiguration *(*NeoWCHomeLeadingSwipeIMP)(id, SEL, UITableView *, NSIndexPath *);
+static NeoWCHomeLeadingSwipeIMP NeoWCOriginalHomeLeadingSwipe;
+
+static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector,
+                                                           UITableView *tableView,
+                                                           NSIndexPath *indexPath) {
+    if (!NeoWCEnhancementEnabled(NeoWCHomeSwipeActionsEnabledKey)) {
+        return NeoWCOriginalHomeLeadingSwipe ? NeoWCOriginalHomeLeadingSwipe(owner, selector, tableView, indexPath) : nil;
+    }
+    id data = NeoWCHomeSessionCellData(tableView, indexPath);
+    NSString *userName = NeoWCHomeSessionUserName(data);
+    if (userName.length == 0 || [userName isEqualToString:@"filehelper"] || [userName hasPrefix:@"gh_"]) {
+        return NeoWCOriginalHomeLeadingSwipe ? NeoWCOriginalHomeLeadingSwipe(owner, selector, tableView, indexPath) : nil;
+    }
+    id contact = NeoWCContactForUserName(userName) ?: data;
+    BOOL group = [userName hasSuffix:@"@chatroom"];
+    id sessionInfo = NeoWCTweakValueForSelectorNames(data, @[@"m_sessionInfo", @"sessionInfo"]) ?: data;
+    BOOL muted = NeoWCHomeSessionMuted(data);
+    BOOL top = NeoWCHomeBooleanValue(sessionInfo, @[@"m_bIsTop", @"isTop"]);
+    __weak UITableView *weakTableView = tableView;
+
+    UIContextualAction *remark = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                                          title:@"备注"
+                                                                        handler:^(__unused UIContextualAction *action,
+                                                                                  __unused UIView *sourceView,
+                                                                                  void (^completionHandler)(BOOL)) {
+        NeoWCOpenHomeRemark(owner, contact, group);
+        completionHandler(YES);
+    }];
+    remark.backgroundColor = UIColor.systemGrayColor;
+
+    UIContextualAction *mute = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                                        title:muted ? @"取消勿扰" : @"勿扰"
+                                                                      handler:^(__unused UIContextualAction *action,
+                                                                                __unused UIView *sourceView,
+                                                                                void (^completionHandler)(BOOL)) {
+        NeoWCCommitHomeSessionToggle(contact, group, @"setUpdateNotifyMuted:", !muted);
+        [weakTableView reloadData];
+        completionHandler(YES);
+    }];
+    mute.backgroundColor = UIColor.systemOrangeColor;
+
+    UIContextualAction *pin = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                                       title:top ? @"取消置顶" : @"置顶"
+                                                                     handler:^(__unused UIContextualAction *action,
+                                                                               __unused UIView *sourceView,
+                                                                               void (^completionHandler)(BOOL)) {
+        NeoWCCommitHomeSessionToggle(contact, group, @"onTopSession:", !top);
+        [weakTableView reloadData];
+        completionHandler(YES);
+    }];
+    pin.backgroundColor = UIColor.systemBlueColor;
+
+    NSMutableArray<UIContextualAction *> *actions = [NSMutableArray arrayWithObjects:remark, mute, pin, nil];
+    if (group) {
+        UIContextualAction *fold = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                                             title:@"折叠群聊"
+                                                                           handler:^(__unused UIContextualAction *action,
+                                                                                     __unused UIView *sourceView,
+                                                                                     void (^completionHandler)(BOOL)) {
+            NeoWCCommitHomeSessionToggle(contact, YES, @"setChatBoxStatus:", YES);
+            [weakTableView reloadData];
+            completionHandler(YES);
+        }];
+        fold.backgroundColor = UIColor.systemPurpleColor;
+        [actions insertObject:fold atIndex:1];
+    } else {
+        UIContextualAction *moments = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                                               title:@"朋友圈"
+                                                                             handler:^(__unused UIContextualAction *action,
+                                                                                       __unused UIView *sourceView,
+                                                                                       void (^completionHandler)(BOOL)) {
+            NeoWCOpenHomeMoments(owner, contact);
+            completionHandler(YES);
+        }];
+        moments.backgroundColor = UIColor.systemGreenColor;
+        [actions insertObject:moments atIndex:1];
+    }
+    NeoWCCompatibilityMarkTriggered(@"home-swipe-actions");
+    UISwipeActionsConfiguration *configuration = [UISwipeActionsConfiguration configurationWithActions:actions];
+    configuration.performsFirstActionWithFullSwipe = NO;
+    return configuration;
+}
+
+static BOOL NeoWCHomeLeadingSwipeInstalled;
+
+static void NeoWCTryInstallHomeLeadingSwipe(void) {
+    if (NeoWCHomeLeadingSwipeInstalled) return;
+    Class controllerClass = objc_getClass("NewMainFrameViewController");
+    SEL selector = NSSelectorFromString(@"tableView:leadingSwipeActionsConfigurationForRowAtIndexPath:");
+    if (!controllerClass) return;
+    Method method = class_getInstanceMethod(controllerClass, selector);
+    const char *types = "@@:@@";
+    if (method) {
+        NeoWCOriginalHomeLeadingSwipe = (NeoWCHomeLeadingSwipeIMP)method_getImplementation(method);
+        if (NeoWCOriginalHomeLeadingSwipe == NeoWCHomeLeadingSwipe) {
+            NeoWCHomeLeadingSwipeInstalled = YES;
+            return;
+        }
+        types = method_getTypeEncoding(method) ?: types;
+    }
+    // class_addMethod also handles an inherited implementation without mutating
+    // the superclass. Only replace directly when this class already owns it.
+    if (class_addMethod(controllerClass, selector, (IMP)NeoWCHomeLeadingSwipe, types)) {
+        NeoWCHomeLeadingSwipeInstalled = YES;
+        return;
+    }
+    Method ownedMethod = class_getInstanceMethod(controllerClass, selector);
+    if (!ownedMethod) return;
+    method_setImplementation(ownedMethod, (IMP)NeoWCHomeLeadingSwipe);
+    NeoWCHomeLeadingSwipeInstalled = YES;
+}
+
+__attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
+    NeoWCTryInstallHomeLeadingSwipe();
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NeoWCTryInstallHomeLeadingSwipe();
+    });
+}
+
+%hook WeixinContactInfoAssist
+
+- (void)initData {
+    %orig;
+    NeoWCInjectRawIDCell(self, NO);
+}
+
+- (void)reloadTableView {
+    %orig;
+    NeoWCInjectRawIDCell(self, NO);
+}
+
+%new
+- (void)neowc_copyRawContactID {
+    NSString *rawID = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
+    if (rawID.length > 0) UIPasteboard.generalPasteboard.string = rawID;
+}
+
+%end
+
+%hook ChatRoomInfoViewController
+
+- (void)initData {
+    %orig;
+    NeoWCInjectRawIDCell(self, YES);
+}
+
+- (void)reloadTableData {
+    %orig;
+    NeoWCInjectRawIDCell(self, YES);
+}
+
+- (void)reloadProfileTableData {
+    %orig;
+    NeoWCInjectRawIDCell(self, YES);
+}
+
+%new
+- (void)neowc_copyRawContactID {
+    NSString *rawID = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
+    if (rawID.length > 0) UIPasteboard.generalPasteboard.string = rawID;
+}
+
+%end
+
+%hook SessionSelectController
+
+- (void)setMaxSelectionCount:(NSUInteger)count {
+    if (NeoWCEnhancementEnabled(NeoWCMultiSelectLimitEnabledKey)) {
+        NeoWCCompatibilityMarkTriggered(@"multi-select-limit");
+    }
+    %orig(NeoWCEnhancementEnabled(NeoWCMultiSelectLimitEnabledKey) ? 999 : count);
+}
+
+- (BOOL)ignoreMaxSelectionLimit {
+    if (NeoWCEnhancementEnabled(NeoWCMultiSelectLimitEnabledKey)) {
+        NeoWCCompatibilityMarkTriggered(@"multi-select-limit");
+        return YES;
+    }
+    return %orig;
+}
+
+%end
+
+%hook ShortVideoToolbar
+
+- (CGFloat)sightCaptureMaxDuration {
+    if (NeoWCEnhancementEnabled(NeoWCMultiSelectLimitEnabledKey)) {
+        NeoWCCompatibilityMarkTriggered(@"multi-select-limit");
+        return 999.0;
+    }
+    return %orig;
+}
+
+%end
+
 %hook MMMsgCommonTipsView
 
 - (void)layoutSubviews {
@@ -5057,6 +5496,22 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
 %end
 
 %hook BaseMsgContentViewController
+
+- (NSUInteger)uiMultiSelectMaxCount {
+    if (NeoWCEnhancementEnabled(NeoWCMultiSelectLimitEnabledKey)) {
+        NeoWCCompatibilityMarkTriggered(@"multi-select-limit");
+        return 9999;
+    }
+    return %orig;
+}
+
+- (NSUInteger)getMultiSelectMaxCount {
+    if (NeoWCEnhancementEnabled(NeoWCMultiSelectLimitEnabledKey)) {
+        NeoWCCompatibilityMarkTriggered(@"multi-select-limit");
+        return 9999;
+    }
+    return %orig;
+}
 
 - (void)viewDidLoad {
     %orig;

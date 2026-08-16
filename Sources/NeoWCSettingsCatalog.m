@@ -1,5 +1,6 @@
 #import "NeoWCSettingsCatalog.h"
 #import "NeoWCAccount.h"
+#import "NeoWCAntiRevoke.h"
 #import "NeoWCAuthorization.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCInterfaceTweaks.h"
@@ -69,6 +70,26 @@ void NeoWCSettingsRegenerateDailyStepTarget(NSUserDefaults *defaults) {
     } else {
         [defaults removeObjectForKey:NeoWCStepDailyTargetKey];
         [defaults removeObjectForKey:NeoWCStepCountDateKey];
+    }
+}
+
+void NeoWCSettingsHandleSwitchChange(NSString *key, BOOL enabled) {
+    if (key.length == 0) return;
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    if ([key isEqualToString:NeoWCStepOverrideEnabledKey] && enabled) {
+        NeoWCSettingsRegenerateDailyStepTarget(defaults);
+    }
+    if ([key isEqualToString:NeoWCAntiRevokePersistRecordsKey]) {
+        NeoWCAntiRevokeSetPersistenceEnabled(enabled);
+    }
+    if ([key hasPrefix:@"com.qiu7c.neowc."]) {
+        [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:key];
+    }
+    if ([key isEqualToString:NeoWCDebugFloatingEnabledKey]) {
+        [[NeoWCDebugManager sharedManager] setFloatingEnabled:enabled];
+    }
+    if ([key isEqualToString:NeoWCAntiRevokeKey]) {
+        [NSNotificationCenter.defaultCenter postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
     }
 }
 
@@ -147,6 +168,9 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCAutoVoiceTranscriptionIgnoreGroupKey: @NO,
         NeoWCAutoVoiceTranscriptionIgnorePrivateKey: @NO,
         NeoWCAutoVoiceTranscriptionIgnoreSelfKey: @YES,
+        NeoWCMultiSelectLimitEnabledKey: @NO,
+        NeoWCShowRawContactIDEnabledKey: @NO,
+        NeoWCHomeSwipeActionsEnabledKey: @NO,
         NeoWCHideScreenshotForwardKey: @NO,
         NeoWCInputSwipeActionsEnabledKey: @NO,
         NeoWCMomentsLikeHapticEnabledKey: @NO,
@@ -320,6 +344,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     NSMutableArray *media = [NSMutableArray arrayWithArray:@[
         NeoWCItem(@"图片编辑快捷发送", @"在官方图片编辑菜单中发送到当前会话", @"photo.badge.arrow.down", NeoWCSettingRowKindSwitch, NeoWCImageEditQuickSendEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"自动选择原图", @"选择和预览图片时自动勾选原图", @"photo.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCAutoOriginalImageEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"突破多选限制", @"放宽消息、转发目标与拍摄视频限制", @"checklist.unchecked", NeoWCSettingRowKindSwitch, NeoWCMultiSelectLimitEnabledKey, nil, NeoWCSettingActionNone),
     ]];
     NeoWCAddFeature(media, NeoWCItem(@"多选消息导出", @"控制复制、保存和分享功能", @"square.and.arrow.up.on.square", NeoWCSettingRowKindSwitch, NeoWCMultiSelectExportEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"复制纯文本", @"只复制消息正文", @"doc.on.clipboard", NeoWCSettingRowKindSwitch, NeoWCMultiSelectExportTextKey, nil, NeoWCSettingActionNone),
@@ -340,6 +365,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
         NeoWCItem(@"设备扫码自动登录", @"自动确认电脑、平板等设备登录", @"desktopcomputer", NeoWCSettingRowKindSwitch, NeoWCAutoDeviceLoginKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"游戏授权自动允许", @"自动确认游戏扫码授权", @"gamecontroller", NeoWCSettingRowKindSwitch, NeoWCAutoGameAuthorizeKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"伪装扫码来源", @"将相册识别结果按相机扫码处理", @"qrcode.viewfinder", NeoWCSettingRowKindSwitch, NeoWCQRCodeCameraSourceEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"主页右滑扩展", @"增加备注、朋友圈、折叠群聊、勿扰与置顶操作", @"rectangle.and.hand.point.up.left", NeoWCSettingRowKindSwitch, NeoWCHomeSwipeActionsEnabledKey, nil, NeoWCSettingActionNone),
     ]];
     NSMutableArray *moments = [NSMutableArray array];
     CGFloat intensity = [defaults doubleForKey:NeoWCMomentsLikeHapticIntensityKey];
@@ -362,6 +388,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     ], defaults, collapsed);
 
     NSMutableArray *local = [NSMutableArray array];
+    [local addObject:NeoWCItem(@"显示原始号码", @"在好友和群聊资料页显示可复制的原始 ID", @"number.square", NeoWCSettingRowKindSwitch, NeoWCShowRawContactIDEnabledKey, nil, NeoWCSettingActionNone)];
     NeoWCStepMode stepMode = [defaults integerForKey:NeoWCStepModeKey] == NeoWCStepModeDailyRandom ? NeoWCStepModeDailyRandom : NeoWCStepModeDailyFixed;
     NSInteger configuredSteps = MIN(100000, MAX(0, [defaults integerForKey:NeoWCStepCountKey]));
     NSInteger effectiveSteps = [defaults integerForKey:NeoWCStepDailyTargetKey];
@@ -446,7 +473,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
     NSUInteger hiddenMeCount = [defaults arrayForKey:NeoWCMeMenuHiddenTitlesKey].count;
     NSArray *management = @[
         NeoWCItem(@"我的页面入口管理", @"隐藏作品、小店与卡包或表情入口", @"person.crop.rectangle.stack", NeoWCSettingRowKindDetail, nil, NeoWCCountText(hiddenMeCount), NeoWCSettingActionMeMenu),
-        NeoWCItem(@"插件管理", @"分类、排序、收纳与统一插件入口", @"square.stack.3d.up", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionPluginManager),
+        NeoWCItem(@"插件管理", @"分类、排序；长按任意开关可添加快捷开关", @"square.stack.3d.up", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionPluginManager),
     ];
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"display" title:@"显示" footer:@"关闭后恢复微信原始样式。" items:display],

@@ -8,6 +8,7 @@
 #import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCInterfaceTweaks.h"
+#import "NeoWCPluginManager.h"
 #import <math.h>
 
 static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.ui.last-shown-release-notes-version";
@@ -23,6 +24,7 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
 @property (nonatomic, assign) BOOL requestedAuthorizationCheck;
 - (instancetype)initWithCategory:(NeoWCSettingsCategory)category;
 - (void)presentReleaseNotesIfNeeded;
+- (void)quickSwitchLongPressed:(UILongPressGestureRecognizer *)gesture;
 @end
 
 @implementation NeoWCSettingsViewController
@@ -74,6 +76,9 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
     self.tableView.sectionFooterHeight = UITableViewAutomaticDimension;
     self.tableView.cellLayoutMarginsFollowReadableWidth = NO;
     [self.tableView registerClass:NeoWCSettingsCell.class forCellReuseIdentifier:@"NeoWCSettingsCell"];
+    UILongPressGestureRecognizer *quickSwitchGesture = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(quickSwitchLongPressed:)];
+    quickSwitchGesture.minimumPressDuration = 0.55;
+    [self.tableView addGestureRecognizer:quickSwitchGesture];
 
     __weak typeof(self) weakSelf = self;
     self.actions = [[NeoWCSettingsActions alloc] initWithViewController:self reloadHandler:^(BOOL applyScale) {
@@ -234,15 +239,40 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
         [self.collapsedFeatureKeys removeObject:item.defaultsKey];
         [self saveCollapsedFeatureKeys];
     }
-    if ([item.defaultsKey isEqualToString:NeoWCStepOverrideEnabledKey] && enabled) NeoWCSettingsRegenerateDailyStepTarget(defaults);
-    if ([item.defaultsKey isEqualToString:NeoWCAntiRevokePersistRecordsKey]) NeoWCAntiRevokeSetPersistenceEnabled(enabled);
-    if ([item.defaultsKey hasPrefix:@"com.qiu7c.neowc."]) [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:item.defaultsKey];
-    if ([item.defaultsKey isEqualToString:NeoWCDebugFloatingEnabledKey]) [[NeoWCDebugManager sharedManager] setFloatingEnabled:enabled];
-    if ([item.defaultsKey isEqualToString:NeoWCAntiRevokeKey]) [NSNotificationCenter.defaultCenter postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
+    NeoWCSettingsHandleSwitchChange(item.defaultsKey, enabled);
     BOOL applyScale = [item.defaultsKey isEqualToString:NeoWCPageScaleEnabledKey];
     if (item.hasChildren || [item.defaultsKey isEqualToString:NeoWCEnabledKey] || applyScale) {
         [self reloadSettingsPreservingPositionApplyScale:applyScale];
     }
+}
+
+- (void)quickSwitchLongPressed:(UILongPressGestureRecognizer *)gesture {
+    if (gesture.state != UIGestureRecognizerStateBegan) return;
+    NSIndexPath *indexPath = [self.tableView indexPathForRowAtPoint:[gesture locationInView:self.tableView]];
+    NeoWCSettingItem *item = indexPath ? [self itemAtIndexPath:indexPath] : nil;
+    if (item.kind != NeoWCSettingRowKindSwitch || item.defaultsKey.length == 0 ||
+        [item.defaultsKey isEqualToString:NeoWCEnabledKey]) return;
+
+    BOOL registered = NeoWCPluginManagerIsQuickSwitchRegistered(item.defaultsKey);
+    NSString *actionTitle = registered ? @"从插件管理移除" : @"添加到插件管理";
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:item.title
+                                                                    message:@"快捷开关与设置页使用同一配置"
+                                                             preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:actionTitle
+                                             style:registered ? UIAlertActionStyleDestructive : UIAlertActionStyleDefault
+                                           handler:^(__unused UIAlertAction *action) {
+        NeoWCPluginManagerSetQuickSwitchRegistered(item.defaultsKey, item.title, !registered);
+        UINotificationFeedbackGenerator *feedback = [UINotificationFeedbackGenerator new];
+        [feedback notificationOccurred:UINotificationFeedbackTypeSuccess];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) {
+        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
+        popover.sourceView = cell ?: self.tableView;
+        popover.sourceRect = (cell ?: self.tableView).bounds;
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)openCategory:(NeoWCSettingsCategory)category {

@@ -1,5 +1,7 @@
 #import "NeoWCPluginManager.h"
 #import "NeoWCDebug.h"
+#import "NeoWCEnhancements.h"
+#import "NeoWCSettingsCatalog.h"
 #import <objc/message.h>
 
 static NSString *const WCPCategoriesKey = @"WCPluginsMgr.PluginCategories";
@@ -16,6 +18,7 @@ static NSString *const WCPHeaderIconStyleKey = @"WCPluginsMgr.HeaderIconStyle";
 static NSString *const WCPHeaderRadiusKey = @"WCPluginsMgr.HeaderIconCornerRadius";
 static NSString *const WCPEntryIconStyleKey = @"WCPluginsMgr.IconStyle";
 static NSString *const WCPDidChangeNotification = @"WCPluginsMgr.RegistryDidChange";
+static NSString *const WCPNeoWCQuickSwitchesKey = @"WCPluginsMgr.NeoWCQuickSwitches";
 
 static NSArray<NSString *> *WCPPluginIconStyleNames(void) {
     return @[@"微信原生", @"灯泡", @"拼图", @"印章", @"宫格"];
@@ -126,6 +129,54 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
     if (!title.length || !key.length) return;
     WCPluginModel *model = [WCPluginModel new]; model.isController = NO; model.title = title; model.version = @""; model.controller = @""; model.key = key; [self addModel:model];
 }
+- (void)removeSwitchWithKey:(NSString *)key {
+    if (!key.length) return;
+    NSString *identifier = [@"switch:" stringByAppendingString:key];
+    @synchronized (self) {
+        NSIndexSet *indexes = [self.plugins indexesOfObjectsPassingTest:^BOOL(WCPluginModel *model, NSUInteger idx, BOOL *stop) {
+            (void)idx; (void)stop;
+            return [[self identifier:model] isEqualToString:identifier];
+        }];
+        if (indexes.count) [self.plugins removeObjectsAtIndexes:indexes];
+    }
+    [NSNotificationCenter.defaultCenter postNotificationName:WCPDidChangeNotification object:self];
+}
+@end
+
+BOOL NeoWCPluginManagerIsQuickSwitchRegistered(NSString *key) {
+    if (key.length == 0) return NO;
+    return [WCPDictionary(WCPNeoWCQuickSwitchesKey)[key] isKindOfClass:NSString.class];
+}
+
+void NeoWCPluginManagerSetQuickSwitchRegistered(NSString *key, NSString *title, BOOL registered) {
+    if (key.length == 0) return;
+    NSMutableDictionary *saved = WCPMutableDictionary(WCPNeoWCQuickSwitchesKey);
+    if (registered) {
+        NSString *displayTitle = title.length ? title : key;
+        saved[key] = displayTitle;
+        [WCPluginsMgr.sharedInstance registerSwitchWithTitle:displayTitle key:key];
+    } else {
+        [saved removeObjectForKey:key];
+        [WCPluginsMgr.sharedInstance removeSwitchWithKey:key];
+    }
+    [NSUserDefaults.standardUserDefaults setObject:saved forKey:WCPNeoWCQuickSwitchesKey];
+}
+
+void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
+    NSDictionary *saved = WCPDictionary(WCPNeoWCQuickSwitchesKey);
+    [saved enumerateKeysAndObjectsUsingBlock:^(id key, id title, BOOL *stop) {
+        (void)stop;
+        if ([key isKindOfClass:NSString.class] && [title isKindOfClass:NSString.class] &&
+            [key length] > 0 && [title length] > 0) {
+            [WCPluginsMgr.sharedInstance registerSwitchWithTitle:title key:key];
+        }
+    }];
+}
+
+@class WCPluginsViewController;
+
+@interface WCPCategoryOrderEditorController : UITableViewController
+- (instancetype)initWithOwner:(WCPluginsViewController *)owner;
 @end
 
 @interface WCPluginsViewController () <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
@@ -157,6 +208,7 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
 - (void)nextPage;
 - (void)updateHeader;
 - (void)manageCategories;
+- (void)editCategoryOrder;
 - (void)editCategory:(nullable NSString *)oldName;
 - (void)deleteCurrentCategory;
 - (void)editPerPage;
@@ -228,7 +280,8 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
 - (NSString *)categoryForModel:(WCPluginModel *)model {
     NSString *stored = WCPDictionary(WCPCategoriesKey)[[self identifierForModel:model]];
     if ([self.categories containsObject:stored]) return stored;
-    BOOL isNeoWC = model.isController && [model.controller isEqualToString:@"NeoWCSettingsViewController"];
+    BOOL isNeoWC = (model.isController && [model.controller isEqualToString:@"NeoWCSettingsViewController"]) ||
+                   (!model.isController && [model.key hasPrefix:@"com.qiu7c.neowc."]);
     NSString *preferred = isNeoWC ? @"定制" : @"功能";
     if ([self.categories containsObject:preferred]) return preferred;
     return self.categories.firstObject ?: preferred;
@@ -240,7 +293,7 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
 - (void)reloadCategories {
     NSArray *defaults = @[@"定制", @"功能"]; NSMutableArray *saved = [NSMutableArray array];
     for (id category in WCPArray(WCPCustomCategoriesKey)) if ([category isKindOfClass:NSString.class] && [category length] && ![saved containsObject:category]) [saved addObject:category];
-    NSArray *categories = saved.count > 1 ? saved : defaults; self.categories = categories; if (![categories containsObject:self.currentCategory]) self.currentCategory = categories.firstObject;
+    NSArray *categories = saved.count > 0 ? saved : defaults; self.categories = categories; if (![categories containsObject:self.currentCategory]) self.currentCategory = categories.firstObject;
     if (self.categoryControl) { [self.categoryControl removeAllSegments]; [categories enumerateObjectsUsingBlock:^(NSString *item, NSUInteger idx, BOOL *stop) { [self.categoryControl insertSegmentWithTitle:item atIndex:idx animated:NO]; }]; self.categoryControl.selectedSegmentIndex = [categories indexOfObject:self.currentCategory]; }
 }
 - (void)reloadTableData {
@@ -276,7 +329,7 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
     if (model.isController) { cell.accessoryView = nil; cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator; } else { UISwitch *toggle = [UISwitch new]; toggle.on = [NSUserDefaults.standardUserDefaults boolForKey:model.key]; toggle.tag = indexPath.row; [toggle addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged]; cell.accessoryView = toggle; cell.accessoryType = UITableViewCellAccessoryNone; }
     if (!cell.gestureRecognizers.count) [cell addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(rowLongPressed:)]]; return cell;
 }
-- (void)switchChanged:(UISwitch *)sender { if (sender.tag < 0 || sender.tag >= (NSInteger)self.pageModels.count) return; WCPluginModel *model = self.pageModels[sender.tag]; if (!model.isController && model.key.length) [NSUserDefaults.standardUserDefaults setBool:sender.on forKey:model.key]; }
+- (void)switchChanged:(UISwitch *)sender { if (sender.tag < 0 || sender.tag >= (NSInteger)self.pageModels.count) return; WCPluginModel *model = self.pageModels[sender.tag]; if (!model.isController && model.key.length) { [NSUserDefaults.standardUserDefaults setBool:sender.on forKey:model.key]; NeoWCSettingsHandleSwitchChange(model.key, sender.on); } }
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.row < 0 || indexPath.row >= (NSInteger)self.pageModels.count) return;
@@ -324,7 +377,7 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
 
 - (void)presentSettingsMenu {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"设置" message:@"管理插件分类、顺序与页面外观" preferredStyle:UIAlertControllerStyleActionSheet]; __weak typeof(self) weakSelf = self;
-    [sheet addAction:[UIAlertAction actionWithTitle:@"管理切换器" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf manageCategories]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"管理分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf manageCategories]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"编辑插件顺序" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf.navigationController pushViewController:[[WCPPluginOrderEditorController alloc] initWithOwner:weakSelf] animated:YES]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"每页插件数量" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf editPerPage]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"顶部文字" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf editHeaderText]; }]];
@@ -334,17 +387,73 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; WCPShow(self, sheet);
 }
 - (void)manageCategories {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"管理切换器" message:nil preferredStyle:UIAlertControllerStyleActionSheet]; __weak typeof(self) weakSelf = self;
-    [sheet addAction:[UIAlertAction actionWithTitle:@"新增切换器" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf editCategory:nil]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"修改当前名称" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf editCategory:weakSelf.currentCategory]; }]]; if (self.categories.count > 2) [sheet addAction:[UIAlertAction actionWithTitle:@"删除当前切换器" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) { [weakSelf deleteCurrentCategory]; }]];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"管理分类" message:nil preferredStyle:UIAlertControllerStyleActionSheet]; __weak typeof(self) weakSelf = self;
+    [sheet addAction:[UIAlertAction actionWithTitle:@"新增分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf editCategory:nil]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"修改当前名称" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf editCategory:weakSelf.currentCategory]; }]];
+    if (self.categories.count > 1) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"调整分类顺序" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf editCategoryOrder]; }]];
+        [sheet addAction:[UIAlertAction actionWithTitle:@"删除当前分类" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) { [weakSelf deleteCurrentCategory]; }]];
+    }
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; WCPShow(self, sheet);
 }
+- (void)editCategoryOrder {
+    WCPCategoryOrderEditorController *controller = [[WCPCategoryOrderEditorController alloc] initWithOwner:self];
+    [self.navigationController pushViewController:controller animated:YES];
+}
 - (void)editCategory:(nullable NSString *)oldName {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:oldName ? @"修改切换器名称" : @"新增切换器" message:nil preferredStyle:UIAlertControllerStyleAlert]; [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"标签名称"; field.text = oldName; }]; [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; __weak typeof(self) weakSelf = self;
-    [alert addAction:[UIAlertAction actionWithTitle:oldName ? @"保存" : @"新增" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { NSString *name = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]; if (!name.length) return; NSMutableArray *categories = [weakSelf.categories mutableCopy] ?: [NSMutableArray array]; if (oldName) [categories removeObject:oldName]; if (![categories containsObject:name]) [categories addObject:name]; NSMutableDictionary *mapping = WCPMutableDictionary(WCPCategoriesKey); if (oldName) for (NSString *identifier in mapping.allKeys) if ([mapping[identifier] isEqualToString:oldName]) mapping[identifier] = name; [NSUserDefaults.standardUserDefaults setObject:categories forKey:WCPCustomCategoriesKey]; [NSUserDefaults.standardUserDefaults setObject:mapping forKey:WCPCategoriesKey]; weakSelf.currentCategory = name; [weakSelf reloadTableData]; }]]; [self presentViewController:alert animated:YES completion:nil];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:oldName ? @"修改分类名称" : @"新增分类" message:nil preferredStyle:UIAlertControllerStyleAlert]; [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"分类名称"; field.text = oldName; }]; [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:oldName ? @"保存" : @"新增" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *name = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (!name.length) return;
+        NSMutableArray *categories = [weakSelf.categories mutableCopy] ?: [NSMutableArray array];
+        NSUInteger oldIndex = oldName ? [categories indexOfObject:oldName] : NSNotFound;
+        NSUInteger existingIndex = [categories indexOfObject:name];
+        if (existingIndex != NSNotFound && existingIndex != oldIndex) {
+            UIAlertController *duplicate = [UIAlertController alertControllerWithTitle:@"名称已存在" message:@"请换一个分类名称。" preferredStyle:UIAlertControllerStyleAlert];
+            [duplicate addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+            dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf presentViewController:duplicate animated:YES completion:nil]; });
+            return;
+        }
+        NSMutableDictionary *mapping = WCPMutableDictionary(WCPCategoriesKey);
+        if (oldIndex != NSNotFound) {
+            NSArray *models = [WCPluginsMgr.sharedInstance.plugins copy];
+            for (WCPluginModel *model in models) {
+                if ([[weakSelf categoryForModel:model] isEqualToString:oldName]) mapping[[weakSelf identifierForModel:model]] = name;
+            }
+            categories[oldIndex] = name;
+        } else {
+            [categories addObject:name];
+        }
+        [NSUserDefaults.standardUserDefaults setObject:categories forKey:WCPCustomCategoriesKey];
+        [NSUserDefaults.standardUserDefaults setObject:mapping forKey:WCPCategoriesKey];
+        weakSelf.currentCategory = name;
+        [weakSelf reloadTableData];
+    }]]; [self presentViewController:alert animated:YES completion:nil];
 }
 - (void)deleteCurrentCategory {
-    if (self.categories.count <= 2) return; NSString *deleted = self.currentCategory; NSMutableArray *categories = [self.categories mutableCopy]; [categories removeObject:deleted]; NSMutableDictionary *mapping = WCPMutableDictionary(WCPCategoriesKey); for (NSString *identifier in mapping.allKeys) if ([mapping[identifier] isEqualToString:deleted]) [mapping removeObjectForKey:identifier]; [NSUserDefaults.standardUserDefaults setObject:categories forKey:WCPCustomCategoriesKey]; [NSUserDefaults.standardUserDefaults setObject:mapping forKey:WCPCategoriesKey]; self.currentCategory = categories.firstObject; [self reloadTableData];
+    if (self.categories.count <= 1) return;
+    NSString *deleted = self.currentCategory;
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"删除当前分类？" message:@"分类中的插件会移动到相邻分类。" preferredStyle:UIAlertControllerStyleAlert];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [confirm addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        NSMutableArray *categories = [weakSelf.categories mutableCopy];
+        NSUInteger deletedIndex = [categories indexOfObject:deleted];
+        if (deletedIndex == NSNotFound || categories.count <= 1) return;
+        [categories removeObjectAtIndex:deletedIndex];
+        NSString *destination = categories[MIN(deletedIndex, categories.count - 1)];
+        NSMutableDictionary *mapping = WCPMutableDictionary(WCPCategoriesKey);
+        NSArray *models = [WCPluginsMgr.sharedInstance.plugins copy];
+        for (WCPluginModel *model in models) {
+            if ([[weakSelf categoryForModel:model] isEqualToString:deleted]) mapping[[weakSelf identifierForModel:model]] = destination;
+        }
+        [NSUserDefaults.standardUserDefaults setObject:categories forKey:WCPCustomCategoriesKey];
+        [NSUserDefaults.standardUserDefaults setObject:mapping forKey:WCPCategoriesKey];
+        weakSelf.currentCategory = destination;
+        weakSelf.currentPage = 0;
+        [weakSelf reloadTableData];
+    }]];
+    [self presentViewController:confirm animated:YES completion:nil];
 }
 - (void)editPerPage {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"每页插件数量" message:@"超过数量后在底部翻页" preferredStyle:UIAlertControllerStyleAlert]; [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.keyboardType = UIKeyboardTypeNumberPad; field.placeholder = @"10"; field.text = [NSString stringWithFormat:@"%ld", (long)([NSUserDefaults.standardUserDefaults integerForKey:WCPPerPageKey] ?: 10)]; }]; [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; __weak typeof(self) weakSelf = self; [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { NSInteger value = MIN(100, MAX(1, alert.textFields.firstObject.text.integerValue)); [NSUserDefaults.standardUserDefaults setInteger:value forKey:WCPPerPageKey]; weakSelf.currentPage = 0; [weakSelf reloadTableData]; }]]; [self presentViewController:alert animated:YES completion:nil];
@@ -382,8 +491,74 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
 - (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *)info { UIImage *image = info[UIImagePickerControllerOriginalImage]; NSData *data = image ? UIImageJPEGRepresentation(image, 0.86) : nil; if (data) [NSUserDefaults.standardUserDefaults setObject:data forKey:WCPHeaderIconKey]; [picker dismissViewControllerAnimated:YES completion:^{ [self updateHeader]; }]; }
 - (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker { [picker dismissViewControllerAnimated:YES completion:nil]; }
 - (void)confirmReset {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"清空配置" message:@"恢复顶部文案、图标、切换器、排序和分页设置" preferredStyle:UIAlertControllerStyleAlert]; [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; __weak typeof(self) weakSelf = self; [alert addAction:[UIAlertAction actionWithTitle:@"清空" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) { for (NSString *key in @[WCPCategoriesKey, WCPCustomCategoriesKey, WCPNamesKey, WCPVersionsKey, WCPOrdersKey, WCPHiddenKey, WCPPerPageKey, WCPHeaderTitleKey, WCPHeaderSubtitleKey, WCPHeaderIconKey, WCPHeaderIconStyleKey, WCPHeaderRadiusKey, WCPEntryIconStyleKey]) [NSUserDefaults.standardUserDefaults removeObjectForKey:key]; weakSelf.currentCategory = @"定制"; weakSelf.currentPage = 0; [weakSelf reloadTableData]; }]]; [self presentViewController:alert animated:YES completion:nil];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"清空配置" message:@"恢复顶部文案、图标、分类、排序和分页设置" preferredStyle:UIAlertControllerStyleAlert]; [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; __weak typeof(self) weakSelf = self; [alert addAction:[UIAlertAction actionWithTitle:@"清空" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) { for (NSString *key in @[WCPCategoriesKey, WCPCustomCategoriesKey, WCPNamesKey, WCPVersionsKey, WCPOrdersKey, WCPHiddenKey, WCPPerPageKey, WCPHeaderTitleKey, WCPHeaderSubtitleKey, WCPHeaderIconKey, WCPHeaderIconStyleKey, WCPHeaderRadiusKey, WCPEntryIconStyleKey]) [NSUserDefaults.standardUserDefaults removeObjectForKey:key]; weakSelf.currentCategory = @"定制"; weakSelf.currentPage = 0; [weakSelf reloadTableData]; }]]; [self presentViewController:alert animated:YES completion:nil];
 }
+@end
+
+@interface WCPCategoryOrderEditorController ()
+@property (nonatomic, weak) WCPluginsViewController *owner;
+@property (nonatomic, strong) NSMutableArray<NSString *> *items;
+@end
+
+@implementation WCPCategoryOrderEditorController
+
+- (instancetype)initWithOwner:(WCPluginsViewController *)owner {
+    self = [super initWithStyle:UITableViewStyleInsetGrouped];
+    if (self) {
+        _owner = owner;
+        _items = [owner.categories mutableCopy] ?: [NSMutableArray array];
+    }
+    return self;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"分类顺序";
+    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    [self setEditing:YES animated:NO];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    [NSUserDefaults.standardUserDefaults setObject:self.items forKey:WCPCustomCategoriesKey];
+    [self.owner reloadTableData];
+}
+
+- (NSInteger)tableView:(__unused UITableView *)tableView numberOfRowsInSection:(__unused NSInteger)section {
+    return self.items.count;
+}
+
+- (NSString *)tableView:(__unused UITableView *)tableView titleForFooterInSection:(__unused NSInteger)section {
+    return @"拖动右侧手柄调整分类显示顺序。";
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"CategoryOrderCell"];
+    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"CategoryOrderCell"];
+    cell.textLabel.text = self.items[indexPath.row];
+    cell.showsReorderControl = YES;
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    return cell;
+}
+
+- (BOOL)tableView:(__unused UITableView *)tableView canMoveRowAtIndexPath:(__unused NSIndexPath *)indexPath {
+    return YES;
+}
+
+- (BOOL)tableView:(__unused UITableView *)tableView canEditRowAtIndexPath:(__unused NSIndexPath *)indexPath {
+    return NO;
+}
+
+- (void)tableView:(__unused UITableView *)tableView
+moveRowAtIndexPath:(NSIndexPath *)sourceIndexPath
+       toIndexPath:(NSIndexPath *)destinationIndexPath {
+    if (sourceIndexPath.row == destinationIndexPath.row) return;
+    NSString *item = self.items[sourceIndexPath.row];
+    [self.items removeObjectAtIndex:sourceIndexPath.row];
+    [self.items insertObject:item atIndex:destinationIndexPath.row];
+    [NSUserDefaults.standardUserDefaults setObject:self.items forKey:WCPCustomCategoriesKey];
+}
+
 @end
 
 @interface WCPPluginOrderEditorController ()
