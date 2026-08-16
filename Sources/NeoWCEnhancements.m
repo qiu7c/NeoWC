@@ -33,6 +33,7 @@ NSString *const NeoWCChatMessageTimeFontSizeKey = @"com.qiu7c.neowc.chat.message
 NSString *const NeoWCChatMessageTimeColorKey = @"com.qiu7c.neowc.chat.message-time.color";
 NSString *const NeoWCChatMessageTimeBubbleVerticalPositionKey = @"com.qiu7c.neowc.chat.message-time.bubble-vertical-position";
 NSString *const NeoWCChatMessageTimeAvatarSpacingKey = @"com.qiu7c.neowc.chat.message-time.avatar-spacing";
+NSString *const NeoWCChatMessageTimeBoldKey = @"com.qiu7c.neowc.chat.message-time.bold";
 NSString *const NeoWCQuoteJumpEnabledKey = @"com.qiu7c.neowc.chat.quote-jump";
 NSString *const NeoWCQuoteJumpImageEnabledKey = @"com.qiu7c.neowc.chat.quote-jump.image";
 NSString *const NeoWCQuoteJumpVideoEnabledKey = @"com.qiu7c.neowc.chat.quote-jump.video";

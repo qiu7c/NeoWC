@@ -184,7 +184,7 @@
                                                              preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray<NSDictionary *> *options = @[
         @{@"title": @"头像下方", @"bubble": @NO},
-        @{@"title": @"消息旁", @"bubble": @YES},
+        @{@"title": @"消息右侧", @"bubble": @YES},
     ];
     __weak typeof(self) weakSelf = self;
     for (NSDictionary *option in options) {

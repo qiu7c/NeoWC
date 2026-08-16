@@ -142,7 +142,7 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
     if ([shownVersion isEqualToString:NeoWCDisplayVersion]) return;
 
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"NeoWC %@", NeoWCDisplayVersion]
-                                                                   message:@"本次更新\n\n• 恢复头像下方与气泡旁消息时间显示\n• 授权资料与状态改为本地持久化、后台静默校验\n• 普通授权仅作状态展示，黑名单限制继续保留\n• 移除设置页功能搜索并优化页面稳定性"
+                                                                   message:@"本次更新\n\n• 优化多处界面布局与视觉细节\n• 新增内置插件管理，可以卸载其他插件管理插件啦 OvO\n• 新增消息时间显示\n• 丰富消息手势：新增双击、三击与右滑操作，支持复制、复读、删除和撤回\n• 修复已知问题，优化整体使用体验"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
     [defaults setObject:NeoWCDisplayVersion forKey:NeoWCLastShownReleaseNotesVersionKey];

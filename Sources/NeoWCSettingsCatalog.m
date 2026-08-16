@@ -92,7 +92,8 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCChatMessageTimeFontSizeKey: @10.0,
         NeoWCChatMessageTimeColorKey: @"#8E8E93FF",
         NeoWCChatMessageTimeBubbleVerticalPositionKey: @2,
-        NeoWCChatMessageTimeAvatarSpacingKey: @0.0,
+        NeoWCChatMessageTimeAvatarSpacingKey: @-2.0,
+        NeoWCChatMessageTimeBoldKey: @NO,
         NeoWCEmoticonToSelfieEnabledKey: @NO,
         NeoWCMomentsForwardEnabledKey: @NO,
         NeoWCReplySwipeEnabledKey: @NO,
@@ -253,14 +254,21 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     NSInteger messageTimePosition = MIN(2, MAX(0, [defaults integerForKey:NeoWCChatMessageTimeBubbleVerticalPositionKey]));
     NSArray<NSString *> *messageTimePositionNames = @[@"顶部", @"中间", @"底部"];
     NSString *messageTimeColor = [defaults stringForKey:NeoWCChatMessageTimeColorKey] ?: @"#8E8E93FF";
-    NeoWCAddFeature(interaction, NeoWCItem(@"消息时间显示", @"在头像下方或消息旁显示发送时间", @"clock", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeEnabledKey, nil, NeoWCSettingActionNone), @[
-        NeoWCItem(@"显示模式", @"头像下方与消息旁严格二选一", @"rectangle.2.swap", NeoWCSettingRowKindDetail, nil, messageTimeBubbleMode ? @"消息旁" : @"头像下方", NeoWCSettingActionMessageTimeMode),
-        NeoWCItem(@"消息旁位置", @"默认位于消息底部，避开居中的防撤回提示", @"arrow.up.and.down.text.horizontal", NeoWCSettingRowKindDetail, nil, messageTimePositionNames[messageTimePosition], NeoWCSettingActionMessageTimePosition),
-        NeoWCItem(@"头像时间间距", @"负值向上、正值向下，范围 -6 到 8", @"arrow.up.and.down", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatMessageTimeAvatarSpacingKey]], NeoWCSettingActionMessageTimeAvatarSpacing),
+    NSString *messageTimeModeName = messageTimeBubbleMode ? @"消息右侧" : @"头像下方";
+    NSMutableArray<NeoWCSettingItem *> *messageTimeChildren = [NSMutableArray arrayWithObject:
+        NeoWCItem(@"时间显示位置", @"头像下方与消息右侧严格二选一", @"rectangle.2.swap", NeoWCSettingRowKindDetail, nil, messageTimeModeName, NeoWCSettingActionMessageTimeMode)];
+    if (messageTimeBubbleMode) {
+        [messageTimeChildren addObject:NeoWCItem(@"消息旁垂直位置", @"调整时间位于消息顶部、中间或底部", @"arrow.up.and.down.text.horizontal", NeoWCSettingRowKindDetail, nil, messageTimePositionNames[messageTimePosition], NeoWCSettingActionMessageTimePosition)];
+    } else {
+        [messageTimeChildren addObject:NeoWCItem(@"头像时间间距", @"负值向上、正值向下，范围 -6 到 8", @"arrow.up.and.down", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatMessageTimeAvatarSpacingKey]], NeoWCSettingActionMessageTimeAvatarSpacing)];
+    }
+    [messageTimeChildren addObjectsFromArray:@[
         NeoWCItem(@"时间格式", @"支持 yyyy、MM、dd、E、HH、mm、ss", @"textformat", NeoWCSettingRowKindDetail, nil, messageTimeFormat, NeoWCSettingActionMessageTimeFormat),
         NeoWCItem(@"时间字号", @"限制在 8 到 18 点", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatMessageTimeFontSizeKey]], NeoWCSettingActionMessageTimeFontSize),
+        NeoWCItem(@"时间文字加粗", @"头像下方与消息右侧共同生效", @"bold", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeBoldKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"时间颜色", @"支持透明度并适配不同聊天背景", @"paintpalette", NeoWCSettingRowKindDetail, nil, messageTimeColor.uppercaseString, NeoWCSettingActionMessageTimeColor),
-    ], defaults, collapsed);
+    ]];
+    NeoWCAddFeature(interaction, NeoWCItem(@"消息时间显示", [NSString stringWithFormat:@"当前：%@", messageTimeModeName], @"clock", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeEnabledKey, nil, NeoWCSettingActionNone), messageTimeChildren, defaults, collapsed);
     NSInteger selfSwipeAction = [defaults integerForKey:NeoWCReplySwipeSelfActionKey];
     NSInteger otherSwipeAction = [defaults integerForKey:NeoWCReplySwipeOtherActionKey];
     NSInteger selfRightSwipeAction = [defaults integerForKey:NeoWCReplySwipeRightSelfActionKey];

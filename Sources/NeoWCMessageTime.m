@@ -173,7 +173,8 @@ static void NeoWCRefreshMessageTimeLabels(UIView *cell) {
     NSString *text = NeoWCMessageTimeText(time, format);
     CGFloat configuredSize = [defaults doubleForKey:NeoWCChatMessageTimeFontSizeKey];
     CGFloat fontSize = MIN(18.0, MAX(8.0, configuredSize > 0 ? configuredSize : 10.0));
-    UIFont *font = [UIFont systemFontOfSize:fontSize weight:UIFontWeightRegular];
+    UIFontWeight fontWeight = [defaults boolForKey:NeoWCChatMessageTimeBoldKey] ? UIFontWeightSemibold : UIFontWeightRegular;
+    UIFont *font = [UIFont systemFontOfSize:fontSize weight:fontWeight];
     UIColor *color = NeoWCColorForDefaultsKey(NeoWCChatMessageTimeColorKey, UIColor.secondaryLabelColor);
     CGFloat labelHeight = MAX(12.0, ceil(fontSize * 1.5));
     CGFloat measuredWidth = ceil([text sizeWithAttributes:@{NSFontAttributeName: font}].width) + 4.0;
