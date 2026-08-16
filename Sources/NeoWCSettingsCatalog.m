@@ -11,7 +11,7 @@ NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-featu
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 static NSString *const NeoWCSearchAllChildrenMarker = @"__neowc_search_all_children__";
 
-NSString *const NeoWCDisplayVersion = @"0.1.2 beta55";
+NSString *const NeoWCDisplayVersion = @"0.1.2 beta57";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,

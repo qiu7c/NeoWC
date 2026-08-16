@@ -2,8 +2,6 @@
 #import "NeoWCAccount.h"
 #import "NeoWCAuthorization.h"
 #import "NeoWCSettingsCatalog.h"
-#import <objc/message.h>
-#import <objc/runtime.h>
 #import <math.h>
 
 static UIImage *NeoWCSettingsSymbol(NSString *name) {
@@ -176,28 +174,27 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
 }
 
 - (UIView *)makeAvatarViewWithWXID:(NSString *)wxid headURL:(NSString *)headURL {
-    Class helperClass = objc_getClass("MMHeadImageHelper");
-    SEL selector = sel_registerName("getContactHeadImageViewWithUsrName:headImgUrl:bAutoUpdate:bRoundCorner:");
-    if (helperClass && [helperClass respondsToSelector:selector] && wxid.length > 0) {
-        id view = ((id (*)(id, SEL, id, id, BOOL, BOOL))objc_msgSend)(helperClass, selector, wxid, headURL ?: @"", YES, YES);
-        if ([view isKindOfClass:UIView.class]) return view;
-    }
+    (void)wxid;
     UIImageView *fallback = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"person.crop.circle.fill"]];
     fallback.tintColor = UIColor.tertiaryLabelColor;
-    fallback.contentMode = UIViewContentModeScaleAspectFit;
+    fallback.contentMode = UIViewContentModeScaleAspectFill;
+    fallback.clipsToBounds = YES;
+    NSURL *URL = headURL.length > 0 ? [NSURL URLWithString:headURL] : nil;
+    if (URL) {
+        __weak UIImageView *weakImageView = fallback;
+        [[[NSURLSession sharedSession] dataTaskWithURL:URL completionHandler:^(NSData *data, __unused NSURLResponse *response, __unused NSError *error) {
+            UIImage *image = data.length > 0 ? [UIImage imageWithData:data] : nil;
+            if (!image) return;
+            dispatch_async(dispatch_get_main_queue(), ^{ weakImageView.image = image; });
+        }] resume];
+    }
     return fallback;
 }
 
 - (void)refreshProfile {
-    __weak typeof(self) weakSelf = self;
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSString *wxid = NeoWCCurrentUserWXID();
-        NSString *nickname = NeoWCCurrentUserNickname();
-        NSString *headURL = NeoWCCurrentUserHeadImageURL();
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [weakSelf applyProfileWithWXID:wxid nickname:nickname headURL:headURL];
-        });
-    });
+    [self applyProfileWithWXID:NeoWCCurrentUserWXID()
+                      nickname:NeoWCCurrentUserNickname()
+                       headURL:NeoWCCurrentUserHeadImageURL()];
 }
 
 - (void)applyProfileWithWXID:(NSString *)wxid

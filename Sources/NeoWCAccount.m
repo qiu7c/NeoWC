@@ -2,6 +2,10 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
+static NSString *const NeoWCCachedWXIDKey = @"com.qiu7c.neowc.authorization.cached-wxid";
+static NSString *const NeoWCCachedNicknameKey = @"com.qiu7c.neowc.authorization.cached-nickname";
+static NSString *const NeoWCCachedHeadImageURLKey = @"com.qiu7c.neowc.authorization.cached-head-image-url";
+
 static id NeoWCServiceCenterFromCurrentContext(id self, SEL command) {
     (void)self;
     (void)command;
@@ -38,15 +42,6 @@ id NeoWCServiceForClass(Class serviceClass) {
     return ((id (*)(id, SEL, Class))objc_msgSend)(center, selector, serviceClass);
 }
 
-static id NeoWCCurrentUserContact(void) {
-    Class contactManagerClass = objc_getClass("CContactMgr");
-    if (!contactManagerClass) return nil;
-    SEL selfContactSelector = sel_registerName("getSelfContact");
-    id manager = NeoWCServiceForClass(contactManagerClass);
-    if (!manager || ![manager respondsToSelector:selfContactSelector]) return nil;
-    return ((id (*)(id, SEL))objc_msgSend)(manager, selfContactSelector);
-}
-
 static NSString *NeoWCContactString(id contact, const char *selectorName) {
     if (!contact || !selectorName) return nil;
     SEL selector = sel_registerName(selectorName);
@@ -63,14 +58,29 @@ static NSString *NeoWCContactString(id contact, const char *selectorName) {
     return text.length > 0 ? text : nil;
 }
 
+BOOL NeoWCUpdateCachedCurrentUserContact(id contact) {
+    NSString *wxid = NeoWCContactString(contact, "m_nsUsrName");
+    if (wxid.length == 0) return NO;
+    NSString *nickname = NeoWCContactString(contact, "m_nsNickName");
+    NSString *headImageURL = NeoWCContactString(contact, "m_nsHeadImgUrl");
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    BOOL changed = ![[defaults stringForKey:NeoWCCachedWXIDKey] isEqualToString:wxid];
+    [defaults setObject:wxid forKey:NeoWCCachedWXIDKey];
+    if (nickname.length > 0) [defaults setObject:nickname forKey:NeoWCCachedNicknameKey];
+    else [defaults removeObjectForKey:NeoWCCachedNicknameKey];
+    if (headImageURL.length > 0) [defaults setObject:headImageURL forKey:NeoWCCachedHeadImageURLKey];
+    else [defaults removeObjectForKey:NeoWCCachedHeadImageURLKey];
+    return changed;
+}
+
 NSString *NeoWCCurrentUserWXID(void) {
-    return NeoWCContactString(NeoWCCurrentUserContact(), "m_nsUsrName");
+    return [NSUserDefaults.standardUserDefaults stringForKey:NeoWCCachedWXIDKey];
 }
 
 NSString *NeoWCCurrentUserNickname(void) {
-    return NeoWCContactString(NeoWCCurrentUserContact(), "m_nsNickName");
+    return [NSUserDefaults.standardUserDefaults stringForKey:NeoWCCachedNicknameKey];
 }
 
 NSString *NeoWCCurrentUserHeadImageURL(void) {
-    return NeoWCContactString(NeoWCCurrentUserContact(), "m_nsHeadImgUrl");
+    return [NSUserDefaults.standardUserDefaults stringForKey:NeoWCCachedHeadImageURLKey];
 }

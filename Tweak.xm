@@ -5785,6 +5785,12 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
 
 %hook CContactMgr
 
+- (id)getSelfContact {
+    id contact = %orig;
+    NeoWCUpdateCachedCurrentUserContact(contact);
+    return contact;
+}
+
 - (void)printContactImportantChangeData:(id)newContact oldContact:(id)oldContact {
     id snapshot = NeoWCCaptureGroupMemberChange(newContact, oldContact);
     if (snapshot) NeoWCCompatibilityMarkTriggered(@"group-member-reminder");

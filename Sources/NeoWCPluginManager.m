@@ -32,6 +32,24 @@ static UIImage *WCPBuiltinPluginIcon(NSInteger style) {
     return [UIImage systemImageNamed:symbols[index]];
 }
 
+static NSInteger WCPCurrentHeaderIconStyle(NSUserDefaults *defaults) {
+    return [defaults objectForKey:WCPHeaderIconStyleKey]
+        ? [defaults integerForKey:WCPHeaderIconStyleKey]
+        : 4;
+}
+
+static UIImage *WCPHeaderBuiltinPluginIcon(NSInteger style) {
+    UIImage *image = WCPBuiltinPluginIcon(style);
+    if (style != 0 || !image) return image;
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
+    format.opaque = NO;
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(72.0, 72.0)
+                                                                                format:format];
+    return [renderer imageWithActions:^(__unused UIGraphicsImageRendererContext *context) {
+        [image drawInRect:CGRectMake(18.0, 18.0, 36.0, 36.0)];
+    }];
+}
+
 static UIFont *WCPScaledFont(UIFontTextStyle textStyle, CGFloat size, UIFontWeight weight) {
     UIFont *font = [UIFont systemFontOfSize:size weight:weight];
     return [[UIFontMetrics metricsForTextStyle:textStyle] scaledFontForFont:font];
@@ -194,8 +212,8 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
     self.heroTitle.text = [defaults stringForKey:WCPHeaderTitleKey] ?: @"Plug-in";
     self.heroSubtitle.text = [defaults stringForKey:WCPHeaderSubtitleKey] ?: @"万事皆有可能";
     NSData *data = [defaults dataForKey:WCPHeaderIconKey];
-    NSInteger iconStyle = [defaults integerForKey:WCPHeaderIconStyleKey];
-    self.heroIcon.image = data.length ? [UIImage imageWithData:data] : WCPBuiltinPluginIcon(iconStyle);
+    NSInteger iconStyle = WCPCurrentHeaderIconStyle(defaults);
+    self.heroIcon.image = data.length ? [UIImage imageWithData:data] : WCPHeaderBuiltinPluginIcon(iconStyle);
     self.heroIcon.contentMode = data.length ? UIViewContentModeScaleAspectFill : UIViewContentModeScaleAspectFit;
     self.heroIcon.tintColor = UIColor.systemGreenColor;
     CGFloat radius = [defaults objectForKey:WCPHeaderRadiusKey] ? [defaults doubleForKey:WCPHeaderRadiusKey] : 12; self.heroIcon.layer.cornerRadius = MIN(44, MAX(0, radius));
@@ -342,7 +360,7 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
         [sheet addAction:[UIAlertAction actionWithTitle:customTitle style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { UIImagePickerController *picker = [UIImagePickerController new]; picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary; picker.delegate = weakSelf; [weakSelf presentViewController:picker animated:YES completion:nil]; }]];
     }
     NSArray<NSString *> *names = WCPPluginIconStyleNames();
-    NSInteger current = [NSUserDefaults.standardUserDefaults integerForKey:WCPHeaderIconStyleKey];
+    NSInteger current = WCPCurrentHeaderIconStyle(NSUserDefaults.standardUserDefaults);
     for (NSUInteger index = 0; index < names.count; index++) {
         NSString *title = !hasCustomImage && index == (NSUInteger)MAX(current, 0)
             ? [@"✓  " stringByAppendingString:names[index]] : names[index];
