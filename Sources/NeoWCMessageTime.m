@@ -78,28 +78,34 @@ static BOOL NeoWCMessageTimeContentFrameIsUsable(CGRect frame, UIView *cell, BOO
     return isSender ? CGRectGetMidX(frame) >= cellWidth * 0.42 : CGRectGetMidX(frame) <= cellWidth * 0.58;
 }
 
-static UIView *NeoWCMessageTimeContentCandidate(UIView *root, UIView *cell, UIView *avatar, BOOL isSender, CGFloat *bestScore) {
+static void NeoWCMessageTimeConsiderContentCandidate(UIView *candidate, UIView *cell, UIView *avatar,
+                                                      BOOL isSender, UIView **bestView, CGFloat *bestScore) {
+    if (!candidate || candidate.hidden || candidate.alpha <= 0.01 || candidate == avatar ||
+        (avatar && [candidate isDescendantOfView:avatar])) return;
+    NSString *className = NSStringFromClass(candidate.class);
+    if ([candidate isKindOfClass:UILabel.class] || [candidate isKindOfClass:UIButton.class] ||
+        [className containsString:@"HeadImage"] || [className containsString:@"Avatar"]) return;
+    CGRect frame = [candidate convertRect:candidate.bounds toView:cell];
+    if (!NeoWCMessageTimeContentFrameIsUsable(frame, cell, isSender)) return;
+    CGFloat score = frame.size.width * frame.size.height;
+    if ([className containsString:@"Message"] || [className containsString:@"Content"] ||
+        [className containsString:@"Image"] || [className containsString:@"Voice"] ||
+        [className containsString:@"Emoticon"] || [className containsString:@"App"]) score += 100000.0;
+    if (score <= *bestScore) return;
+    *bestScore = score;
+    *bestView = candidate;
+}
+
+static UIView *NeoWCMessageTimeBoundedContentCandidate(UIView *root, UIView *cell, UIView *avatar, BOOL isSender) {
     UIView *best = nil;
+    CGFloat bestScore = 0.0;
+    // Message cells update status frequently. Inspect only two bounded levels;
+    // never recursively walk the complete private view hierarchy here.
     for (UIView *subview in root.subviews) {
-        if (subview.hidden || subview.alpha <= 0.01 || subview == avatar || (avatar && [subview isDescendantOfView:avatar])) continue;
-        NSString *className = NSStringFromClass(subview.class);
-        BOOL excludedClass = [subview isKindOfClass:UILabel.class] || [subview isKindOfClass:UIButton.class] ||
-            [className containsString:@"HeadImage"] || [className containsString:@"Avatar"];
-        if (!excludedClass) {
-            CGRect frame = [subview convertRect:subview.bounds toView:cell];
-            if (NeoWCMessageTimeContentFrameIsUsable(frame, cell, isSender)) {
-                CGFloat score = frame.size.width * frame.size.height;
-                if ([className containsString:@"Message"] || [className containsString:@"Content"] ||
-                    [className containsString:@"Image"] || [className containsString:@"Voice"] ||
-                    [className containsString:@"Emoticon"] || [className containsString:@"App"]) score += 100000.0;
-                if (score > *bestScore) {
-                    *bestScore = score;
-                    best = subview;
-                }
-            }
+        NeoWCMessageTimeConsiderContentCandidate(subview, cell, avatar, isSender, &best, &bestScore);
+        for (UIView *nested in subview.subviews) {
+            NeoWCMessageTimeConsiderContentCandidate(nested, cell, avatar, isSender, &best, &bestScore);
         }
-        UIView *nested = NeoWCMessageTimeContentCandidate(subview, cell, avatar, isSender, bestScore);
-        if (nested) best = nested;
     }
     return best;
 }
@@ -113,7 +119,9 @@ static UIView *NeoWCMessageTimeBubbleView(UIView *cell, BOOL isSender) {
             if (NeoWCMessageTimeContentFrameIsUsable(frame, cell, isSender)) return value;
         }
     }
-    id content = NeoWCMessageTimeFirstValue(cell, @[@"m_contentView", @"contentView"]);
+    id content = NeoWCMessageTimeFirstValue(cell, @[@"m_contentView", @"contentView", @"m_msgContentView",
+                                                    @"msgContentView", @"m_messageView", @"messageView",
+                                                    @"m_nodeView", @"nodeView"]);
     if ([content isKindOfClass:UIView.class]) {
         if ([content respondsToSelector:selector]) {
             id value = ((id (*)(id, SEL))objc_msgSend)(content, selector);
@@ -139,8 +147,11 @@ static UIView *NeoWCMessageTimeBubbleView(UIView *cell, BOOL isSender) {
         if (NeoWCMessageTimeContentFrameIsUsable(frame, cell, isSender)) return value;
     }
     UIView *avatar = NeoWCMessageTimeAvatarView(cell);
-    CGFloat bestScore = 0.0;
-    return NeoWCMessageTimeContentCandidate(cell, cell, avatar, isSender, &bestScore);
+    if ([content isKindOfClass:UIView.class] && content != cell) {
+        UIView *bounded = NeoWCMessageTimeBoundedContentCandidate(content, cell, avatar, isSender);
+        if (bounded) return bounded;
+    }
+    return NeoWCMessageTimeBoundedContentCandidate(cell, cell, avatar, isSender);
 }
 
 static UILabel *NeoWCMessageTimeLabel(UIView *cell, const void *key) {
@@ -224,10 +235,8 @@ static void NeoWCRefreshMessageTimeLabels(UIView *cell) {
             avatarLabel.text = text;
             avatarLabel.font = font;
             avatarLabel.textColor = color;
-            CGFloat cellBottom = MAX(CGRectGetMaxY(frame) + labelHeight + 2.0, CGRectGetHeight(cell.bounds) - 2.0);
-            CGFloat centeredGapY = CGRectGetMaxY(frame) + (cellBottom - CGRectGetMaxY(frame) - labelHeight) * 0.5;
             avatarLabel.frame = CGRectMake(CGRectGetMidX(frame) - labelWidth * 0.5,
-                                           MAX(CGRectGetMaxY(frame) + 1.0, centeredGapY),
+                                           CGRectGetMaxY(frame) + 2.0,
                                            labelWidth,
                                            labelHeight);
             avatarLabel.hidden = NO;

@@ -260,8 +260,8 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     NSInteger messageTimePosition = MIN(2, MAX(0, [defaults integerForKey:NeoWCChatMessageTimeBubbleVerticalPositionKey]));
     NSArray<NSString *> *messageTimePositionNames = @[@"顶部", @"中间", @"底部"];
     NSString *messageTimeColor = [defaults stringForKey:NeoWCChatMessageTimeColorKey] ?: @"#8E8E93FF";
-    NeoWCAddFeature(interaction, NeoWCItem(@"消息时间显示", @"在头像之间或消息旁显示发送时间", @"clock", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeEnabledKey, nil, NeoWCSettingActionNone), @[
-        NeoWCItem(@"显示模式", @"头像之间与消息旁严格二选一", @"rectangle.2.swap", NeoWCSettingRowKindDetail, nil, messageTimeBubbleMode ? @"消息旁" : @"头像之间", NeoWCSettingActionMessageTimeMode),
+    NeoWCAddFeature(interaction, NeoWCItem(@"消息时间显示", @"在头像下方或消息旁显示发送时间", @"clock", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeEnabledKey, nil, NeoWCSettingActionNone), @[
+        NeoWCItem(@"显示模式", @"头像下方与消息旁严格二选一", @"rectangle.2.swap", NeoWCSettingRowKindDetail, nil, messageTimeBubbleMode ? @"消息旁" : @"头像下方", NeoWCSettingActionMessageTimeMode),
         NeoWCItem(@"消息旁位置", @"默认位于消息底部，避开居中的防撤回提示", @"arrow.up.and.down.text.horizontal", NeoWCSettingRowKindDetail, nil, messageTimePositionNames[messageTimePosition], NeoWCSettingActionMessageTimePosition),
         NeoWCItem(@"时间格式", @"支持 yyyy、MM、dd、E、HH、mm、ss", @"textformat", NeoWCSettingRowKindDetail, nil, messageTimeFormat, NeoWCSettingActionMessageTimeFormat),
         NeoWCItem(@"时间字号", @"限制在 8 到 18 点", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatMessageTimeFontSizeKey]], NeoWCSettingActionMessageTimeFontSize),

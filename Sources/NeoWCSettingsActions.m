@@ -180,10 +180,10 @@
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     BOOL bubbleMode = [defaults boolForKey:NeoWCChatMessageTimeBubbleSideKey];
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"消息时间显示模式"
-                                                                    message:@"两种模式互斥；头像模式位于相邻头像之间，消息旁模式支持全部消息类型。"
+                                                                    message:@"两种模式互斥；头像模式紧贴头像底部，消息旁模式支持全部消息类型。"
                                                              preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray<NSDictionary *> *options = @[
-        @{@"title": @"头像之间", @"bubble": @NO},
+        @{@"title": @"头像下方", @"bubble": @NO},
         @{@"title": @"消息旁", @"bubble": @YES},
     ];
     __weak typeof(self) weakSelf = self;
