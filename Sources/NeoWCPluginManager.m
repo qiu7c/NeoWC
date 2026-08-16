@@ -12,9 +12,25 @@ static NSString *const WCPPerPageKey = @"WCPluginsMgr.PluginsPerPage";
 static NSString *const WCPHeaderTitleKey = @"WCPluginsMgr.HeaderTitle";
 static NSString *const WCPHeaderSubtitleKey = @"WCPluginsMgr.HeaderSubtitle";
 static NSString *const WCPHeaderIconKey = @"WCPluginsMgr.HeaderIconImageData";
+static NSString *const WCPHeaderIconStyleKey = @"WCPluginsMgr.HeaderIconStyle";
 static NSString *const WCPHeaderRadiusKey = @"WCPluginsMgr.HeaderIconCornerRadius";
 static NSString *const WCPEntryIconStyleKey = @"WCPluginsMgr.IconStyle";
 static NSString *const WCPDidChangeNotification = @"WCPluginsMgr.RegistryDidChange";
+
+static NSArray<NSString *> *WCPPluginIconStyleNames(void) {
+    return @[@"微信原生", @"灯泡", @"拼图", @"印章", @"宫格"];
+}
+
+static UIImage *WCPBuiltinPluginIcon(NSInteger style) {
+    if (style <= 0) {
+        UIImage *native = [UIImage imageNamed:@"WeChat_Lab_Logo_light_small"] ?:
+                          [UIImage imageNamed:@"WeChat_Lab_Logo_light_small@3x.png"];
+        if (native) return native;
+    }
+    NSArray<NSString *> *symbols = @[@"app.badge", @"lightbulb", @"puzzlepiece.extension", @"seal", @"square.grid.2x2"];
+    NSUInteger index = MIN((NSUInteger)MAX(style, 0), symbols.count - 1);
+    return [UIImage systemImageNamed:symbols[index]];
+}
 
 static NSDictionary *WCPDictionary(NSString *key) {
     NSDictionary *value = [NSUserDefaults.standardUserDefaults dictionaryForKey:key];
@@ -29,6 +45,19 @@ static void WCPShow(UIViewController *controller, UIAlertController *alert) {
     UIPopoverPresentationController *popover = alert.popoverPresentationController;
     if (popover) { popover.sourceView = controller.view; popover.sourceRect = CGRectMake(CGRectGetMidX(controller.view.bounds), CGRectGetMaxY(controller.view.bounds) - 1.0, 1.0, 1.0); }
     [controller presentViewController:alert animated:YES completion:nil];
+}
+
+static BOOL WCPPushViewController(UINavigationController *navigation,
+                                  UIViewController *controller,
+                                  BOOL animated) {
+    if (!navigation || !controller) return NO;
+    SEL wechatPush = NSSelectorFromString(@"PushViewController:animated:");
+    if ([navigation respondsToSelector:wechatPush]) {
+        ((void (*)(id, SEL, UIViewController *, BOOL))objc_msgSend)(navigation, wechatPush, controller, animated);
+        return YES;
+    }
+    [navigation pushViewController:controller animated:animated];
+    return YES;
 }
 
 @implementation WCPluginModel
@@ -130,15 +159,15 @@ static void WCPShow(UIViewController *controller, UIAlertController *alert) {
 - (void)registryChanged:(NSNotification *)note { dispatch_async(dispatch_get_main_queue(), ^{ [self reloadTableData]; }); }
 
 - (void)buildHeader {
-    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 294.0)]; header.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 270.0)]; header.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     self.heroIcon = [UIImageView new]; self.heroIcon.translatesAutoresizingMaskIntoConstraints = NO; self.heroIcon.contentMode = UIViewContentModeScaleAspectFill; self.heroIcon.clipsToBounds = YES; [header addSubview:self.heroIcon];
     self.heroTitle = [UILabel new]; self.heroTitle.translatesAutoresizingMaskIntoConstraints = NO; self.heroTitle.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle2]; self.heroTitle.adjustsFontForContentSizeCategory = YES; self.heroTitle.textAlignment = NSTextAlignmentCenter; [header addSubview:self.heroTitle];
     self.heroSubtitle = [UILabel new]; self.heroSubtitle.translatesAutoresizingMaskIntoConstraints = NO; self.heroSubtitle.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline]; self.heroSubtitle.adjustsFontForContentSizeCategory = YES; self.heroSubtitle.textColor = UIColor.secondaryLabelColor; self.heroSubtitle.textAlignment = NSTextAlignmentCenter; [header addSubview:self.heroSubtitle];
     self.categoryControl = [UISegmentedControl new]; self.categoryControl.translatesAutoresizingMaskIntoConstraints = NO; [self.categoryControl addTarget:self action:@selector(categoryChanged:) forControlEvents:UIControlEventValueChanged]; [header addSubview:self.categoryControl];
     [header addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(headerLongPressed:)]];
     [NSLayoutConstraint activateConstraints:@[
-        [self.heroIcon.centerXAnchor constraintEqualToAnchor:header.centerXAnchor], [self.heroIcon.topAnchor constraintEqualToAnchor:header.topAnchor constant:26], [self.heroIcon.widthAnchor constraintEqualToConstant:88], [self.heroIcon.heightAnchor constraintEqualToConstant:88],
-        [self.heroTitle.leadingAnchor constraintGreaterThanOrEqualToAnchor:header.leadingAnchor constant:24], [self.heroTitle.trailingAnchor constraintLessThanOrEqualToAnchor:header.trailingAnchor constant:-24], [self.heroTitle.centerXAnchor constraintEqualToAnchor:header.centerXAnchor], [self.heroTitle.topAnchor constraintEqualToAnchor:self.heroIcon.bottomAnchor constant:14],
+        [self.heroIcon.centerXAnchor constraintEqualToAnchor:header.centerXAnchor], [self.heroIcon.topAnchor constraintEqualToAnchor:header.topAnchor constant:24], [self.heroIcon.widthAnchor constraintEqualToConstant:72], [self.heroIcon.heightAnchor constraintEqualToConstant:72],
+        [self.heroTitle.leadingAnchor constraintGreaterThanOrEqualToAnchor:header.leadingAnchor constant:24], [self.heroTitle.trailingAnchor constraintLessThanOrEqualToAnchor:header.trailingAnchor constant:-24], [self.heroTitle.centerXAnchor constraintEqualToAnchor:header.centerXAnchor], [self.heroTitle.topAnchor constraintEqualToAnchor:self.heroIcon.bottomAnchor constant:12],
         [self.heroSubtitle.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:28], [self.heroSubtitle.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-28], [self.heroSubtitle.topAnchor constraintEqualToAnchor:self.heroTitle.bottomAnchor constant:8],
         [self.categoryControl.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:20], [self.categoryControl.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-20], [self.categoryControl.topAnchor constraintEqualToAnchor:self.heroSubtitle.bottomAnchor constant:24], [self.categoryControl.heightAnchor constraintEqualToConstant:40]
     ]];
@@ -148,7 +177,11 @@ static void WCPShow(UIViewController *controller, UIAlertController *alert) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     self.heroTitle.text = [defaults stringForKey:WCPHeaderTitleKey] ?: @"Plug-in";
     self.heroSubtitle.text = [defaults stringForKey:WCPHeaderSubtitleKey] ?: @"万事皆有可能";
-    NSData *data = [defaults dataForKey:WCPHeaderIconKey]; self.heroIcon.image = data.length ? [UIImage imageWithData:data] : [UIImage systemImageNamed:@"puzzlepiece.extension.fill"]; self.heroIcon.tintColor = UIColor.systemGreenColor;
+    NSData *data = [defaults dataForKey:WCPHeaderIconKey];
+    NSInteger iconStyle = [defaults integerForKey:WCPHeaderIconStyleKey];
+    self.heroIcon.image = data.length ? [UIImage imageWithData:data] : WCPBuiltinPluginIcon(iconStyle);
+    self.heroIcon.contentMode = data.length ? UIViewContentModeScaleAspectFill : UIViewContentModeScaleAspectFit;
+    self.heroIcon.tintColor = UIColor.systemGreenColor;
     CGFloat radius = [defaults objectForKey:WCPHeaderRadiusKey] ? [defaults doubleForKey:WCPHeaderRadiusKey] : 12; self.heroIcon.layer.cornerRadius = MIN(44, MAX(0, radius));
 }
 - (NSString *)identifierForModel:(WCPluginModel *)model {
@@ -158,15 +191,22 @@ static void WCPShow(UIViewController *controller, UIAlertController *alert) {
 }
 - (NSString *)displayNameForModel:(WCPluginModel *)model { return WCPDictionary(WCPNamesKey)[[self identifierForModel:model]] ?: model.title ?: @"插件"; }
 - (NSString *)displayVersionForModel:(WCPluginModel *)model { return WCPDictionary(WCPVersionsKey)[[self identifierForModel:model]] ?: model.version ?: @""; }
-- (NSString *)categoryForModel:(WCPluginModel *)model { NSString *stored = WCPDictionary(WCPCategoriesKey)[[self identifierForModel:model]]; if ([self.categories containsObject:stored]) return stored; return self.categories.count > 1 ? self.categories[1] : (self.categories.firstObject ?: @"功能"); }
+- (NSString *)categoryForModel:(WCPluginModel *)model {
+    NSString *stored = WCPDictionary(WCPCategoriesKey)[[self identifierForModel:model]];
+    if ([self.categories containsObject:stored]) return stored;
+    BOOL isNeoWC = model.isController && [model.controller isEqualToString:@"NeoWCSettingsViewController"];
+    NSString *preferred = isNeoWC ? @"定制" : @"功能";
+    if ([self.categories containsObject:preferred]) return preferred;
+    return self.categories.firstObject ?: preferred;
+}
 - (BOOL)isPluginHidden:(WCPluginModel *)model { return [WCPArray(WCPHiddenKey) containsObject:[self identifierForModel:model]]; }
 - (void)setPluginHidden:(BOOL)hidden forModel:(WCPluginModel *)model {
     NSMutableArray *items = [NSMutableArray arrayWithArray:WCPArray(WCPHiddenKey)]; NSString *identifier = [self identifierForModel:model]; [items removeObject:identifier]; if (hidden) [items addObject:identifier]; [NSUserDefaults.standardUserDefaults setObject:items forKey:WCPHiddenKey]; [self reloadTableData];
 }
 - (void)reloadCategories {
-    NSArray *defaults = @[@"美化", @"功能", @"定制"]; NSMutableArray *saved = [NSMutableArray array];
+    NSArray *defaults = @[@"定制", @"功能"]; NSMutableArray *saved = [NSMutableArray array];
     for (id category in WCPArray(WCPCustomCategoriesKey)) if ([category isKindOfClass:NSString.class] && [category length] && ![saved containsObject:category]) [saved addObject:category];
-    NSArray *categories = saved.count > 1 ? saved : defaults; self.categories = categories; if (![categories containsObject:self.currentCategory]) self.currentCategory = categories.count > 1 ? categories[1] : categories.firstObject;
+    NSArray *categories = saved.count > 1 ? saved : defaults; self.categories = categories; if (![categories containsObject:self.currentCategory]) self.currentCategory = categories.firstObject;
     if (self.categoryControl) { [self.categoryControl removeAllSegments]; [categories enumerateObjectsUsingBlock:^(NSString *item, NSUInteger idx, BOOL *stop) { [self.categoryControl insertSegmentWithTitle:item atIndex:idx animated:NO]; }]; self.categoryControl.selectedSegmentIndex = [categories indexOfObject:self.currentCategory]; }
 }
 - (void)reloadTableData {
@@ -203,7 +243,24 @@ static void WCPShow(UIViewController *controller, UIAlertController *alert) {
     if (!cell.gestureRecognizers.count) [cell addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(rowLongPressed:)]]; return cell;
 }
 - (void)switchChanged:(UISwitch *)sender { if (sender.tag < 0 || sender.tag >= (NSInteger)self.pageModels.count) return; WCPluginModel *model = self.pageModels[sender.tag]; if (!model.isController && model.key.length) [NSUserDefaults.standardUserDefaults setBool:sender.on forKey:model.key]; }
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath { [tableView deselectRowAtIndexPath:indexPath animated:YES]; WCPluginModel *model = self.pageModels[indexPath.row]; if (!model.isController) return; Class cls = NSClassFromString(model.controller); if (cls && [cls isSubclassOfClass:UIViewController.class]) { UIViewController *controller = [cls new]; controller.hidesBottomBarWhenPushed = YES; [self.navigationController pushViewController:controller animated:YES]; } }
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (indexPath.row < 0 || indexPath.row >= (NSInteger)self.pageModels.count) return;
+    WCPluginModel *model = self.pageModels[indexPath.row];
+    if (!model.isController) return;
+    Class cls = NSClassFromString(model.controller);
+    if (!cls || ![cls isSubclassOfClass:UIViewController.class]) {
+        NeoWCLog(@"插件管理：控制器不可用，controller=%@", model.controller ?: @"");
+        return;
+    }
+    UIViewController *controller = [cls new];
+    controller.hidesBottomBarWhenPushed = YES;
+    NeoWCLog(@"插件管理：打开 %@，controller=%@ navigation=%@",
+             [self displayNameForModel:model], model.controller, NSStringFromClass(self.navigationController.class));
+    if (!WCPPushViewController(self.navigationController, controller, YES)) {
+        NeoWCLog(@"插件管理：页面入栈失败，controller=%@", model.controller);
+    }
+}
 - (void)headerLongPressed:(UILongPressGestureRecognizer *)gesture { if (gesture.state == UIGestureRecognizerStateBegan) [self presentSettingsMenu]; }
 - (void)rowLongPressed:(UILongPressGestureRecognizer *)gesture {
     if (gesture.state != UIGestureRecognizerStateBegan) return; NSIndexPath *path = [self.tableView indexPathForRowAtPoint:[gesture locationInView:self.tableView]]; if (!path) return; WCPluginModel *model = self.pageModels[path.row]; UIAlertController *sheet = [UIAlertController alertControllerWithTitle:[self displayNameForModel:model] message:nil preferredStyle:UIAlertControllerStyleActionSheet]; __weak typeof(self) weakSelf = self;
@@ -253,7 +310,7 @@ static void WCPShow(UIViewController *controller, UIAlertController *alert) {
     [alert addAction:[UIAlertAction actionWithTitle:oldName ? @"保存" : @"新增" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { NSString *name = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]; if (!name.length) return; NSMutableArray *categories = [weakSelf.categories mutableCopy] ?: [NSMutableArray array]; if (oldName) [categories removeObject:oldName]; if (![categories containsObject:name]) [categories addObject:name]; NSMutableDictionary *mapping = WCPMutableDictionary(WCPCategoriesKey); if (oldName) for (NSString *identifier in mapping.allKeys) if ([mapping[identifier] isEqualToString:oldName]) mapping[identifier] = name; [NSUserDefaults.standardUserDefaults setObject:categories forKey:WCPCustomCategoriesKey]; [NSUserDefaults.standardUserDefaults setObject:mapping forKey:WCPCategoriesKey]; weakSelf.currentCategory = name; [weakSelf reloadTableData]; }]]; [self presentViewController:alert animated:YES completion:nil];
 }
 - (void)deleteCurrentCategory {
-    if (self.categories.count <= 2) return; NSString *deleted = self.currentCategory; NSMutableArray *categories = [self.categories mutableCopy]; [categories removeObject:deleted]; NSMutableDictionary *mapping = WCPMutableDictionary(WCPCategoriesKey); for (NSString *identifier in mapping.allKeys) if ([mapping[identifier] isEqualToString:deleted]) [mapping removeObjectForKey:identifier]; [NSUserDefaults.standardUserDefaults setObject:categories forKey:WCPCustomCategoriesKey]; [NSUserDefaults.standardUserDefaults setObject:mapping forKey:WCPCategoriesKey]; self.currentCategory = categories.count > 1 ? categories[1] : categories.firstObject; [self reloadTableData];
+    if (self.categories.count <= 2) return; NSString *deleted = self.currentCategory; NSMutableArray *categories = [self.categories mutableCopy]; [categories removeObject:deleted]; NSMutableDictionary *mapping = WCPMutableDictionary(WCPCategoriesKey); for (NSString *identifier in mapping.allKeys) if ([mapping[identifier] isEqualToString:deleted]) [mapping removeObjectForKey:identifier]; [NSUserDefaults.standardUserDefaults setObject:categories forKey:WCPCustomCategoriesKey]; [NSUserDefaults.standardUserDefaults setObject:mapping forKey:WCPCategoriesKey]; self.currentCategory = categories.firstObject; [self reloadTableData];
 }
 - (void)editPerPage {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"每页插件数量" message:@"超过数量后在底部翻页" preferredStyle:UIAlertControllerStyleAlert]; [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.keyboardType = UIKeyboardTypeNumberPad; field.placeholder = @"10"; field.text = [NSString stringWithFormat:@"%ld", (long)([NSUserDefaults.standardUserDefaults integerForKey:WCPPerPageKey] ?: 10)]; }]; [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; __weak typeof(self) weakSelf = self; [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { NSInteger value = MIN(100, MAX(1, alert.textFields.firstObject.text.integerValue)); [NSUserDefaults.standardUserDefaults setInteger:value forKey:WCPPerPageKey]; weakSelf.currentPage = 0; [weakSelf reloadTableData]; }]]; [self presentViewController:alert animated:YES completion:nil];
@@ -263,11 +320,27 @@ static void WCPShow(UIViewController *controller, UIAlertController *alert) {
 }
 - (void)editHeaderIcon {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"顶部图标" message:nil preferredStyle:UIAlertControllerStyleActionSheet]; __weak typeof(self) weakSelf = self;
-    if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) [sheet addAction:[UIAlertAction actionWithTitle:@"从相册选择" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { UIImagePickerController *picker = [UIImagePickerController new]; picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary; picker.delegate = weakSelf; [weakSelf presentViewController:picker animated:YES completion:nil]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"圆角度" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf editHeaderRadius]; }]]; [sheet addAction:[UIAlertAction actionWithTitle:@"清除自定义图片" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) { [NSUserDefaults.standardUserDefaults removeObjectForKey:WCPHeaderIconKey]; [weakSelf updateHeader]; }]]; [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; WCPShow(self, sheet);
+    BOOL hasCustomImage = [NSUserDefaults.standardUserDefaults dataForKey:WCPHeaderIconKey].length > 0;
+    if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+        NSString *customTitle = hasCustomImage ? @"✓  从相册自定义" : @"从相册自定义";
+        [sheet addAction:[UIAlertAction actionWithTitle:customTitle style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { UIImagePickerController *picker = [UIImagePickerController new]; picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary; picker.delegate = weakSelf; [weakSelf presentViewController:picker animated:YES completion:nil]; }]];
+    }
+    NSArray<NSString *> *names = WCPPluginIconStyleNames();
+    NSInteger current = [NSUserDefaults.standardUserDefaults integerForKey:WCPHeaderIconStyleKey];
+    for (NSUInteger index = 0; index < names.count; index++) {
+        NSString *title = !hasCustomImage && index == (NSUInteger)MAX(current, 0)
+            ? [@"✓  " stringByAppendingString:names[index]] : names[index];
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [NSUserDefaults.standardUserDefaults removeObjectForKey:WCPHeaderIconKey];
+            [NSUserDefaults.standardUserDefaults setInteger:index forKey:WCPHeaderIconStyleKey];
+            [weakSelf updateHeader];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"圆角度" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf editHeaderRadius]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; WCPShow(self, sheet);
 }
 - (void)editEntryIcon {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"入口图标" message:@"更改后重新进入“我”页生效" preferredStyle:UIAlertControllerStyleActionSheet]; NSArray *names = @[@"微信原生", @"灯泡", @"拼图", @"印章", @"宫格"]; NSInteger current = [NSUserDefaults.standardUserDefaults integerForKey:WCPEntryIconStyleKey]; for (NSUInteger index = 0; index < names.count; index++) { NSString *title = index == (NSUInteger)MAX(current, 0) ? [@"✓  " stringByAppendingString:names[index]] : names[index]; [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [NSUserDefaults.standardUserDefaults setInteger:index forKey:WCPEntryIconStyleKey]; }]]; } [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; WCPShow(self, sheet);
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"入口图标" message:@"更改后重新进入“我”页生效" preferredStyle:UIAlertControllerStyleActionSheet]; NSArray *names = WCPPluginIconStyleNames(); NSInteger current = [NSUserDefaults.standardUserDefaults integerForKey:WCPEntryIconStyleKey]; for (NSUInteger index = 0; index < names.count; index++) { NSString *title = index == (NSUInteger)MAX(current, 0) ? [@"✓  " stringByAppendingString:names[index]] : names[index]; [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [NSUserDefaults.standardUserDefaults setInteger:index forKey:WCPEntryIconStyleKey]; }]]; } [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; WCPShow(self, sheet);
 }
 - (void)editHeaderRadius {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"图标圆角度" message:@"范围 0 - 20" preferredStyle:UIAlertControllerStyleAlert]; [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.keyboardType = UIKeyboardTypeDecimalPad; field.text = [NSString stringWithFormat:@"%.0f", self.heroIcon.layer.cornerRadius]; }]; [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; __weak typeof(self) weakSelf = self; [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [NSUserDefaults.standardUserDefaults setDouble:MIN(20, MAX(0, alert.textFields.firstObject.text.doubleValue)) forKey:WCPHeaderRadiusKey]; [weakSelf updateHeader]; }]]; [self presentViewController:alert animated:YES completion:nil];
@@ -275,7 +348,7 @@ static void WCPShow(UIViewController *controller, UIAlertController *alert) {
 - (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *)info { UIImage *image = info[UIImagePickerControllerOriginalImage]; NSData *data = image ? UIImageJPEGRepresentation(image, 0.86) : nil; if (data) [NSUserDefaults.standardUserDefaults setObject:data forKey:WCPHeaderIconKey]; [picker dismissViewControllerAnimated:YES completion:^{ [self updateHeader]; }]; }
 - (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker { [picker dismissViewControllerAnimated:YES completion:nil]; }
 - (void)confirmReset {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"清空配置" message:@"恢复顶部文案、图标、切换器、排序和分页设置" preferredStyle:UIAlertControllerStyleAlert]; [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; __weak typeof(self) weakSelf = self; [alert addAction:[UIAlertAction actionWithTitle:@"清空" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) { for (NSString *key in @[WCPCategoriesKey, WCPCustomCategoriesKey, WCPNamesKey, WCPVersionsKey, WCPOrdersKey, WCPHiddenKey, WCPPerPageKey, WCPHeaderTitleKey, WCPHeaderSubtitleKey, WCPHeaderIconKey, WCPHeaderRadiusKey, WCPEntryIconStyleKey]) [NSUserDefaults.standardUserDefaults removeObjectForKey:key]; weakSelf.currentCategory = @"功能"; weakSelf.currentPage = 0; [weakSelf reloadTableData]; }]]; [self presentViewController:alert animated:YES completion:nil];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"清空配置" message:@"恢复顶部文案、图标、切换器、排序和分页设置" preferredStyle:UIAlertControllerStyleAlert]; [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; __weak typeof(self) weakSelf = self; [alert addAction:[UIAlertAction actionWithTitle:@"清空" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) { for (NSString *key in @[WCPCategoriesKey, WCPCustomCategoriesKey, WCPNamesKey, WCPVersionsKey, WCPOrdersKey, WCPHiddenKey, WCPPerPageKey, WCPHeaderTitleKey, WCPHeaderSubtitleKey, WCPHeaderIconKey, WCPHeaderIconStyleKey, WCPHeaderRadiusKey, WCPEntryIconStyleKey]) [NSUserDefaults.standardUserDefaults removeObjectForKey:key]; weakSelf.currentCategory = @"定制"; weakSelf.currentPage = 0; [weakSelf reloadTableData]; }]]; [self presentViewController:alert animated:YES completion:nil];
 }
 @end
 
@@ -302,12 +375,12 @@ static void WCPShow(UIViewController *controller, UIAlertController *alert) {
 - (void)tableView:(UITableView *)tableView accessoryButtonTappedForRowWithIndexPath:(NSIndexPath *)path { if (path.section != 1) return; [self.owner setPluginHidden:NO forModel:self.hidden[path.row]]; [self reloadModels]; }
 @end
 
-static UIImage *WCPEntryIcon(void) { NSInteger style = [NSUserDefaults.standardUserDefaults integerForKey:WCPEntryIconStyleKey]; if (style <= 0) { UIImage *native = [UIImage imageNamed:@"WeChat_Lab_Logo_light_small"] ?: [UIImage imageNamed:@"WeChat_Lab_Logo_light_small@3x.png"]; if (native) return native; } NSArray *symbols = @[@"app.badge", @"lightbulb", @"puzzlepiece.extension", @"seal", @"square.grid.2x2"]; return [UIImage systemImageNamed:symbols[MIN((NSUInteger)MAX(style, 0), symbols.count - 1)]]; }
+static UIImage *WCPEntryIcon(void) { return WCPBuiltinPluginIcon([NSUserDefaults.standardUserDefaults integerForKey:WCPEntryIconStyleKey]); }
 
 void NeoWCInstallPluginManagerEntry(id moreViewController) {
     if (!moreViewController) return; id tableManager = nil; @try { tableManager = [moreViewController valueForKey:@"m_tableViewMgr"]; } @catch (__unused NSException *exception) {} if (!tableManager || ![tableManager respondsToSelector:NSSelectorFromString(@"getSectionAt:")]) return; Class cellClass = NSClassFromString(@"WCTableViewCellManager"); UIImage *icon = WCPEntryIcon(); id cell = nil; SEL factory = NSSelectorFromString(@"normalCellForSel:target:leftImage:title:WithDisclosureIndicator:"); if ([cellClass respondsToSelector:factory]) cell = ((id (*)(id, SEL, SEL, id, UIImage *, NSString *, BOOL))objc_msgSend)(cellClass, factory, @selector(pushPluginController), moreViewController, icon, @"插件", YES); else { factory = NSSelectorFromString(@"normalCellForSel:target:leftImage:title:pathKey:"); if ([cellClass respondsToSelector:factory]) cell = ((id (*)(id, SEL, SEL, id, UIImage *, NSString *, NSString *))objc_msgSend)(cellClass, factory, @selector(pushPluginController), moreViewController, icon, @"插件", nil); } if (!cell) return; id section = ((id (*)(id, SEL, NSUInteger))objc_msgSend)(tableManager, NSSelectorFromString(@"getSectionAt:"), 2); if (section && [section respondsToSelector:NSSelectorFromString(@"addCell:")]) ((void (*)(id, SEL, id))objc_msgSend)(section, NSSelectorFromString(@"addCell:"), cell); id tableView = nil; if ([tableManager respondsToSelector:NSSelectorFromString(@"getTableView")]) tableView = ((id (*)(id, SEL))objc_msgSend)(tableManager, NSSelectorFromString(@"getTableView")); if ([tableView respondsToSelector:@selector(reloadData)]) [tableView reloadData];
 }
 
 void NeoWCPushPluginManager(id sender) {
-    WCPluginsViewController *controller = [WCPluginsViewController new]; controller.hidesBottomBarWhenPushed = YES; UINavigationController *navigation = nil; Class managerClass = NSClassFromString(@"CAppViewControllerManager"); SEL current = NSSelectorFromString(@"getCurrentNavigationController"); if ([managerClass respondsToSelector:current]) navigation = ((id (*)(id, SEL))objc_msgSend)(managerClass, current); if (!navigation && [sender isKindOfClass:UIViewController.class]) navigation = [(UIViewController *)sender navigationController]; SEL wechatPush = NSSelectorFromString(@"PushViewController:animated:"); if ([navigation respondsToSelector:wechatPush]) ((void (*)(id, SEL, UIViewController *, BOOL))objc_msgSend)(navigation, wechatPush, controller, YES); else [navigation pushViewController:controller animated:YES];
+    WCPluginsViewController *controller = [WCPluginsViewController new]; controller.hidesBottomBarWhenPushed = YES; UINavigationController *navigation = nil; Class managerClass = NSClassFromString(@"CAppViewControllerManager"); SEL current = NSSelectorFromString(@"getCurrentNavigationController"); if ([managerClass respondsToSelector:current]) navigation = ((id (*)(id, SEL))objc_msgSend)(managerClass, current); if (!navigation && [sender isKindOfClass:UIViewController.class]) navigation = [(UIViewController *)sender navigationController]; WCPPushViewController(navigation, controller, YES);
 }
