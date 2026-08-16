@@ -181,6 +181,24 @@ static void WCPShow(UIViewController *controller, UIAlertController *alert) {
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PluginValueCell"]; if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"PluginValueCell"];
     WCPluginModel *model = self.pageModels[indexPath.row]; cell.textLabel.text = [self displayNameForModel:model]; cell.textLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody]; cell.textLabel.adjustsFontForContentSizeCategory = YES; NSString *version = [self displayVersionForModel:model]; cell.detailTextLabel.text = version.length ? version : nil; cell.detailTextLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody]; cell.detailTextLabel.adjustsFontForContentSizeCategory = YES; cell.imageView.image = nil;
+    BOOL firstRow = indexPath.row == 0;
+    BOOL lastRow = indexPath.row + 1 == (NSInteger)self.pageModels.count;
+    CACornerMask corners = 0;
+    if (firstRow) corners |= kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+    if (lastRow) corners |= kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+    UIView *cardBackground = [UIView new];
+    cardBackground.backgroundColor = UIColor.systemBackgroundColor;
+    cardBackground.layer.cornerRadius = (firstRow || lastRow) ? 16.0 : 0.0;
+    cardBackground.layer.cornerCurve = kCACornerCurveContinuous;
+    cardBackground.layer.maskedCorners = corners;
+    cell.backgroundColor = UIColor.clearColor;
+    cell.backgroundView = cardBackground;
+    UIView *selectedBackground = [UIView new];
+    selectedBackground.backgroundColor = UIColor.secondarySystemFillColor;
+    selectedBackground.layer.cornerRadius = cardBackground.layer.cornerRadius;
+    selectedBackground.layer.cornerCurve = kCACornerCurveContinuous;
+    selectedBackground.layer.maskedCorners = corners;
+    cell.selectedBackgroundView = selectedBackground;
     if (model.isController) { cell.accessoryView = nil; cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator; } else { UISwitch *toggle = [UISwitch new]; toggle.on = [NSUserDefaults.standardUserDefaults boolForKey:model.key]; toggle.tag = indexPath.row; [toggle addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged]; cell.accessoryView = toggle; cell.accessoryType = UITableViewCellAccessoryNone; }
     if (!cell.gestureRecognizers.count) [cell addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(rowLongPressed:)]]; return cell;
 }

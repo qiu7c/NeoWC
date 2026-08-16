@@ -14,6 +14,7 @@ typedef NS_ENUM(NSInteger, NeoWCAuthorizationState) {
 FOUNDATION_EXPORT NSNotificationName const NeoWCAuthorizationStateDidChangeNotification;
 FOUNDATION_EXPORT BOOL NeoWCAuthorizationIsCurrentUserAdministrator(void);
 FOUNDATION_EXPORT BOOL NeoWCAuthorizationAllowsCoreFeatures(void);
+FOUNDATION_EXPORT BOOL NeoWCAuthorizationHasCompletedInitialCheckForCurrentUser(void);
 FOUNDATION_EXPORT BOOL NeoWCAuthorizationIsPermanentlyBlacklisted(void);
 FOUNDATION_EXPORT NeoWCAuthorizationState NeoWCCurrentAuthorizationState(void);
 FOUNDATION_EXPORT NSString *NeoWCCurrentAuthorizationMessage(void);

@@ -3631,6 +3631,7 @@ static void NeoWCRegisterPlugin(void) {
         NeoWCRegisterPlugin();
         NeoWCRefreshDailyStepOverride();
         NeoWCPresentPermanentBlacklistBlockerIfNeeded();
+        if (NeoWCAuthorizationIsPermanentlyBlacklisted()) NeoWCRefreshCurrentAuthorization();
 
         [[NSNotificationCenter defaultCenter]
             addObserverForName:UIApplicationDidFinishLaunchingNotification
@@ -3641,6 +3642,7 @@ static void NeoWCRegisterPlugin(void) {
                         NeoWCRefreshDailyStepOverride();
                         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                             NeoWCPresentPermanentBlacklistBlockerIfNeeded();
+                            if (NeoWCAuthorizationIsPermanentlyBlacklisted()) NeoWCRefreshCurrentAuthorization();
                         });
                         [[NeoWCDebugManager sharedManager] applySavedState];
                     }];
@@ -3700,6 +3702,7 @@ static void NeoWCRegisterPlugin(void) {
                             object:nil
                              queue:[NSOperationQueue mainQueue]
                         usingBlock:^(__unused NSNotification *note) {
+                            if (NeoWCAuthorizationIsPermanentlyBlacklisted()) NeoWCRefreshCurrentAuthorization();
                             NeoWCPresentPermanentBlacklistBlockerIfNeeded();
                             refreshVisibleChatChrome();
                             // WeChat restores different background layers in separate passes.

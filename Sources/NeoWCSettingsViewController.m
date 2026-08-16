@@ -143,10 +143,13 @@
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     if (self.category != NeoWCSettingsCategoryRoot || self.requestedAuthorization) return;
-    BOOL hasLocalAuthorization = NeoWCAuthorizationAllowsCoreFeatures();
+    BOOL needsInitialAuthorization = !NeoWCAuthorizationHasCompletedInitialCheckForCurrentUser();
     self.requestedAuthorization = YES;
     NeoWCRefreshCurrentAuthorization();
-    if (!hasLocalAuthorization) dispatch_async(dispatch_get_main_queue(), ^{ [self presentAuthorizationValidationAlertIfNeeded]; });
+    if (needsInitialAuthorization) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{ [self presentAuthorizationValidationAlertIfNeeded]; });
+    }
 }
 
 - (void)authorizationStateDidChange:(__unused NSNotification *)notification {
@@ -166,8 +169,8 @@
         self.presentedViewController ||
         NeoWCCurrentAuthorizationState() != NeoWCAuthorizationStateLoading ||
         NeoWCAuthorizationAllowsCoreFeatures()) return;
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"授权验证"
-                                                                   message:@"正在验证当前账号，请稍候…"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"首次初始化验证"
+                                                                   message:@"正在验证当前账号授权，请稍候…"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     self.authorizationValidationAlert = alert;
     [self presentViewController:alert animated:YES completion:nil];
