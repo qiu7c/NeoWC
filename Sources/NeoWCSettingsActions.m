@@ -240,10 +240,10 @@
         if ([resolved getWhite:&white alpha:&alpha]) red = green = blue = white;
     }
     NSString *hex = [NSString stringWithFormat:@"#%02X%02X%02X%02X",
-                     (NSInteger)lrint(MIN(1.0, MAX(0.0, red)) * 255.0),
-                     (NSInteger)lrint(MIN(1.0, MAX(0.0, green)) * 255.0),
-                     (NSInteger)lrint(MIN(1.0, MAX(0.0, blue)) * 255.0),
-                     (NSInteger)lrint(MIN(1.0, MAX(0.0, alpha)) * 255.0)];
+                     (unsigned int)lrint(MIN(1.0, MAX(0.0, red)) * 255.0),
+                     (unsigned int)lrint(MIN(1.0, MAX(0.0, green)) * 255.0),
+                     (unsigned int)lrint(MIN(1.0, MAX(0.0, blue)) * 255.0),
+                     (unsigned int)lrint(MIN(1.0, MAX(0.0, alpha)) * 255.0)];
     [NSUserDefaults.standardUserDefaults setObject:hex forKey:self.activeColorDefaultsKey];
     [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:self.activeColorDefaultsKey];
     self.activeColorDefaultsKey = nil;
