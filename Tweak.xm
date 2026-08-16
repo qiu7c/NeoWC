@@ -6100,15 +6100,7 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     UIColor *promptColor = NeoWCColorForDefaultsKey(NeoWCAntiRevokeSideTextColorKey, UIColor.tertiaryLabelColor);
     if (![label.textColor isEqual:promptColor]) label.textColor = promptColor;
 
-    id bubble = nil;
-    SEL bubbleSelector = NSSelectorFromString(@"getBgImageView");
-    if ([self respondsToSelector:bubbleSelector]) bubble = ((id (*)(id, SEL))objc_msgSend)(self, bubbleSelector);
-    UIView *bubbleView = [bubble isKindOfClass:[UIView class]] ? bubble : nil;
-    if (!bubbleView) {
-        id contentView = NeoWCTweakSafeValue(self, @"m_contentView");
-        if (![contentView isKindOfClass:[UIView class]]) contentView = NeoWCTweakSafeValue(self, @"contentView");
-        if ([contentView isKindOfClass:[UIView class]]) bubbleView = contentView;
-    }
+    UIView *bubbleView = NeoWCMessageSideAnchorView(self);
     if (!bubbleView) {
         if (!label.hidden) label.hidden = YES;
         return;

@@ -70,54 +70,18 @@ static UIView *NeoWCMessageTimeAvatarView(UIView *cell) {
     return avatar.hidden ? nil : avatar;
 }
 
-static BOOL NeoWCMessageTimeContentFrameIsUsable(CGRect frame, UIView *cell, BOOL isSender) {
-    CGFloat cellWidth = CGRectGetWidth(cell.bounds);
-    CGFloat cellHeight = CGRectGetHeight(cell.bounds);
-    if (CGRectIsEmpty(frame) || CGRectIsNull(frame) || frame.size.width < 20.0 || frame.size.height < 16.0) return NO;
-    if (frame.size.width > cellWidth * 0.9 || frame.size.height > cellHeight * 0.96) return NO;
-    return isSender ? CGRectGetMidX(frame) >= cellWidth * 0.42 : CGRectGetMidX(frame) <= cellWidth * 0.58;
+static BOOL NeoWCMessageTimeAnchorIsUsable(id value) {
+    if (![value isKindOfClass:UIView.class]) return NO;
+    UIView *view = value;
+    return !view.hidden && view.alpha > 0.01 && CGRectGetWidth(view.bounds) > 1.0 && CGRectGetHeight(view.bounds) > 1.0;
 }
 
-static void NeoWCMessageTimeConsiderContentCandidate(UIView *candidate, UIView *cell, UIView *avatar,
-                                                      BOOL isSender, UIView **bestView, CGFloat *bestScore) {
-    if (!candidate || candidate.hidden || candidate.alpha <= 0.01 || candidate == avatar ||
-        (avatar && [candidate isDescendantOfView:avatar])) return;
-    NSString *className = NSStringFromClass(candidate.class);
-    if ([candidate isKindOfClass:UILabel.class] || [candidate isKindOfClass:UIButton.class] ||
-        [className containsString:@"HeadImage"] || [className containsString:@"Avatar"]) return;
-    CGRect frame = [candidate convertRect:candidate.bounds toView:cell];
-    if (!NeoWCMessageTimeContentFrameIsUsable(frame, cell, isSender)) return;
-    CGFloat score = frame.size.width * frame.size.height;
-    if ([className containsString:@"Message"] || [className containsString:@"Content"] ||
-        [className containsString:@"Image"] || [className containsString:@"Voice"] ||
-        [className containsString:@"Emoticon"] || [className containsString:@"App"]) score += 100000.0;
-    if (score <= *bestScore) return;
-    *bestScore = score;
-    *bestView = candidate;
-}
-
-static UIView *NeoWCMessageTimeBoundedContentCandidate(UIView *root, UIView *cell, UIView *avatar, BOOL isSender) {
-    UIView *best = nil;
-    CGFloat bestScore = 0.0;
-    // Message cells update status frequently. Inspect only two bounded levels;
-    // never recursively walk the complete private view hierarchy here.
-    for (UIView *subview in root.subviews) {
-        NeoWCMessageTimeConsiderContentCandidate(subview, cell, avatar, isSender, &best, &bestScore);
-        for (UIView *nested in subview.subviews) {
-            NeoWCMessageTimeConsiderContentCandidate(nested, cell, avatar, isSender, &best, &bestScore);
-        }
-    }
-    return best;
-}
-
-static UIView *NeoWCMessageTimeBubbleView(UIView *cell, BOOL isSender) {
+UIView *NeoWCMessageSideAnchorView(UIView *cell) {
+    if (!cell) return nil;
     SEL selector = NSSelectorFromString(@"getBgImageView");
     if ([cell respondsToSelector:selector]) {
         id value = ((id (*)(id, SEL))objc_msgSend)(cell, selector);
-        if ([value isKindOfClass:UIView.class] && ![value isHidden]) {
-            CGRect frame = [(UIView *)value convertRect:[(UIView *)value bounds] toView:cell];
-            if (NeoWCMessageTimeContentFrameIsUsable(frame, cell, isSender)) return value;
-        }
+        if (NeoWCMessageTimeAnchorIsUsable(value)) return value;
     }
     id content = NeoWCMessageTimeFirstValue(cell, @[@"m_contentView", @"contentView", @"m_msgContentView",
                                                     @"msgContentView", @"m_messageView", @"messageView",
@@ -125,38 +89,28 @@ static UIView *NeoWCMessageTimeBubbleView(UIView *cell, BOOL isSender) {
     if ([content isKindOfClass:UIView.class]) {
         if ([content respondsToSelector:selector]) {
             id value = ((id (*)(id, SEL))objc_msgSend)(content, selector);
-            if ([value isKindOfClass:UIView.class] && ![value isHidden]) {
-                CGRect frame = [(UIView *)value convertRect:[(UIView *)value bounds] toView:cell];
-                if (NeoWCMessageTimeContentFrameIsUsable(frame, cell, isSender)) return value;
-            }
+            if (NeoWCMessageTimeAnchorIsUsable(value)) return value;
         }
         id value = NeoWCMessageTimeFirstValue(content, @[@"m_bgImageView", @"bgImageView"]);
-        if ([value isKindOfClass:UIView.class] && ![value isHidden]) {
-            CGRect frame = [(UIView *)value convertRect:[(UIView *)value bounds] toView:cell];
-            if (NeoWCMessageTimeContentFrameIsUsable(frame, cell, isSender)) return value;
-        }
-        CGRect contentFrame = [(UIView *)content convertRect:[(UIView *)content bounds] toView:cell];
-        if (NeoWCMessageTimeContentFrameIsUsable(contentFrame, cell, isSender)) return content;
+        if (NeoWCMessageTimeAnchorIsUsable(value)) return value;
+        if (NeoWCMessageTimeAnchorIsUsable(content)) return content;
     }
     for (NSString *selectorName in @[@"getContentView", @"getMessageContentView", @"getMsgContentView", @"getNodeView"]) {
         SEL contentSelector = NSSelectorFromString(selectorName);
         if (![cell respondsToSelector:contentSelector]) continue;
         id value = ((id (*)(id, SEL))objc_msgSend)(cell, contentSelector);
         if (![value isKindOfClass:UIView.class]) continue;
-        CGRect frame = [(UIView *)value convertRect:[(UIView *)value bounds] toView:cell];
-        if (NeoWCMessageTimeContentFrameIsUsable(frame, cell, isSender)) return value;
+        if (NeoWCMessageTimeAnchorIsUsable(value)) return value;
     }
-    UIView *avatar = NeoWCMessageTimeAvatarView(cell);
-    if ([content isKindOfClass:UIView.class] && content != cell) {
-        UIView *bounded = NeoWCMessageTimeBoundedContentCandidate(content, cell, avatar, isSender);
-        if (bounded) return bounded;
-    }
-    return NeoWCMessageTimeBoundedContentCandidate(cell, cell, avatar, isSender);
+    return nil;
 }
 
 static UILabel *NeoWCMessageTimeLabel(UIView *cell, const void *key) {
     UILabel *label = objc_getAssociatedObject(cell, key);
-    if (label) return label;
+    if (label) {
+        if (label.superview != cell) [cell addSubview:label];
+        return label;
+    }
     label = [[UILabel alloc] initWithFrame:CGRectZero];
     label.numberOfLines = 1;
     label.textAlignment = NSTextAlignmentCenter;
@@ -195,7 +149,7 @@ static void NeoWCRefreshMessageTimeLabels(UIView *cell) {
     BOOL enabled = NeoWCEnhancementEnabled(NeoWCChatMessageTimeEnabledKey);
     BOOL bubbleSide = [defaults boolForKey:NeoWCChatMessageTimeBubbleSideKey];
     // Bubble mode wins if legacy settings ever contain both booleans. When
-    // neither is set, fall back to the default avatar-between mode.
+    // neither is set, fall back to the default below-avatar mode.
     BOOL belowAvatar = !bubbleSide;
     if (!enabled || !cell.window) {
         NeoWCHideMessageTimeLabels(cell);
@@ -249,7 +203,7 @@ static void NeoWCRefreshMessageTimeLabels(UIView *cell) {
 
     UILabel *bubbleLabel = objc_getAssociatedObject(cell, NeoWCMessageTimeBubbleLabelKey);
     if (bubbleSide) {
-        UIView *bubble = NeoWCMessageTimeBubbleView(cell, isSender);
+        UIView *bubble = NeoWCMessageSideAnchorView(cell);
         if (bubble) {
             CGRect frame = [bubble convertRect:bubble.bounds toView:cell];
             CGFloat gap = 5.0;
@@ -301,8 +255,13 @@ void NeoWCScheduleMessageTimeRefresh(UIView *cell) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.08 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIView *delayedCell = weakCell;
             if (!delayedCell) return;
-            objc_setAssociatedObject(delayedCell, NeoWCMessageTimeRefreshPendingKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             NeoWCRefreshMessageTimeLabels(delayedCell);
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.18 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                UIView *finalCell = weakCell;
+                if (!finalCell) return;
+                objc_setAssociatedObject(finalCell, NeoWCMessageTimeRefreshPendingKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                NeoWCRefreshMessageTimeLabels(finalCell);
+            });
         });
     });
 }
