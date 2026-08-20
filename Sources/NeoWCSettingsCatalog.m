@@ -115,6 +115,8 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCChatMessageTimeBoldKey: @NO,
         NeoWCEmoticonToSelfieEnabledKey: @NO,
         NeoWCMomentsForwardEnabledKey: @NO,
+        NeoWCMomentsSaveImagesEnabledKey: @NO,
+        NeoWCMomentsOriginalMediaPostEnabledKey: @NO,
         NeoWCReplySwipeEnabledKey: @NO,
         NeoWCReplySwipeSelfActionKey: @(NeoWCReplySwipeActionQuote),
         NeoWCReplySwipeOtherActionKey: @(NeoWCReplySwipeActionQuote),
@@ -163,6 +165,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCMeMenuKnownTitlesKey: @[],
         NeoWCMeMenuHiddenTitlesKey: @[],
         NeoWCAutoVoiceTranscriptionEnabledKey: @NO,
+        NeoWCVoiceForwardEnabledKey: @NO,
         NeoWCAutoVoiceTranscriptionIgnoreGroupKey: @NO,
         NeoWCAutoVoiceTranscriptionIgnorePrivateKey: @NO,
         NeoWCAutoVoiceTranscriptionIgnoreSelfKey: @YES,
@@ -262,6 +265,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCSettingRowKindSwitch, NeoWCGameSelectorKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"聊天记录小丑", @"长按消息，仅修改当前页面本机显示", @"square.and.pencil", NeoWCSettingRowKindSwitch, NeoWCChatJokerEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"表情存入自拍", @"在微信原生菜单中存入自拍表情", @"camera", NeoWCSettingRowKindSwitch, NeoWCEmoticonToSelfieEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"语音转发", @"在语音长按菜单中恢复微信原生转发", @"waveform.badge.plus", NeoWCSettingRowKindSwitch, NeoWCVoiceForwardEnabledKey, nil, NeoWCSettingActionNone),
     ]];
     NeoWCAddFeature(interaction, NeoWCItem(@"语音自动转文字", @"调用微信原生转文字", @"waveform.and.mic", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"忽略群聊语音", @"群聊中的语音保持原样", @"person.3", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnoreGroupKey, nil, NeoWCSettingActionNone),
@@ -339,7 +343,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
 
     NSMutableArray *media = [NSMutableArray arrayWithArray:@[
         NeoWCItem(@"图片编辑快捷发送", @"在官方图片编辑菜单中发送到当前会话", @"photo.badge.arrow.down", NeoWCSettingRowKindSwitch, NeoWCImageEditQuickSendEnabledKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"自动选择原图", @"选择和预览图片时自动勾选原图", @"photo.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCAutoOriginalImageEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"自动选择原图", @"选择和预览照片、视频时自动勾选原图", @"photo.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCAutoOriginalImageEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"突破多选限制", @"放宽消息、转发目标与拍摄视频限制", @"checklist.unchecked", NeoWCSettingRowKindSwitch, NeoWCMultiSelectLimitEnabledKey, nil, NeoWCSettingActionNone),
     ]];
     NeoWCAddFeature(media, NeoWCItem(@"多选消息导出", @"控制复制、保存和分享功能", @"square.and.arrow.up.on.square", NeoWCSettingRowKindSwitch, NeoWCMultiSelectExportEnabledKey, nil, NeoWCSettingActionNone), @[
@@ -376,6 +380,8 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     [moments addObjectsFromArray:@[
         NeoWCItem(@"朋友圈操作按钮替换为评论", @"点击后直接进入评论", @"bubble.middle.bottom", NeoWCSettingRowKindSwitch, NeoWCMomentsQuickCommentKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"朋友圈转发", @"点击进入朋友圈转发发布页", @"arrowshape.turn.up.right", NeoWCSettingRowKindSwitch, NeoWCMomentsForwardEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"保存朋友圈图片", @"在朋友圈操作菜单中保存该条全部图片", @"square.and.arrow.down", NeoWCSettingRowKindSwitch, NeoWCMomentsSaveImagesEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"朋友圈高清发送", @"发布图片、视频时启用原始媒体参数", @"photo.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCMomentsOriginalMediaPostEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"朋友圈头像快捷权限", @"长按头像切换朋友权限", @"person.crop.circle.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCMomentsQuickPermissionsKey, nil, NeoWCSettingActionNone),
     ]];
     NSString *dateFormat = NeoWCNormalizedMomentsDateFormat([defaults stringForKey:NeoWCMomentsPreciseTimeFormatKey]) ?: NeoWCMomentsPreciseTimeDefaultFormat;
@@ -455,13 +461,11 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
                     @[
         NeoWCItem(@"头像大小", @"限制在 24 到 34 之间", @"person.crop.circle", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarAvatarSizeKey]], NeoWCSettingActionChatTopAvatarSize),
         NeoWCItem(@"昵称字号", @"限制在 12 到 18 之间", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarNicknameSizeKey]], NeoWCSettingActionChatTopNicknameSize),
+        NeoWCItem(@"玻璃类型", supportsLiquidGlass ? @"用于左右胶囊和置顶消息" : @"iOS 26 以下仅支持超薄玻璃", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(usesLiquidGlass ? @"液态玻璃" : @"超薄玻璃"), NeoWCSettingActionChatTopEffectStyle),
+        NeoWCItem(@"模糊强度", @"限制在 20% 到 100%", @"drop.halffull", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassBlurIntensityKey]], NeoWCSettingActionChatGlassBlurIntensity),
+        NeoWCItem(@"染色强度", @"限制在 0% 到 30%；0% 不额外染色", @"paintpalette", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassTintOpacityKey]], NeoWCSettingActionChatGlassTintOpacity),
+        NeoWCItem(@"胶囊阴影", @"左右胶囊使用轻微环境阴影", @"circle.dotted", NeoWCSettingRowKindSwitch, NeoWCChatTopBarShadowEnabledKey, nil, NeoWCSettingActionNone),
     ], defaults, collapsed);
-    [chatCapsules addObjectsFromArray:@[
-        NeoWCItem(@"玻璃类型", supportsLiquidGlass ? @"用于胶囊顶栏" : @"iOS 26 以下仅支持超薄玻璃", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(usesLiquidGlass ? @"液态玻璃" : @"超薄玻璃"), NeoWCSettingActionChatTopEffectStyle),
-        NeoWCItem(@"模糊强度", @"胶囊顶栏使用，限制在 20% 到 100%", @"drop.halffull", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassBlurIntensityKey]], NeoWCSettingActionChatGlassBlurIntensity),
-        NeoWCItem(@"染色强度", @"使用系统背景色轻微统一玻璃明暗，限制在 0% 到 30%", @"paintpalette", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassTintOpacityKey]], NeoWCSettingActionChatGlassTintOpacity),
-        NeoWCItem(@"胶囊阴影", @"胶囊顶栏的轻微环境阴影", @"circle.dotted", NeoWCSettingRowKindSwitch, NeoWCChatTopBarShadowEnabledKey, nil, NeoWCSettingActionNone),
-    ]];
     NSMutableArray *input = [NSMutableArray array];
     NSMutableArray *roundingChildren = [NSMutableArray array];
     NeoWCSettingItem *inner = NeoWCItem(@"输入框内部圆角", @"调整文字输入区域", @"text.cursor", NeoWCSettingRowKindSwitch, NeoWCChatInputInnerRoundingKey, nil, NeoWCSettingActionNone);
@@ -480,7 +484,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
     ];
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"display" title:@"显示" footer:@"关闭后恢复微信原始样式。" items:display],
-        [NeoWCSettingSection sectionWithIdentifier:@"chat-capsules" title:@"聊天胶囊" footer:@"玻璃参数仅作用于胶囊顶栏。" items:chatCapsules],
+        [NeoWCSettingSection sectionWithIdentifier:@"chat-capsules" title:@"聊天顶栏" footer:@"展开胶囊顶栏可调整内容尺寸与玻璃效果。" items:chatCapsules],
         [NeoWCSettingSection sectionWithIdentifier:@"input" title:@"输入栏" footer:nil items:input],
         [NeoWCSettingSection sectionWithIdentifier:@"entry-management" title:@"入口管理" footer:nil items:management],
     ];

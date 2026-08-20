@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <Photos/Photos.h>
 #import <math.h>
 #import <stdlib.h>
 #import <objc/message.h>
@@ -58,6 +59,7 @@
 - (id)operateBtnImage:(BOOL)spring isSpringStyle:(BOOL)springStyle;
 - (void)neowc_handleMomentsDoubleTap;
 - (void)neowc_handleMomentsForward:(id)sender;
+- (void)neowc_handleMomentsSaveImages:(id)sender;
 @end
 
 @interface WCTimeLineOperateButtonView : UIButton
@@ -70,6 +72,7 @@
 - (void)showWithItemData:(id)item tipPoint:(CGPoint)tipPoint;
 - (void)hide;
 - (void)neowc_handleMomentsForward:(id)sender;
+- (void)neowc_handleMomentsSaveImages:(id)sender;
 @end
 
 @interface CommonMessageCellView : UIView
@@ -232,12 +235,16 @@ static char NeoWCDeviceCardDidConfirmKey;
 static char NeoWCGameDidAuthorizeKey;
 static char NeoWCMomentsDoubleTapRecognizerKey;
 static char NeoWCMomentsForwardButtonKey;
+static char NeoWCMomentsSaveButtonKey;
 static char NeoWCMomentsOriginalOperateFrameKey;
 static char NeoWCMomentsFloatForwardButtonKey;
+static char NeoWCMomentsFloatSaveButtonKey;
 static char NeoWCMomentsFloatSeparatorKey;
+static char NeoWCMomentsFloatSaveSeparatorKey;
 static char NeoWCMomentsFloatDataItemKey;
 static char NeoWCMomentsFloatSnapshotKey;
 static char NeoWCMomentsForwardTaskKey;
+static char NeoWCMomentsSaveTaskKey;
 static char NeoWCImageJokerPickerDelegateKey;
 static char NeoWCEmoticonPreviewLongPressKey;
 static char NeoWCMomentsOriginalTimeTextKey;
@@ -326,6 +333,8 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
 static void NeoWCRefreshChatTopBarAfterWechatUpdate(BaseMsgContentViewController *controller);
 static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView);
 static BaseMsgContentViewController *NeoWCResolveVisibleChatController(void);
+static BOOL NeoWCMomentCanSaveImages(id dataItem);
+static void NeoWCSaveMomentImages(id dataItem, UIViewController *presenter);
 
 @interface NeoWCBarButtonActionProxy : NSObject
 @property (nonatomic, strong) UIBarButtonItem *originalItem;
@@ -423,7 +432,9 @@ static UIControl *NeoWCFirstControlInView(UIView *view) {
 @property (nonatomic, strong) CALayer *originalLayerMask;
 @property (nonatomic, strong) CAShapeLayer *expandedLayerMask;
 @property (nonatomic, assign) CGRect forwardFrame;
+@property (nonatomic, assign) CGRect saveFrame;
 @property (nonatomic, assign) CGRect separatorFrame;
+@property (nonatomic, assign) CGRect saveSeparatorFrame;
 @property (nonatomic, assign) BOOL applying;
 @end
 
@@ -2627,6 +2638,118 @@ static NSString *NeoWCMomentsExistingMediaPath(id mediaItem, NSArray<NSString *>
 
 @end
 
+@interface NeoWCMomentsImageSaveTask : NSObject
+@property (nonatomic, strong) id dataItem;
+@property (nonatomic, weak) UIViewController *presenter;
+@property (nonatomic, strong) NSArray *mediaItems;
+@property (nonatomic, strong) NSMutableArray *resolvedPaths;
+@property (nonatomic, strong) NSMutableArray *downloaders;
+@property (nonatomic, assign) NSUInteger remainingDownloads;
+@property (nonatomic, assign) BOOL failed;
+- (void)start;
+@end
+
+@implementation NeoWCMomentsImageSaveTask
+
+- (void)finish {
+    UIViewController *presenter = self.presenter;
+    if (presenter && objc_getAssociatedObject(presenter, &NeoWCMomentsSaveTaskKey) == self) {
+        objc_setAssociatedObject(presenter, &NeoWCMomentsSaveTaskKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
+- (void)saveResolvedImages {
+    NSMutableArray<UIImage *> *images = [NSMutableArray array];
+    for (id value in self.resolvedPaths) {
+        if ([value isKindOfClass:[NSString class]] && [value length] > 0) {
+            UIImage *image = [UIImage imageWithContentsOfFile:value];
+            if (image) [images addObject:image];
+        }
+    }
+    if (self.failed || images.count != self.mediaItems.count) {
+        NeoWCShowTransientMessage(@"朋友圈图片下载失败，请稍后重试", NO);
+        [self finish];
+        return;
+    }
+    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+        for (UIImage *image in images) {
+            [PHAssetChangeRequest creationRequestForAssetFromImage:image];
+        }
+    } completionHandler:^(BOOL success, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                NeoWCShowTransientMessage([NSString stringWithFormat:@"已保存 %lu 张朋友圈图片", (unsigned long)images.count], YES);
+                NeoWCCompatibilityMarkTriggered(@"moments-save-images");
+            } else {
+                NeoWCLog(@"保存朋友圈图片失败：%@", error.localizedDescription ?: @"未知错误");
+                NeoWCShowTransientMessage(@"保存失败，请检查照片权限", NO);
+            }
+            [self finish];
+        });
+    }];
+}
+
+- (void)finishMediaResolutionIfNeeded {
+    if (self.remainingDownloads == 0) [self saveResolvedImages];
+}
+
+- (void)resolveMediaItem:(id)mediaItem index:(NSUInteger)index {
+    NSArray *pathSelectors = @[@"pathForUhdData", @"pathForHdData", @"pathForData", @"pathForExistData"];
+    NSString *path = NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
+    if (path.length > 0) {
+        self.resolvedPaths[index] = path;
+        self.remainingDownloads--;
+        [self finishMediaResolutionIfNeeded];
+        return;
+    }
+    Class downloaderClass = NSClassFromString(@"WCMediaDownloader");
+    SEL initializer = NSSelectorFromString(@"initWithDataItem:mediaItem:");
+    SEL startSelector = NSSelectorFromString(@"startDownloadWithCompletionHandler:");
+    id downloader = downloaderClass && [downloaderClass instancesRespondToSelector:initializer]
+        ? ((id (*)(id, SEL, id, id))objc_msgSend)([downloaderClass alloc], initializer, self.dataItem, mediaItem) : nil;
+    if (!downloader || ![downloader respondsToSelector:startSelector]) {
+        self.failed = YES;
+        self.remainingDownloads--;
+        [self finishMediaResolutionIfNeeded];
+        return;
+    }
+    [self.downloaders addObject:downloader];
+    __weak typeof(self) weakSelf = self;
+    void (^completion)(BOOL, NSError *) = ^(__unused BOOL success, __unused NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            NSString *resolvedPath = NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
+            if (resolvedPath.length > 0) strongSelf.resolvedPaths[index] = resolvedPath;
+            else strongSelf.failed = YES;
+            [strongSelf.downloaders removeObject:downloader];
+            strongSelf.remainingDownloads--;
+            [strongSelf finishMediaResolutionIfNeeded];
+        });
+    };
+    ((void (*)(id, SEL, id))objc_msgSend)(downloader, startSelector, completion);
+}
+
+- (void)start {
+    id contentObject = NeoWCMomentsContentObject(self.dataItem);
+    NSArray *mediaItems = NeoWCMomentsMediaItems(self.dataItem);
+    if (!NeoWCMomentsBoolForSelector(contentObject, @"isPhotoType") || mediaItems.count == 0) {
+        NeoWCShowTransientMessage(@"该条朋友圈没有可保存的图片", NO);
+        [self finish];
+        return;
+    }
+    self.mediaItems = [mediaItems subarrayWithRange:NSMakeRange(0, MIN((NSUInteger)9, mediaItems.count))];
+    self.resolvedPaths = [NSMutableArray arrayWithCapacity:self.mediaItems.count];
+    for (__unused id item in self.mediaItems) [self.resolvedPaths addObject:NSNull.null];
+    self.downloaders = [NSMutableArray array];
+    self.remainingDownloads = self.mediaItems.count;
+    [self.mediaItems enumerateObjectsUsingBlock:^(id mediaItem, NSUInteger index, __unused BOOL *stop) {
+        [self resolveMediaItem:mediaItem index:index];
+    }];
+}
+
+@end
+
 static void NeoWCForwardMoment(id dataItem, UIViewController *presenter) {
     if (!NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey) || !presenter.view.window) return;
     if (!NeoWCMomentCanForward(dataItem)) {
@@ -2637,6 +2760,24 @@ static void NeoWCForwardMoment(id dataItem, UIViewController *presenter) {
     task.dataItem = dataItem;
     task.presenter = presenter;
     objc_setAssociatedObject(presenter, &NeoWCMomentsForwardTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [task start];
+}
+
+static BOOL NeoWCMomentCanSaveImages(id dataItem) {
+    id contentObject = NeoWCMomentsContentObject(dataItem);
+    return NeoWCMomentsBoolForSelector(contentObject, @"isPhotoType") && NeoWCMomentsMediaItems(dataItem).count > 0;
+}
+
+static void NeoWCSaveMomentImages(id dataItem, UIViewController *presenter) {
+    if (!NeoWCEnhancementEnabled(NeoWCMomentsSaveImagesEnabledKey) || !presenter.view.window) return;
+    if (!NeoWCMomentCanSaveImages(dataItem)) {
+        NeoWCShowTransientMessage(@"该条朋友圈没有可保存的图片", NO);
+        return;
+    }
+    NeoWCMomentsImageSaveTask *task = [NeoWCMomentsImageSaveTask new];
+    task.dataItem = dataItem;
+    task.presenter = presenter;
+    objc_setAssociatedObject(presenter, &NeoWCMomentsSaveTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [task start];
 }
 
@@ -2676,9 +2817,13 @@ static BOOL NeoWCMomentsVisibleTextIntersectsRect(UIView *view,
 
 static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
     UIButton *button = objc_getAssociatedObject(cell, &NeoWCMomentsForwardButtonKey);
-    BOOL shouldShow = NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey) &&
-                      NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey);
+    UIButton *saveButton = objc_getAssociatedObject(cell, &NeoWCMomentsSaveButtonKey);
     id dataItem = NeoWCMomentsObjectForName(cell, @"m_dataItem");
+    BOOL quickComment = NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey);
+    BOOL shouldShowForward = quickComment && NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey);
+    BOOL shouldShowSave = quickComment && NeoWCEnhancementEnabled(NeoWCMomentsSaveImagesEnabledKey) &&
+                          NeoWCMomentCanSaveImages(dataItem);
+    BOOL shouldShow = shouldShowForward || shouldShowSave;
     UIView *operateButton = NeoWCMomentsObjectForName(cell, @"m_operateBtn");
     NSValue *storedFrameValue = [operateButton isKindOfClass:[UIView class]]
         ? objc_getAssociatedObject(operateButton, &NeoWCMomentsOriginalOperateFrameKey)
@@ -2692,25 +2837,47 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
             objc_setAssociatedObject(operateButton, &NeoWCMomentsOriginalOperateFrameKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         [button removeFromSuperview];
+        [saveButton removeFromSuperview];
         objc_setAssociatedObject(cell, &NeoWCMomentsForwardButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &NeoWCMomentsSaveButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
     if (!button) {
         button = NeoWCMomentsForwardButton(cell, @selector(neowc_handleMomentsForward:));
         objc_setAssociatedObject(cell, &NeoWCMomentsForwardButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
+    if (!saveButton) {
+        saveButton = NeoWCMomentsForwardButton(cell, @selector(neowc_handleMomentsSaveImages:));
+        UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:13.0 weight:UIImageSymbolWeightRegular];
+        UIImage *icon = [UIImage systemImageNamed:@"square.and.arrow.down" withConfiguration:configuration] ?:
+                        [UIImage systemImageNamed:@"arrow.down.to.line" withConfiguration:configuration];
+        [saveButton setImage:[icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] forState:UIControlStateNormal];
+        saveButton.accessibilityLabel = @"保存朋友圈图片";
+        objc_setAssociatedObject(cell, &NeoWCMomentsSaveButtonKey, saveButton, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    button.hidden = !shouldShowForward;
+    saveButton.hidden = !shouldShowSave;
     if (button.superview != cell) {
         [button removeFromSuperview];
         [cell addSubview:button];
     }
+    if (saveButton.superview != cell) {
+        [saveButton removeFromSuperview];
+        [cell addSubview:saveButton];
+    }
     button.tintColor = operateButton.tintColor ?: UIColor.darkGrayColor;
+    saveButton.tintColor = button.tintColor;
     CGRect originalFrame = storedFrameValue ? storedFrameValue.CGRectValue : operateButton.frame;
-    CGRect shiftedFrame = CGRectOffset(originalFrame, -36.0, 0.0);
+    NSUInteger slotCount = (shouldShowForward ? 1 : 0) + (shouldShowSave ? 1 : 0);
+    CGRect shiftedFrame = CGRectOffset(originalFrame, -36.0 * slotCount, 0.0);
+    CGRect oneSlotFrame = CGRectOffset(originalFrame, -36.0, 0.0);
+    CGRect twoSlotFrame = CGRectOffset(originalFrame, -72.0, 0.0);
     if (storedFrameValue &&
         !CGRectEqualToRect(operateButton.frame, originalFrame) &&
-        !CGRectEqualToRect(operateButton.frame, shiftedFrame)) {
+        !CGRectEqualToRect(operateButton.frame, oneSlotFrame) &&
+        !CGRectEqualToRect(operateButton.frame, twoSlotFrame)) {
         originalFrame = operateButton.frame;
-        shiftedFrame = CGRectOffset(originalFrame, -36.0, 0.0);
+        shiftedFrame = CGRectOffset(originalFrame, -36.0 * slotCount, 0.0);
     }
     objc_setAssociatedObject(operateButton, &NeoWCMomentsOriginalOperateFrameKey,
                              [NSValue valueWithCGRect:originalFrame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -2727,14 +2894,35 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
         CGRectGetMinY(originalFrameInCell) >= CGRectGetHeight(originalFrameInCell) + 2.0;
     if (shouldStackVertically) {
         operateButton.frame = originalFrame;
-        button.frame = CGRectOffset(originalFrameInCell, 0.0, -CGRectGetHeight(originalFrameInCell) - 2.0);
+        CGFloat nextX = CGRectGetMinX(originalFrameInCell) - 36.0 * (slotCount - 1);
+        if (shouldShowForward) {
+            button.frame = CGRectMake(nextX, CGRectGetMinY(originalFrameInCell) - CGRectGetHeight(originalFrameInCell) - 2.0,
+                                      CGRectGetWidth(originalFrameInCell), CGRectGetHeight(originalFrameInCell));
+            nextX += 36.0;
+        }
+        if (shouldShowSave) {
+            saveButton.frame = CGRectMake(nextX, CGRectGetMinY(originalFrameInCell) - CGRectGetHeight(originalFrameInCell) - 2.0,
+                                          CGRectGetWidth(originalFrameInCell), CGRectGetHeight(originalFrameInCell));
+        }
     } else {
         operateButton.frame = shiftedFrame;
-        button.frame = originalFrameInCell;
+        CGFloat nextX = CGRectGetMinX(originalFrameInCell) - 36.0 * (slotCount - 1);
+        if (shouldShowForward) {
+            button.frame = CGRectMake(nextX, CGRectGetMinY(originalFrameInCell), CGRectGetWidth(originalFrameInCell), CGRectGetHeight(originalFrameInCell));
+            nextX += 36.0;
+        }
+        if (shouldShowSave) {
+            saveButton.frame = CGRectMake(nextX, CGRectGetMinY(originalFrameInCell), CGRectGetWidth(originalFrameInCell), CGRectGetHeight(originalFrameInCell));
+        }
     }
-    button.hidden = NO;
-    button.alpha = 1.0;
-    [cell bringSubviewToFront:button];
+    if (shouldShowForward) {
+        button.alpha = 1.0;
+        [cell bringSubviewToFront:button];
+    }
+    if (shouldShowSave) {
+        saveButton.alpha = 1.0;
+        [cell bringSubviewToFront:saveButton];
+    }
 }
 
 static void NeoWCRestoreMomentsFloatMenu(WCOperateFloatView *floatView) {
@@ -2743,7 +2931,9 @@ static void NeoWCRestoreMomentsFloatMenu(WCOperateFloatView *floatView) {
     snapshot.applying = YES;
     [snapshot.expandedLayerMask removeAllAnimations];
     UIButton *button = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey);
+    UIButton *saveButton = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSaveButtonKey);
     UIImageView *separator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey);
+    UIImageView *saveSeparator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSaveSeparatorKey);
     floatView.frame = snapshot.baseFrame;
     if (snapshot.container != floatView) snapshot.container.frame = snapshot.baseContainerFrame;
     NSUInteger count = MIN(snapshot.baseViews.count, snapshot.baseFrames.count);
@@ -2751,7 +2941,9 @@ static void NeoWCRestoreMomentsFloatMenu(WCOperateFloatView *floatView) {
         snapshot.baseViews[index].frame = snapshot.baseFrames[index].CGRectValue;
     }
     button.hidden = YES;
+    saveButton.hidden = YES;
     separator.hidden = YES;
+    saveSeparator.hidden = YES;
     floatView.layer.mask = snapshot.originalLayerMask;
     snapshot.applying = NO;
     objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSnapshotKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -2759,7 +2951,9 @@ static void NeoWCRestoreMomentsFloatMenu(WCOperateFloatView *floatView) {
 
 static NeoWCMomentsFloatMenuSnapshot *NeoWCCaptureMomentsFloatMenu(WCOperateFloatView *floatView,
                                                                    UIButton *button,
-                                                                   UIView *separator) {
+                                                                   UIButton *saveButton,
+                                                                   UIView *separator,
+                                                                   UIView *saveSeparator) {
     UIControl *likeButton = nil;
     UIControl *commentButton = nil;
     NeoWCMomentsNativeFloatControls(floatView, &likeButton, &commentButton);
@@ -2772,7 +2966,8 @@ static NeoWCMomentsFloatMenuSnapshot *NeoWCCaptureMomentsFloatMenu(WCOperateFloa
 
     NeoWCMomentsFloatMenuSnapshot *snapshot = [NeoWCMomentsFloatMenuSnapshot new];
     snapshot.baseFrame = floatView.frame;
-    snapshot.addedWidth = slotWidth;
+    NSUInteger slotCount = (button.hidden ? 0 : 1) + (saveButton.hidden ? 0 : 1);
+    snapshot.addedWidth = slotWidth * slotCount;
     snapshot.container = container;
     snapshot.baseContainerFrame = container.frame;
     snapshot.containerIsDirectChild = container.superview == floatView;
@@ -2781,7 +2976,7 @@ static NeoWCMomentsFloatMenuSnapshot *NeoWCCaptureMomentsFloatMenu(WCOperateFloa
     NSMutableArray<UIView *> *baseViews = [NSMutableArray array];
     NSMutableArray<NSValue *> *baseFrames = [NSMutableArray array];
     for (UIView *view in container.subviews) {
-        if (view == button || view == separator) continue;
+        if (view == button || view == saveButton || view == separator || view == saveSeparator) continue;
         [baseViews addObject:view];
         [baseFrames addObject:[NSValue valueWithCGRect:view.frame]];
     }
@@ -2801,8 +2996,17 @@ static NeoWCMomentsFloatMenuSnapshot *NeoWCCaptureMomentsFloatMenu(WCOperateFloa
     CGFloat separatorY = slotY + (slotHeight - separatorHeight) * 0.5;
     CGFloat containerWidth = CGRectGetWidth(container.bounds);
     if (containerWidth <= 0.0) containerWidth = CGRectGetWidth(snapshot.baseContainerFrame);
-    snapshot.forwardFrame = CGRectMake(containerWidth, slotY, slotWidth, slotHeight);
-    snapshot.separatorFrame = CGRectMake(containerWidth - separatorWidth,
+    CGFloat nextX = containerWidth;
+    if (!button.hidden) {
+        snapshot.forwardFrame = CGRectMake(nextX, slotY, slotWidth, slotHeight);
+        snapshot.separatorFrame = CGRectMake(nextX - separatorWidth, separatorY, separatorWidth, separatorHeight);
+        nextX += slotWidth;
+    }
+    if (!saveButton.hidden) {
+        snapshot.saveFrame = CGRectMake(nextX, slotY, slotWidth, slotHeight);
+        snapshot.saveSeparatorFrame = CGRectMake(nextX - separatorWidth, separatorY, separatorWidth, separatorHeight);
+    }
+    if (button.hidden) snapshot.separatorFrame = CGRectMake(containerWidth - separatorWidth,
                                          separatorY,
                                          separatorWidth,
                                          separatorHeight);
@@ -2873,7 +3077,9 @@ static void NeoWCApplyMomentsFloatMenuSnapshot(WCOperateFloatView *floatView) {
     snapshot.applying = YES;
 
     UIButton *button = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey);
+    UIButton *saveButton = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSaveButtonKey);
     UIImageView *separator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey);
+    UIImageView *saveSeparator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSaveSeparatorKey);
     CGRect expandedFrame = snapshot.baseFrame;
     expandedFrame.origin.x -= snapshot.addedWidth;
     expandedFrame.size.width += snapshot.addedWidth;
@@ -2899,12 +3105,21 @@ static void NeoWCApplyMomentsFloatMenuSnapshot(WCOperateFloatView *floatView) {
     }
 
     button.frame = snapshot.forwardFrame;
+    saveButton.frame = snapshot.saveFrame;
     separator.frame = snapshot.separatorFrame;
-    button.hidden = NO;
-    separator.hidden = NO;
-    button.alpha = 1.0;
-    [snapshot.container bringSubviewToFront:separator];
-    [snapshot.container bringSubviewToFront:button];
+    saveSeparator.frame = snapshot.saveSeparatorFrame;
+    if (!button.hidden) {
+        button.alpha = 1.0;
+        separator.hidden = NO;
+        [snapshot.container bringSubviewToFront:separator];
+        [snapshot.container bringSubviewToFront:button];
+    }
+    if (!saveButton.hidden) {
+        saveButton.alpha = 1.0;
+        saveSeparator.hidden = NO;
+        [snapshot.container bringSubviewToFront:saveSeparator];
+        [snapshot.container bringSubviewToFront:saveButton];
+    }
 
     if (!snapshot.expandedLayerMask) {
         snapshot.expandedLayerMask = [CAShapeLayer layer];
@@ -2921,25 +3136,47 @@ static void NeoWCApplyMomentsFloatMenuSnapshot(WCOperateFloatView *floatView) {
 
 static void NeoWCPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
     id dataItem = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatDataItemKey);
-    BOOL shouldShow = NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey) &&
-                      !NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) &&
-                      dataItem != nil;
+    BOOL allowFloatExtension = !NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) && dataItem != nil;
+    BOOL shouldShowForward = allowFloatExtension && NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey);
+    BOOL shouldShowSave = allowFloatExtension && NeoWCEnhancementEnabled(NeoWCMomentsSaveImagesEnabledKey) &&
+                          NeoWCMomentCanSaveImages(dataItem);
+    BOOL shouldShow = shouldShowForward || shouldShowSave;
     UIControl *likeButton = nil;
     UIControl *commentButton = nil;
     NeoWCMomentsNativeFloatControls(floatView, &likeButton, &commentButton);
     UIControl *anchor = commentButton ?: likeButton;
     UIButton *button = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey);
+    UIButton *saveButton = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSaveButtonKey);
     UIImageView *separator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey);
+    UIImageView *saveSeparator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSaveSeparatorKey);
     if (!shouldShow || ![anchor isKindOfClass:[UIControl class]]) {
         NeoWCRestoreMomentsFloatMenu(floatView);
         [button removeFromSuperview];
+        [saveButton removeFromSuperview];
         [separator removeFromSuperview];
+        [saveSeparator removeFromSuperview];
         objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSnapshotKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSaveButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSaveSeparatorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
-
+    if (!saveButton) {
+        saveButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        [saveButton setTitle:@"保存" forState:UIControlStateNormal];
+        UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:14.0 weight:UIImageSymbolWeightRegular];
+        UIImage *icon = [UIImage systemImageNamed:@"square.and.arrow.down" withConfiguration:configuration] ?:
+                        [UIImage systemImageNamed:@"arrow.down.to.line" withConfiguration:configuration];
+        [saveButton setImage:[icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] forState:UIControlStateNormal];
+        saveButton.accessibilityIdentifier = @"moments_save_images";
+        saveButton.contentEdgeInsets = UIEdgeInsetsZero;
+        saveButton.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
+        saveButton.imageEdgeInsets = UIEdgeInsetsMake(0.0, -3.0, 0.0, 3.0);
+        saveButton.titleEdgeInsets = UIEdgeInsetsMake(0.0, 3.0, 0.0, -3.0);
+        [saveButton addTarget:floatView action:@selector(neowc_handleMomentsSaveImages:) forControlEvents:UIControlEventTouchUpInside];
+        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSaveButtonKey, saveButton, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
     UIView *container = anchor.superview ?: floatView;
     if (!button) {
         button = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -2958,21 +3195,33 @@ static void NeoWCPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
         [button addTarget:floatView action:@selector(neowc_handleMomentsForward:) forControlEvents:UIControlEventTouchUpInside];
         objc_setAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
+    button.hidden = !shouldShowForward;
+    saveButton.hidden = !shouldShowSave;
     UIButton *anchorButton = [anchor isKindOfClass:[UIButton class]] ? (UIButton *)anchor : nil;
     UIColor *contentColor = [anchorButton titleColorForState:UIControlStateNormal] ?: anchor.tintColor ?: UIColor.whiteColor;
     [button setTitleColor:contentColor forState:UIControlStateNormal];
+    [saveButton setTitleColor:contentColor forState:UIControlStateNormal];
     [button setTitleColor:[anchorButton titleColorForState:UIControlStateHighlighted] ?: contentColor
                  forState:UIControlStateHighlighted];
+    [saveButton setTitleColor:[anchorButton titleColorForState:UIControlStateHighlighted] ?: contentColor
+                     forState:UIControlStateHighlighted];
     [button setTitleColor:[anchorButton titleColorForState:UIControlStateDisabled] ?: contentColor
                  forState:UIControlStateDisabled];
     button.tintColor = contentColor;
+    saveButton.tintColor = contentColor;
     button.titleLabel.font = anchorButton.titleLabel.font ?: [UIFont systemFontOfSize:14.0];
+    saveButton.titleLabel.font = button.titleLabel.font;
     button.contentHorizontalAlignment = anchorButton ? anchorButton.contentHorizontalAlignment : UIControlContentHorizontalAlignmentCenter;
     button.contentVerticalAlignment = anchorButton ? anchorButton.contentVerticalAlignment : UIControlContentVerticalAlignmentCenter;
     button.enabled = anchor.enabled;
+    saveButton.enabled = anchor.enabled;
     if (button.superview != container) {
         [button removeFromSuperview];
         [container addSubview:button];
+    }
+    if (saveButton.superview != container) {
+        [saveButton removeFromSuperview];
+        [container addSubview:saveButton];
     }
     UIImageView *nativeSeparator = NeoWCMomentsNativeSeparator(floatView, anchor, separator);
     UIImageView *clonedSeparator = NeoWCCloneMomentsNativeSeparator(nativeSeparator, separator);
@@ -2985,7 +3234,17 @@ static void NeoWCPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
         [container addSubview:separator];
     }
 
-    NeoWCMomentsFloatMenuSnapshot *snapshot = NeoWCCaptureMomentsFloatMenu(floatView, button, separator);
+    UIImageView *clonedSaveSeparator = NeoWCCloneMomentsNativeSeparator(nativeSeparator, saveSeparator);
+    if (clonedSaveSeparator != saveSeparator) {
+        saveSeparator = clonedSaveSeparator;
+        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSaveSeparatorKey, saveSeparator, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (saveSeparator.superview != container) {
+        [saveSeparator removeFromSuperview];
+        [container addSubview:saveSeparator];
+    }
+
+    NeoWCMomentsFloatMenuSnapshot *snapshot = NeoWCCaptureMomentsFloatMenu(floatView, button, saveButton, separator, saveSeparator);
     objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSnapshotKey, snapshot, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     NeoWCApplyMomentsFloatMenuSnapshot(floatView);
 }
@@ -3338,12 +3597,95 @@ static void NeoWCSynchronizeVisibleReplyGestures(void) {
     if (window) NeoWCSynchronizeReplyGesturesInView(window);
 }
 
-static void NeoWCApplyAutoOriginalSelection(id controller) {
-    if (!NeoWCEnhancementEnabled(NeoWCAutoOriginalImageEnabledKey)) return;
-    SEL selector = NSSelectorFromString(@"setIsOriginSelected:");
-    if (![controller respondsToSelector:selector]) return;
-    ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, selector, YES);
-    NeoWCCompatibilityMarkTriggered(@"auto-original-image");
+static id NeoWCExactIvarValue(id object, NSString *ivarName) {
+    if (!object || ivarName.length == 0) return nil;
+    Ivar ivar = class_getInstanceVariable([object class], ivarName.UTF8String);
+    if (ivar) return object_getIvar(object, ivar);
+    return NeoWCTweakSafeValue(object, ivarName);
+}
+
+static void NeoWCApplyAutoOriginalSelection(id controller, NSString *originCheckKey) {
+    if (!controller || !NeoWCEnhancementEnabled(NeoWCAutoOriginalImageEnabledKey)) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!NeoWCEnhancementEnabled(NeoWCAutoOriginalImageEnabledKey)) return;
+
+        SEL selectedSelector = NSSelectorFromString(@"isOriginSelected");
+        SEL checkSelector = NSSelectorFromString(@"onOriginImageCheck:");
+        if ([controller respondsToSelector:selectedSelector] &&
+            [controller respondsToSelector:checkSelector]) {
+            BOOL selected = ((BOOL (*)(id, SEL))objc_msgSend)(controller, selectedSelector);
+            if (selected) return;
+
+            id originCheck = NeoWCExactIvarValue(controller, originCheckKey);
+            if (originCheck) {
+                ((void (*)(id, SEL, id))objc_msgSend)(controller, checkSelector, originCheck);
+                NeoWCCompatibilityMarkTriggered(@"auto-original-image");
+                return;
+            }
+        }
+
+        // Older WeChat builds may not expose the native checkbox callback.
+        SEL setter = NSSelectorFromString(@"setIsOriginSelected:");
+        if ([controller respondsToSelector:setter]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, setter, YES);
+            NeoWCCompatibilityMarkTriggered(@"auto-original-image");
+        }
+    });
+}
+
+static void NeoWCSetMomentsOriginalFlag(id object) {
+    if (!object || !NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey)) return;
+    SEL originalSelector = NSSelectorFromString(@"setOriginal:");
+    if ([object respondsToSelector:originalSelector]) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(object, originalSelector, YES);
+    }
+
+    // WeChatX marks each upload subtask with the confirmed setSkipCompress:
+    // selector. Discover only object ivars and only touch collections whose
+    // elements expose that exact selector, avoiding guessed private field names.
+    SEL skipSelector = NSSelectorFromString(@"setSkipCompress:");
+    for (Class cls = object_getClass(object); cls && cls != NSObject.class; cls = class_getSuperclass(cls)) {
+        unsigned int count = 0;
+        Ivar *ivars = class_copyIvarList(cls, &count);
+        for (unsigned int index = 0; index < count; index++) {
+            const char *type = ivar_getTypeEncoding(ivars[index]);
+            if (!type || type[0] != '@') continue;
+            id value = nil;
+            @try { value = object_getIvar(object, ivars[index]); }
+            @catch (__unused NSException *exception) { value = nil; }
+            if ([value respondsToSelector:originalSelector]) {
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(value, originalSelector, YES);
+            }
+            if (![value conformsToProtocol:@protocol(NSFastEnumeration)]) continue;
+            for (id child in value) {
+                if ([child respondsToSelector:skipSelector]) {
+                    ((void (*)(id, SEL, BOOL))objc_msgSend)(child, skipSelector, YES);
+                }
+            }
+        }
+        free(ivars);
+    }
+}
+
+static void NeoWCSetMomentsCommitImagesOriginal(id controller) {
+    if (!controller || !NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey)) return;
+    Class imageClass = NSClassFromString(@"MMImage");
+    for (Class cls = object_getClass(controller); cls && cls != NSObject.class; cls = class_getSuperclass(cls)) {
+        unsigned int count = 0;
+        Ivar *ivars = class_copyIvarList(cls, &count);
+        for (unsigned int index = 0; index < count; index++) {
+            const char *type = ivar_getTypeEncoding(ivars[index]);
+            if (!type || type[0] != '@') continue;
+            id value = nil;
+            @try { value = object_getIvar(controller, ivars[index]); }
+            @catch (__unused NSException *exception) { value = nil; }
+            if (![value isKindOfClass:NSArray.class]) continue;
+            for (id child in value) {
+                if (imageClass && [child isKindOfClass:imageClass]) NeoWCSetMomentsOriginalFlag(child);
+            }
+        }
+        free(ivars);
+    }
 }
 
 static void NeoWCPresentJokerEditorForCell(id cell, BOOL transferContext) {
@@ -3893,7 +4235,64 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 
 - (void)viewDidLoad {
     %orig;
-    NeoWCApplyAutoOriginalSelection(self);
+    NeoWCApplyAutoOriginalSelection(self, @"m_originImageCheck");
+}
+
+- (void)initCombineSendViewIfNeeded {
+    %orig;
+    NeoWCApplyAutoOriginalSelection(self, @"m_originImageCheck");
+}
+
+- (void)reloadBottomBar {
+    %orig;
+    NeoWCApplyAutoOriginalSelection(self, @"m_originImageCheck");
+}
+
+%end
+
+%hook MMAssetTimeLineConfig
+
+- (BOOL)isRetrivingOriginImage {
+    if (NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey)) {
+        NeoWCCompatibilityMarkTriggered(@"moments-original-media");
+        return YES;
+    }
+    return %orig;
+}
+
+- (BOOL)shouldCompressLongImage {
+    return NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey) ? NO : %orig;
+}
+
+- (CGSize)imageResultSizeForOriginSize:(CGSize)originSize {
+    return NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey) ? originSize : %orig(originSize);
+}
+
+- (CGFloat)compressQuality {
+    return NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey) ? 1.0 : %orig;
+}
+
+- (BOOL)useHighResolutionImageSize {
+    return NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey) ? YES : %orig;
+}
+
+%end
+
+%hook WCNewCommitViewController
+
+- (void)OnDone {
+    NeoWCSetMomentsCommitImagesOriginal(self);
+    %orig;
+}
+
+- (void)commonUpdateWCUploadTask:(id)task {
+    %orig(task);
+    NeoWCSetMomentsOriginalFlag(task);
+}
+
+- (void)processUploadTask:(id)task {
+    NeoWCSetMomentsOriginalFlag(task);
+    %orig(task);
 }
 
 %end
@@ -3902,7 +4301,22 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 
 - (void)viewDidLoad {
     %orig;
-    NeoWCApplyAutoOriginalSelection(self);
+    NeoWCApplyAutoOriginalSelection(self, @"_originImageCheck");
+}
+
+- (void)initCombineSendViewIfNeeded {
+    %orig;
+    NeoWCApplyAutoOriginalSelection(self, @"_originImageCheck");
+}
+
+- (void)reactiveSendButton {
+    %orig;
+    NeoWCApplyAutoOriginalSelection(self, @"_originImageCheck");
+}
+
+- (void)reloadSelectedCollectionView {
+    %orig;
+    NeoWCApplyAutoOriginalSelection(self, @"_originImageCheck");
 }
 
 %end
@@ -4091,6 +4505,31 @@ didReceiveNotificationResponse:(id)response
 %end
 
 %hook VoiceMessageCellView
+
+- (NSArray *)operationMenuItems {
+    NSArray *originalItems = %orig;
+    if (!NeoWCEnhancementEnabled(NeoWCVoiceForwardEnabledKey) ||
+        ![originalItems isKindOfClass:[NSArray class]]) return originalItems;
+    for (id item in originalItems) {
+        if ([[NeoWCTweakSafeValue(item, @"title") description] containsString:@"转发"]) return originalItems;
+    }
+    SEL selector = NSSelectorFromString(@"forwardMenuItem");
+    if (![self respondsToSelector:selector]) return originalItems;
+    id forwardItem = ((id (*)(id, SEL))objc_msgSend)(self, selector);
+    if (!forwardItem) return originalItems;
+    NeoWCCompatibilityMarkTriggered(@"voice-forward");
+    return [originalItems arrayByAddingObject:forwardItem];
+}
+
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+    if (NeoWCEnhancementEnabled(NeoWCVoiceForwardEnabledKey) &&
+        (action == NSSelectorFromString(@"onForward:") ||
+         action == NSSelectorFromString(@"doForward") ||
+         action == NSSelectorFromString(@"onClickForwardMenu:"))) {
+        return YES;
+    }
+    return %orig;
+}
 
 - (void)layoutSubviews {
     %orig;
@@ -6430,6 +6869,15 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
     NeoWCForwardMoment(dataItem, presenter);
 }
 
+%new
+- (void)neowc_handleMomentsSaveImages:(id)sender {
+    (void)sender;
+    id dataItem = NeoWCMomentsObjectForName(self, @"m_dataItem");
+    UIViewController *presenter = NeoWCJokerPresenterForCell(self);
+    if (!NeoWCMomentCanSaveImages(dataItem) || !presenter) return;
+    NeoWCSaveMomentImages(dataItem, presenter);
+}
+
 - (id)operateBtnImage:(BOOL)spring isSpringStyle:(BOOL)springStyle {
     if (NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey)) {
         UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:16.0 weight:UIImageSymbolWeightMedium];
@@ -6485,7 +6933,9 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)hide {
     UIButton *button = objc_getAssociatedObject(self, &NeoWCMomentsFloatForwardButtonKey);
+    UIButton *saveButton = objc_getAssociatedObject(self, &NeoWCMomentsFloatSaveButtonKey);
     button.hidden = YES;
+    saveButton.hidden = YES;
     NeoWCRestoreMomentsFloatMenu(self);
     %orig;
 }
@@ -6498,6 +6948,16 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
     if (!dataItem || !presenter) return;
     [self hide];
     NeoWCForwardMoment(dataItem, presenter);
+}
+
+%new
+- (void)neowc_handleMomentsSaveImages:(id)sender {
+    (void)sender;
+    id dataItem = objc_getAssociatedObject(self, &NeoWCMomentsFloatDataItemKey);
+    UIViewController *presenter = NeoWCJokerPresenterForCell(self);
+    if (!dataItem || !presenter) return;
+    [self hide];
+    NeoWCSaveMomentImages(dataItem, presenter);
 }
 
 %end
