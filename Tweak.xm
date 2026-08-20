@@ -341,6 +341,7 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
 static void NeoWCRefreshChatTopBarAfterWechatUpdate(BaseMsgContentViewController *controller);
 static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView);
 static BaseMsgContentViewController *NeoWCResolveVisibleChatController(void);
+static void NeoWCShowTransientMessage(NSString *message, BOOL success);
 static BOOL NeoWCMomentCanSaveMedia(id dataItem);
 static void NeoWCSaveMomentMedia(id dataItem, UIViewController *presenter);
 
