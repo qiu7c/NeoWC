@@ -5709,7 +5709,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
     if (NeoWCEnhancementEnabled(NeoWCHomeSwipeActionsEnabledKey) &&
         [gestureRecognizer isKindOfClass:UIPanGestureRecognizer.class]) {
-        CGPoint velocity = [(UIPanGestureRecognizer *)gestureRecognizer velocityInView:self];
+        CGPoint velocity = [(UIPanGestureRecognizer *)gestureRecognizer velocityInView:gestureRecognizer.view];
         // NewMainFrameCell owns a horizontal pan recognizer that can win before
         // UITableView's leading-swipe recognizer. Yield only for a deliberate
         // rightward horizontal gesture; vertical scrolling and native left
