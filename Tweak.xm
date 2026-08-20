@@ -168,6 +168,14 @@
 @property (nonatomic, copy) NSString *m_nsEmoticonMD5;
 @end
 
+@interface UploadVoiceWrap : NSObject
+- (void)setM_uiVoiceForwardFlag:(unsigned int)forwardFlag;
+@end
+
+@interface UploadVoiceRequest : NSObject
+- (void)setForwardFlag:(unsigned int)forwardFlag;
+@end
+
 @interface CMessageMgr : NSObject
 - (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap;
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap;
@@ -206,6 +214,7 @@
 @end
 
 static BOOL NeoWCDidRegister = NO;
+static NSTimeInterval NeoWCVoiceRepeatForwardDeadline = 0;
 static char NeoWCDeviceCardDidConfirmKey;
 static char NeoWCGameDidAuthorizeKey;
 static char NeoWCMomentsDoubleTapRecognizerKey;
@@ -652,6 +661,10 @@ static BOOL NeoWCRepeatPlainTextMessageFallback(CommonMessageCellView *cell) {
     return YES;
 }
 
+static BOOL NeoWCVoiceRepeatUploadIsActive(void) {
+    return NeoWCVoiceRepeatForwardDeadline > NSDate.date.timeIntervalSince1970;
+}
+
 static BOOL NeoWCRepeatVoiceMessage(id source, NSString *session) {
     if (!source || session.length == 0) return NO;
 
@@ -662,12 +675,14 @@ static BOOL NeoWCRepeatVoiceMessage(id source, NSString *session) {
     SEL saveVoiceSelector = sel_registerName("SaveMesVoice:MsgWrap:");
     SEL resendSelector = sel_registerName("ResendVoiceMsg:MsgWrap:");
     SEL uploaderSelector = sel_registerName("uploaderForMsgWrap:");
+    Class messageWrapClass = objc_getClass("CMessageWrap");
     Class audioSenderClass = objc_getClass("AudioSender");
     id audioSender = audioSenderClass ? NeoWCServiceForClass(audioSenderClass) : nil;
     if (![source respondsToSelector:voicePathSelector] ||
         !manager ||
-        ![manager respondsToSelector:destinationPathSelector] ||
         ![manager respondsToSelector:addLocalSelector] ||
+        !messageWrapClass ||
+        ![messageWrapClass respondsToSelector:destinationPathSelector] ||
         !audioSender) {
         NeoWCLog(@"语音复读入口不完整，取消发送");
         return NO;
@@ -704,15 +719,17 @@ static BOOL NeoWCRepeatVoiceMessage(id source, NSString *session) {
         id extendInfo = NeoWCTweakSafeValue(repeated, @"m_extendInfoWithMsgType");
         NeoWCTweakSetValue(extendInfo, @"m_uiVoiceForwardFlag", @1);
 
-        NSString *destinationPath = ((id (*)(id, SEL, id))objc_msgSend)(manager,
+        // AddLocalMsg assigns the new local message ID. WeChat derives the
+        // audio destination path from that ID, so this must happen first.
+        ((void (*)(id, SEL, id, id))objc_msgSend)(manager, addLocalSelector, session, repeated);
+
+        NSString *destinationPath = ((id (*)(id, SEL, id))objc_msgSend)(messageWrapClass,
                                                                         destinationPathSelector,
                                                                         repeated);
         if (![destinationPath isKindOfClass:[NSString class]] || destinationPath.length == 0) {
             NeoWCLog(@"语音复读无法生成目标文件路径");
             return NO;
         }
-
-        ((void (*)(id, SEL, id, id))objc_msgSend)(manager, addLocalSelector, session, repeated);
 
         BOOL voiceSaved = [sourcePath isEqualToString:destinationPath];
         if (!voiceSaved) {
@@ -723,10 +740,11 @@ static BOOL NeoWCRepeatVoiceMessage(id source, NSString *session) {
             if (!voiceSaved && [manager respondsToSelector:saveVoiceSelector]) {
                 NSData *voiceData = [NSData dataWithContentsOfFile:sourcePath];
                 if (voiceData.length > 0) {
-                    voiceSaved = ((BOOL (*)(id, SEL, id, id))objc_msgSend)(manager,
-                                                                          saveVoiceSelector,
-                                                                          voiceData,
-                                                                          repeated);
+                    ((void (*)(id, SEL, id, id))objc_msgSend)(manager,
+                                                              saveVoiceSelector,
+                                                              voiceData,
+                                                              repeated);
+                    voiceSaved = YES;
                 }
             }
             if (!voiceSaved) {
@@ -744,6 +762,10 @@ static BOOL NeoWCRepeatVoiceMessage(id source, NSString *session) {
             NeoWCLog(@"语音复读找不到微信语音上传入口");
             return NO;
         }
+        // WeChatX keeps the native upload pipeline in forwarding mode for a
+        // short, repeat-scoped window. The setter hooks below never affect
+        // ordinary voice recording or forwarding outside this window.
+        NeoWCVoiceRepeatForwardDeadline = NSDate.date.timeIntervalSince1970 + 60.0;
         ((void (*)(id, SEL, id, id))objc_msgSend)(resendTarget, resendSelector, session, repeated);
         return YES;
     } @catch (NSException *exception) {
@@ -5924,6 +5946,22 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 + (NSData *)getMsgHdOrMiddleImgData:(id)message canUseHeif:(BOOL)canUseHeif {
     return NeoWCImageJokerDataForMessage(message) ?: %orig(message, canUseHeif);
+}
+
+%end
+
+%hook UploadVoiceWrap
+
+- (void)setM_uiVoiceForwardFlag:(unsigned int)forwardFlag {
+    %orig(NeoWCVoiceRepeatUploadIsActive() ? 1 : forwardFlag);
+}
+
+%end
+
+%hook UploadVoiceRequest
+
+- (void)setForwardFlag:(unsigned int)forwardFlag {
+    %orig(NeoWCVoiceRepeatUploadIsActive() ? 1 : forwardFlag);
 }
 
 %end

@@ -288,6 +288,7 @@ $git='C:\Users\C\.cache\codex-runtimes\codex-primary-runtime\dependencies\native
    - beta58 恢复两种消息时间显示：保留原有配置 Key 与默认值；头像下方模式依据 WCPulse 已确认的 `m_uiCreateTime`、头像锚点、标签复用与尺寸公式实现，气泡旁模式作为 NeoWC 独立适配并在空间不足时隐藏。刷新只接入 `setViewModel:`、`updateStatus`、`updateNodeStatus` 和 `didMoveToWindow`，不恢复布局 Hook，也不主动触发布局。
    - beta59 取消 wxid 普通授权对功能的所有限制：已授权、未授权、加载、断网、超时和响应异常均可正常进入页面并使用功能，授权结果仅影响个人信息区的一行状态文字。`NeoWCAuthorizationAllowsCoreFeatures()` 现在只拒绝永久黑名单；服务端黑名单命中仍写入本地永久状态、停用功能并展示不可关闭的退出弹窗，后台确认解除黑名单后继续清除该状态。
    - 正式版本更新为 0.1.3；用户首次进入该版本的 NeoWC 设置首页时显示一次更新日志，使用版本化 Key 记录已展示状态，同版本后续进入不重复弹出。更新日志与授权请求互不依赖，不参与功能门禁。为排除微信首页“收取中”卡顿，普通功能热路径不再创建授权服务或读取 wxid/网络状态，只读取一个原子内存黑名单标志；非黑名单授权服务仅在进入 NeoWC 设置首页后异步启动。
+   - 0.1.3 后续修复语音复读：按 WeChatX 未混淆旧版的真实调用顺序，先通过 `CMessageMgr AddLocalMsg:MsgWrap:` 分配新本地 ID，再调用 `CMessageWrap +getPathOfAudio:` 生成目标语音路径；不再错误地向 `CMessageMgr` 请求路径，也不再把无返回值保证的 `SaveMesVoice:MsgWrap:` 当作 `BOOL`。复读上传的 ForwardFlag 仅在 60 秒复读窗口内由 `UploadVoiceWrap` / `UploadVoiceRequest` 补齐，普通语音发送不受影响。
 
 3. 仍须保持的既有边界
    - 钱包只处理 `WCPayWalletEntryHeaderView` 内的 `TimeoutNumber`，金额单位为分。
