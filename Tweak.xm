@@ -5688,11 +5688,35 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 %hook NewMainFrameViewController
 
+- (void)viewDidLoad {
+    // Install before WeChat creates/assigns the table delegate. UIKit may cache
+    // whether the delegate implements leading swipe actions during setup.
+    NeoWCInstallHomeLeadingSwipeOnClass(object_getClass(self));
+    %orig;
+}
+
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
     UITableView *tableView = NeoWCHomeTableViewForController(self);
     NeoWCInstallHomeLeadingSwipeOnClass(object_getClass(self));
     if (tableView.delegate) NeoWCInstallHomeLeadingSwipeOnClass(object_getClass(tableView.delegate));
+}
+
+%end
+
+%hook NewMainFrameCell
+
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
+    if (NeoWCEnhancementEnabled(NeoWCHomeSwipeActionsEnabledKey) &&
+        [gestureRecognizer isKindOfClass:UIPanGestureRecognizer.class]) {
+        CGPoint velocity = [(UIPanGestureRecognizer *)gestureRecognizer velocityInView:self];
+        // NewMainFrameCell owns a horizontal pan recognizer that can win before
+        // UITableView's leading-swipe recognizer. Yield only for a deliberate
+        // rightward horizontal gesture; vertical scrolling and native left
+        // swipe actions continue through WeChat's original decision.
+        if (velocity.x > 0.0 && fabs(velocity.x) > fabs(velocity.y)) return NO;
+    }
+    return %orig;
 }
 
 %end
