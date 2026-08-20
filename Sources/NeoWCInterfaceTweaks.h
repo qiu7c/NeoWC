@@ -9,7 +9,9 @@ FOUNDATION_EXPORT NSString *const NeoWCHideChatMuteIconKey;
 FOUNDATION_EXPORT NSString *const NeoWCGlobalAvatarRoundingEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCGlobalAvatarCornerPercentKey;
 
-/// Reloads the cached values used by WeChat's native setConerSize: path.
+/// Applies rounding to the avatar container itself without inspecting WeChat's
+/// asynchronous inner image-loading views.
+FOUNDATION_EXPORT void NeoWCApplyGlobalAvatarRoundingToHeadView(UIView *headView);
 FOUNDATION_EXPORT void NeoWCRefreshTrackedGlobalAvatarViews(void);
 FOUNDATION_EXPORT unsigned int NeoWCGlobalAvatarScaledCornerSize(unsigned int originalSize);
 

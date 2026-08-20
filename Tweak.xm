@@ -4147,6 +4147,11 @@ didReceiveNotificationResponse:(id)response
 
 %hook MMHeadImageView
 
+- (void)didMoveToWindow {
+    %orig;
+    NeoWCApplyGlobalAvatarRoundingToHeadView(self);
+}
+
 - (void)setConerSize:(unsigned int)cornerSize {
     %orig(NeoWCGlobalAvatarScaledCornerSize(cornerSize));
 }
@@ -4154,6 +4159,11 @@ didReceiveNotificationResponse:(id)response
 %end
 
 %hook FakeHeadImageView
+
+- (void)didMoveToWindow {
+    %orig;
+    NeoWCApplyGlobalAvatarRoundingToHeadView(self);
+}
 
 - (void)setConerSize:(unsigned int)cornerSize {
     %orig(NeoWCGlobalAvatarScaledCornerSize(cornerSize));
@@ -5181,14 +5191,42 @@ static NSUInteger NeoWCCallUnsignedSelector(id object, NSString *selectorName) {
     }
 }
 
-static id NeoWCTableSectionAtIndex(id tableInfo, NSUInteger index) {
-    SEL selector = NSSelectorFromString(@"getSectionAt:");
-    if (!tableInfo || ![tableInfo respondsToSelector:selector]) return nil;
-    @try {
-        return ((id (*)(id, SEL, NSUInteger))objc_msgSend)(tableInfo, selector, index);
-    } @catch (__unused NSException *exception) {
-        return nil;
+static id NeoWCRawProfileValue(id object, NSArray<NSString *> *names) {
+    if (!object) return nil;
+    id value = NeoWCTweakValueForSelectorNames(object, names);
+    if (value) return value;
+    for (NSString *name in names) {
+        value = NeoWCTweakSafeValue(object, name);
+        if (value) return value;
     }
+    return nil;
+}
+
+static NSArray *NeoWCTableSections(id tableInfo) {
+    if ([tableInfo isKindOfClass:NSArray.class]) return tableInfo;
+    id sections = NeoWCRawProfileValue(tableInfo,
+                                       @[@"sections", @"m_arrSections", @"sectionArray", @"allSections"]);
+    return [sections isKindOfClass:NSArray.class] ? sections : nil;
+}
+
+static id NeoWCTableSectionAtIndex(id tableInfo, NSUInteger index) {
+    for (NSString *name in @[@"getSectionAt:", @"sectionAtIndex:"]) {
+        SEL selector = NSSelectorFromString(name);
+        if (!tableInfo || ![tableInfo respondsToSelector:selector]) continue;
+        @try {
+            id section = ((id (*)(id, SEL, NSUInteger))objc_msgSend)(tableInfo, selector, index);
+            if (section) return section;
+        } @catch (__unused NSException *exception) {
+        }
+    }
+    NSArray *sections = NeoWCTableSections(tableInfo);
+    return index < sections.count ? sections[index] : nil;
+}
+
+static NSArray *NeoWCTableCells(id section) {
+    id cells = NeoWCRawProfileValue(section,
+                                    @[@"getAllCells", @"cells", @"m_arrCells", @"cellArray", @"allCells"]);
+    return [cells isKindOfClass:NSArray.class] ? cells : nil;
 }
 
 static id NeoWCTableCellAtIndex(id section, NSUInteger index) {
@@ -5200,7 +5238,7 @@ static id NeoWCTableCellAtIndex(id section, NSUInteger index) {
         } @catch (__unused NSException *exception) {
         }
     }
-    NSArray *cells = NeoWCTweakValueForSelectorNames(section, @[@"cells", @"cellArray", @"m_arrCells"]);
+    NSArray *cells = NeoWCTableCells(section);
     return [cells isKindOfClass:NSArray.class] && index < cells.count ? cells[index] : nil;
 }
 
@@ -5213,15 +5251,22 @@ static NSUInteger NeoWCTableCellCount(id section) {
         } @catch (__unused NSException *exception) {
         }
     }
-    NSArray *cells = NeoWCTweakValueForSelectorNames(section, @[@"cells", @"cellArray", @"m_arrCells"]);
+    NSArray *cells = NeoWCTableCells(section);
     return [cells isKindOfClass:NSArray.class] ? cells.count : 0;
 }
 
 static NSString *NeoWCTableCellTitle(id cell) {
-    id title = NeoWCTweakValueForSelectorNames(cell, @[@"title", @"m_title", @"leftTitle", @"text"]);
+    id title = NeoWCRawProfileValue(cell, @[@"title", @"m_title", @"leftTitle", @"text"]);
     if ([title isKindOfClass:NSString.class]) return title;
-    UILabel *label = NeoWCTweakValueForSelectorNames(cell, @[@"titleLabel", @"m_titleLabel", @"leftLabel"]);
-    return [label isKindOfClass:UILabel.class] ? label.text : nil;
+    UILabel *label = NeoWCRawProfileValue(cell, @[@"titleLabel", @"m_titleLabel", @"leftLabel"]);
+    if ([label isKindOfClass:UILabel.class]) return label.text;
+
+    // Newer WeChat table cells keep their visible title in
+    // cellConfig.leftConfig.title instead of exposing it on the cell itself.
+    id cellConfig = NeoWCRawProfileValue(cell, @[@"cellConfig", @"m_cellConfig"]);
+    id leftConfig = NeoWCRawProfileValue(cellConfig, @[@"leftConfig", @"m_leftConfig"]);
+    title = NeoWCRawProfileValue(leftConfig, @[@"title", @"text"]);
+    return [title isKindOfClass:NSString.class] ? title : nil;
 }
 
 static BOOL NeoWCSectionContainsRawIDCell(id section, NSString *title) {
@@ -5229,8 +5274,11 @@ static BOOL NeoWCSectionContainsRawIDCell(id section, NSString *title) {
     for (NSUInteger index = 0; index < count; index++) {
         id cell = NeoWCTableCellAtIndex(section, index);
         if ([objc_getAssociatedObject(cell, &NeoWCRawContactIDCellMarkerKey) boolValue]) return YES;
+        NSString *marker = NeoWCTweakSafeValue(cell, @"userInfo");
+        if ([marker isKindOfClass:NSString.class] && [marker hasPrefix:@"neowc_profile_raw_"]) return YES;
         NSString *cellTitle = NeoWCTableCellTitle(cell);
-        if ([cellTitle isEqualToString:title]) return YES;
+        if ([cellTitle isEqualToString:title] || [cellTitle isEqualToString:@"原始 ID"] ||
+            [cellTitle isEqualToString:@"原始群号码"]) return YES;
     }
     return NO;
 }
@@ -5243,8 +5291,8 @@ static id NeoWCCreateRawIDCell(id target, NSString *title, NSString *rawID) {
     if ([cellClass respondsToSelector:copyFactory]) {
         cell = ((id (*)(id, SEL, SEL, id, NSString *, NSString *, BOOL))objc_msgSend)(cellClass,
                                                                                      copyFactory,
-                                                                                     @selector(neowc_copyRawContactID),
-                                                                                     target,
+                                                                                     NULL,
+                                                                                     nil,
                                                                                      title,
                                                                                      rawID,
                                                                                      YES);
@@ -5256,55 +5304,91 @@ static id NeoWCCreateRawIDCell(id target, NSString *title, NSString *rawID) {
                                                                                 title,
                                                                                 rawID);
     }
+    if (cell) {
+        NeoWCTweakSetValue(cell, @"userInfo", [title containsString:@"群"] ?
+                           @"neowc_profile_raw_group_id_cell" : @"neowc_profile_raw_id_cell");
+        SEL heightSelector = NSSelectorFromString(@"setFCellHeight:");
+        if ([cell respondsToSelector:heightSelector]) {
+            ((void (*)(id, SEL, CGFloat))objc_msgSend)(cell, heightSelector, 56.0);
+        }
+    }
     return cell;
+}
+
+static BOOL NeoWCInsertRawIDCell(id section, id cell, NSUInteger index) {
+    if (!section || !cell) return NO;
+    NSUInteger count = NeoWCTableCellCount(section);
+    if (index == NSNotFound || index > count) index = count;
+    SEL insertSelector = NSSelectorFromString(@"insertCell:At:");
+    SEL addSelector = NSSelectorFromString(@"addCell:");
+    if ([section respondsToSelector:insertSelector]) {
+        ((void (*)(id, SEL, id, NSUInteger))objc_msgSend)(section, insertSelector, cell, index);
+        return YES;
+    }
+    if ([section respondsToSelector:addSelector] && index == count) {
+        ((void (*)(id, SEL, id))objc_msgSend)(section, addSelector, cell);
+        return YES;
+    }
+    NSArray *cells = NeoWCTableCells(section);
+    if ([cells isKindOfClass:NSMutableArray.class]) {
+        [(NSMutableArray *)cells insertObject:cell atIndex:MIN(index, cells.count)];
+        return YES;
+    }
+    return NO;
 }
 
 static void NeoWCInjectRawIDCell(id controller, BOOL group) {
     if (!NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey) || !controller) return;
-    NSString *contactKey = group ? @"m_chatRoomContact" : @"m_contact";
-    id contact = NeoWCTweakSafeValue(controller, contactKey);
-    if (!contact) contact = NeoWCTweakValueForSelectorNames(controller, @[contactKey, @"contact", @"chatRoomContact"]);
-    NSString *rawID = NeoWCTweakValueForSelectorNames(contact, @[@"m_nsUsrName", @"userName"]);
+    NSArray<NSString *> *contactNames = group ?
+        @[@"m_chatRoomContact", @"chatRoomContact", @"contact", @"m_contact"] :
+        @[@"m_contact", @"contact", @"contactInfo", @"m_contactInfo"];
+    id contact = NeoWCRawProfileValue(controller, contactNames);
+    NSString *rawID = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
     if (![rawID isKindOfClass:NSString.class] || rawID.length == 0) return;
 
-    id tableInfo = NeoWCTweakValueForSelectorNames(controller, @[@"m_tableViewInfo", @"tableViewInfo", @"m_tableViewMgr"]);
+    id tableInfo = NeoWCRawProfileValue(controller,
+                                        @[@"m_tableViewInfo", @"tableViewInfo", @"m_tableViewMgr", @"tableViewMgr"]);
     NSUInteger sectionCount = NeoWCCallUnsignedSelector(tableInfo, @"getSectionCount");
+    if (sectionCount == 0) sectionCount = NeoWCTableSections(tableInfo).count;
     if (!tableInfo || sectionCount == 0) return;
     NSString *title = group ? @"原始群号码" : @"原始号码";
     id targetSection = nil;
     NSUInteger targetIndex = NSNotFound;
+    NSInteger targetScore = NSIntegerMin;
     for (NSUInteger sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++) {
         id section = NeoWCTableSectionAtIndex(tableInfo, sectionIndex);
         if (!section) continue;
         if (NeoWCSectionContainsRawIDCell(section, title)) return;
         NSUInteger cellCount = NeoWCTableCellCount(section);
+        NSInteger sectionScore = -((NSInteger)sectionIndex);
+        NSUInteger sectionTargetIndex = cellCount;
         for (NSUInteger cellIndex = 0; cellIndex < cellCount; cellIndex++) {
             NSString *cellTitle = NeoWCTableCellTitle(NeoWCTableCellAtIndex(section, cellIndex));
-            if ([cellTitle containsString:@"微信号"] || [cellTitle containsString:@"群聊名称"] ||
-                [cellTitle containsString:@"朋友资料"]) {
-                targetSection = section;
-                targetIndex = cellIndex + 1;
+            if (cellTitle.length == 0) continue;
+            if ([cellTitle containsString:@"微信号"] || [cellTitle containsString:@"群聊名称"]) {
+                sectionScore += 100;
+                sectionTargetIndex = cellIndex + 1;
+            } else if ([cellTitle containsString:@"朋友资料"] || [cellTitle containsString:@"群聊"] ||
+                       [cellTitle containsString:@"设置备注"] || [cellTitle containsString:@"备注"]) {
+                sectionScore += 30;
+            } else if ([cellTitle containsString:@"朋友圈"] || [cellTitle containsString:@"添加到通讯录"]) {
+                sectionScore += 10;
             }
+        }
+        if (!targetSection || sectionScore > targetScore) {
+            targetSection = section;
+            targetIndex = sectionTargetIndex;
+            targetScore = sectionScore;
         }
     }
     if (!targetSection) {
-        targetSection = NeoWCTableSectionAtIndex(tableInfo, MIN((NSUInteger)1, sectionCount - 1));
+        targetSection = NeoWCTableSectionAtIndex(tableInfo, 0);
         targetIndex = NeoWCTableCellCount(targetSection);
     }
     id cell = NeoWCCreateRawIDCell(controller, title, rawID);
     if (!cell || !targetSection) return;
     objc_setAssociatedObject(cell, &NeoWCRawContactIDCellMarkerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NSUInteger count = NeoWCTableCellCount(targetSection);
-    if (targetIndex == NSNotFound || targetIndex > count) targetIndex = count;
-    SEL insertSelector = NSSelectorFromString(@"insertCell:At:");
-    SEL addSelector = NSSelectorFromString(@"addCell:");
-    if ([targetSection respondsToSelector:insertSelector]) {
-        ((void (*)(id, SEL, id, NSUInteger))objc_msgSend)(targetSection, insertSelector, cell, targetIndex);
-    } else if ([targetSection respondsToSelector:addSelector]) {
-        ((void (*)(id, SEL, id))objc_msgSend)(targetSection, addSelector, cell);
-    } else {
-        return;
-    }
+    if (!NeoWCInsertRawIDCell(targetSection, cell, targetIndex)) return;
     objc_setAssociatedObject(controller, &NeoWCRawContactIDKey, rawID, OBJC_ASSOCIATION_COPY_NONATOMIC);
     NeoWCCompatibilityMarkTriggered(@"raw-contact-id");
 }
@@ -5609,6 +5693,18 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
     UITableView *tableView = NeoWCHomeTableViewForController(self);
     NeoWCInstallHomeLeadingSwipeOnClass(object_getClass(self));
     if (tableView.delegate) NeoWCInstallHomeLeadingSwipeOnClass(object_getClass(tableView.delegate));
+}
+
+%end
+
+%hook MainFrameTableView
+
+- (void)setDelegate:(id<UITableViewDelegate>)delegate {
+    // UITableView caches optional delegate capabilities inside setDelegate:.
+    // Install the leading-swipe selector before passing the delegate to WeChat,
+    // otherwise the method works only when startup timing happens to be lucky.
+    if (delegate) NeoWCInstallHomeLeadingSwipeOnClass(object_getClass(delegate));
+    %orig(delegate);
 }
 
 %end
