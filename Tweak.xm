@@ -5502,11 +5502,52 @@ static id NeoWCHomeSessionInfoController(id contact, BOOL group) {
     return controller;
 }
 
+static NSMutableSet *NeoWCRetainedHomeSessionControllers(void) {
+    static NSMutableSet *controllers;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        controllers = [NSMutableSet set];
+    });
+    return controllers;
+}
+
+static void NeoWCRetainHomeSessionController(id controller) {
+    if (!controller) return;
+    NSMutableSet *controllers = NeoWCRetainedHomeSessionControllers();
+    [controllers addObject:controller];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        [controllers removeObject:controller];
+    });
+}
+
+static void NeoWCRefreshHomeSessionTable(UITableView *tableView) {
+    if (!tableView) return;
+    __weak UITableView *weakTableView = tableView;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        [weakTableView reloadData];
+    });
+}
+
+static void NeoWCSetHomeContactBoolean(id contact, NSString *selectorName, BOOL enabled) {
+    SEL selector = NSSelectorFromString(selectorName);
+    if (!contact || ![contact respondsToSelector:selector]) return;
+    @try {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(contact, selector, enabled);
+    } @catch (__unused NSException *exception) {
+    }
+}
+
 static void NeoWCCommitHomeSessionToggle(id contact, BOOL group, NSString *selectorName, BOOL enabled) {
     id controller = NeoWCHomeSessionInfoController(contact, group);
     SEL selector = NSSelectorFromString(selectorName);
     if (!controller || ![controller respondsToSelector:selector]) return;
     @try {
+        NeoWCRetainHomeSessionController(controller);
+        // Loading the native settings controller lets WeChat initialize its
+        // backing state before the private setting action is dispatched.
+        (void)((id (*)(id, SEL))objc_msgSend)(controller, @selector(view));
         ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, selector, enabled);
         SEL willDisappear = @selector(viewWillDisappear:);
         SEL didDisappear = @selector(viewDidDisappear:);
@@ -5514,6 +5555,14 @@ static void NeoWCCommitHomeSessionToggle(id contact, BOOL group, NSString *selec
         if ([controller respondsToSelector:didDisappear]) ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, didDisappear, YES);
     } @catch (__unused NSException *exception) {
     }
+}
+
+static void NeoWCCommitHomeMuteToggle(id contact, BOOL group, BOOL muted) {
+    BOOL desiredMuted = !muted;
+    BOOL notifyOpen = !desiredMuted;
+    NeoWCSetHomeContactBoolean(contact, @"setChatStatusNotifyOpen:", notifyOpen);
+    NeoWCSetHomeContactBoolean(contact, @"setChatRoomNotify:", notifyOpen);
+    NeoWCCommitHomeSessionToggle(contact, group, @"setUpdateNotifyMuted:", desiredMuted);
 }
 
 typedef UISwipeActionsConfiguration *(*NeoWCHomeLeadingSwipeIMP)(id, SEL, UITableView *, NSIndexPath *);
@@ -5544,20 +5593,22 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
     }
     id data = NeoWCHomeSessionCellData(owner, tableView, indexPath);
     NSString *userName = NeoWCHomeSessionUserName(data);
-    if (userName.length == 0 || [userName isEqualToString:@"filehelper"] || [userName hasPrefix:@"gh_"]) {
-        if (userName.length == 0) {
-            NeoWCLog(@"主页右滑：未取得会话数据，owner=%@ delegate=%@ row=%ld",
-                     NSStringFromClass([owner class]),
-                     NSStringFromClass([tableView.delegate class]),
-                     (long)indexPath.row);
-        }
+    if (userName.length == 0) {
+        NeoWCLog(@"主页右滑：未取得会话数据，owner=%@ delegate=%@ row=%ld",
+                 NSStringFromClass([owner class]),
+                 NSStringFromClass([tableView.delegate class]),
+                 (long)indexPath.row);
         return original ? original(owner, selector, tableView, indexPath) : nil;
     }
     id contact = NeoWCContactForUserName(userName) ?: data;
     id actionOwner = NeoWCHomeActionOwner(owner, tableView);
     BOOL group = [userName hasSuffix:@"@chatroom"];
+    BOOL supportsMoments = !group &&
+                           ![userName hasPrefix:@"gh_"] &&
+                           ![userName isEqualToString:@"filehelper"] &&
+                           ![userName isEqualToString:@"weixin"];
     id sessionInfo = NeoWCTweakValueForSelectorNames(data, @[@"m_sessionInfo", @"sessionInfo"]) ?: data;
-    BOOL muted = NeoWCHomeSessionMuted(data);
+    BOOL muted = NeoWCHomeSessionMuted(contact);
     BOOL top = NeoWCHomeBooleanValue(sessionInfo, @[@"m_bIsTop", @"isTop"]);
     __weak UITableView *weakTableView = tableView;
 
@@ -5576,8 +5627,8 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
                                                                       handler:^(__unused UIContextualAction *action,
                                                                                 __unused UIView *sourceView,
                                                                                 void (^completionHandler)(BOOL)) {
-        NeoWCCommitHomeSessionToggle(contact, group, @"setUpdateNotifyMuted:", !muted);
-        [weakTableView reloadData];
+        NeoWCCommitHomeMuteToggle(contact, group, muted);
+        NeoWCRefreshHomeSessionTable(weakTableView);
         completionHandler(YES);
     }];
     mute.backgroundColor = UIColor.systemOrangeColor;
@@ -5588,7 +5639,7 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
                                                                                __unused UIView *sourceView,
                                                                                void (^completionHandler)(BOOL)) {
         NeoWCCommitHomeSessionToggle(contact, group, @"onTopSession:", !top);
-        [weakTableView reloadData];
+        NeoWCRefreshHomeSessionTable(weakTableView);
         completionHandler(YES);
     }];
     pin.backgroundColor = UIColor.systemBlueColor;
@@ -5601,12 +5652,12 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
                                                                                      __unused UIView *sourceView,
                                                                                      void (^completionHandler)(BOOL)) {
             NeoWCCommitHomeSessionToggle(contact, YES, @"setChatBoxStatus:", YES);
-            [weakTableView reloadData];
+            NeoWCRefreshHomeSessionTable(weakTableView);
             completionHandler(YES);
         }];
         fold.backgroundColor = UIColor.systemPurpleColor;
         [actions insertObject:fold atIndex:1];
-    } else {
+    } else if (supportsMoments) {
         UIContextualAction *moments = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
                                                                                title:@"朋友圈"
                                                                              handler:^(__unused UIContextualAction *action,
