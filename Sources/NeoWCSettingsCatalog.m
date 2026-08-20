@@ -380,8 +380,8 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     [moments addObjectsFromArray:@[
         NeoWCItem(@"朋友圈操作按钮替换为评论", @"点击后直接进入评论", @"bubble.middle.bottom", NeoWCSettingRowKindSwitch, NeoWCMomentsQuickCommentKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"朋友圈转发", @"点击进入朋友圈转发发布页", @"arrowshape.turn.up.right", NeoWCSettingRowKindSwitch, NeoWCMomentsForwardEnabledKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"保存朋友圈图片", @"在朋友圈操作菜单中保存该条全部图片", @"square.and.arrow.down", NeoWCSettingRowKindSwitch, NeoWCMomentsSaveImagesEnabledKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"朋友圈高清发送", @"发布图片、视频时启用原始媒体参数", @"photo.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCMomentsOriginalMediaPostEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"保存朋友圈媒体", @"在朋友圈操作菜单中保存图片、视频和实况照片", @"square.and.arrow.down", NeoWCSettingRowKindSwitch, NeoWCMomentsSaveImagesEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"朋友圈高清发送", @"在相机菜单增加“选择高清图片/原视频”，并沿用原生发表链", @"photo.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCMomentsOriginalMediaPostEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"朋友圈头像快捷权限", @"长按头像切换朋友权限", @"person.crop.circle.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCMomentsQuickPermissionsKey, nil, NeoWCSettingActionNone),
     ]];
     NSString *dateFormat = NeoWCNormalizedMomentsDateFormat([defaults stringForKey:NeoWCMomentsPreciseTimeFormatKey]) ?: NeoWCMomentsPreciseTimeDefaultFormat;

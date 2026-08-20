@@ -32,7 +32,7 @@ static NSArray<NSDictionary *> *NeoWCCompatibilityDefinitions(void) {
             @{ @"id": @"game-login", @"title": @"游戏扫码授权", @"class": @"MMAuthorizeUserInfoViewController", @"selector": @"viewDidAppear:" },
             @{ @"id": @"moments-like", @"title": @"朋友圈双击点赞", @"class": @"WCTimeLineCellView", @"selector": @"onAccessibilityLike" },
             @{ @"id": @"moments-forward", @"title": @"朋友圈转发", @"class": @"WCTimeLineCellView", @"selector": @"m_dataItem" },
-            @{ @"id": @"moments-save-images", @"title": @"保存朋友圈图片", @"class": @"WCOperateFloatView", @"selector": @"showWithItemData:tipPoint:" },
+            @{ @"id": @"moments-save-images", @"title": @"保存朋友圈媒体", @"class": @"WCOperateFloatView", @"selector": @"showWithItemData:tipPoint:" },
             @{ @"id": @"moments-original-media", @"title": @"朋友圈高清发送", @"class": @"MMAssetTimeLineConfig", @"selector": @"compressQuality" },
             @{ @"id": @"moments-quick-permissions", @"title": @"朋友圈头像快捷权限", @"class": @"WCTimeLineCellView", @"selector": @"editBlackList" },
             @{ @"id": @"moments-precise-time", @"title": @"朋友圈精确发布时间", @"class": @"WCTimeLineCellView", @"selector": @"updateWithDataItem:actionAreaVM:" },
