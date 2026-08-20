@@ -28,7 +28,8 @@ void NeoWCInstallServiceCenterCompatibility(void) {
 }
 
 id NeoWCDefaultServiceCenter(void) {
-    NeoWCInstallServiceCenterCompatibility();
+    id contextCenter = NeoWCServiceCenterFromCurrentContext(nil, NULL);
+    if (contextCenter) return contextCenter;
     Class centerClass = objc_getClass("MMServiceCenter");
     SEL selector = sel_registerName("defaultCenter");
     if (!centerClass || ![centerClass respondsToSelector:selector]) return nil;
@@ -64,13 +65,33 @@ BOOL NeoWCUpdateCachedCurrentUserContact(id contact) {
     NSString *nickname = NeoWCContactString(contact, "m_nsNickName");
     NSString *headImageURL = NeoWCContactString(contact, "m_nsHeadImgUrl");
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    BOOL changed = ![[defaults stringForKey:NeoWCCachedWXIDKey] isEqualToString:wxid];
-    [defaults setObject:wxid forKey:NeoWCCachedWXIDKey];
-    if (nickname.length > 0) [defaults setObject:nickname forKey:NeoWCCachedNicknameKey];
-    else [defaults removeObjectForKey:NeoWCCachedNicknameKey];
-    if (headImageURL.length > 0) [defaults setObject:headImageURL forKey:NeoWCCachedHeadImageURLKey];
-    else [defaults removeObjectForKey:NeoWCCachedHeadImageURLKey];
-    return changed;
+    NSString *cachedWXID = [defaults stringForKey:NeoWCCachedWXIDKey];
+    NSString *cachedNickname = [defaults stringForKey:NeoWCCachedNicknameKey];
+    NSString *cachedHeadImageURL = [defaults stringForKey:NeoWCCachedHeadImageURLKey];
+    BOOL wxidChanged = ![(cachedWXID ?: @"") isEqualToString:wxid];
+    BOOL nicknameChanged = ![(cachedNickname ?: @"") isEqualToString:(nickname ?: @"")];
+    BOOL headImageChanged = ![(cachedHeadImageURL ?: @"") isEqualToString:(headImageURL ?: @"")];
+    if (!wxidChanged && !nicknameChanged && !headImageChanged) return NO;
+
+    if (wxidChanged) [defaults setObject:wxid forKey:NeoWCCachedWXIDKey];
+    if (nicknameChanged) {
+        if (nickname.length > 0) [defaults setObject:nickname forKey:NeoWCCachedNicknameKey];
+        else [defaults removeObjectForKey:NeoWCCachedNicknameKey];
+    }
+    if (headImageChanged) {
+        if (headImageURL.length > 0) [defaults setObject:headImageURL forKey:NeoWCCachedHeadImageURLKey];
+        else [defaults removeObjectForKey:NeoWCCachedHeadImageURLKey];
+    }
+    return YES;
+}
+
+BOOL NeoWCRefreshCachedCurrentUserContact(void) {
+    Class contactManagerClass = objc_getClass("CContactMgr");
+    id manager = NeoWCServiceForClass(contactManagerClass);
+    SEL selector = sel_registerName("getSelfContact");
+    if (!manager || ![manager respondsToSelector:selector]) return NO;
+    id contact = ((id (*)(id, SEL))objc_msgSend)(manager, selector);
+    return NeoWCUpdateCachedCurrentUserContact(contact);
 }
 
 NSString *NeoWCCurrentUserWXID(void) {

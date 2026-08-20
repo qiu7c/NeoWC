@@ -3739,7 +3739,6 @@ static void NeoWCRegisterPlugin(void) {
 @implementation NeoWCEntryLoader
 
 + (void)load {
-    NeoWCInstallServiceCenterCompatibility();
     dispatch_async(dispatch_get_main_queue(), ^{
         NeoWCRegisterPlugin();
         NeoWCRefreshDailyStepOverride();
@@ -4148,20 +4147,6 @@ didReceiveNotificationResponse:(id)response
 
 %hook MMHeadImageView
 
-- (instancetype)initWithUsrName:(NSString *)userName
-                     headImgUrl:(NSString *)headImageURL
-                    bAutoUpdate:(BOOL)autoUpdate
-                   bRoundCorner:(BOOL)roundCorner {
-    MMHeadImageView *view = %orig(userName, headImageURL, autoUpdate, roundCorner);
-    NeoWCApplyGlobalAvatarRoundingToHeadView(view);
-    return view;
-}
-
-- (void)layoutSubviews {
-    %orig;
-    NeoWCApplyGlobalAvatarRoundingToHeadView(self);
-}
-
 - (void)setConerSize:(unsigned int)cornerSize {
     %orig(NeoWCGlobalAvatarScaledCornerSize(cornerSize));
 }
@@ -4169,17 +4154,6 @@ didReceiveNotificationResponse:(id)response
 %end
 
 %hook FakeHeadImageView
-
-- (instancetype)initWithRoundCorner:(BOOL)roundCorner {
-    FakeHeadImageView *view = %orig(roundCorner);
-    NeoWCApplyGlobalAvatarRoundingToHeadView(view);
-    return view;
-}
-
-- (void)layoutSubviews {
-    %orig;
-    NeoWCApplyGlobalAvatarRoundingToHeadView(self);
-}
 
 - (void)setConerSize:(unsigned int)cornerSize {
     %orig(NeoWCGlobalAvatarScaledCornerSize(cornerSize));
@@ -5408,6 +5382,15 @@ static void NeoWCPushHomeController(id owner, id controller) {
     else [presenter presentViewController:controller animated:YES completion:nil];
 }
 
+static id NeoWCHomeActionOwner(id owner, UITableView *tableView) {
+    if ([owner isKindOfClass:UIViewController.class]) return owner;
+    UIResponder *responder = tableView;
+    while ((responder = responder.nextResponder)) {
+        if ([responder isKindOfClass:UIViewController.class]) return responder;
+    }
+    return owner;
+}
+
 static void NeoWCOpenHomeRemark(id owner, id contact, BOOL group) {
     Class controllerClass = NSClassFromString(group ? @"ChatRoomRemarkEditViewController" : @"NewRemarkViewController");
     id controller = controllerClass ? [controllerClass new] : nil;
@@ -5450,13 +5433,30 @@ static void NeoWCCommitHomeSessionToggle(id contact, BOOL group, NSString *selec
 }
 
 typedef UISwipeActionsConfiguration *(*NeoWCHomeLeadingSwipeIMP)(id, SEL, UITableView *, NSIndexPath *);
-static NeoWCHomeLeadingSwipeIMP NeoWCOriginalHomeLeadingSwipe;
+
+static NSMutableDictionary<NSString *, NSValue *> *NeoWCHomeLeadingSwipeOriginalIMPs(void) {
+    static NSMutableDictionary<NSString *, NSValue *> *implementations;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        implementations = [NSMutableDictionary dictionary];
+    });
+    return implementations;
+}
+
+static NeoWCHomeLeadingSwipeIMP NeoWCOriginalHomeLeadingSwipeForOwner(id owner) {
+    for (Class candidate = object_getClass(owner); candidate; candidate = class_getSuperclass(candidate)) {
+        NSValue *value = NeoWCHomeLeadingSwipeOriginalIMPs()[NSStringFromClass(candidate)];
+        if (value) return (NeoWCHomeLeadingSwipeIMP)value.pointerValue;
+    }
+    return NULL;
+}
 
 static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector,
                                                            UITableView *tableView,
                                                            NSIndexPath *indexPath) {
+    NeoWCHomeLeadingSwipeIMP original = NeoWCOriginalHomeLeadingSwipeForOwner(owner);
     if (!NeoWCEnhancementEnabled(NeoWCHomeSwipeActionsEnabledKey)) {
-        return NeoWCOriginalHomeLeadingSwipe ? NeoWCOriginalHomeLeadingSwipe(owner, selector, tableView, indexPath) : nil;
+        return original ? original(owner, selector, tableView, indexPath) : nil;
     }
     id data = NeoWCHomeSessionCellData(owner, tableView, indexPath);
     NSString *userName = NeoWCHomeSessionUserName(data);
@@ -5467,9 +5467,10 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
                      NSStringFromClass([tableView.delegate class]),
                      (long)indexPath.row);
         }
-        return NeoWCOriginalHomeLeadingSwipe ? NeoWCOriginalHomeLeadingSwipe(owner, selector, tableView, indexPath) : nil;
+        return original ? original(owner, selector, tableView, indexPath) : nil;
     }
     id contact = NeoWCContactForUserName(userName) ?: data;
+    id actionOwner = NeoWCHomeActionOwner(owner, tableView);
     BOOL group = [userName hasSuffix:@"@chatroom"];
     id sessionInfo = NeoWCTweakValueForSelectorNames(data, @[@"m_sessionInfo", @"sessionInfo"]) ?: data;
     BOOL muted = NeoWCHomeSessionMuted(data);
@@ -5481,7 +5482,7 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
                                                                         handler:^(__unused UIContextualAction *action,
                                                                                   __unused UIView *sourceView,
                                                                                   void (^completionHandler)(BOOL)) {
-        NeoWCOpenHomeRemark(owner, contact, group);
+        NeoWCOpenHomeRemark(actionOwner, contact, group);
         completionHandler(YES);
     }];
     remark.backgroundColor = UIColor.systemGrayColor;
@@ -5527,7 +5528,7 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
                                                                              handler:^(__unused UIContextualAction *action,
                                                                                        __unused UIView *sourceView,
                                                                                        void (^completionHandler)(BOOL)) {
-            NeoWCOpenHomeMoments(owner, contact);
+            NeoWCOpenHomeMoments(actionOwner, contact);
             completionHandler(YES);
         }];
         moments.backgroundColor = UIColor.systemGreenColor;
@@ -5539,33 +5540,50 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
     return configuration;
 }
 
-static BOOL NeoWCHomeLeadingSwipeInstalled;
-
-static void NeoWCTryInstallHomeLeadingSwipe(void) {
-    if (NeoWCHomeLeadingSwipeInstalled) return;
-    Class controllerClass = objc_getClass("NewMainFrameViewController");
+static void NeoWCInstallHomeLeadingSwipeOnClass(Class controllerClass) {
     SEL selector = NSSelectorFromString(@"tableView:leadingSwipeActionsConfigurationForRowAtIndexPath:");
     if (!controllerClass) return;
     Method method = class_getInstanceMethod(controllerClass, selector);
     const char *types = "@@:@@";
+    IMP currentImplementation = method ? method_getImplementation(method) : NULL;
+    if (currentImplementation == (IMP)NeoWCHomeLeadingSwipe) return;
     if (method) {
-        NeoWCOriginalHomeLeadingSwipe = (NeoWCHomeLeadingSwipeIMP)method_getImplementation(method);
-        if (NeoWCOriginalHomeLeadingSwipe == NeoWCHomeLeadingSwipe) {
-            NeoWCHomeLeadingSwipeInstalled = YES;
-            return;
-        }
         types = method_getTypeEncoding(method) ?: types;
+        NeoWCHomeLeadingSwipeOriginalIMPs()[NSStringFromClass(controllerClass)] =
+            [NSValue valueWithPointer:(const void *)currentImplementation];
     }
     // class_addMethod also handles an inherited implementation without mutating
     // the superclass. Only replace directly when this class already owns it.
     if (class_addMethod(controllerClass, selector, (IMP)NeoWCHomeLeadingSwipe, types)) {
-        NeoWCHomeLeadingSwipeInstalled = YES;
         return;
     }
     Method ownedMethod = class_getInstanceMethod(controllerClass, selector);
     if (!ownedMethod) return;
     method_setImplementation(ownedMethod, (IMP)NeoWCHomeLeadingSwipe);
-    NeoWCHomeLeadingSwipeInstalled = YES;
+}
+
+static void NeoWCTryInstallHomeLeadingSwipe(void) {
+    NeoWCInstallHomeLeadingSwipeOnClass(objc_getClass("NewMainFrameViewController"));
+}
+
+static UITableView *NeoWCHomeTableViewForController(id controller) {
+    id tableView = NeoWCTweakValueForSelectorNames(controller,
+                                                    @[@"tableView", @"m_tableView", @"mainTableView", @"m_mainTableView"]);
+    if ([tableView isKindOfClass:UITableView.class]) return tableView;
+    UIView *rootView = [controller isKindOfClass:UIViewController.class] ? [controller view] : nil;
+    if (!rootView) return nil;
+    NSMutableArray<UIView *> *pending = [NSMutableArray arrayWithObject:rootView];
+    while (pending.count > 0) {
+        UIView *candidate = pending.lastObject;
+        [pending removeLastObject];
+        if ([candidate isKindOfClass:UITableView.class] &&
+            ([NSStringFromClass(candidate.class) containsString:@"MainFrame"] || !tableView)) {
+            tableView = candidate;
+            if ([NSStringFromClass(candidate.class) containsString:@"MainFrame"]) break;
+        }
+        [pending addObjectsFromArray:candidate.subviews];
+    }
+    return [tableView isKindOfClass:UITableView.class] ? tableView : nil;
 }
 
 __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
@@ -5583,6 +5601,17 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
         NeoWCTryInstallHomeLeadingSwipe();
     }];
 }
+
+%hook NewMainFrameViewController
+
+- (void)viewDidAppear:(BOOL)animated {
+    %orig;
+    UITableView *tableView = NeoWCHomeTableViewForController(self);
+    NeoWCInstallHomeLeadingSwipeOnClass(object_getClass(self));
+    if (tableView.delegate) NeoWCInstallHomeLeadingSwipeOnClass(object_getClass(tableView.delegate));
+}
+
+%end
 
 %hook WeixinContactInfoAssist
 
@@ -6422,12 +6451,6 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %end
 
 %hook CContactMgr
-
-- (id)getSelfContact {
-    id contact = %orig;
-    NeoWCUpdateCachedCurrentUserContact(contact);
-    return contact;
-}
 
 - (void)printContactImportantChangeData:(id)newContact oldContact:(id)oldContact {
     id snapshot = NeoWCCaptureGroupMemberChange(newContact, oldContact);

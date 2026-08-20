@@ -1,4 +1,5 @@
 #import "NeoWCSettingsViewController.h"
+#import "NeoWCAccount.h"
 #import "NeoWCSettingsActions.h"
 #import "NeoWCSettingsCatalog.h"
 #import "NeoWCSettingsModels.h"
@@ -122,6 +123,7 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    if (self.category == NeoWCSettingsCategoryRoot) NeoWCRefreshCachedCurrentUserContact();
     [self.profileHeader refreshProfile];
     if (self.category != NeoWCSettingsCategoryRoot) return;
     [self presentReleaseNotesIfNeeded];
