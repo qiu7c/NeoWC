@@ -113,7 +113,20 @@
 
 NeoWC 当前把这些入口归入“广告精简”，但必须保持开关关闭时完整返回微信原逻辑。URL、越狱与统计相关 Hook 风险和版本敏感度较高，不能从字符串命中推断调用签名；后续修改前必须重新确认原方法参数与返回类型。
 
-## 7. 使用原则
+## 7. WeChatX 全局头像圆角
+
+对 `WeChatX-new.arm64.dylib` 的 `WXInitRoundAvatar`（`0x2addf8`）和旧版同名初始化器（`0x27c77c`）反编译后确认：
+
+- 目标类不是全局 `UIImageView`，而是微信头像基类 `MMHeadImageView` 与占位头像类 `FakeHeadImageView`。
+- `MMHeadImageView` Hook `initWithUsrName:headImgUrl:bAutoUpdate:bRoundCorner:`、`layoutSubviews`、`setConerSize:`。
+- `FakeHeadImageView` Hook `initWithRoundCorner:`、`layoutSubviews`、`setConerSize:`。
+- 布局阶段若对象响应 `headImageView`，优先修改内部真实头像 View；否则修改容器本身。
+- 圆角半径算法为 `min(width, height) × 0.5 × ratio`，其中 `ratio` 来自 0–100 的 `wkkAvatarRadius` 并限制在有效范围内。
+- `setConerSize:` 的输入也按相同比例换算。参考插件另有浅色/深色描边与描边宽度逻辑，但它与“全局头像圆角”不是同一必要能力，NeoWC 暂不迁入。
+
+因此实现全局头像圆角时只应覆盖上述两个头像类，不得扫描普通图片视图，避免把聊天图片、二维码、表情或功能图标裁圆。
+
+## 8. 使用原则
 
 - 后续维护遇到尚未还原、真机不生效或微信版本变化的功能时，可以并且应当回到上述参考插件的原始 `dylib`/`deb` 及 `.codex-analysis/` 中的提取文件继续反编译学习；先补齐证据，再修改 NeoWC。
 - 先从 Hook 注册表确定类、Selector 和原方法类型，再看替换函数调用顺序。

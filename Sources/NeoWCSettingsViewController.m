@@ -4,7 +4,6 @@
 #import "NeoWCSettingsModels.h"
 #import "NeoWCSettingsUI.h"
 #import "NeoWCAntiRevoke.h"
-#import "NeoWCAuthorization.h"
 #import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCInterfaceTweaks.h"
@@ -20,8 +19,6 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
 @property (nonatomic, strong) NeoWCSettingsActions *actions;
 @property (nonatomic, strong) NeoWCSettingsProfileHeaderView *profileHeader;
 @property (nonatomic, assign) BOOL attemptedReleaseNotes;
-@property (nonatomic, assign) BOOL displayedBlacklistedState;
-@property (nonatomic, assign) BOOL requestedAuthorizationCheck;
 - (instancetype)initWithCategory:(NeoWCSettingsCategory)category;
 - (void)presentReleaseNotesIfNeeded;
 - (void)quickSwitchLongPressed:(UILongPressGestureRecognizer *)gesture;
@@ -98,12 +95,6 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
     }
     [self applySettingsPageScale];
     [self rebuildSections];
-    self.displayedBlacklistedState = NeoWCAuthorizationIsPermanentlyBlacklisted();
-    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(authorizationStateDidChange:) name:NeoWCAuthorizationStateDidChangeNotification object:nil];
-}
-
-- (void)dealloc {
-    [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
 - (CGFloat)settingsPageScale {
@@ -134,10 +125,6 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
     [self.profileHeader refreshProfile];
     if (self.category != NeoWCSettingsCategoryRoot) return;
     [self presentReleaseNotesIfNeeded];
-    if (!self.requestedAuthorizationCheck) {
-        self.requestedAuthorizationCheck = YES;
-        NeoWCRefreshCurrentAuthorization();
-    }
 }
 
 - (void)presentReleaseNotesIfNeeded {
@@ -153,19 +140,6 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
     [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
     [defaults setObject:NeoWCDisplayVersion forKey:NeoWCLastShownReleaseNotesVersionKey];
     [self presentViewController:alert animated:YES completion:nil];
-}
-
-- (void)authorizationStateDidChange:(__unused NSNotification *)notification {
-    BOOL blacklisted = NeoWCAuthorizationIsPermanentlyBlacklisted();
-    if (self.category != NeoWCSettingsCategoryRoot && blacklisted) {
-        [self.navigationController popViewControllerAnimated:YES];
-        return;
-    }
-    [self.profileHeader refreshProfile];
-    if (blacklisted != self.displayedBlacklistedState) {
-        self.displayedBlacklistedState = blacklisted;
-        [self reloadSettingsPreservingPositionApplyScale:YES];
-    }
 }
 
 - (void)viewDidLayoutSubviews {

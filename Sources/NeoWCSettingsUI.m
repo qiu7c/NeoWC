@@ -1,6 +1,5 @@
 #import "NeoWCSettingsUI.h"
 #import "NeoWCAccount.h"
-#import "NeoWCAuthorization.h"
 #import "NeoWCSettingsCatalog.h"
 #import <math.h>
 
@@ -121,8 +120,6 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
 @property (nonatomic, strong) UIView *avatarView;
 @property (nonatomic, strong) UILabel *nicknameLabel;
 @property (nonatomic, strong) UILabel *wxidLabel;
-@property (nonatomic, strong) UILabel *authorizationLabel;
-@property (nonatomic, strong) UIStackView *metadataStack;
 @property (nonatomic, copy) NSArray<NSLayoutConstraint *> *avatarConstraints;
 @property (nonatomic, copy) NSString *appliedAvatarWXID;
 @property (nonatomic, copy) NSString *appliedHeadURL;
@@ -159,20 +156,8 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
     _wxidLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
     [self addSubview:_wxidLabel];
 
-    _authorizationLabel = [UILabel new];
-    _authorizationLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleFootnote]
-        scaledFontForFont:[UIFont systemFontOfSize:13.0 weight:UIFontWeightMedium]];
-    _authorizationLabel.adjustsFontForContentSizeCategory = YES;
-    _authorizationLabel.textColor = UIColor.systemGreenColor;
-
-    _metadataStack = [[UIStackView alloc] initWithArrangedSubviews:@[_authorizationLabel]];
-    _metadataStack.translatesAutoresizingMaskIntoConstraints = NO;
-    _metadataStack.axis = UILayoutConstraintAxisHorizontal;
-    _metadataStack.alignment = UIStackViewAlignmentCenter;
-    _metadataStack.spacing = 14.0;
-    [self addSubview:_metadataStack];
-    // Account and authorization values are persisted. Apply them before the
-    // header first appears so it never renders an empty placeholder frame.
+    // Account values are persisted. Apply them before the header first appears
+    // so it never renders an empty placeholder frame.
     [self refreshProfile];
     return self;
 }
@@ -215,43 +200,11 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
                      headURL:(NSString *)headURL {
     self.wxid = wxid;
     NSString *displayNickname = nickname.length > 0 ? nickname : @"微信用户";
-    BOOL isAuthor = NeoWCAuthorizationIsCurrentUserAdministrator();
-    if (isAuthor) {
-        NSString *authorTitle = [NSString stringWithFormat:@"%@  作者", displayNickname];
-        NSMutableAttributedString *attributedTitle = [[NSMutableAttributedString alloc] initWithString:authorTitle];
-        [attributedTitle addAttribute:NSForegroundColorAttributeName
-                                value:UIColor.systemYellowColor
-                                range:NSMakeRange(0, displayNickname.length)];
-        [attributedTitle addAttribute:NSForegroundColorAttributeName
-                                value:UIColor.secondaryLabelColor
-                                range:NSMakeRange(displayNickname.length + 2, 2)];
-        self.nicknameLabel.attributedText = attributedTitle;
-    } else {
-        self.nicknameLabel.attributedText = nil;
-        self.nicknameLabel.textColor = UIColor.labelColor;
-        self.nicknameLabel.text = displayNickname;
-    }
+    self.nicknameLabel.attributedText = nil;
+    self.nicknameLabel.textColor = UIColor.labelColor;
+    self.nicknameLabel.text = displayNickname;
     self.wxidLabel.text = self.wxid.length > 0 ? self.wxid : @"wxid 未获取";
-    NeoWCAuthorizationState authorizationState = NeoWCCurrentAuthorizationState();
-    if (authorizationState == NeoWCAuthorizationStateAuthorized) {
-        self.authorizationLabel.text = @"✓ 已授权";
-        self.authorizationLabel.textColor = UIColor.systemGreenColor;
-    } else if (authorizationState == NeoWCAuthorizationStateBlacklisted || NeoWCAuthorizationIsPermanentlyBlacklisted()) {
-        self.authorizationLabel.text = @"已限制使用";
-        self.authorizationLabel.textColor = UIColor.systemRedColor;
-    } else if (authorizationState == NeoWCAuthorizationStateLoading || authorizationState == NeoWCAuthorizationStateUnknown) {
-        self.authorizationLabel.text = @"授权状态检测中";
-        self.authorizationLabel.textColor = UIColor.secondaryLabelColor;
-    } else if (authorizationState == NeoWCAuthorizationStateFailed) {
-        self.authorizationLabel.text = @"授权状态暂不可用";
-        self.authorizationLabel.textColor = UIColor.secondaryLabelColor;
-    } else {
-        self.authorizationLabel.text = @"未授权";
-        self.authorizationLabel.textColor = UIColor.secondaryLabelColor;
-    }
-    self.accessibilityLabel = [NSString stringWithFormat:@"%@%@，%@，%@",
-                               displayNickname, isAuthor ? @"，作者" : @"",
-                               self.wxidLabel.text, self.authorizationLabel.text];
+    self.accessibilityLabel = [NSString stringWithFormat:@"%@，%@", displayNickname, self.wxidLabel.text];
     self.accessibilityHint = self.wxid.length > 0 ? @"轻点复制 wxid" : nil;
 
     BOOL avatarNeedsUpdate = !self.avatarView ||
@@ -292,11 +245,7 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
         [self.wxidLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-24.0],
         [self.wxidLabel.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
         [self.wxidLabel.topAnchor constraintEqualToAnchor:self.nicknameLabel.bottomAnchor constant:4.0],
-        [self.metadataStack.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-        [self.metadataStack.topAnchor constraintEqualToAnchor:self.wxidLabel.bottomAnchor constant:9.0],
-        [self.metadataStack.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.leadingAnchor constant:20.0],
-        [self.metadataStack.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-20.0],
-        [self.metadataStack.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-16.0],
+        [self.wxidLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-16.0],
     ];
     [NSLayoutConstraint activateConstraints:self.avatarConstraints];
 }
@@ -305,9 +254,8 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
     CGFloat textWidth = MAX(120.0, width - 48.0);
     CGFloat nicknameHeight = [self.nicknameLabel sizeThatFits:CGSizeMake(textWidth, CGFLOAT_MAX)].height;
     CGFloat wxidHeight = [self.wxidLabel sizeThatFits:CGSizeMake(textWidth, CGFLOAT_MAX)].height;
-    CGFloat metadataHeight = [self.metadataStack systemLayoutSizeFittingSize:UILayoutFittingCompressedSize].height;
-    CGFloat contentHeight = 18.0 + 92.0 + 10.0 + nicknameHeight + 4.0 + wxidHeight + 9.0 + metadataHeight + 16.0;
-    return MAX(contentHeight, 212.0 * scale);
+    CGFloat contentHeight = 18.0 + 92.0 + 10.0 + nicknameHeight + 4.0 + wxidHeight + 16.0;
+    return MAX(contentHeight, 188.0 * scale);
 }
 
 - (void)showCopyConfirmation {

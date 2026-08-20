@@ -6,6 +6,14 @@ FOUNDATION_EXPORT NSString *const NeoWCChatInputOuterRoundingKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatInputInnerRadiusKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatInputOuterRadiusKey;
 FOUNDATION_EXPORT NSString *const NeoWCHideChatMuteIconKey;
+FOUNDATION_EXPORT NSString *const NeoWCGlobalAvatarRoundingEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCGlobalAvatarCornerPercentKey;
+
+/// Applies the global avatar style only to WeChat's MMHeadImageView /
+/// FakeHeadImageView containers. Ordinary UIImageView instances are untouched.
+FOUNDATION_EXPORT void NeoWCApplyGlobalAvatarRoundingToHeadView(UIView *headView);
+FOUNDATION_EXPORT void NeoWCRefreshTrackedGlobalAvatarViews(void);
+FOUNDATION_EXPORT unsigned int NeoWCGlobalAvatarScaledCornerSize(unsigned int originalSize);
 
 /// Applies or restores NeoWC's chat input rounding on an existing MMInputToolView.
 FOUNDATION_EXPORT void NeoWCApplyChatInputRoundingToToolView(UIView *inputToolView);

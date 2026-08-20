@@ -161,6 +161,19 @@
 @interface MMInputToolView : UIView
 @end
 
+@interface MMHeadImageView : UIView
+- (instancetype)initWithUsrName:(NSString *)userName
+                     headImgUrl:(NSString *)headImageURL
+                    bAutoUpdate:(BOOL)autoUpdate
+                   bRoundCorner:(BOOL)roundCorner;
+- (void)setConerSize:(unsigned int)cornerSize;
+@end
+
+@interface FakeHeadImageView : UIView
+- (instancetype)initWithRoundCorner:(BOOL)roundCorner;
+- (void)setConerSize:(unsigned int)cornerSize;
+@end
+
 @interface CMessageWrap : NSObject
 @property (nonatomic, assign) NSUInteger m_uiMessageType;
 @property (nonatomic, assign) NSUInteger m_uiGameType;
@@ -426,8 +439,40 @@ static UIViewController *NeoWCViewControllerForResponder(id responderObject) {
     return nil;
 }
 
+static NSArray<UIGestureRecognizer *> *NeoWCNavigationReturnGesturesForView(UIView *view) {
+    UIViewController *controller = NeoWCViewControllerForResponder(view);
+    UINavigationController *navigationController = controller.navigationController;
+    if (!navigationController || navigationController.viewControllers.count <= 1) return @[];
+
+    NSMutableArray<UIGestureRecognizer *> *gestures = [NSMutableArray array];
+    UIGestureRecognizer *interactivePop = navigationController.interactivePopGestureRecognizer;
+    if (interactivePop && interactivePop.enabled) [gestures addObject:interactivePop];
+
+    // WCPulse and some WeChat navigation containers expose an additional
+    // full-screen return recognizer. Resolve it dynamically so message gestures
+    // keep yielding even when the navigation view recreates that recognizer.
+    for (id owner in @[navigationController, navigationController.view]) {
+        for (NSString *selectorName in @[@"screenDismissPanGestureRecognizer", @"dismissPanGestureRecognizer"]) {
+            SEL selector = NSSelectorFromString(selectorName);
+            if (![owner respondsToSelector:selector]) continue;
+            id candidate = ((id (*)(id, SEL))objc_msgSend)(owner, selector);
+            if (![candidate isKindOfClass:[UIGestureRecognizer class]] ||
+                ![(UIGestureRecognizer *)candidate isEnabled] ||
+                [gestures containsObject:candidate]) continue;
+            [gestures addObject:candidate];
+        }
+    }
+    return gestures;
+}
+
+static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIView *view) {
+    if (!candidate) return NO;
+    return [NeoWCNavigationReturnGesturesForView(view) containsObject:candidate];
+}
+
 @interface NeoWCReplyPanGestureDelegate : NSObject <UIGestureRecognizerDelegate>
 @property (nonatomic, weak) UIView *cell;
+@property (nonatomic, assign) CGFloat initialWindowX;
 @end
 
 @implementation NeoWCReplyPanGestureDelegate
@@ -440,12 +485,31 @@ static UIViewController *NeoWCViewControllerForResponder(id responderObject) {
     CGPoint velocity = [pan velocityInView:self.cell];
     if (fabs(velocity.x) <= fabs(velocity.y)) return NO;
     if (NeoWCMessageSwipeAction((CommonMessageCellView *)self.cell, velocity.x > 0.0) == NeoWCReplySwipeActionNone) return NO;
+    if (velocity.x > 0.0 && NeoWCNavigationReturnGesturesForView(self.cell).count > 0) {
+        CGFloat edgeWidth = MAX(50.0, self.cell.window.safeAreaInsets.left + 32.0);
+        if (self.initialWindowX <= edgeWidth) return NO;
+    }
     CGPoint location = [pan locationInView:self.cell];
     CGFloat width = CGRectGetWidth(self.cell.bounds);
-    // Preserve the native interactive-pop edge. A rightward message action must
-    // start farther inside the chat so returning cannot accidentally trigger it.
-    CGFloat minimumX = velocity.x > 0.0 ? 44.0 : 24.0;
-    return location.x >= minimumX && location.x <= MAX(minimumX, width - 24.0);
+    return location.x >= 24.0 && location.x <= MAX(24.0, width - 24.0);
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
+       shouldReceiveTouch:(UITouch *)touch {
+    UIWindow *window = self.cell.window;
+    self.initialWindowX = window ? [touch locationInView:window].x : CGFLOAT_MAX;
+    if (!window || NeoWCNavigationReturnGesturesForView(self.cell).count == 0) return YES;
+    CGFloat edgeWidth = MAX(50.0, window.safeAreaInsets.left + 32.0);
+    // The decision is based on the original touch, not the later point at which
+    // UIKit asks shouldBegin. This prevents an edge-back drag from entering a
+    // message cell and subsequently firing its configured right-swipe action.
+    return self.initialWindowX > edgeWidth;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
+    shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    (void)gestureRecognizer;
+    return NeoWCIsNavigationReturnGesture(otherGestureRecognizer, self.cell);
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
@@ -497,10 +561,8 @@ static void NeoWCSynchronizeReplyGesture(CommonMessageCellView *cell) {
         panRecognizer.delaysTouchesBegan = NO;
         panRecognizer.delaysTouchesEnded = NO;
         [cell addGestureRecognizer:panRecognizer];
-        UIViewController *controller = NeoWCViewControllerForResponder(cell);
-        UIGestureRecognizer *popGesture = controller.navigationController.interactivePopGestureRecognizer;
-        if (popGesture && popGesture != panRecognizer) {
-            [panRecognizer requireGestureRecognizerToFail:popGesture];
+        for (UIGestureRecognizer *returnGesture in NeoWCNavigationReturnGesturesForView(cell)) {
+            if (returnGesture != panRecognizer) [panRecognizer requireGestureRecognizerToFail:returnGesture];
         }
         objc_setAssociatedObject(cell, &NeoWCReplyPanRecognizerKey, panRecognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(cell, &NeoWCReplyPanDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -3708,6 +3770,12 @@ static void NeoWCRegisterPlugin(void) {
                         NeoWCSynchronizeVisibleMomentsCells();
                         NeoWCSynchronizeVisibleReplyGestures();
                         NSString *changedKey = [note.object isKindOfClass:[NSString class]] ? note.object : nil;
+                        if (!changedKey ||
+                            [changedKey isEqualToString:NeoWCGlobalAvatarRoundingEnabledKey] ||
+                            [changedKey isEqualToString:NeoWCGlobalAvatarCornerPercentKey] ||
+                            [changedKey isEqualToString:NeoWCEnabledKey]) {
+                            NeoWCRefreshTrackedGlobalAvatarViews();
+                        }
                         BOOL refreshChatTop = !changedKey ||
                             [changedKey isEqualToString:NeoWCChatTopBarCapsuleEnabledKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarEffectStyleKey] ||
@@ -4074,6 +4142,47 @@ didReceiveNotificationResponse:(id)response
     if (self.window) {
         NeoWCApplyChatInputRoundingToToolView(self);
     }
+}
+
+%end
+
+%hook MMHeadImageView
+
+- (instancetype)initWithUsrName:(NSString *)userName
+                     headImgUrl:(NSString *)headImageURL
+                    bAutoUpdate:(BOOL)autoUpdate
+                   bRoundCorner:(BOOL)roundCorner {
+    MMHeadImageView *view = %orig(userName, headImageURL, autoUpdate, roundCorner);
+    NeoWCApplyGlobalAvatarRoundingToHeadView(view);
+    return view;
+}
+
+- (void)layoutSubviews {
+    %orig;
+    NeoWCApplyGlobalAvatarRoundingToHeadView(self);
+}
+
+- (void)setConerSize:(unsigned int)cornerSize {
+    %orig(NeoWCGlobalAvatarScaledCornerSize(cornerSize));
+}
+
+%end
+
+%hook FakeHeadImageView
+
+- (instancetype)initWithRoundCorner:(BOOL)roundCorner {
+    FakeHeadImageView *view = %orig(roundCorner);
+    NeoWCApplyGlobalAvatarRoundingToHeadView(view);
+    return view;
+}
+
+- (void)layoutSubviews {
+    %orig;
+    NeoWCApplyGlobalAvatarRoundingToHeadView(self);
+}
+
+- (void)setConerSize:(unsigned int)cornerSize {
+    %orig(NeoWCGlobalAvatarScaledCornerSize(cornerSize));
 }
 
 %end

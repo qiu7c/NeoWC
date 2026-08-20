@@ -1,6 +1,7 @@
 #import "NeoWCInterfaceTweaks.h"
 
 #import <QuartzCore/QuartzCore.h>
+#import <math.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 
@@ -13,6 +14,8 @@ NSString *const NeoWCChatInputOuterRoundingKey = @"com.qiu7c.neowc.interface.cha
 NSString *const NeoWCChatInputInnerRadiusKey = @"com.qiu7c.neowc.interface.chat-input-rounding.inner-radius";
 NSString *const NeoWCChatInputOuterRadiusKey = @"com.qiu7c.neowc.interface.chat-input-rounding.outer-radius";
 NSString *const NeoWCHideChatMuteIconKey = @"com.qiu7c.neowc.interface.hide-chat-mute-icon";
+NSString *const NeoWCGlobalAvatarRoundingEnabledKey = @"com.qiu7c.neowc.interface.global-avatar-rounding";
+NSString *const NeoWCGlobalAvatarCornerPercentKey = @"com.qiu7c.neowc.interface.global-avatar-corner-percent";
 
 static char NeoWCOriginalCornerRadiusKey;
 static char NeoWCOriginalMasksToBoundsKey;
@@ -22,6 +25,34 @@ static char NeoWCRoundingAppliedToToolViewKey;
 static char NeoWCRoundingConfigurationKey;
 static char NeoWCOriginalMuteIconHiddenKey;
 static char NeoWCOriginalMuteMemberLabelHiddenKey;
+static char NeoWCGlobalAvatarOriginalCornerRadiusKey;
+static char NeoWCGlobalAvatarOriginalMasksToBoundsKey;
+static char NeoWCGlobalAvatarOriginalCornerCurveKey;
+static char NeoWCGlobalAvatarStateSavedKey;
+
+static NSHashTable<UIView *> *NeoWCTrackedGlobalAvatarViews(void) {
+    static NSHashTable<UIView *> *views;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ views = [NSHashTable weakObjectsHashTable]; });
+    return views;
+}
+
+static NSHashTable<UIView *> *NeoWCTrackedGlobalAvatarTargets(void) {
+    static NSHashTable<UIView *> *views;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ views = [NSHashTable weakObjectsHashTable]; });
+    return views;
+}
+
+static void NeoWCRegisterGlobalAvatarDefaults(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        [NSUserDefaults.standardUserDefaults registerDefaults:@{
+            NeoWCGlobalAvatarRoundingEnabledKey: @NO,
+            NeoWCGlobalAvatarCornerPercentKey: @100.0,
+        }];
+    });
+}
 
 static NSHashTable<UIImageView *> *NeoWCHiddenMuteImageViews(void) {
     static NSHashTable<UIImageView *> *imageViews;
@@ -69,6 +100,76 @@ static UIView *NeoWCInterfaceViewValue(id object, NSArray<NSString *> *keys) {
         if ([value isKindOfClass:[UIView class]]) return value;
     }
     return nil;
+}
+
+static UIView *NeoWCGlobalAvatarImageTarget(UIView *headView) {
+    UIView *imageView = NeoWCInterfaceViewValue(headView, @[@"headImageView", @"_headImageView"]);
+    return imageView ?: headView;
+}
+
+static CGFloat NeoWCGlobalAvatarCornerRatio(void) {
+    NeoWCRegisterGlobalAvatarDefaults();
+    CGFloat percent = [NSUserDefaults.standardUserDefaults doubleForKey:NeoWCGlobalAvatarCornerPercentKey];
+    return MIN(100.0, MAX(0.0, percent)) / 100.0;
+}
+
+void NeoWCApplyGlobalAvatarRoundingToHeadView(UIView *headView) {
+    if (!headView) return;
+    [NeoWCTrackedGlobalAvatarViews() addObject:headView];
+    UIView *target = NeoWCGlobalAvatarImageTarget(headView);
+    if (!target) return;
+    [NeoWCTrackedGlobalAvatarTargets() addObject:target];
+
+    NeoWCRegisterGlobalAvatarDefaults();
+    BOOL enabled = NeoWCEnhancementEnabled(NeoWCGlobalAvatarRoundingEnabledKey);
+    NSNumber *saved = objc_getAssociatedObject(target, &NeoWCGlobalAvatarStateSavedKey);
+    if (!enabled) {
+        if (!saved.boolValue) return;
+        target.layer.cornerRadius = [objc_getAssociatedObject(target, &NeoWCGlobalAvatarOriginalCornerRadiusKey) doubleValue];
+        target.layer.masksToBounds = [objc_getAssociatedObject(target, &NeoWCGlobalAvatarOriginalMasksToBoundsKey) boolValue];
+        NSString *curve = objc_getAssociatedObject(target, &NeoWCGlobalAvatarOriginalCornerCurveKey);
+        if (curve.length > 0) target.layer.cornerCurve = curve;
+        objc_setAssociatedObject(target, &NeoWCGlobalAvatarStateSavedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(target, &NeoWCGlobalAvatarOriginalCornerRadiusKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(target, &NeoWCGlobalAvatarOriginalMasksToBoundsKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(target, &NeoWCGlobalAvatarOriginalCornerCurveKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return;
+    }
+
+    if (!saved.boolValue) {
+        objc_setAssociatedObject(target, &NeoWCGlobalAvatarOriginalCornerRadiusKey, @(target.layer.cornerRadius), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(target, &NeoWCGlobalAvatarOriginalMasksToBoundsKey, @(target.layer.masksToBounds), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(target, &NeoWCGlobalAvatarOriginalCornerCurveKey,
+                                 target.layer.cornerCurve ?: kCACornerCurveCircular,
+                                 OBJC_ASSOCIATION_COPY_NONATOMIC);
+        objc_setAssociatedObject(target, &NeoWCGlobalAvatarStateSavedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+
+    CGFloat width = CGRectGetWidth(target.bounds);
+    CGFloat height = CGRectGetHeight(target.bounds);
+    if (width <= 0.0 || height <= 0.0) return;
+    CGFloat radius = MIN(width, height) * 0.5 * NeoWCGlobalAvatarCornerRatio();
+    if (fabs(target.layer.cornerRadius - radius) > 0.01) target.layer.cornerRadius = radius;
+    if (![target.layer.cornerCurve isEqualToString:kCACornerCurveContinuous]) target.layer.cornerCurve = kCACornerCurveContinuous;
+    if (!target.layer.masksToBounds) target.layer.masksToBounds = YES;
+}
+
+void NeoWCRefreshTrackedGlobalAvatarViews(void) {
+    for (UIView *headView in NeoWCTrackedGlobalAvatarViews().allObjects) {
+        NeoWCApplyGlobalAvatarRoundingToHeadView(headView);
+    }
+    // An MMHeadImageView can replace its inner image view after an asynchronous
+    // avatar download. Keep the old target weakly tracked so disabling the
+    // feature restores every layer NeoWC actually changed.
+    for (UIView *target in NeoWCTrackedGlobalAvatarTargets().allObjects) {
+        NeoWCApplyGlobalAvatarRoundingToHeadView(target);
+    }
+}
+
+unsigned int NeoWCGlobalAvatarScaledCornerSize(unsigned int originalSize) {
+    NeoWCRegisterGlobalAvatarDefaults();
+    if (!NeoWCEnhancementEnabled(NeoWCGlobalAvatarRoundingEnabledKey)) return originalSize;
+    return (unsigned int)lrint((double)originalSize * NeoWCGlobalAvatarCornerRatio());
 }
 
 static UIView *NeoWCFindSubviewOfClassName(UIView *view, NSString *className) {

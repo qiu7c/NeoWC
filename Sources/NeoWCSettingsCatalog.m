@@ -1,7 +1,5 @@
 #import "NeoWCSettingsCatalog.h"
-#import "NeoWCAccount.h"
 #import "NeoWCAntiRevoke.h"
-#import "NeoWCAuthorization.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCInterfaceTweaks.h"
 #import "NeoWCDebug.h"
@@ -192,19 +190,17 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCChatInputInnerRadiusKey: @18.0,
         NeoWCChatInputOuterRadiusKey: @22.0,
         NeoWCHideChatMuteIconKey: @NO,
+        NeoWCGlobalAvatarRoundingEnabledKey: @NO,
+        NeoWCGlobalAvatarCornerPercentKey: @100.0,
         NeoWCExpandedCategoriesKey: @[@"messages"],
         NeoWCCollapsedFeaturesKey: @[],
     }];
 }
 
 static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
-    BOOL administrator = NeoWCAuthorizationIsCurrentUserAdministrator();
     NSMutableArray<NeoWCSettingItem *> *maintenanceItems = [NSMutableArray arrayWithObjects:
         NeoWCItem(@"配置管理", @"导入、导出或重置 NeoWC 配置", @"externaldrive", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionConfigManager),
         NeoWCInfoItem(@"version", @"版本", @"NeoWC", @"shippingbox", NeoWCDisplayVersion), nil];
-    if (administrator) {
-        [maintenanceItems insertObject:NeoWCItem(@"授权管理", @"管理授权列表与黑名单", @"person.badge.key", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionAuthorizationManager) atIndex:0];
-    }
     NeoWCSettingSection *maintenance = [NeoWCSettingSection sectionWithIdentifier:@"maintenance" title:@"维护"
                                                                            footer:[NSString stringWithFormat:@"NeoWC · %@", NeoWCDisplayVersion]
                                                                             items:maintenanceItems];
@@ -216,7 +212,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
                                              footer:nil items:@[
             NeoWCItem(@"聊天增强", @"消息、编辑、提醒与导出", @"bubble.left.and.bubble.right", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenMessages),
             NeoWCItem(@"常用增强", @"朋友圈、扫码、运动与本地显示", @"bolt", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenEnhancements),
-            NeoWCItem(@"界面优化", @"胶囊、缩放与入口显示", @"paintbrush", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenInterface),
+            NeoWCItem(@"界面优化", @"头像、胶囊、缩放与入口显示", @"paintbrush", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenInterface),
             NeoWCItem(@"开发者功能", @"日志、兼容性与快捷入口", @"hammer", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenDeveloper),
         ]],
         maintenance,
@@ -432,6 +428,13 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
 
 static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *defaults, NSSet<NSString *> *collapsed) {
     NSMutableArray *display = [NSMutableArray array];
+    NeoWCAddFeature(display,
+                    NeoWCItem(@"全局头像圆角", @"统一调整微信头像组件的圆角", @"person.crop.square", NeoWCSettingRowKindSwitch, NeoWCGlobalAvatarRoundingEnabledKey, nil, NeoWCSettingActionNone),
+                    @[
+        NeoWCItem(@"头像圆角程度", @"0% 为直角，100% 为圆形", @"slider.horizontal.3", NeoWCSettingRowKindDetail, nil,
+                  [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCGlobalAvatarCornerPercentKey]],
+                  NeoWCSettingActionGlobalAvatarCornerPercent),
+    ], defaults, collapsed);
     CGFloat globalScale = NeoWCScalePercentForDefaultsKey(NeoWCPageScaleGlobalPercentKey, 100.0);
     CGFloat settingsScale = NeoWCScalePercentForDefaultsKey(NeoWCSettingsPageScalePercentKey, 100.0);
     NeoWCAddFeature(display, NeoWCItem(@"页面缩放", @"按微信字体规则缩放页面", @"textformat.size", NeoWCSettingRowKindSwitch, NeoWCPageScaleEnabledKey, nil, NeoWCSettingActionNone), @[

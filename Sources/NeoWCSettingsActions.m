@@ -1,7 +1,6 @@
 #import "NeoWCSettingsActions.h"
 #import "NeoWCSettingsCatalog.h"
 #import "NeoWCAntiRevoke.h"
-#import "NeoWCAuthorization.h"
 #import "NeoWCAntiRevokeTemplateEditor.h"
 #import "NeoWCConfigManagerViewController.h"
 #import "NeoWCDebug.h"
@@ -510,11 +509,9 @@
         case NeoWCSettingActionChatTopEffectStyle: [self presentChatTopEffectStylePicker]; break;
         case NeoWCSettingActionChatGlassBlurIntensity: [self presentNumberEditorWithTitle:item.title message:@"请输入 20 到 100 之间的百分比" key:NeoWCChatGlassBlurIntensityKey minimum:20 maximum:100 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatGlassTintOpacity: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 30 之间的百分比；0 表示不额外染色" key:NeoWCChatGlassTintOpacityKey minimum:0 maximum:30 notifyChange:YES applyScale:NO]; break;
-        case NeoWCSettingActionAuthorizationManager:
-            if (NeoWCAuthorizationIsCurrentUserAdministrator()) [self push:[NeoWCAuthorizationManagerViewController new]];
-            break;
         case NeoWCSettingActionMessageGestureAction: [self presentMessageGestureActionPickerForItem:item]; break;
         case NeoWCSettingActionReplySwipeTriggerDistance: [self presentNumberEditorWithTitle:item.title message:@"请输入 36 到 100 之间的触发距离；数值越小越容易触发" key:NeoWCReplySwipeTriggerDistanceKey minimum:36 maximum:100 notifyChange:YES applyScale:NO]; break;
+        case NeoWCSettingActionGlobalAvatarCornerPercent: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 100 之间的百分比；0 为直角，100 为圆形" key:NeoWCGlobalAvatarCornerPercentKey minimum:0 maximum:100 notifyChange:YES applyScale:NO]; break;
         default: break;
     }
 }
