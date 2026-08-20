@@ -251,7 +251,9 @@ static char NeoWCMomentsFloatDataItemKey;
 static char NeoWCMomentsFloatSnapshotKey;
 static char NeoWCMomentsForwardTaskKey;
 static char NeoWCMomentsSaveTaskKey;
+static char NeoWCMomentsDataItemSaveTaskKey;
 static char NeoWCMomentsHighQualityMenuKey;
+static char NeoWCMomentsHighQualityPickerDelegateKey;
 static char NeoWCImageJokerPickerDelegateKey;
 static char NeoWCEmoticonPreviewLongPressKey;
 static char NeoWCMomentsOriginalTimeTextKey;
@@ -259,6 +261,7 @@ static char NeoWCMomentsOriginalTimeLinesKey;
 static char NeoWCMomentsPreciseTimeAppliedKey;
 static id NeoWCPendingMomentsPermissionDataItem;
 static __weak id NeoWCPendingMomentsCameraController;
+static id NeoWCActiveMomentsMediaSaveTask;
 static char NeoWCGameSelectorPresentedKey;
 static char NeoWCChatExportBuildingMenuKey;
 static char NeoWCAntiRevokeSideLabelKey;
@@ -822,14 +825,17 @@ static BOOL NeoWCRepeatVoiceMessage(id source, NSString *session) {
             if (!voiceSaved && [manager respondsToSelector:saveVoiceSelector]) {
                 NSData *voiceData = [NSData dataWithContentsOfFile:sourcePath];
                 if (voiceData.length > 0) {
-                    ((void (*)(id, SEL, id, id))objc_msgSend)(manager,
-                                                              saveVoiceSelector,
-                                                              voiceData,
-                                                              repeated);
-                    voiceSaved = YES;
+                    voiceSaved = ((BOOL (*)(id, SEL, id, id))objc_msgSend)(manager,
+                                                                           saveVoiceSelector,
+                                                                           voiceData,
+                                                                           repeated);
                 }
             }
-            if (!voiceSaved) {
+            NSDictionary *destinationAttributes = [[NSFileManager defaultManager]
+                                                    attributesOfItemAtPath:destinationPath
+                                                    error:nil];
+            unsigned long long destinationSize = [destinationAttributes[NSFileSize] unsignedLongLongValue];
+            if (!voiceSaved || destinationSize == 0) {
                 NeoWCLog(@"语音复读保存语音失败：%@", copyError.localizedDescription ?: @"未知错误");
                 return NO;
             }
@@ -847,13 +853,76 @@ static BOOL NeoWCRepeatVoiceMessage(id source, NSString *session) {
         // WeChatX keeps the native upload pipeline in forwarding mode for a
         // short, repeat-scoped window. The setter hooks below never affect
         // ordinary voice recording or forwarding outside this window.
-        NeoWCVoiceRepeatForwardDeadline = NSDate.date.timeIntervalSince1970 + 60.0;
+        NeoWCVoiceRepeatForwardDeadline = NSDate.date.timeIntervalSince1970 + 12.0;
         ((void (*)(id, SEL, id, id))objc_msgSend)(resendTarget, resendSelector, session, repeated);
         return YES;
     } @catch (NSException *exception) {
         NeoWCLog(@"语音复读调用失败：%@", exception.reason ?: exception.name);
         return NO;
     }
+}
+
+static NSString *NeoWCVoiceForwardSessionForContact(id contact) {
+    if (!contact) return nil;
+    if ([contact isKindOfClass:[NSString class]] && [contact length] > 0) return contact;
+    for (NSString *key in @[@"m_nsUsrName", @"userName", @"username"]) {
+        id value = NeoWCTweakSafeValue(contact, key);
+        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
+    }
+    return nil;
+}
+
+// WeChat's stock forward controller accepts voice messages into its local
+// result flow, but current versions do not start a usable voice upload for
+// them. Match WeChatX by consuming voice wraps before the stock forward path
+// and sending each one through AudioSender's native resend pipeline.
+static NSArray *NeoWCForwardMessagesBySendingVoices(NSArray *messages,
+                                                    NSArray *contacts,
+                                                    NSIndexSet **handledIndexes) {
+    if (handledIndexes) *handledIndexes = nil;
+    if (!NeoWCEnhancementEnabled(NeoWCVoiceForwardEnabledKey) ||
+        ![messages isKindOfClass:[NSArray class]] || messages.count == 0 ||
+        ![contacts isKindOfClass:[NSArray class]] || contacts.count == 0) {
+        return messages;
+    }
+
+    NSMutableArray *remaining = [NSMutableArray arrayWithCapacity:messages.count];
+    NSMutableIndexSet *handled = [NSMutableIndexSet indexSet];
+    [messages enumerateObjectsUsingBlock:^(id message, NSUInteger index, BOOL *stop) {
+        (void)stop;
+        if ([NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue] != 34) {
+            [remaining addObject:message];
+            return;
+        }
+
+        BOOL sentToEveryContact = YES;
+        for (id contact in contacts) {
+            NSString *session = NeoWCVoiceForwardSessionForContact(contact);
+            if (session.length == 0 || !NeoWCRepeatVoiceMessage(message, session)) {
+                sentToEveryContact = NO;
+                break;
+            }
+        }
+        if (sentToEveryContact) {
+            [handled addIndex:index];
+            NeoWCCompatibilityMarkTriggered(@"voice-forward");
+        } else {
+            [remaining addObject:message];
+        }
+    }];
+    if (handledIndexes && handled.count > 0) *handledIndexes = [handled copy];
+    return remaining;
+}
+
+static NSArray *NeoWCVoiceForwardFilteredOrigins(NSArray *origins, NSIndexSet *handledIndexes) {
+    if (![origins isKindOfClass:[NSArray class]] || handledIndexes.count == 0) return origins;
+    NSMutableArray *remaining = [origins mutableCopy];
+    [handledIndexes enumerateIndexesWithOptions:NSEnumerationReverse
+                                     usingBlock:^(NSUInteger index, BOOL *stop) {
+        (void)stop;
+        if (index < remaining.count) [remaining removeObjectAtIndex:index];
+    }];
+    return remaining;
 }
 
 static BOOL NeoWCRepeatMessage(CommonMessageCellView *cell) {
@@ -1230,105 +1299,137 @@ static BOOL NeoWCConfigureMomentsPermissionsActionSheet(WCActionSheet *sheet, id
     return YES;
 }
 
-static BOOL NeoWCIsBlockObject(id value) {
-    if (!value) return NO;
-    const char *className = object_getClassName(value);
-    return className && strstr(className, "Block") != NULL;
+@interface NeoWCMomentsOriginalMediaPickerDelegate : NSObject <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@property (nonatomic, weak) UIViewController *timelineController;
+@end
+
+@implementation NeoWCMomentsOriginalMediaPickerDelegate
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:nil];
 }
 
-static void (^NeoWCActionSheetItemEventAction(id item))(void) {
-    if (!item) return nil;
-    for (NSString *key in @[@"eventAction", @"m_eventAction", @"_eventAction", @"actionBlock", @"m_actionBlock"]) {
-        id value = NeoWCTweakSafeValue(item, key);
-        if (NeoWCIsBlockObject(value)) return [value copy];
-    }
+- (void)imagePickerController:(UIImagePickerController *)picker
+ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey, id> *)info {
+    UIViewController *timelineController = self.timelineController;
+    NSString *mediaType = info[UIImagePickerControllerMediaType];
+    BOOL isVideo = [mediaType isEqualToString:@"public.movie"] || [mediaType isEqualToString:@"public.video"];
+    id commitObject = nil;
 
-    // WCActionSheetItem exposes setEventAction: but not a stable getter in the
-    // supported builds. Read only block-typed ivars when the accessor is absent;
-    // this avoids guessing a private field type or invoking an arbitrary object.
-    for (Class cls = object_getClass(item); cls && cls != NSObject.class; cls = class_getSuperclass(cls)) {
-        unsigned int count = 0;
-        Ivar *ivars = class_copyIvarList(cls, &count);
-        for (unsigned int index = 0; index < count; index++) {
-            const char *type = ivar_getTypeEncoding(ivars[index]);
-            if (!type || strcmp(type, "@?") != 0) continue;
-            id value = nil;
-            @try { value = object_getIvar(item, ivars[index]); }
-            @catch (__unused NSException *exception) { value = nil; }
-            if (NeoWCIsBlockObject(value)) {
-                void (^copied)(void) = [value copy];
-                free(ivars);
-                return copied;
+    if (isVideo) {
+        NSURL *videoURL = info[UIImagePickerControllerMediaURL];
+        Class draftClass = NSClassFromString(@"SightDraft");
+        SEL draftSelector = NSSelectorFromString(@"draftWithVideoURL:");
+        if (videoURL.isFileURL && draftClass && [draftClass respondsToSelector:draftSelector]) {
+            commitObject = ((id (*)(id, SEL, id))objc_msgSend)(draftClass, draftSelector, videoURL);
+            for (NSDictionary *entry in @[
+                @{@"selector": @"setIsUseFFmpegHevcEncoding:", @"value": @NO},
+                @{@"selector": @"setIsUseCacheCompressResult:", @"value": @NO},
+                @{@"selector": @"setIsJustExport:", @"value": @YES}
+            ]) {
+                SEL selector = NSSelectorFromString(entry[@"selector"]);
+                if ([commitObject respondsToSelector:selector]) {
+                    ((void (*)(id, SEL, BOOL))objc_msgSend)(commitObject, selector, [entry[@"value"] boolValue]);
+                }
             }
         }
-        free(ivars);
+    } else {
+        UIImage *image = info[UIImagePickerControllerOriginalImage];
+        Class imageClass = NSClassFromString(@"MMImage");
+        SEL initializer = NSSelectorFromString(@"initWithImage:");
+        if ([image isKindOfClass:[UIImage class]] && imageClass && [imageClass instancesRespondToSelector:initializer]) {
+            commitObject = ((id (*)(id, SEL, id))objc_msgSend)([imageClass alloc], initializer, image);
+            id phAsset = info[UIImagePickerControllerPHAsset];
+            Class assetClass = NSClassFromString(@"MMAssetForPHAssetFramework");
+            SEL assetInitializer = NSSelectorFromString(@"initWithPHAsset:IsNeedOrigin:");
+            if ([phAsset isKindOfClass:[PHAsset class]] && assetClass && [assetClass instancesRespondToSelector:assetInitializer]) {
+                id asset = ((id (*)(id, SEL, id, BOOL))objc_msgSend)([assetClass alloc], assetInitializer, phAsset, YES);
+                SEL setAsset = NSSelectorFromString(@"setM_asset:");
+                SEL assetID = NSSelectorFromString(@"assetId");
+                SEL setAssetID = NSSelectorFromString(@"setM_assetID:");
+                SEL setAssetClass = NSSelectorFromString(@"setM_assetClassNameStr:");
+                SEL setImageFromAsset = NSSelectorFromString(@"setM_imageFromAsset:");
+                if ([commitObject respondsToSelector:setAsset]) ((void (*)(id, SEL, id))objc_msgSend)(commitObject, setAsset, asset);
+                if ([asset respondsToSelector:assetID] && [commitObject respondsToSelector:setAssetID]) {
+                    id identifier = ((id (*)(id, SEL))objc_msgSend)(asset, assetID);
+                    ((void (*)(id, SEL, id))objc_msgSend)(commitObject, setAssetID, identifier);
+                }
+                if ([commitObject respondsToSelector:setAssetClass]) {
+                    ((void (*)(id, SEL, id))objc_msgSend)(commitObject, setAssetClass, NSStringFromClass([asset class]));
+                }
+                if ([commitObject respondsToSelector:setImageFromAsset]) {
+                    ((void (*)(id, SEL, id))objc_msgSend)(commitObject, setImageFromAsset, image);
+                }
+            }
+        }
     }
-    return nil;
+
+    [picker dismissViewControllerAnimated:YES completion:^{
+        if (!timelineController || !commitObject) {
+            NeoWCShowTransientMessage(isVideo ? @"没有取得选中的原视频，请重新选择" : @"没有取得选中的原图，请重新选择", NO);
+            return;
+        }
+        SEL reportSelector = NSSelectorFromString(@"postReportSession");
+        id reportSession = [timelineController respondsToSelector:reportSelector]
+            ? ((id (*)(id, SEL))objc_msgSend)(timelineController, reportSelector) : nil;
+        if (isVideo) {
+            SEL selector = NSSelectorFromString(@"openCommitViewControllerWithSightDraft:postReportSession:trashReportData:withExtBean:");
+            if ([timelineController respondsToSelector:selector]) {
+                ((void (*)(id, SEL, id, id, id, id))objc_msgSend)(timelineController, selector, commitObject, reportSession, nil, nil);
+                return;
+            }
+        } else {
+            SEL selector = NSSelectorFromString(@"openCommitViewControllerWithShowLocation:arrImage:postReportSession:trashReportData:withExtBean:");
+            if ([timelineController respondsToSelector:selector]) {
+                ((void (*)(id, SEL, BOOL, id, id, id, id))objc_msgSend)(timelineController, selector, YES, @[commitObject], reportSession, nil, nil);
+                return;
+            }
+        }
+        NeoWCShowTransientMessage(@"当前微信版本不支持朋友圈高清发布", NO);
+    }];
 }
 
-static NSDictionary *NeoWCMomentsCameraSheetNativeAlbumAction(WCActionSheet *sheet) {
-    if (!sheet || !NeoWCPendingMomentsCameraController) return nil;
-    NSArray *items = NeoWCTweakSafeValue(sheet, @"buttonTitleList");
-    if (![items isKindOfClass:[NSArray class]] || items.count < 2) return nil;
+@end
 
-    BOOL hasCapture = NO;
-    NSString *candidateTitle = nil;
-    void (^candidateAction)(void) = nil;
-    for (id item in items) {
-        NSString *title = NeoWCTweakSafeValue(item, @"title");
-        if (![title isKindOfClass:[NSString class]]) continue;
-        if ([title containsString:@"拍摄"] || [title containsString:@"相机"]) hasCapture = YES;
-        if (([title containsString:@"相册"] || [title containsString:@"照片"]) &&
-            ![title containsString:@"选择高清"]) {
-            void (^action)(void) = NeoWCActionSheetItemEventAction(item);
-            if (action) {
-                candidateTitle = title;
-                candidateAction = action;
-            }
-        }
+static void NeoWCOpenMomentsHighQualityPicker(UIViewController *timelineController) {
+    if (!timelineController || ![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+        NeoWCShowTransientMessage(@"当前无法访问系统相册，请稍后重试", NO);
+        return;
     }
-    // WCActionSheet keeps its cancel item outside buttonTitleList on current
-    // WeChat builds, so the native camera + album pair is the stable signal.
-    if (!hasCapture || candidateTitle.length == 0 || !candidateAction) return nil;
-    return @{ @"title": candidateTitle, @"action": candidateAction };
+    UIImagePickerController *picker = [UIImagePickerController new];
+    NeoWCMomentsOriginalMediaPickerDelegate *delegate = [NeoWCMomentsOriginalMediaPickerDelegate new];
+    delegate.timelineController = timelineController;
+    picker.delegate = delegate;
+    objc_setAssociatedObject(picker, &NeoWCMomentsHighQualityPickerDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    picker.mediaTypes = @[@"public.image", @"public.movie"];
+    picker.allowsEditing = NO;
+    picker.videoQuality = UIImagePickerControllerQualityTypeHigh;
+    [timelineController presentViewController:picker animated:YES completion:nil];
 }
 
 static void NeoWCPrepareMomentsHighQualityMenu(WCActionSheet *sheet) {
     if (!sheet || !NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey) ||
         !NeoWCPendingMomentsCameraController ||
         objc_getAssociatedObject(sheet, &NeoWCMomentsHighQualityMenuKey)) return;
-    if ([sheet isContainButtonTitle:@"选择高清图片/原视频"]) {
-        objc_setAssociatedObject(sheet, &NeoWCMomentsHighQualityMenuKey, @YES,
-                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        return;
-    }
-
-    NSDictionary *nativeActionInfo = NeoWCMomentsCameraSheetNativeAlbumAction(sheet);
-    if (!nativeActionInfo) return;
-    NSString *nativeAlbumTitle = nativeActionInfo[@"title"];
-    void (^nativeAlbumAction)(void) = (void (^)(void))nativeActionInfo[@"action"];
-
-    __weak WCActionSheet *weakSheet = sheet;
+    __weak UIViewController *weakController = NeoWCPendingMomentsCameraController;
+    objc_setAssociatedObject(sheet, &NeoWCMomentsHighQualityMenuKey, @YES,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     BOOL added = NO;
     @try {
         [sheet addButtonWithTitle:@"选择高清图片/原视频" eventAction:^{
-            WCActionSheet *strongSheet = weakSheet;
-            if (!nativeAlbumAction) {
-                NeoWCLog(@"朋友圈高清入口缺少微信原生相册动作，已安全跳过");
-                NeoWCShowTransientMessage(@"当前微信版本暂不支持朋友圈高清选图", NO);
-                return;
-            }
-            nativeAlbumAction();
-            (void)strongSheet;
+            NeoWCOpenMomentsHighQualityPicker(weakController);
         }];
         added = YES;
     } @catch (NSException *exception) {
         NeoWCLog(@"增加朋友圈高清入口失败：%@", exception.reason ?: @"未知异常");
     }
-    if (!added) return;
-    objc_setAssociatedObject(sheet, &NeoWCMomentsHighQualityMenuKey, @YES,
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCLog(@"已在朋友圈相机菜单增加高清入口（复用原生%@动作）", nativeAlbumTitle);
+    if (!added) {
+        objc_setAssociatedObject(sheet, &NeoWCMomentsHighQualityMenuKey, nil,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return;
+    }
+    NeoWCLog(@"已在朋友圈相机菜单增加高清入口");
 }
 
 static id NeoWCTweakValueForSelectorNames(id object, NSArray<NSString *> *selectorNames) {
@@ -2175,6 +2276,19 @@ static UIWindow *NeoWCActiveWindow(void) {
 }
 
 static void NeoWCShowTransientMessage(NSString *message, BOOL success) {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ NeoWCShowTransientMessage(message, success); });
+        return;
+    }
+    Class toastClass = NSClassFromString(@"WeToast");
+    SEL toastSelector = NSSelectorFromString(@"toast");
+    id toast = toastClass && [toastClass respondsToSelector:toastSelector]
+        ? ((id (*)(id, SEL))objc_msgSend)(toastClass, toastSelector) : nil;
+    SEL showSelector = NSSelectorFromString(success ? @"showDoneToastWithText:" : @"showErrorToastWithText:");
+    if (toast && [toast respondsToSelector:showSelector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(toast, showSelector, message);
+        return;
+    }
     UIWindow *window = NeoWCActiveWindow();
     if (!window || message.length == 0) return;
     UILabel *label = [UILabel new];
@@ -2190,6 +2304,7 @@ static void NeoWCShowTransientMessage(NSString *message, BOOL success) {
     CGFloat width = MIN(CGRectGetWidth(window.bounds) - 48.0, 320.0);
     label.frame = CGRectMake((CGRectGetWidth(window.bounds) - width) * 0.5, window.safeAreaInsets.top + 18.0, width, success ? 44.0 : 60.0);
     [window addSubview:label];
+    [window bringSubviewToFront:label];
     [UIView animateWithDuration:0.18 animations:^{ label.alpha = 1.0; } completion:^(__unused BOOL finished) {
         [UIView animateWithDuration:0.20 delay:2.0 options:UIViewAnimationOptionCurveEaseInOut animations:^{ label.alpha = 0.0; } completion:^(__unused BOOL done) { [label removeFromSuperview]; }];
     }];
@@ -2402,13 +2517,14 @@ static NSArray<UIControl *> *NeoWCMomentsVisibleControls(UIView *root) {
     if (![root isKindOfClass:[UIView class]]) return @[];
     NSMutableArray<UIControl *> *controls = [NSMutableArray array];
     id injectedForwardButton = objc_getAssociatedObject(root, &NeoWCMomentsFloatForwardButtonKey);
+    id injectedSaveButton = objc_getAssociatedObject(root, &NeoWCMomentsFloatSaveButtonKey);
     NSMutableArray<UIView *> *pending = [NSMutableArray arrayWithObject:root];
     while (pending.count > 0) {
         UIView *view = pending.lastObject;
         [pending removeLastObject];
         for (UIView *subview in view.subviews) {
             [pending addObject:subview];
-            if (subview == injectedForwardButton || ![subview isKindOfClass:[UIControl class]] ||
+            if (subview == injectedForwardButton || subview == injectedSaveButton || ![subview isKindOfClass:[UIControl class]] ||
                 subview.hidden || subview.alpha <= 0.01) continue;
             CGRect frame = [subview convertRect:subview.bounds toView:root];
             if (CGRectGetWidth(frame) >= 36.0 && CGRectGetHeight(frame) >= 24.0) {
@@ -2815,6 +2931,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 @property (nonatomic, strong) NSMutableArray *livePhotoIndexes;
 @property (nonatomic, strong) NSMutableArray *downloaders;
 @property (nonatomic, strong) NSMutableArray *livePhotoSaveQueue;
+@property (nonatomic, strong) NSMutableArray<NSString *> *temporaryPaths;
 @property (nonatomic, assign) NSUInteger remainingDownloads;
 @property (nonatomic, assign) NSUInteger nextLivePhotoIndex;
 @property (nonatomic, assign) BOOL video;
@@ -2825,11 +2942,40 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 
 @implementation NeoWCMomentsMediaSaveTask
 
+- (NSString *)preparedLivePhotoImagePath:(NSString *)sourcePath {
+    UIImage *image = sourcePath.length > 0 ? [UIImage imageWithContentsOfFile:sourcePath] : nil;
+    NSData *pngData = image ? UIImagePNGRepresentation(image) : nil;
+    if (pngData.length == 0) return nil;
+    NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"NeoWCMomentsMediaSave"];
+    NSError *directoryError = nil;
+    if (![[NSFileManager defaultManager] createDirectoryAtPath:directory
+                                   withIntermediateDirectories:YES
+                                                    attributes:nil
+                                                         error:&directoryError]) {
+        NeoWCLog(@"创建朋友圈实况临时目录失败：%@", directoryError.localizedDescription ?: @"未知错误");
+        return nil;
+    }
+    NSString *fileName = [NSString stringWithFormat:@"NeoWC_Moments_%@.png", NSUUID.UUID.UUIDString];
+    NSString *preparedPath = [directory stringByAppendingPathComponent:fileName];
+    if (![pngData writeToFile:preparedPath options:NSDataWritingAtomic error:nil]) return nil;
+    if (!self.temporaryPaths) self.temporaryPaths = [NSMutableArray array];
+    [self.temporaryPaths addObject:preparedPath];
+    return preparedPath;
+}
+
 - (void)finish {
     UIViewController *presenter = self.presenter;
     if (presenter && objc_getAssociatedObject(presenter, &NeoWCMomentsSaveTaskKey) == self) {
         objc_setAssociatedObject(presenter, &NeoWCMomentsSaveTaskKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
+    if (self.dataItem && objc_getAssociatedObject(self.dataItem, &NeoWCMomentsDataItemSaveTaskKey) == self) {
+        objc_setAssociatedObject(self.dataItem, &NeoWCMomentsDataItemSaveTaskKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    for (NSString *path in self.temporaryPaths) {
+        [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+    }
+    [self.temporaryPaths removeAllObjects];
+    if (NeoWCActiveMomentsMediaSaveTask == self) NeoWCActiveMomentsMediaSaveTask = nil;
 }
 
 - (void)finishWithFailure:(NSString *)message {
@@ -2884,42 +3030,17 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     // compatibility helper, which falls back to MMServiceCenter.defaultCenter.
     id service = NeoWCServiceForClass(albumServiceClass);
     if (!service || ![service respondsToSelector:saveSelector]) return NO;
-
-    NSMethodSignature *signature = [service methodSignatureForSelector:saveSelector];
-    if (!signature || signature.numberOfArguments != 8 || signature.methodReturnType[0] != 'v') return NO;
-    const char *imageType = [signature getArgumentTypeAtIndex:2];
-    const char *videoType = [signature getArgumentTypeAtIndex:3];
-    const char *timeType = [signature getArgumentTypeAtIndex:4];
-    const char *tipsType = [signature getArgumentTypeAtIndex:5];
-    const char *successType = [signature getArgumentTypeAtIndex:6];
-    const char *failureType = [signature getArgumentTypeAtIndex:7];
-    if (!imageType || imageType[0] != '@' || !videoType || videoType[0] != '@' ||
-        !timeType || !strchr("cCsSiIlLqQ", timeType[0]) || !tipsType ||
-        !(tipsType[0] == 'c' || tipsType[0] == 'B') || !successType || successType[0] != '@' ||
-        !failureType || failureType[0] != '@') return NO;
-
-    NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
-    invocation.target = service;
-    invocation.selector = saveSelector;
-    id imageArgument = imagePath;
-    id videoArgument = videoPath;
-    BOOL showTips = NO;
-    id successArgument = [^{
+    void (^successBlock)(void) = [^{
         if (success) success();
     } copy];
-    id failureArgument = [^{
+    void (^failureBlock)(void) = [^{
         if (failure) failure();
     } copy];
-    [invocation setArgument:&imageArgument atIndex:2];
-    [invocation setArgument:&videoArgument atIndex:3];
-    unsigned long long timeArgument = (unsigned long long)stillImageTimeMs;
-    [invocation setArgument:&timeArgument atIndex:4];
-    [invocation setArgument:&showTips atIndex:5];
-    [invocation setArgument:&successArgument atIndex:6];
-    [invocation setArgument:&failureArgument atIndex:7];
-    [invocation retainArguments];
     @try {
-        [invocation invoke];
+        // WeChatX calls this private API directly with two NSString paths,
+        // a 64-bit millisecond time, isShowTips=NO and two no-argument blocks.
+        ((void (*)(id, SEL, id, id, long long, BOOL, id, id))objc_msgSend)(
+            service, saveSelector, imagePath, videoPath, stillImageTimeMs, NO, successBlock, failureBlock);
         return YES;
     } @catch (NSException *exception) {
         NeoWCLog(@"调用微信实况保存接口失败：%@", exception.reason ?: @"未知异常");
@@ -2942,8 +3063,13 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
         [self finishWithFailure:@"实况照片数据不完整，未保存为静态图片"];
         return;
     }
+    NSString *preparedImagePath = [self preparedLivePhotoImagePath:imagePath];
+    if (preparedImagePath.length == 0) {
+        [self finishWithFailure:@"实况照片静态图处理失败"];
+        return;
+    }
     __weak typeof(self) weakSelf = self;
-    BOOL invoked = [self invokeLivePhotoSaveForImagePath:imagePath
+    BOOL invoked = [self invokeLivePhotoSaveForImagePath:preparedImagePath
                                                videoPath:videoPath
                                         stillImageTimeMs:NeoWCNormalizedLivePhotoStillImageTimeMs(timeValue.longLongValue,
                                                                                                   videoPath)
@@ -2960,7 +3086,15 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
             [strongSelf finishWithFailure:@"实况照片保存失败，请检查照片权限"];
         });
     }];
-    if (!invoked) [self finishWithFailure:@"当前微信版本不支持保存实况照片"];
+    if (!invoked) {
+        [self finishWithFailure:@"当前微信版本不支持保存实况照片"];
+        return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(45.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || strongSelf.finished || strongSelf.nextLivePhotoIndex != queueIndex + 1) return;
+        [strongSelf finishWithFailure:@"实况照片保存超时，请检查照片权限"];
+    });
 }
 
 - (void)saveResolvedMedia {
@@ -3105,8 +3239,9 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     for (NSUInteger index = 0; index < self.mediaItems.count; index++) {
         id mediaItem = self.mediaItems[index];
         [requests addObject:@{ @"item": mediaItem, @"index": @(index), @"video": @NO }];
-        if (!isVideo && NeoWCMomentsBoolForSelector(mediaItem, @"isLivePhoto")) {
-            id livePhotoMediaItem = NeoWCMomentsObjectForSelector(mediaItem, @"livePhotoMediaItem");
+        id livePhotoMediaItem = !isVideo ? NeoWCMomentsObjectForSelector(mediaItem, @"livePhotoMediaItem") : nil;
+        BOOL isLivePhoto = !isVideo && (NeoWCMomentsBoolForSelector(mediaItem, @"isLivePhoto") || livePhotoMediaItem != nil);
+        if (isLivePhoto) {
             long long stillImageTimeMs = 0;
             BOOL hasStillImageTime = NeoWCMomentsLongLongForSelector(mediaItem, @"livePhotoStillImageTimeMs", &stillImageTimeMs) &&
                                      stillImageTimeMs > 0;
@@ -3161,10 +3296,19 @@ static void NeoWCSaveMomentMedia(id dataItem, UIViewController *presenter) {
         NeoWCShowTransientMessage(@"该条朋友圈没有可保存的媒体", NO);
         return;
     }
+    NeoWCMomentsMediaSaveTask *activeTask = [NeoWCActiveMomentsMediaSaveTask isKindOfClass:[NeoWCMomentsMediaSaveTask class]]
+        ? NeoWCActiveMomentsMediaSaveTask
+        : objc_getAssociatedObject(dataItem, &NeoWCMomentsDataItemSaveTaskKey);
+    if ([activeTask isKindOfClass:[NeoWCMomentsMediaSaveTask class]] && !activeTask.finished) {
+        NeoWCLog(@"已忽略同一条朋友圈媒体的重复保存触发");
+        return;
+    }
     NeoWCMomentsMediaSaveTask *task = [NeoWCMomentsMediaSaveTask new];
     task.dataItem = dataItem;
     task.presenter = presenter;
     objc_setAssociatedObject(presenter, &NeoWCMomentsSaveTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(dataItem, &NeoWCMomentsDataItemSaveTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NeoWCActiveMomentsMediaSaveTask = task;
     [task start];
 }
 
@@ -4939,6 +5083,104 @@ didReceiveNotificationResponse:(id)response
     %orig;
     id message = NeoWCImageJokerMessageForObject(self);
     NeoWCScheduleVoiceTranscription(self, message);
+}
+
+%end
+
+%hook ForwardMessageLogicController
+
+- (void)ForwardMsg:(id)message ToContact:(id)contact {
+    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(message ? @[message] : @[],
+                                                             contact ? @[contact] : @[],
+                                                             NULL);
+    if (remaining.count == 0 && message) return;
+    %orig(message, contact);
+}
+
+- (void)ForwardMsgList:(NSArray *)messages ToContact:(id)contact {
+    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages,
+                                                             contact ? @[contact] : @[],
+                                                             NULL);
+    if (remaining.count == 0 && messages.count > 0) return;
+    %orig(remaining, contact);
+}
+
+- (void)ForwardMsgList:(NSArray *)messages ToContact:(id)contact batchRevokeScene:(NSInteger)scene {
+    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages,
+                                                             contact ? @[contact] : @[],
+                                                             NULL);
+    if (remaining.count == 0 && messages.count > 0) return;
+    %orig(remaining, contact, scene);
+}
+
+- (void)ForwardMsgList:(NSArray *)messages ToContact:(id)contact WithRevokeBatchId:(id)batchID {
+    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages,
+                                                             contact ? @[contact] : @[],
+                                                             NULL);
+    if (remaining.count == 0 && messages.count > 0) return;
+    %orig(remaining, contact, batchID);
+}
+
+- (void)forwardMsgList:(NSArray *)messages toContacts:(NSArray *)contacts {
+    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages, contacts, NULL);
+    if (remaining.count == 0 && messages.count > 0) return;
+    %orig(remaining, contacts);
+}
+
+- (void)forwardNoConfirmForMsgList:(NSArray *)messages toContacts:(NSArray *)contacts {
+    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages, contacts, NULL);
+    if (remaining.count == 0 && messages.count > 0) return;
+    %orig(remaining, contacts);
+}
+
+- (void)forwardNoConfirmForMsgList:(NSArray *)messages
+                        toContacts:(NSArray *)contacts
+                withBatchSendScene:(NSInteger)scene {
+    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages, contacts, NULL);
+    if (remaining.count == 0 && messages.count > 0) return;
+    %orig(remaining, contacts, scene);
+}
+
+- (void)forwardMsgList:(NSArray *)messages
+         msgOriginList:(NSArray *)origins
+            toContacts:(NSArray *)contacts
+            ignoreTips:(BOOL)ignoreTips {
+    NSIndexSet *handled = nil;
+    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages, contacts, &handled);
+    if (remaining.count == 0 && messages.count > 0) return;
+    %orig(remaining, NeoWCVoiceForwardFilteredOrigins(origins, handled), contacts, ignoreTips);
+}
+
+- (void)forwardMsgList:(NSArray *)messages
+         msgOriginList:(NSArray *)origins
+            toContacts:(NSArray *)contacts
+            ignoreTips:(BOOL)ignoreTips
+       showConfirmView:(BOOL)showConfirmView {
+    NSIndexSet *handled = nil;
+    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages, contacts, &handled);
+    if (remaining.count == 0 && messages.count > 0) return;
+    %orig(remaining,
+          NeoWCVoiceForwardFilteredOrigins(origins, handled),
+          contacts,
+          ignoreTips,
+          showConfirmView);
+}
+
+- (void)forwardMsgList:(NSArray *)messages
+         msgOriginList:(NSArray *)origins
+            toContacts:(NSArray *)contacts
+            ignoreTips:(BOOL)ignoreTips
+       showConfirmView:(BOOL)showConfirmView
+      batchRevokeScene:(NSInteger)scene {
+    NSIndexSet *handled = nil;
+    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages, contacts, &handled);
+    if (remaining.count == 0 && messages.count > 0) return;
+    %orig(remaining,
+          NeoWCVoiceForwardFilteredOrigins(origins, handled),
+          contacts,
+          ignoreTips,
+          showConfirmView,
+          scene);
 }
 
 %end
@@ -7114,6 +7356,70 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)setForwardFlag:(unsigned int)forwardFlag {
     %orig(NeoWCVoiceRepeatUploadIsActive() ? 1 : forwardFlag);
+}
+
+%end
+
+%hook MMNewUploadVoiceMgr
+
+- (void)AddNewPart:(id)part
+           LocalID:(unsigned int)localID
+          n64SvrID:(long long)serverID
+            Offset:(unsigned int)offset
+               Len:(unsigned int)length
+         VoiceTime:(unsigned int)voiceTime
+        CreateTime:(unsigned int)createTime
+           EndFlag:(unsigned int)endFlag
+        CancelFlag:(unsigned int)cancelFlag
+       VoiceFormat:(unsigned int)voiceFormat
+       ForwardFlag:(unsigned int)forwardFlag
+         msgSource:(id)msgSource
+          chatName:(id)chatName {
+    %orig(part,
+          localID,
+          serverID,
+          offset,
+          length,
+          voiceTime,
+          createTime,
+          endFlag,
+          cancelFlag,
+          voiceFormat,
+          NeoWCVoiceRepeatUploadIsActive() ? 1 : forwardFlag,
+          msgSource,
+          chatName);
+}
+
+%end
+
+%hook UploadVoiceCDNMgr
+
+- (void)AddNewPart:(id)part
+           LocalID:(unsigned int)localID
+          n64SvrID:(long long)serverID
+            Offset:(unsigned int)offset
+               Len:(unsigned int)length
+         VoiceTime:(unsigned int)voiceTime
+        CreateTime:(unsigned int)createTime
+           EndFlag:(unsigned int)endFlag
+        CancelFlag:(unsigned int)cancelFlag
+       VoiceFormat:(unsigned int)voiceFormat
+       ForwardFlag:(unsigned int)forwardFlag
+         msgSource:(id)msgSource
+          chatName:(id)chatName {
+    %orig(part,
+          localID,
+          serverID,
+          offset,
+          length,
+          voiceTime,
+          createTime,
+          endFlag,
+          cancelFlag,
+          voiceFormat,
+          NeoWCVoiceRepeatUploadIsActive() ? 1 : forwardFlag,
+          msgSource,
+          chatName);
 }
 
 %end
