@@ -4824,6 +4824,9 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
 
 %end
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
+
 %group NeoWCHighRefreshRateRange
 
 %hook CADisplayLink
@@ -4841,6 +4844,8 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
 %end
 
 %end
+
+#pragma clang diagnostic pop
 
 %hook CAMetalLayer
 
