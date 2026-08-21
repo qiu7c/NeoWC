@@ -31,6 +31,9 @@
 - (void)showPhotoAlert:(id)context;
 @end
 
+@interface WCCommentDetailViewControllerFB : UIViewController
+@end
+
 @interface WCActionSheetItem : NSObject
 - (instancetype)initWithTitle:(NSString *)title;
 - (void)setBEnable:(BOOL)enabled;
@@ -338,6 +341,7 @@ static char NeoWCCallVoiceConfirmedKey;
 static char NeoWCCallVideoConfirmedKey;
 static __weak BaseMsgContentViewController *NeoWCVisibleChatController;
 static __weak id NeoWCCurrentEditImageLogicController;
+static __weak UIViewController *NeoWCActiveMomentsDetailController;
 static BOOL NeoWCMomentsDispatchingQuickComment = NO;
 
 static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
@@ -460,6 +464,18 @@ static UIViewController *NeoWCViewControllerForResponder(id responderObject) {
         responder = responder.nextResponder;
     }
     return nil;
+}
+
+static BOOL NeoWCMomentsIsNativeDetailContext(id responderObject) {
+    Class detailClass = NSClassFromString(@"WCCommentDetailViewControllerFB");
+    if (!detailClass) return NO;
+    UIViewController *controller = NeoWCViewControllerForResponder(responderObject);
+    UIViewController *activeDetail = NeoWCActiveMomentsDetailController;
+    if ([activeDetail isKindOfClass:detailClass] && !controller) return YES;
+    for (UIViewController *current = controller; current; current = current.parentViewController) {
+        if ([current isKindOfClass:detailClass] || current == activeDetail) return YES;
+    }
+    return [controller.navigationController.topViewController isKindOfClass:detailClass];
 }
 
 static NSArray<UIGestureRecognizer *> *NeoWCNavigationReturnGesturesForView(UIView *view) {
@@ -1322,16 +1338,6 @@ static BOOL NeoWCConfigureMomentsPermissionsActionSheet(WCActionSheet *sheet, id
         SEL draftSelector = NSSelectorFromString(@"draftWithVideoURL:");
         if (videoURL.isFileURL && draftClass && [draftClass respondsToSelector:draftSelector]) {
             commitObject = ((id (*)(id, SEL, id))objc_msgSend)(draftClass, draftSelector, videoURL);
-            for (NSDictionary *entry in @[
-                @{@"selector": @"setIsUseFFmpegHevcEncoding:", @"value": @NO},
-                @{@"selector": @"setIsUseCacheCompressResult:", @"value": @NO},
-                @{@"selector": @"setIsJustExport:", @"value": @YES}
-            ]) {
-                SEL selector = NSSelectorFromString(entry[@"selector"]);
-                if ([commitObject respondsToSelector:selector]) {
-                    ((void (*)(id, SEL, BOOL))objc_msgSend)(commitObject, selector, [entry[@"value"] boolValue]);
-                }
-            }
         }
     } else {
         UIImage *image = info[UIImagePickerControllerOriginalImage];
@@ -1404,7 +1410,7 @@ static void NeoWCOpenMomentsHighQualityPicker(UIViewController *timelineControll
     picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
     picker.mediaTypes = @[@"public.image", @"public.movie"];
     picker.allowsEditing = NO;
-    picker.videoQuality = UIImagePickerControllerQualityTypeHigh;
+    picker.videoExportPreset = AVAssetExportPresetPassthrough;
     [timelineController presentViewController:picker animated:YES completion:nil];
 }
 
@@ -2936,6 +2942,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 @property (nonatomic, assign) NSUInteger nextLivePhotoIndex;
 @property (nonatomic, assign) BOOL video;
 @property (nonatomic, assign) BOOL failed;
+@property (nonatomic, assign) BOOL saveStarted;
 @property (nonatomic, assign) BOOL finished;
 - (void)start;
 @end
@@ -3161,7 +3168,9 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 }
 
 - (void)finishMediaResolutionIfNeeded {
-    if (self.remainingDownloads == 0) [self saveResolvedMedia];
+    if (self.remainingDownloads != 0 || self.saveStarted || self.finished) return;
+    self.saveStarted = YES;
+    [self saveResolvedMedia];
 }
 
 - (void)resolvePathForMediaItem:(id)mediaItem
@@ -3243,18 +3252,20 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
         BOOL isLivePhoto = !isVideo && (NeoWCMomentsBoolForSelector(mediaItem, @"isLivePhoto") || livePhotoMediaItem != nil);
         if (isLivePhoto) {
             long long stillImageTimeMs = 0;
-            BOOL hasStillImageTime = NeoWCMomentsLongLongForSelector(mediaItem, @"livePhotoStillImageTimeMs", &stillImageTimeMs) &&
-                                     stillImageTimeMs > 0;
+            BOOL hasStillImageTime = NeoWCMomentsLongLongForSelector(mediaItem, @"livePhotoStillImageTimeMs", &stillImageTimeMs);
             if (!hasStillImageTime && livePhotoMediaItem) {
-                hasStillImageTime = NeoWCMomentsLongLongForSelector(livePhotoMediaItem, @"livePhotoStillImageTimeMs", &stillImageTimeMs) &&
-                                    stillImageTimeMs > 0;
+                hasStillImageTime = NeoWCMomentsLongLongForSelector(livePhotoMediaItem, @"livePhotoStillImageTimeMs", &stillImageTimeMs);
             }
-            if (!livePhotoMediaItem || !hasStillImageTime) {
+            if (!livePhotoMediaItem) {
                 self.failed = YES;
                 continue;
             }
             [self.livePhotoIndexes addObject:@(index)];
-            self.livePhotoTimes[index] = @(stillImageTimeMs);
+            // A cold, never-played Live Photo commonly reports no still-image
+            // timestamp (or zero). Match WeChatX by allowing that state; after
+            // the MOV finishes downloading, the save path derives a safe time
+            // from its duration instead of requiring playback to prime it.
+            self.livePhotoTimes[index] = @(hasStillImageTime ? stillImageTimeMs : 0);
             [requests addObject:@{ @"item": livePhotoMediaItem, @"index": @(index), @"video": @YES }];
         }
     }
@@ -3350,7 +3361,8 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
     UIButton *button = objc_getAssociatedObject(cell, &NeoWCMomentsForwardButtonKey);
     UIButton *saveButton = objc_getAssociatedObject(cell, &NeoWCMomentsSaveButtonKey);
     id dataItem = NeoWCMomentsObjectForName(cell, @"m_dataItem");
-    BOOL quickComment = NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey);
+    BOOL detailContext = NeoWCMomentsIsNativeDetailContext(cell);
+    BOOL quickComment = NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) && !detailContext;
     BOOL shouldShowForward = quickComment && NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey);
     BOOL shouldShowSave = quickComment && NeoWCEnhancementEnabled(NeoWCMomentsSaveImagesEnabledKey) &&
                           NeoWCMomentCanSaveMedia(dataItem);
@@ -3667,7 +3679,9 @@ static void NeoWCApplyMomentsFloatMenuSnapshot(WCOperateFloatView *floatView) {
 
 static void NeoWCPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
     id dataItem = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatDataItemKey);
-    BOOL allowFloatExtension = !NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) && dataItem != nil;
+    BOOL detailContext = NeoWCMomentsIsNativeDetailContext(floatView);
+    BOOL allowFloatExtension = (!NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) || detailContext) &&
+                               dataItem != nil;
     BOOL shouldShowForward = allowFloatExtension && NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey);
     BOOL shouldShowSave = allowFloatExtension && NeoWCEnhancementEnabled(NeoWCMomentsSaveImagesEnabledKey) &&
                           NeoWCMomentCanSaveMedia(dataItem);
@@ -3900,7 +3914,8 @@ static void NeoWCApplyMomentsPreciseTime(WCTimeLineCellView *cell, BOOL nativeTi
 static void NeoWCSynchronizeMomentsCell(WCTimeLineCellView *cell) {
     if (!cell) return;
     UITapGestureRecognizer *recognizer = objc_getAssociatedObject(cell, &NeoWCMomentsDoubleTapRecognizerKey);
-    BOOL enabled = NeoWCEnhancementEnabled(NeoWCMomentsDoubleTapLikeKey);
+    BOOL enabled = NeoWCEnhancementEnabled(NeoWCMomentsDoubleTapLikeKey) &&
+                   !NeoWCMomentsIsNativeDetailContext(cell);
     if (enabled && !recognizer) {
         recognizer = [[UITapGestureRecognizer alloc] initWithTarget:cell action:@selector(neowc_handleMomentsDoubleTap)];
         recognizer.numberOfTapsRequired = 2;
@@ -4973,6 +4988,25 @@ didReceiveNotificationResponse:(id)response
     } @finally {
         NeoWCPendingMomentsCameraController = previousController;
     }
+}
+
+%end
+
+%hook WCCommentDetailViewControllerFB
+
+- (void)viewDidLoad {
+    NeoWCActiveMomentsDetailController = self;
+    %orig;
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    NeoWCActiveMomentsDetailController = self;
+    %orig(animated);
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    %orig(animated);
+    if (NeoWCActiveMomentsDetailController == self) NeoWCActiveMomentsDetailController = nil;
 }
 
 %end
@@ -7532,7 +7566,9 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
     %orig;
     NeoWCCompatibilityMarkTriggered(@"moments-like");
     NeoWCSynchronizeMomentsCell(self);
-    if (NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey)) {
+    BOOL shouldReplaceOperateButton = NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) &&
+                                      !NeoWCMomentsIsNativeDetailContext(self);
+    if (shouldReplaceOperateButton) {
         @try {
             UIView *operateButton = [self valueForKey:@"m_operateBtn"];
             if ([operateButton isKindOfClass:NSClassFromString(@"WCTimeLineOperateButtonView")]) {
@@ -7562,7 +7598,8 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 %new
 - (void)neowc_handleMomentsDoubleTap {
-    if (!NeoWCEnhancementEnabled(NeoWCMomentsDoubleTapLikeKey)) return;
+    if (!NeoWCEnhancementEnabled(NeoWCMomentsDoubleTapLikeKey) ||
+        NeoWCMomentsIsNativeDetailContext(self)) return;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [self onAccessibilityLike];
     NeoWCShowMomentsHeart(self);
@@ -7589,7 +7626,8 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 - (id)operateBtnImage:(BOOL)spring isSpringStyle:(BOOL)springStyle {
-    if (NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey)) {
+    if (NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) &&
+        !NeoWCMomentsIsNativeDetailContext(self)) {
         UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:16.0 weight:UIImageSymbolWeightMedium];
         return [[UIImage systemImageNamed:@"bubble.middle.bottom" withConfiguration:configuration] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     }
@@ -7601,7 +7639,8 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook WCTimeLineOperateButtonView
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey)) {
+    if (NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) &&
+        !NeoWCMomentsIsNativeDetailContext(self)) {
         NeoWCMomentsDispatchingQuickComment = YES;
         @try {
             %orig;
