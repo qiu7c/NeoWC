@@ -6,16 +6,14 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
 @interface NeoWCReleaseNoteItem ()
 @property (nonatomic, copy, readwrite) NSString *title;
 @property (nonatomic, copy, readwrite) NSString *detail;
-@property (nonatomic, copy, readwrite) NSString *symbol;
 @end
 
 @implementation NeoWCReleaseNoteItem
 
-+ (instancetype)itemWithTitle:(NSString *)title detail:(NSString *)detail symbol:(NSString *)symbol {
++ (instancetype)itemWithTitle:(NSString *)title detail:(NSString *)detail {
     NeoWCReleaseNoteItem *item = [self new];
     item.title = title;
     item.detail = detail;
-    item.symbol = symbol;
     return item;
 }
 
@@ -50,26 +48,19 @@ NSArray<NeoWCReleaseNote *> *NeoWCReleaseNotes(void) {
                                      headline:@"朋友圈、交互与流畅度全面升级"
                                         items:@[
                 [NeoWCReleaseNoteItem itemWithTitle:@"朋友圈高清发布"
-                                              detail:@"新增高清图片和原视频入口，减少发布过程中的画质损失。"
-                                              symbol:@"photo.badge.checkmark"],
+                                              detail:@"新增高清图片和原视频入口，减少发布过程中的画质损失。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"保存朋友圈媒体"
-                                              detail:@"支持保存朋友圈图片、视频和实况照片，并提供保存结果提示。"
-                                              symbol:@"square.and.arrow.down"],
-                [NeoWCReleaseNoteItem itemWithTitle:@"滑动屏幕高刷"
-                                              detail:@"前台滑动时使用设备支持的最高刷新率，浏览更加顺滑。"
-                                              symbol:@"speedometer"],
+                                              detail:@"支持保存朋友圈图片、视频和实况照片，并提供保存结果提示。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"锁定屏幕刷新率"
+                                              detail:@"前台锁定为设备支持的最高刷新率，120 Hz 与 60 Hz 屏幕分别使用对应上限。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"主页右滑扩展"
-                                              detail:@"增加备注、朋友圈、折叠群聊、勿扰和置顶等快捷操作。"
-                                              symbol:@"rectangle.and.hand.point.up.left"],
+                                              detail:@"增加备注、朋友圈、折叠群聊、勿扰和置顶等快捷操作。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"流畅度与手势优化"
-                                              detail:@"减少多处卡顿，并解决消息手势与页面返回手势之间的冲突。"
-                                              symbol:@"hand.draw"],
+                                              detail:@"减少多处卡顿，并解决消息手势与页面返回手势之间的冲突。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"编辑图片快捷发送"
-                                              detail:@"优化图片和当前会话识别，编辑后可通过确认页发送到当前聊天。"
-                                              symbol:@"photo.badge.arrow.down"],
+                                              detail:@"优化图片和当前会话识别，编辑后可通过确认页发送到当前聊天。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"语音转发"
-                                              detail:@"在语音长按菜单中新增转发入口，补齐语音消息转发流程。"
-                                              symbol:@"waveform.badge.plus"],
+                                              detail:@"在语音长按菜单中新增转发入口，补齐语音消息转发流程。"],
             ]],
         ];
     });
@@ -117,17 +108,6 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
     UIView *row = [UIView new];
     row.translatesAutoresizingMaskIntoConstraints = NO;
 
-    UIView *symbolBackground = [UIView new];
-    symbolBackground.translatesAutoresizingMaskIntoConstraints = NO;
-    symbolBackground.backgroundColor = [UIColor.systemBlueColor colorWithAlphaComponent:0.12];
-    symbolBackground.layer.cornerRadius = 12.0;
-    symbolBackground.layer.cornerCurve = kCACornerCurveContinuous;
-    UIImageView *symbolView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:item.symbol]];
-    symbolView.translatesAutoresizingMaskIntoConstraints = NO;
-    symbolView.tintColor = UIColor.systemBlueColor;
-    symbolView.contentMode = UIViewContentModeScaleAspectFit;
-    [symbolBackground addSubview:symbolView];
-
     UILabel *titleLabel = [self labelWithFont:[UIFont preferredFontForTextStyle:UIFontTextStyleBody]
                                        color:UIColor.labelColor
                                        lines:0];
@@ -144,22 +124,13 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
     textStack.alignment = UIStackViewAlignmentFill;
     textStack.spacing = 3.0;
 
-    [row addSubview:symbolBackground];
     [row addSubview:textStack];
     [NSLayoutConstraint activateConstraints:@[
-        [symbolBackground.leadingAnchor constraintEqualToAnchor:row.leadingAnchor],
-        [symbolBackground.topAnchor constraintEqualToAnchor:row.topAnchor constant:2.0],
-        [symbolBackground.widthAnchor constraintEqualToConstant:42.0],
-        [symbolBackground.heightAnchor constraintEqualToConstant:42.0],
-        [symbolView.centerXAnchor constraintEqualToAnchor:symbolBackground.centerXAnchor],
-        [symbolView.centerYAnchor constraintEqualToAnchor:symbolBackground.centerYAnchor],
-        [symbolView.widthAnchor constraintEqualToConstant:21.0],
-        [symbolView.heightAnchor constraintEqualToConstant:21.0],
-        [textStack.leadingAnchor constraintEqualToAnchor:symbolBackground.trailingAnchor constant:12.0],
+        [textStack.leadingAnchor constraintEqualToAnchor:row.leadingAnchor],
         [textStack.trailingAnchor constraintEqualToAnchor:row.trailingAnchor],
         [textStack.topAnchor constraintEqualToAnchor:row.topAnchor],
         [textStack.bottomAnchor constraintEqualToAnchor:row.bottomAnchor],
-        [row.heightAnchor constraintGreaterThanOrEqualToConstant:48.0],
+        [row.heightAnchor constraintGreaterThanOrEqualToConstant:44.0],
     ]];
     return row;
 }
@@ -170,32 +141,31 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
 
     self.backdropView = [UIControl new];
     self.backdropView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.backdropView.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.46];
+    self.backdropView.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.16];
     [self.backdropView addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.backdropView];
 
     self.cardView = [UIView new];
     self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.cardView.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
+    self.cardView.backgroundColor = UIColor.clearColor;
     self.cardView.layer.cornerRadius = 28.0;
     self.cardView.layer.cornerCurve = kCACornerCurveContinuous;
     self.cardView.layer.shadowColor = UIColor.blackColor.CGColor;
-    self.cardView.layer.shadowOpacity = 0.22;
-    self.cardView.layer.shadowRadius = 28.0;
-    self.cardView.layer.shadowOffset = CGSizeMake(0.0, 12.0);
+    self.cardView.layer.shadowOpacity = 0.08;
+    self.cardView.layer.shadowRadius = 18.0;
+    self.cardView.layer.shadowOffset = CGSizeMake(0.0, 6.0);
     [self.view addSubview:self.cardView];
 
+    UIVisualEffectView *materialView = [[UIVisualEffectView alloc]
+        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial]];
+    materialView.translatesAutoresizingMaskIntoConstraints = NO;
+    materialView.userInteractionEnabled = NO;
+    materialView.clipsToBounds = YES;
+    materialView.layer.cornerRadius = 28.0;
+    materialView.layer.cornerCurve = kCACornerCurveContinuous;
+    [self.cardView addSubview:materialView];
+
     NeoWCReleaseNote *note = NeoWCReleaseNotes().firstObject;
-    UIView *iconBackground = [UIView new];
-    iconBackground.translatesAutoresizingMaskIntoConstraints = NO;
-    iconBackground.backgroundColor = UIColor.systemBlueColor;
-    iconBackground.layer.cornerRadius = 18.0;
-    iconBackground.layer.cornerCurve = kCACornerCurveContinuous;
-    UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"sparkles"]];
-    iconView.translatesAutoresizingMaskIntoConstraints = NO;
-    iconView.tintColor = UIColor.whiteColor;
-    iconView.contentMode = UIViewContentModeScaleAspectFit;
-    [iconBackground addSubview:iconView];
 
     UILabel *titleLabel = [self labelWithFont:[[UIFontMetrics metricsForTextStyle:UIFontTextStyleTitle2]
                                                 scaledFontForFont:[UIFont systemFontOfSize:22.0 weight:UIFontWeightBold]]
@@ -224,7 +194,9 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
 
     UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     closeButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [closeButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal];
+    [closeButton setTitle:@"关闭" forState:UIControlStateNormal];
+    closeButton.titleLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleFootnote]
+        scaledFontForFont:[UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold]];
     closeButton.tintColor = UIColor.tertiaryLabelColor;
     closeButton.accessibilityLabel = @"关闭更新日志";
     [closeButton addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -252,7 +224,6 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
     doneButton.layer.cornerCurve = kCACornerCurveContinuous;
     [doneButton addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
 
-    [self.cardView addSubview:iconBackground];
     [self.cardView addSubview:headingStack];
     [self.cardView addSubview:versionLabel];
     [self.cardView addSubview:closeButton];
@@ -268,6 +239,10 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
         [self.backdropView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.backdropView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.backdropView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [materialView.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor],
+        [materialView.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor],
+        [materialView.topAnchor constraintEqualToAnchor:self.cardView.topAnchor],
+        [materialView.bottomAnchor constraintEqualToAnchor:self.cardView.bottomAnchor],
         [self.cardView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.cardView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
         [self.cardView.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:18.0],
@@ -276,23 +251,15 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
         preferredCardWidth,
         [self.cardView.topAnchor constraintGreaterThanOrEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:18.0],
         [self.cardView.bottomAnchor constraintLessThanOrEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-18.0],
-        [iconBackground.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:22.0],
-        [iconBackground.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:22.0],
-        [iconBackground.widthAnchor constraintEqualToConstant:54.0],
-        [iconBackground.heightAnchor constraintEqualToConstant:54.0],
-        [iconView.centerXAnchor constraintEqualToAnchor:iconBackground.centerXAnchor],
-        [iconView.centerYAnchor constraintEqualToAnchor:iconBackground.centerYAnchor],
-        [iconView.widthAnchor constraintEqualToConstant:26.0],
-        [iconView.heightAnchor constraintEqualToConstant:26.0],
-        [headingStack.leadingAnchor constraintEqualToAnchor:iconBackground.trailingAnchor constant:14.0],
-        [headingStack.centerYAnchor constraintEqualToAnchor:iconBackground.centerYAnchor],
+        [headingStack.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:22.0],
+        [headingStack.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:22.0],
         [headingStack.trailingAnchor constraintLessThanOrEqualToAnchor:closeButton.leadingAnchor constant:-8.0],
         [closeButton.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:17.0],
         [closeButton.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-17.0],
-        [closeButton.widthAnchor constraintEqualToConstant:34.0],
+        [closeButton.widthAnchor constraintEqualToConstant:44.0],
         [closeButton.heightAnchor constraintEqualToConstant:34.0],
         [versionLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:22.0],
-        [versionLabel.topAnchor constraintEqualToAnchor:iconBackground.bottomAnchor constant:16.0],
+        [versionLabel.topAnchor constraintEqualToAnchor:headingStack.bottomAnchor constant:14.0],
         [versionLabel.widthAnchor constraintGreaterThanOrEqualToConstant:62.0],
         [versionLabel.heightAnchor constraintEqualToConstant:26.0],
         [scrollView.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:22.0],

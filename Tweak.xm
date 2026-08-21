@@ -2692,6 +2692,29 @@ static NSString *NeoWCMomentsExistingMediaPath(id mediaItem, NSArray<NSString *>
     return nil;
 }
 
+static BOOL NeoWCMomentsVideoPathContainsAudio(NSString *path) {
+    if (path.length == 0 || ![[NSFileManager defaultManager] fileExistsAtPath:path]) return NO;
+    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:path] options:nil];
+    SEL tracksSelector = NSSelectorFromString(@"tracksWithMediaType:");
+    NSArray *audioTracks = [asset respondsToSelector:tracksSelector]
+        ? ((id (*)(id, SEL, id))objc_msgSend)(asset, tracksSelector, AVMediaTypeAudio) : nil;
+    return audioTracks.count > 0;
+}
+
+static NSString *NeoWCMomentsExistingLivePhotoVideoPath(id mediaItem,
+                                                         NSArray<NSString *> *selectors,
+                                                         BOOL requireAudio) {
+    NSString *firstExistingPath = nil;
+    for (NSString *selectorName in selectors) {
+        id value = NeoWCMomentsObjectForSelector(mediaItem, selectorName);
+        NSString *path = [value isKindOfClass:[NSURL class]] ? [value path] : ([value isKindOfClass:[NSString class]] ? value : nil);
+        if (path.length == 0 || ![[NSFileManager defaultManager] fileExistsAtPath:path]) continue;
+        if (!firstExistingPath) firstExistingPath = path;
+        if (NeoWCMomentsVideoPathContainsAudio(path)) return path;
+    }
+    return requireAudio ? nil : firstExistingPath;
+}
+
 static BOOL NeoWCMomentsLongLongForSelector(id object, NSString *selectorName, long long *result) {
     if (!object || selectorName.length == 0 || !result) return NO;
     SEL selector = NSSelectorFromString(selectorName);
@@ -2978,6 +3001,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 @property (nonatomic, strong) NSMutableArray *livePhotoIndexes;
 @property (nonatomic, strong) NSMutableArray *downloaders;
 @property (nonatomic, strong) NSMutableArray *livePhotoSaveQueue;
+@property (nonatomic, strong) NSMutableArray *livePhotoMakers;
 @property (nonatomic, strong) NSMutableArray<NSString *> *temporaryPaths;
 @property (nonatomic, assign) NSUInteger remainingDownloads;
 @property (nonatomic, assign) NSUInteger nextLivePhotoIndex;
@@ -2989,27 +3013,6 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 @end
 
 @implementation NeoWCMomentsMediaSaveTask
-
-- (NSString *)preparedLivePhotoImagePath:(NSString *)sourcePath {
-    UIImage *image = sourcePath.length > 0 ? [UIImage imageWithContentsOfFile:sourcePath] : nil;
-    NSData *pngData = image ? UIImagePNGRepresentation(image) : nil;
-    if (pngData.length == 0) return nil;
-    NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"NeoWCMomentsMediaSave"];
-    NSError *directoryError = nil;
-    if (![[NSFileManager defaultManager] createDirectoryAtPath:directory
-                                   withIntermediateDirectories:YES
-                                                    attributes:nil
-                                                         error:&directoryError]) {
-        NeoWCLog(@"创建朋友圈实况临时目录失败：%@", directoryError.localizedDescription ?: @"未知错误");
-        return nil;
-    }
-    NSString *fileName = [NSString stringWithFormat:@"NeoWC_Moments_%@.png", NSUUID.UUID.UUIDString];
-    NSString *preparedPath = [directory stringByAppendingPathComponent:fileName];
-    if (![pngData writeToFile:preparedPath options:NSDataWritingAtomic error:nil]) return nil;
-    if (!self.temporaryPaths) self.temporaryPaths = [NSMutableArray array];
-    [self.temporaryPaths addObject:preparedPath];
-    return preparedPath;
-}
 
 - (void)finish {
     UIViewController *presenter = self.presenter;
@@ -3023,7 +3026,66 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
         [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
     }
     [self.temporaryPaths removeAllObjects];
+    [self.livePhotoMakers removeAllObjects];
     if (NeoWCActiveMomentsMediaSaveTask == self) NeoWCActiveMomentsMediaSaveTask = nil;
+}
+
+- (BOOL)prepareLivePhotoForImagePath:(NSString *)imagePath
+                           videoPath:(NSString *)videoPath
+                    stillImageTimeMs:(long long)stillImageTimeMs
+                          completion:(void (^)(NSString *, NSString *))completion {
+    Class makerClass = NSClassFromString(@"WCLivePhotoMaker");
+    Class pathManagerClass = NSClassFromString(@"WCLivePhotoFilePathManager");
+    SEL heicSelector = NSSelectorFromString(@"getLivePhotoHEICPath:");
+    SEL jpgSelector = NSSelectorFromString(@"getLivePhotoJPGPath:");
+    SEL movSelector = NSSelectorFromString(@"getLivePhotoMovPath:");
+    SEL makeSelector = NSSelectorFromString(@"makeLivePhotoByImagePath:videoPath:preferedHEVC:stillImageTimeMs:completionHandler:");
+    if (!makerClass || !pathManagerClass ||
+        ![pathManagerClass respondsToSelector:heicSelector] ||
+        ![pathManagerClass respondsToSelector:jpgSelector] ||
+        ![pathManagerClass respondsToSelector:movSelector]) return NO;
+
+    NSString *fileIdentifier = imagePath.lastPathComponent.stringByDeletingPathExtension;
+    if (fileIdentifier.length == 0) return NO;
+    NSString *heicPath = ((id (*)(id, SEL, id))objc_msgSend)(pathManagerClass, heicSelector, fileIdentifier);
+    NSString *jpgPath = ((id (*)(id, SEL, id))objc_msgSend)(pathManagerClass, jpgSelector, fileIdentifier);
+    NSString *movPath = ((id (*)(id, SEL, id))objc_msgSend)(pathManagerClass, movSelector, fileIdentifier);
+    if (heicPath.length == 0 || jpgPath.length == 0 || movPath.length == 0) return NO;
+
+    NSFileManager *fileManager = NSFileManager.defaultManager;
+    for (NSString *path in @[heicPath, jpgPath, movPath]) {
+        if ([fileManager fileExistsAtPath:path]) [fileManager removeItemAtPath:path error:nil];
+        [self.temporaryPaths addObject:path];
+    }
+
+    id maker = [makerClass new];
+    if (!maker || ![maker respondsToSelector:makeSelector]) return NO;
+    [self.livePhotoMakers addObject:maker];
+    __weak typeof(self) weakSelf = self;
+    __weak id weakMaker = maker;
+    void (^makerCompletion)(void) = [^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf || strongSelf.finished) return;
+            NSString *pairedImagePath = [fileManager fileExistsAtPath:heicPath] ? heicPath :
+                                        ([fileManager fileExistsAtPath:jpgPath] ? jpgPath : nil);
+            NSString *pairedVideoPath = [fileManager fileExistsAtPath:movPath] ? movPath : nil;
+            id completedMaker = weakMaker;
+            if (completedMaker) [strongSelf.livePhotoMakers removeObject:completedMaker];
+            if (completion) completion(pairedImagePath, pairedVideoPath);
+        });
+    } copy];
+    @try {
+        // WeChatX first creates a paired HEIC/JPG + MOV through this maker,
+        // then passes those generated paths to MMAlbumService.
+        ((void (*)(id, SEL, id, id, BOOL, long long, id))objc_msgSend)(
+            maker, makeSelector, imagePath, videoPath, YES, stillImageTimeMs, makerCompletion);
+        return YES;
+    } @catch (NSException *exception) {
+        [self.livePhotoMakers removeObject:maker];
+        NeoWCLog(@"生成朋友圈实况配对文件失败：%@", exception.reason ?: @"未知异常");
+        return NO;
+    }
 }
 
 - (void)finishWithFailure:(NSString *)message {
@@ -3108,40 +3170,124 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     NSString *videoPath = [self.resolvedVideoPaths[mediaIndex] isKindOfClass:[NSString class]] ? self.resolvedVideoPaths[mediaIndex] : nil;
     NSNumber *timeValue = [self.livePhotoTimes[mediaIndex] isKindOfClass:[NSNumber class]] ? self.livePhotoTimes[mediaIndex] : nil;
     if (imagePath.length == 0 || videoPath.length == 0 || !timeValue) {
-        [self finishWithFailure:@"实况照片数据不完整，未保存为静态图片"];
-        return;
-    }
-    NSString *preparedImagePath = [self preparedLivePhotoImagePath:imagePath];
-    if (preparedImagePath.length == 0) {
-        [self finishWithFailure:@"实况照片静态图处理失败"];
+        [self finishWithFailure:@"实况照片数据不完整，请稍后重试"];
         return;
     }
     __weak typeof(self) weakSelf = self;
-    BOOL invoked = [self invokeLivePhotoSaveForImagePath:preparedImagePath
-                                               videoPath:videoPath
-                                        stillImageTimeMs:NeoWCNormalizedLivePhotoStillImageTimeMs(timeValue.longLongValue,
-                                                                                                  videoPath)
-                                                 success:^{
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf || strongSelf.finished) return;
-            [strongSelf saveNextLivePhoto];
-        });
-    } failure:^{
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf || strongSelf.finished) return;
-            [strongSelf finishWithFailure:@"实况照片保存失败，请检查照片权限"];
-        });
+    long long normalizedTimeMs = NeoWCNormalizedLivePhotoStillImageTimeMs(timeValue.longLongValue, videoPath);
+    BOOL preparing = [self prepareLivePhotoForImagePath:imagePath
+                                              videoPath:videoPath
+                                       stillImageTimeMs:normalizedTimeMs
+                                             completion:^(NSString *pairedImagePath, NSString *pairedVideoPath) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || strongSelf.finished) return;
+        if (pairedImagePath.length == 0 || pairedVideoPath.length == 0) {
+            [strongSelf finishWithFailure:@"实况照片配对文件生成失败"];
+            return;
+        }
+        if (NeoWCMomentsVideoPathContainsAudio(videoPath) &&
+            !NeoWCMomentsVideoPathContainsAudio(pairedVideoPath)) {
+            [strongSelf finishWithFailure:@"实况照片原声处理失败，请稍后重试"];
+            return;
+        }
+        BOOL invoked = [strongSelf invokeLivePhotoSaveForImagePath:pairedImagePath
+                                                          videoPath:pairedVideoPath
+                                                   stillImageTimeMs:normalizedTimeMs
+                                                            success:^{
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) innerSelf = weakSelf;
+                if (!innerSelf || innerSelf.finished) return;
+                [innerSelf saveNextLivePhoto];
+            });
+        } failure:^{
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) innerSelf = weakSelf;
+                if (!innerSelf || innerSelf.finished) return;
+                [innerSelf finishWithFailure:@"实况照片保存失败，请检查照片权限"];
+            });
+        }];
+        if (!invoked) [strongSelf finishWithFailure:@"当前微信版本不支持保存实况照片"];
     }];
-    if (!invoked) {
-        [self finishWithFailure:@"当前微信版本不支持保存实况照片"];
+    if (!preparing) {
+        [self finishWithFailure:@"当前微信版本不支持生成实况照片"];
         return;
     }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(45.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || strongSelf.finished || strongSelf.nextLivePhotoIndex != queueIndex + 1) return;
         [strongSelf finishWithFailure:@"实况照片保存超时，请检查照片权限"];
+    });
+}
+
+- (void)finishDownloadedMediaItem:(id)mediaItem
+                            index:(NSUInteger)index
+                      videoPath:(BOOL)videoPath
+                   pathSelectors:(NSArray<NSString *> *)pathSelectors
+                       downloader:(id)downloader
+                          attempt:(NSUInteger)attempt
+                     resolvedPath:(NSString *)resolvedPath {
+    if (self.finished) return;
+    if (resolvedPath.length > 0) {
+        NSMutableArray *targetPaths = videoPath ? self.resolvedVideoPaths : self.resolvedPaths;
+        targetPaths[index] = resolvedPath;
+        [self.downloaders removeObject:downloader];
+        self.remainingDownloads--;
+        [self finishMediaResolutionIfNeeded];
+        return;
+    }
+    if (attempt < 40) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            [strongSelf completeDownloadedMediaItem:mediaItem
+                                              index:index
+                                        videoPath:videoPath
+                                     pathSelectors:pathSelectors
+                                         downloader:downloader
+                                            attempt:attempt + 1];
+        });
+        return;
+    }
+    self.failed = YES;
+    [self.downloaders removeObject:downloader];
+    self.remainingDownloads--;
+    [self finishMediaResolutionIfNeeded];
+}
+
+- (void)completeDownloadedMediaItem:(id)mediaItem
+                              index:(NSUInteger)index
+                        videoPath:(BOOL)videoPath
+                     pathSelectors:(NSArray<NSString *> *)pathSelectors
+                         downloader:(id)downloader
+                            attempt:(NSUInteger)attempt {
+    if (self.finished) return;
+    if (!videoPath) {
+        [self finishDownloadedMediaItem:mediaItem
+                                  index:index
+                            videoPath:NO
+                         pathSelectors:pathSelectors
+                             downloader:downloader
+                                attempt:attempt
+                           resolvedPath:NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors)];
+        return;
+    }
+
+    // AVAsset track discovery can touch the file system and media parser. Keep
+    // repeated cold-cache checks away from scrolling and other main-thread work.
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        NSString *resolvedPath = NeoWCMomentsExistingLivePhotoVideoPath(mediaItem, pathSelectors, YES);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf || strongSelf.finished) return;
+            [strongSelf finishDownloadedMediaItem:mediaItem
+                                            index:index
+                                      videoPath:YES
+                                   pathSelectors:pathSelectors
+                                       downloader:downloader
+                                          attempt:attempt
+                                     resolvedPath:resolvedPath];
+        });
     });
 }
 
@@ -3221,7 +3367,9 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     NSArray *pathSelectors = useVideoSelectors
         ? @[@"pathForSightData", @"pathForData", @"pathForAttachVideoData", @"pathForExistData"]
         : @[@"pathForUhdData", @"pathForHdData", @"pathForData", @"pathForExistData"];
-    NSString *path = NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
+    NSString *path = videoPath
+        ? NeoWCMomentsExistingLivePhotoVideoPath(mediaItem, pathSelectors, YES)
+        : NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
     if (path.length > 0) {
         NSMutableArray *targetPaths = videoPath ? self.resolvedVideoPaths : self.resolvedPaths;
         targetPaths[index] = path;
@@ -3247,16 +3395,12 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf || strongSelf.finished) return;
-            NSString *resolvedPath = NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
-            if (resolvedPath.length > 0) {
-                NSMutableArray *targetPaths = videoPath ? strongSelf.resolvedVideoPaths : strongSelf.resolvedPaths;
-                targetPaths[index] = resolvedPath;
-            } else {
-                strongSelf.failed = YES;
-            }
-            [strongSelf.downloaders removeObject:downloader];
-            strongSelf.remainingDownloads--;
-            [strongSelf finishMediaResolutionIfNeeded];
+            [strongSelf completeDownloadedMediaItem:mediaItem
+                                              index:index
+                                        videoPath:videoPath
+                                     pathSelectors:pathSelectors
+                                         downloader:downloader
+                                            attempt:0];
         });
     };
     ((void (*)(id, SEL, id))objc_msgSend)(downloader, startSelector, completion);
@@ -3279,6 +3423,8 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     self.livePhotoTimes = [NSMutableArray arrayWithCapacity:self.mediaItems.count];
     self.livePhotoIndexes = [NSMutableArray array];
     self.downloaders = [NSMutableArray array];
+    self.livePhotoMakers = [NSMutableArray array];
+    self.temporaryPaths = [NSMutableArray array];
     for (__unused id item in self.mediaItems) {
         [self.resolvedPaths addObject:NSNull.null];
         [self.resolvedVideoPaths addObject:NSNull.null];
@@ -4660,8 +4806,7 @@ static void NeoWCRefreshHighRefreshRateConfiguration(void) {
 
 static BOOL NeoWCShouldUseHighRefreshRate(void) {
     return NeoWCHighRefreshRateEnabled.load(std::memory_order_relaxed) &&
-           NeoWCHighRefreshRateApplicationActive.load(std::memory_order_relaxed) &&
-           NeoWCHighRefreshRateScreenMaximum.load(std::memory_order_relaxed) > 60;
+           NeoWCHighRefreshRateApplicationActive.load(std::memory_order_relaxed);
 }
 
 @interface NeoWCEntryLoader : NSObject
@@ -4810,13 +4955,15 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
     }
     %orig(1);
     if ([self respondsToSelector:@selector(setPreferredFramesPerSecond:)]) {
-        self.preferredFramesPerSecond = 0;
+        self.preferredFramesPerSecond =
+            NeoWCHighRefreshRateScreenMaximum.load(std::memory_order_relaxed);
     }
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)framesPerSecond {
     if (NeoWCShouldUseHighRefreshRate()) {
-        %orig(0);
+        NSInteger maximum = NeoWCHighRefreshRateScreenMaximum.load(std::memory_order_relaxed);
+        %orig(maximum);
         return;
     }
     %orig;
@@ -4834,7 +4981,7 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
     if (NeoWCShouldUseHighRefreshRate()) {
         float maximum = (float)NeoWCHighRefreshRateScreenMaximum.load(std::memory_order_relaxed);
-        CAFrameRateRange preferredRange = CAFrameRateRangeMake(30.0f, maximum, maximum);
+        CAFrameRateRange preferredRange = CAFrameRateRangeMake(maximum, maximum, maximum);
         %orig(preferredRange);
         return;
     }
@@ -5647,7 +5794,7 @@ static void NeoWCConfigureChatTopGlassLayer(UIVisualEffectView *effectView) {
     }
 
     CGFloat tintOpacity = NeoWCChatGlassPercent(NeoWCChatGlassTintOpacityKey,
-                                                0.0, 0.0, 30.0) / 100.0;
+                                                 8.0, 0.0, 30.0) / 100.0;
     if (tintOpacity > 0.001) {
         UIView *tintView = [[UIView alloc] initWithFrame:effectView.contentView.bounds];
         tintView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -5665,9 +5812,9 @@ static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectVi
     container.backgroundColor = UIColor.clearColor;
     BOOL shadowEnabled = [NSUserDefaults.standardUserDefaults boolForKey:NeoWCChatTopBarShadowEnabledKey];
     container.layer.shadowColor = UIColor.blackColor.CGColor;
-    container.layer.shadowOpacity = shadowEnabled ? 0.045 : 0.0;
-    container.layer.shadowRadius = shadowEnabled ? 3.0 : 0.0;
-    container.layer.shadowOffset = CGSizeZero;
+    container.layer.shadowOpacity = shadowEnabled ? 0.10 : 0.0;
+    container.layer.shadowRadius = shadowEnabled ? 5.0 : 0.0;
+    container.layer.shadowOffset = shadowEnabled ? CGSizeMake(0.0, 1.5) : CGSizeZero;
     objc_setAssociatedObject(container, &NeoWCChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
@@ -5677,6 +5824,15 @@ static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectVi
     effectView.layer.cornerRadius = cornerRadius;
     effectView.layer.cornerCurve = kCACornerCurveContinuous;
     NeoWCConfigureChatTopGlassLayer(effectView);
+    if (NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleMaterial) {
+        UIColor *outlineColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+            return traits.userInterfaceStyle == UIUserInterfaceStyleDark
+                ? [UIColor.whiteColor colorWithAlphaComponent:0.14]
+                : [UIColor.blackColor colorWithAlphaComponent:0.10];
+        }];
+        effectView.layer.borderWidth = 0.5;
+        effectView.layer.borderColor = outlineColor.CGColor;
+    }
     objc_setAssociatedObject(effectView, &NeoWCChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [container addSubview:effectView];

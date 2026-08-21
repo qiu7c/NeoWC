@@ -128,7 +128,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCChatTopBarEffectStyleKey: @(NeoWCChatTopBarEffectStyleMaterial),
         NeoWCChatTopBarShadowEnabledKey: @YES,
         NeoWCChatGlassBlurIntensityKey: @100.0,
-        NeoWCChatGlassTintOpacityKey: @0.0,
+        NeoWCChatGlassTintOpacityKey: @8.0,
         NeoWCChatTopBarAvatarSizeKey: @30.0,
         NeoWCChatTopBarNicknameSizeKey: @15.0,
         NeoWCMessageBlockEnabledKey: @NO,
@@ -447,7 +447,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
         NeoWCItem(@"隐藏群标题尾部", @"隐藏群人数和免打扰标记并居中群名", @"bell.slash", NeoWCSettingRowKindSwitch, NeoWCHideChatMuteIconKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"隐藏截屏分享按钮", @"不显示右下角截图转发浮层", @"rectangle.on.rectangle.slash", NeoWCSettingRowKindSwitch, NeoWCHideScreenshotForwardKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"隐藏页面分割线", @"不显示列表和页面中的细分割线", @"rectangle.split.1x2", NeoWCSettingRowKindSwitch, NeoWCHideSeparatorLinesKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"启用滑动屏幕高刷", @"前台滑动时使用设备支持的最高刷新率", @"speedometer", NeoWCSettingRowKindSwitch, NeoWCScrollHighRefreshRateEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"开启强制高刷", @"前台锁定为设备支持的最高刷新率", @"speedometer", NeoWCSettingRowKindSwitch, NeoWCScrollHighRefreshRateEnabledKey, nil, NeoWCSettingActionNone),
     ]];
     NSMutableArray *chatCapsules = [NSMutableArray array];
     BOOL supportsLiquidGlass = NeoWCSystemSupportsNativeLiquidGlass();

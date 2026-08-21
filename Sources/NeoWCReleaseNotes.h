@@ -5,8 +5,7 @@ NS_ASSUME_NONNULL_BEGIN
 @interface NeoWCReleaseNoteItem : NSObject
 @property (nonatomic, copy, readonly) NSString *title;
 @property (nonatomic, copy, readonly) NSString *detail;
-@property (nonatomic, copy, readonly) NSString *symbol;
-+ (instancetype)itemWithTitle:(NSString *)title detail:(NSString *)detail symbol:(NSString *)symbol;
++ (instancetype)itemWithTitle:(NSString *)title detail:(NSString *)detail;
 @end
 
 @interface NeoWCReleaseNote : NSObject

@@ -17,7 +17,7 @@
 #import <objc/runtime.h>
 
 static char NeoWCAuthorSearchLogicKey;
-static NSString *const NeoWCAuthorUserName = @"qiu7c";
+static NSString *const NeoWCAuthorUserName = @"ic7ouo";
 
 static id NeoWCSettingsServiceForClass(Class serviceClass) {
     Class centerClass = NSClassFromString(@"MMServiceCenter");
