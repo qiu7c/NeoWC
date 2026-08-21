@@ -9,9 +9,13 @@ FOUNDATION_EXPORT NSString *const NeoWCHideChatMuteIconKey;
 FOUNDATION_EXPORT NSString *const NeoWCGlobalAvatarRoundingEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCGlobalAvatarCornerPercentKey;
 
-/// Applies rounding to the avatar container itself without inspecting WeChat's
-/// asynchronous inner image-loading views.
+/// Applies rounding to WeChat's real inner avatar image when available, while
+/// retaining the head view as the stable lifecycle owner.
 FOUNDATION_EXPORT void NeoWCApplyGlobalAvatarRoundingToHeadView(UIView *headView);
+/// Keeps a custom avatar out of the global setting while allowing that view to
+/// retain its own independently configured corner style.
+FOUNDATION_EXPORT void NeoWCExcludeHeadViewFromGlobalAvatarRounding(UIView *headView);
+FOUNDATION_EXPORT BOOL NeoWCHeadViewIsExcludedFromGlobalAvatarRounding(UIView *headView);
 FOUNDATION_EXPORT void NeoWCRefreshTrackedGlobalAvatarViews(void);
 FOUNDATION_EXPORT unsigned int NeoWCGlobalAvatarScaledCornerSize(unsigned int originalSize);
 

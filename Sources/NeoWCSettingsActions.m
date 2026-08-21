@@ -11,7 +11,23 @@
 #import "NeoWCLongPressMenuViewController.h"
 #import "NeoWCMeMenuViewController.h"
 #import "NeoWCPluginManager.h"
+#import "NeoWCReleaseNotes.h"
 #import <math.h>
+#import <objc/message.h>
+#import <objc/runtime.h>
+
+static char NeoWCAuthorSearchLogicKey;
+static NSString *const NeoWCAuthorUserName = @"qiu7c";
+
+static id NeoWCSettingsServiceForClass(Class serviceClass) {
+    Class centerClass = NSClassFromString(@"MMServiceCenter");
+    SEL centerSelector = NSSelectorFromString(@"defaultCenter");
+    SEL serviceSelector = NSSelectorFromString(@"getService:");
+    if (!centerClass || !serviceClass || ![centerClass respondsToSelector:centerSelector]) return nil;
+    id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, centerSelector);
+    if (!center || ![center respondsToSelector:serviceSelector]) return nil;
+    return ((id (*)(id, SEL, Class))objc_msgSend)(center, serviceSelector, serviceClass);
+}
 
 @interface NeoWCSettingsActions () <UIColorPickerViewControllerDelegate>
 @property (nonatomic, weak) UIViewController *viewController;
@@ -47,6 +63,70 @@
 
 - (void)push:(UIViewController *)controller {
     if (controller) [self.viewController.navigationController pushViewController:controller animated:YES];
+}
+
+- (void)openAuthorProfile {
+    UIViewController *sourceController = self.viewController;
+    NSString *userName = NeoWCAuthorUserName;
+    if (!sourceController || userName.length == 0) return;
+
+    Class handlerClass = NSClassFromString(@"MMURLHandler");
+    SEL sharedSelector = NSSelectorFromString(@"sharedInstance");
+    SEL constructSelector = NSSelectorFromString(@"constructContactInfoView:withUserName:");
+    id handler = handlerClass && [handlerClass respondsToSelector:sharedSelector]
+        ? ((id (*)(id, SEL))objc_msgSend)(handlerClass, sharedSelector) : nil;
+    Class contactManagerClass = NSClassFromString(@"CContactMgr");
+    id contactManager = NeoWCSettingsServiceForClass(contactManagerClass);
+    id contact = nil;
+    for (NSString *selectorName in @[@"getContactByName:", @"getContactByNameFromCache:"]) {
+        SEL selector = NSSelectorFromString(selectorName);
+        if (!contactManager || ![contactManager respondsToSelector:selector]) continue;
+        contact = ((id (*)(id, SEL, id))objc_msgSend)(contactManager, selector, userName);
+        if (contact) break;
+    }
+    if (handler && contact && [handler respondsToSelector:constructSelector]) {
+        id profileController = ((id (*)(id, SEL, id, id))objc_msgSend)(handler,
+                                                                       constructSelector,
+                                                                       contact,
+                                                                       userName);
+        if ([profileController isKindOfClass:[UIViewController class]] && sourceController.navigationController) {
+            [sourceController.navigationController pushViewController:profileController animated:YES];
+            return;
+        }
+    }
+
+    Class searchClass = NSClassFromString(@"GetA8KeyLogic");
+    SEL initializer = NSSelectorFromString(@"initWithViewController:delegate:");
+    SEL searchSelector = NSSelectorFromString(@"doSearchContact:FromScene:SearchScene:picUrl:");
+    id searchLogic = searchClass && [searchClass instancesRespondToSelector:initializer]
+        ? ((id (*)(id, SEL, id, id))objc_msgSend)([searchClass alloc], initializer, sourceController, nil)
+        : nil;
+    if (searchLogic && [searchLogic respondsToSelector:searchSelector]) {
+        objc_setAssociatedObject(sourceController, &NeoWCAuthorSearchLogicKey,
+                                 searchLogic, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        ((void (*)(id, SEL, id, NSUInteger, NSUInteger, id))objc_msgSend)(searchLogic,
+                                                                          searchSelector,
+                                                                          userName,
+                                                                          0,
+                                                                          0,
+                                                                          nil);
+        return;
+    }
+
+    NSString *URLString = [NSString stringWithFormat:@"weixin://contacts/profile/%@", userName];
+    NSURL *URL = [NSURL URLWithString:URLString];
+    UIApplication *application = UIApplication.sharedApplication;
+    if (URL && [application canOpenURL:URL]) {
+        [application openURL:URL options:@{} completionHandler:nil];
+        return;
+    }
+
+    UIPasteboard.generalPasteboard.string = userName;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"无法打开作者主页"
+                                                                   message:@"作者微信号已复制，可在微信中搜索添加。"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+    [sourceController presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)presentRevokeFilterPicker {
@@ -472,6 +552,8 @@
 - (void)performActionForItem:(NeoWCSettingItem *)item {
     switch (item.action) {
         case NeoWCSettingActionConfigManager: [self push:[NeoWCConfigManagerViewController new]]; break;
+        case NeoWCSettingActionAuthorProfile: [self openAuthorProfile]; break;
+        case NeoWCSettingActionReleaseNotes: [self.viewController presentViewController:[NeoWCReleaseNotesViewController new] animated:NO completion:nil]; break;
         case NeoWCSettingActionBlockUsers: [self push:[[NeoWCListEditorViewController alloc] initWithTitle:item.title subtitle:@"每行填写一个 wxid 或以 @chatroom 结尾的群聊账号" defaultsKey:NeoWCMessageBlockUsersKey mode:NeoWCListEditorModeList]]; break;
         case NeoWCSettingActionBlockKeywords: [self push:[[NeoWCListEditorViewController alloc] initWithTitle:item.title subtitle:@"仅匹配新收到的普通文字消息，每行填写一个关键词" defaultsKey:NeoWCMessageBlockKeywordsKey mode:NeoWCListEditorModeList]]; break;
         case NeoWCSettingActionLongPressMenus: [self push:[NeoWCLongPressMenuViewController new]]; break;

@@ -55,6 +55,7 @@ FOUNDATION_EXPORT NSString *const NeoWCLongPressMenuTitleMapKey;
 FOUNDATION_EXPORT NSString *const NeoWCLongPressMenuKnownTitlesKey;
 FOUNDATION_EXPORT NSString *const NeoWCLongPressMenuManualTitlesKey;
 FOUNDATION_EXPORT NSString *const NeoWCHideSeparatorLinesKey;
+FOUNDATION_EXPORT NSString *const NeoWCScrollHighRefreshRateEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCGroupMemberReminderEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCRedEnvelopeDetailEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCRedEnvelopeDetailCenterKey;

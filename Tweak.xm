@@ -8,6 +8,7 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <string.h>
+#include <atomic>
 
 #import "Sources/NeoWCSettingsViewController.h"
 #import "Sources/NeoWCSettingsCatalog.h"
@@ -240,6 +241,9 @@
 
 static BOOL NeoWCDidRegister = NO;
 static NSTimeInterval NeoWCVoiceRepeatForwardDeadline = 0;
+static std::atomic_bool NeoWCHighRefreshRateEnabled(false);
+static std::atomic_bool NeoWCHighRefreshRateApplicationActive(false);
+static std::atomic_int NeoWCHighRefreshRateScreenMaximum(60);
 static char NeoWCDeviceCardDidConfirmKey;
 static char NeoWCGameDidAuthorizeKey;
 static char NeoWCMomentsDoubleTapRecognizerKey;
@@ -2187,8 +2191,36 @@ static id NeoWCContactForUserName(NSString *userName) {
 }
 
 static NSString *NeoWCConversationUserNameForEditLogic(id logic) {
-    SEL selector = sel_registerName("c2CUserName");
     if (!logic) return nil;
+    SEL originalMessageSelector = sel_registerName("originalMessageWrap");
+    if ([logic respondsToSelector:originalMessageSelector]) {
+        id wrap = ((id (*)(id, SEL))objc_msgSend)(logic, originalMessageSelector);
+        id fromValue = NeoWCTweakValueForSelectorNames(wrap, @[@"m_nsFromUsr"]);
+        id toValue = NeoWCTweakValueForSelectorNames(wrap, @[@"m_nsToUsr"]);
+        NSString *fromUser = [fromValue isKindOfClass:[NSString class]] ? fromValue : nil;
+        NSString *toUser = [toValue isKindOfClass:[NSString class]] ? toValue : nil;
+        Class settingUtilClass = objc_getClass("SettingUtil");
+        SEL localUserSelector = sel_registerName("getLocalUsrName:");
+        NSString *localUser = nil;
+        if (settingUtilClass && [settingUtilClass respondsToSelector:localUserSelector]) {
+            id localValue = ((id (*)(id, SEL, NSInteger))objc_msgSend)(settingUtilClass,
+                                                                        localUserSelector,
+                                                                        0);
+            localUser = [localValue isKindOfClass:[NSString class]] ? localValue : nil;
+        }
+        NSString *conversation = nil;
+        if (fromUser.length > 0 && localUser.length > 0 && [fromUser isEqualToString:localUser]) {
+            conversation = toUser;
+        } else if (fromUser.length > 0) {
+            conversation = fromUser;
+        }
+        if (conversation.length > 0) {
+            objc_setAssociatedObject(logic, &NeoWCEditConversationUserNameKey,
+                                     conversation, OBJC_ASSOCIATION_COPY_NONATOMIC);
+            return conversation;
+        }
+    }
+    SEL selector = sel_registerName("c2CUserName");
     if ([logic respondsToSelector:selector]) {
         id value = ((id (*)(id, SEL))objc_msgSend)(logic, selector);
         if ([value isKindOfClass:[NSString class]] && [value length] > 0) {
@@ -2246,7 +2278,16 @@ static void NeoWCCacheEditedImage(id logic, UIImage *image, NSString *source) {
 
 static UIImage *NeoWCEditedImageFromLogic(id logic) {
     UIImage *image = objc_getAssociatedObject(logic, &NeoWCEditedImageKey);
-    return [image isKindOfClass:[UIImage class]] ? image : nil;
+    if ([image isKindOfClass:[UIImage class]]) return image;
+    id initialView = NeoWCTweakSafeValue(logic, @"_editImageInitialView");
+    id scrollView = NeoWCTweakValueForSelectorNames(initialView, @[@"eIScrollView"]);
+    id editAttribute = NeoWCTweakValueForSelectorNames(scrollView, @[@"getEditImageAttr"]);
+    image = NeoWCTweakSafeValue(editAttribute, @"editedImage");
+    if ([image isKindOfClass:[UIImage class]]) {
+        NeoWCCacheEditedImage(logic, image, @"编辑器最终图片");
+        return image;
+    }
+    return nil;
 }
 
 static void NeoWCLogEditImageDiagnostics(id logic) {
@@ -2476,7 +2517,7 @@ static void NeoWCBeginQuickSend(id logic) {
         NeoWCShowTransientMessage(@"发送失败：图片编辑会话已经结束", NO);
         return;
     }
-    UIImage *cachedImage = objc_getAssociatedObject(logic, &NeoWCEditedImageKey);
+    UIImage *cachedImage = NeoWCEditedImageFromLogic(logic);
     if ([cachedImage isKindOfClass:[UIImage class]]) {
         NeoWCAttemptQuickSendWhenReady(logic, 0);
         return;
@@ -4187,30 +4228,18 @@ static void NeoWCSetMomentsOriginalFlag(id object) {
         ((void (*)(id, SEL, BOOL))objc_msgSend)(object, originalSelector, YES);
     }
 
-    // WeChatX marks each upload subtask with the confirmed setSkipCompress:
-    // selector. Discover only object ivars and only touch collections whose
-    // elements expose that exact selector, avoiding guessed private field names.
+    // Copy WCUploadTask.mediaList before marking each upload subtask so the
+    // collection cannot change while the compression flags are being updated.
+    SEL mediaListSelector = NSSelectorFromString(@"mediaList");
     SEL skipSelector = NSSelectorFromString(@"setSkipCompress:");
-    for (Class cls = object_getClass(object); cls && cls != NSObject.class; cls = class_getSuperclass(cls)) {
-        unsigned int count = 0;
-        Ivar *ivars = class_copyIvarList(cls, &count);
-        for (unsigned int index = 0; index < count; index++) {
-            const char *type = ivar_getTypeEncoding(ivars[index]);
-            if (!type || type[0] != '@') continue;
-            id value = nil;
-            @try { value = object_getIvar(object, ivars[index]); }
-            @catch (__unused NSException *exception) { value = nil; }
-            if ([value respondsToSelector:originalSelector]) {
-                ((void (*)(id, SEL, BOOL))objc_msgSend)(value, originalSelector, YES);
-            }
-            if (![value conformsToProtocol:@protocol(NSFastEnumeration)]) continue;
-            for (id child in value) {
-                if ([child respondsToSelector:skipSelector]) {
-                    ((void (*)(id, SEL, BOOL))objc_msgSend)(child, skipSelector, YES);
-                }
-            }
+    if (![object respondsToSelector:mediaListSelector]) return;
+    id mediaList = ((id (*)(id, SEL))objc_msgSend)(object, mediaListSelector);
+    id stableMediaList = [mediaList respondsToSelector:@selector(copy)] ? [mediaList copy] : mediaList;
+    if (![stableMediaList conformsToProtocol:@protocol(NSFastEnumeration)]) return;
+    for (id mediaTask in stableMediaList) {
+        if ([mediaTask respondsToSelector:skipSelector]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(mediaTask, skipSelector, YES);
         }
-        free(ivars);
     }
 }
 
@@ -4622,6 +4651,19 @@ static void NeoWCRegisterPlugin(void) {
     NeoWCLog(@"已注册插件管理入口与用户选择的快捷开关");
 }
 
+static void NeoWCRefreshHighRefreshRateConfiguration(void) {
+    NeoWCHighRefreshRateEnabled.store(NeoWCEnhancementEnabled(NeoWCScrollHighRefreshRateEnabledKey),
+                                      std::memory_order_relaxed);
+    NSInteger maximum = UIScreen.mainScreen.maximumFramesPerSecond;
+    NeoWCHighRefreshRateScreenMaximum.store((int)MAX(60, maximum), std::memory_order_relaxed);
+}
+
+static BOOL NeoWCShouldUseHighRefreshRate(void) {
+    return NeoWCHighRefreshRateEnabled.load(std::memory_order_relaxed) &&
+           NeoWCHighRefreshRateApplicationActive.load(std::memory_order_relaxed) &&
+           NeoWCHighRefreshRateScreenMaximum.load(std::memory_order_relaxed) > 60;
+}
+
 @interface NeoWCEntryLoader : NSObject
 @end
 
@@ -4631,6 +4673,10 @@ static void NeoWCRegisterPlugin(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         NeoWCRegisterPlugin();
         NeoWCRefreshDailyStepOverride();
+        NeoWCHighRefreshRateApplicationActive.store(
+            UIApplication.sharedApplication.applicationState == UIApplicationStateActive,
+            std::memory_order_relaxed);
+        NeoWCRefreshHighRefreshRateConfiguration();
 
         [[NSNotificationCenter defaultCenter]
             addObserverForName:UIApplicationDidFinishLaunchingNotification
@@ -4639,6 +4685,7 @@ static void NeoWCRegisterPlugin(void) {
                     usingBlock:^(__unused NSNotification *note) {
                         NeoWCRegisterPlugin();
                         NeoWCRefreshDailyStepOverride();
+                        NeoWCRefreshHighRefreshRateConfiguration();
                         [[NeoWCDebugManager sharedManager] applySavedState];
                     }];
 
@@ -4648,6 +4695,24 @@ static void NeoWCRegisterPlugin(void) {
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(__unused NSNotification *note) {
                         NeoWCRefreshDailyStepOverride();
+                        NeoWCRefreshHighRefreshRateConfiguration();
+                    }];
+
+        [[NSNotificationCenter defaultCenter]
+            addObserverForName:UIApplicationDidBecomeActiveNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(__unused NSNotification *note) {
+                        NeoWCHighRefreshRateApplicationActive.store(true, std::memory_order_relaxed);
+                        NeoWCRefreshHighRefreshRateConfiguration();
+                    }];
+
+        [[NSNotificationCenter defaultCenter]
+            addObserverForName:UIApplicationWillResignActiveNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(__unused NSNotification *note) {
+                        NeoWCHighRefreshRateApplicationActive.store(false, std::memory_order_relaxed);
                     }];
 
         [[NSNotificationCenter defaultCenter]
@@ -4658,6 +4723,11 @@ static void NeoWCRegisterPlugin(void) {
                         NeoWCSynchronizeVisibleMomentsCells();
                         NeoWCSynchronizeVisibleReplyGestures();
                         NSString *changedKey = [note.object isKindOfClass:[NSString class]] ? note.object : nil;
+                        if (!changedKey ||
+                            [changedKey isEqualToString:NeoWCScrollHighRefreshRateEnabledKey] ||
+                            [changedKey isEqualToString:NeoWCEnabledKey]) {
+                            NeoWCRefreshHighRefreshRateConfiguration();
+                        }
                         if (!changedKey ||
                             [changedKey isEqualToString:NeoWCGlobalAvatarRoundingEnabledKey] ||
                             [changedKey isEqualToString:NeoWCGlobalAvatarCornerPercentKey] ||
@@ -4730,6 +4800,64 @@ static void NeoWCRegisterPlugin(void) {
 }
 
 @end
+
+%hook CADisplayLink
+
+- (void)setFrameInterval:(NSInteger)frameInterval {
+    if (!NeoWCShouldUseHighRefreshRate()) {
+        %orig;
+        return;
+    }
+    %orig(1);
+    if ([self respondsToSelector:@selector(setPreferredFramesPerSecond:)]) {
+        self.preferredFramesPerSecond = 0;
+    }
+}
+
+- (void)setPreferredFramesPerSecond:(NSInteger)framesPerSecond {
+    if (NeoWCShouldUseHighRefreshRate()) {
+        %orig(0);
+        return;
+    }
+    %orig;
+}
+
+%end
+
+%group NeoWCHighRefreshRateRange
+
+%hook CADisplayLink
+
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if (NeoWCShouldUseHighRefreshRate()) {
+        float maximum = (float)NeoWCHighRefreshRateScreenMaximum.load(std::memory_order_relaxed);
+        CAFrameRateRange preferredRange = CAFrameRateRangeMake(30.0f, maximum, maximum);
+        %orig(preferredRange);
+        return;
+    }
+    %orig;
+}
+
+%end
+
+%end
+
+%hook CAMetalLayer
+
+- (NSUInteger)maximumDrawableCount {
+    if (NeoWCShouldUseHighRefreshRate()) return 2;
+    return %orig;
+}
+
+- (void)setMaximumDrawableCount:(NSUInteger)maximumDrawableCount {
+    if (NeoWCShouldUseHighRefreshRate()) {
+        %orig(2);
+        return;
+    }
+    %orig;
+}
+
+%end
 
 static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
     if (!view) return NO;
@@ -4952,9 +5080,12 @@ didReceiveNotificationResponse:(id)response
                              [self isContainButtonTitle:@"收藏"] &&
                              [self isContainButtonTitle:@"保存图片"];
     if (NeoWCEnhancementEnabled(NeoWCImageEditQuickSendEnabledKey) && isEditedImageMenu && ![self isContainButtonTitle:@"发送到当前会话"]) {
-        id logic = NeoWCTweakSafeValue(self, @"delegateEx") ?: NeoWCTweakSafeValue(self, @"delegate");
         Class logicClass = objc_getClass("EditImageForwardAndEditLogicController");
-        if (!logicClass || ![logic isKindOfClass:logicClass]) logic = NeoWCCurrentEditImageLogicController;
+        id extendedDelegate = NeoWCTweakSafeValue(self, @"delegateEx");
+        id delegate = NeoWCTweakSafeValue(self, @"delegate");
+        id logic = logicClass && [extendedDelegate isKindOfClass:logicClass]
+            ? extendedDelegate
+            : (logicClass && [delegate isKindOfClass:logicClass] ? delegate : nil);
         NSString *conversationUserName = NeoWCConversationUserNameForEditLogic(logic);
         (void)NeoWCEditPresenterController(logic);
         id conversationContact = NeoWCContactForUserName(conversationUserName);
@@ -5266,12 +5397,27 @@ didReceiveNotificationResponse:(id)response
 
 %hook MMHeadImageView
 
+- (void)layoutSubviews {
+    %orig;
+    if (NeoWCHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
+        id imageView = NeoWCTweakValueForSelectorNames(self, @[@"headImageView"]);
+        if ([imageView isKindOfClass:UIImageView.class]) {
+            ((UIImageView *)imageView).contentMode = UIViewContentModeScaleAspectFit;
+        }
+    }
+    NeoWCApplyGlobalAvatarRoundingToHeadView(self);
+}
+
 - (void)didMoveToWindow {
     %orig;
     NeoWCApplyGlobalAvatarRoundingToHeadView(self);
 }
 
 - (void)setConerSize:(unsigned int)cornerSize {
+    if (NeoWCHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
+        %orig(cornerSize);
+        return;
+    }
     %orig(NeoWCGlobalAvatarScaledCornerSize(cornerSize));
 }
 
@@ -5279,12 +5425,27 @@ didReceiveNotificationResponse:(id)response
 
 %hook FakeHeadImageView
 
+- (void)layoutSubviews {
+    %orig;
+    if (NeoWCHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
+        id imageView = NeoWCTweakValueForSelectorNames(self, @[@"headImageView"]);
+        if ([imageView isKindOfClass:UIImageView.class]) {
+            ((UIImageView *)imageView).contentMode = UIViewContentModeScaleAspectFit;
+        }
+    }
+    NeoWCApplyGlobalAvatarRoundingToHeadView(self);
+}
+
 - (void)didMoveToWindow {
     %orig;
     NeoWCApplyGlobalAvatarRoundingToHeadView(self);
 }
 
 - (void)setConerSize:(unsigned int)cornerSize {
+    if (NeoWCHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
+        %orig(cornerSize);
+        return;
+    }
     %orig(NeoWCGlobalAvatarScaledCornerSize(cornerSize));
 }
 
@@ -5555,6 +5716,11 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     objc_setAssociatedObject(controller, &NeoWCChatTopBackProxyKey, backProxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     UIView *avatarSource = NeoWCChatTopAvatarView(contact, userName);
+    NeoWCExcludeHeadViewFromGlobalAvatarRounding(avatarSource);
+    id avatarImage = NeoWCTweakValueForSelectorNames(avatarSource, @[@"headImageView"]);
+    if ([avatarImage isKindOfClass:UIImageView.class]) {
+        ((UIImageView *)avatarImage).contentMode = UIViewContentModeScaleAspectFit;
+    }
     UIView *avatar = [UIView new];
     avatar.translatesAutoresizingMaskIntoConstraints = NO;
     avatar.backgroundColor = UIColor.clearColor;
@@ -9050,3 +9216,10 @@ static BOOL NeoWCPresentCallConfirmation(VoIPBubbleMessageCellView *cell, BOOL v
 }
 
 %end
+
+%ctor {
+    %init;
+    if ([CADisplayLink instancesRespondToSelector:@selector(setPreferredFrameRateRange:)]) {
+        %init(NeoWCHighRefreshRateRange);
+    }
+}

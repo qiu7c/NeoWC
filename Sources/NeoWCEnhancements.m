@@ -56,6 +56,7 @@ NSString *const NeoWCLongPressMenuTitleMapKey = @"com.qiu7c.neowc.chat.long-pres
 NSString *const NeoWCLongPressMenuKnownTitlesKey = @"com.qiu7c.neowc.chat.long-press-menu.known";
 NSString *const NeoWCLongPressMenuManualTitlesKey = @"com.qiu7c.neowc.chat.long-press-menu.manual";
 NSString *const NeoWCHideSeparatorLinesKey = @"com.qiu7c.neowc.interface.hide-separator-lines";
+NSString *const NeoWCScrollHighRefreshRateEnabledKey = @"com.qiu7c.neowc.interface.scroll-high-refresh-rate";
 NSString *const NeoWCGroupMemberReminderEnabledKey = @"com.qiu7c.neowc.message.group-member-reminder";
 NSString *const NeoWCRedEnvelopeDetailEnabledKey = @"com.qiu7c.neowc.chat.red-envelope-detail";
 NSString *const NeoWCRedEnvelopeDetailCenterKey = @"com.qiu7c.neowc.chat.red-envelope-detail.center";

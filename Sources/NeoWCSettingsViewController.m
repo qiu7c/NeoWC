@@ -9,9 +9,8 @@
 #import "NeoWCEnhancements.h"
 #import "NeoWCInterfaceTweaks.h"
 #import "NeoWCPluginManager.h"
+#import "NeoWCReleaseNotes.h"
 #import <math.h>
-
-static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.ui.last-shown-release-notes-version";
 
 @interface NeoWCSettingsViewController ()
 @property (nonatomic, assign) NeoWCSettingsCategory category;
@@ -132,16 +131,10 @@ static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.
 - (void)presentReleaseNotesIfNeeded {
     if (self.attemptedReleaseNotes || self.category != NeoWCSettingsCategoryRoot || !self.view.window) return;
     self.attemptedReleaseNotes = YES;
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSString *shownVersion = [defaults stringForKey:NeoWCLastShownReleaseNotesVersionKey];
-    if ([shownVersion isEqualToString:NeoWCDisplayVersion]) return;
-
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"NeoWC %@", NeoWCDisplayVersion]
-                                                                   message:@"本次更新\n\n• 优化多处界面布局与视觉细节\n• 新增内置插件管理，可以卸载其他插件管理插件啦 OvO\n• 新增消息时间显示\n• 丰富消息手势：新增双击、三击与右滑操作，支持复制、复读、删除和撤回\n• 修复已知问题，优化整体使用体验"
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
-    [defaults setObject:NeoWCDisplayVersion forKey:NeoWCLastShownReleaseNotesVersionKey];
-    [self presentViewController:alert animated:YES completion:nil];
+    if (!NeoWCShouldPresentCurrentReleaseNotes()) return;
+    [self presentViewController:[NeoWCReleaseNotesViewController new]
+                       animated:NO
+                     completion:^{ NeoWCMarkCurrentReleaseNotesPresented(); }];
 }
 
 - (void)viewDidLayoutSubviews {

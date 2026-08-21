@@ -24,6 +24,8 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionOpenInterface,
     NeoWCSettingActionOpenDeveloper,
     NeoWCSettingActionConfigManager,
+    NeoWCSettingActionAuthorProfile,
+    NeoWCSettingActionReleaseNotes,
     NeoWCSettingActionBlockUsers,
     NeoWCSettingActionBlockKeywords,
     NeoWCSettingActionLongPressMenus,
