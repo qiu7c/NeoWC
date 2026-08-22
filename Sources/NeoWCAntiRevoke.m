@@ -351,6 +351,10 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
     search.searchResultsUpdater = self;
     search.obscuresBackgroundDuringPresentation = NO;
     search.searchBar.placeholder = @"搜索联系人或内容";
+    search.searchBar.backgroundImage = [UIImage new];
+    search.searchBar.backgroundColor = UIColor.clearColor;
+    search.searchBar.barTintColor = UIColor.clearColor;
+    search.searchBar.searchTextField.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
     self.navigationItem.searchController = search;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     [self reloadRecordsWithQuery:nil];

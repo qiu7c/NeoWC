@@ -681,6 +681,10 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     searchController.searchResultsUpdater = self;
     searchController.obscuresBackgroundDuringPresentation = NO;
     searchController.searchBar.placeholder = @"输入微信类名";
+    searchController.searchBar.backgroundImage = [UIImage new];
+    searchController.searchBar.backgroundColor = UIColor.clearColor;
+    searchController.searchBar.barTintColor = UIColor.clearColor;
+    searchController.searchBar.searchTextField.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
     self.navigationItem.searchController = searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     self.searchController = searchController;

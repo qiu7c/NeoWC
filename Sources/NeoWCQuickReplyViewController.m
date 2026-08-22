@@ -1,5 +1,6 @@
 #import "NeoWCQuickReplyViewController.h"
 #import "NeoWCQuickReplyStore.h"
+#import "NeoWCSilkDecoder.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCRuntimeFeatures.h"
 #import <AVFoundation/AVFoundation.h>
@@ -37,7 +38,7 @@
                                                                              target:self
                                                                              action:@selector(save)];
     self.titleField.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleField.placeholder = @"标题（可选）";
+    self.titleField.placeholder = @"备注（可选）";
     self.titleField.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     self.titleField.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
     self.titleField.layer.cornerRadius = 10.0;
@@ -175,6 +176,13 @@
 @property (nonatomic, copy) dispatch_block_t sendHandler;
 @property (nonatomic, strong) AVPlayer *player;
 @property (nonatomic, strong) AVAudioPlayer *audioPlayer;
+@property (nonatomic, strong) UIButton *voicePlayButton;
+@property (nonatomic, strong) UILabel *voiceStatusLabel;
+@property (nonatomic, assign) BOOL showsSendButton;
+@property (nonatomic, copy) NSString *voiceSourcePath;
+@property (nonatomic, copy) NSString *voiceTemporaryWAVPath;
+@property (nonatomic, assign) BOOL voiceDecodeInProgress;
+@property (nonatomic, assign) NSUInteger voiceDecodeGeneration;
 - (instancetype)initWithItem:(NeoWCQuickReplyItem *)item;
 @end
 
@@ -184,6 +192,7 @@
     self = [super initWithNibName:nil bundle:nil];
     if (self) {
         _item = item;
+        _showsSendButton = YES;
         self.title = item.type == NeoWCQuickReplyTypeImage ? @"确认图片素材" :
                      (item.type == NeoWCQuickReplyTypeVideo ? @"确认视频素材" : @"确认语音素材");
     }
@@ -193,25 +202,66 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = UIColor.blackColor;
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"发送"
-                                                                              style:UIBarButtonItemStyleDone
-                                                                             target:self
-                                                                             action:@selector(sendTapped)];
+    if (self.showsSendButton) {
+        self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"发送"
+                                                                                  style:UIBarButtonItemStyleDone
+                                                                                 target:self
+                                                                                 action:@selector(sendTapped)];
+    }
     NSString *path = [NeoWCQuickReplyStore.sharedStore absoluteMediaPathForItem:self.item];
     if (self.item.type == NeoWCQuickReplyTypeVoice) {
-        self.audioPlayer = [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path ?: @""] error:nil];
+        self.voiceSourcePath = path;
+        NSUInteger voiceTime = [self.item.metadata[@"voiceTime"] unsignedIntegerValue];
+        NSUInteger voiceFormat = [self.item.metadata[@"voiceFormat"] unsignedIntegerValue];
+        NSError *audioError = nil;
+        if (voiceFormat != 4) {
+            self.audioPlayer = [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path ?: @""] error:&audioError];
+        }
         UIImageView *waveform = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"waveform.circle.fill"]];
         waveform.translatesAutoresizingMaskIntoConstraints = NO;
         waveform.tintColor = UIColor.whiteColor;
         waveform.contentMode = UIViewContentModeScaleAspectFit;
+        UIButton *playButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        playButton.translatesAutoresizingMaskIntoConstraints = NO;
+        playButton.tintColor = UIColor.whiteColor;
+        playButton.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+        BOOL canDecodeSilk = voiceFormat == 4 && path.length > 0;
+        [playButton setTitle:(self.audioPlayer || canDecodeSilk) ? @"播放" : @"暂不可预览" forState:UIControlStateNormal];
+        playButton.enabled = self.audioPlayer != nil || canDecodeSilk;
+        [playButton addTarget:self action:@selector(voicePlayTapped) forControlEvents:UIControlEventTouchUpInside];
+        UILabel *statusLabel = [UILabel new];
+        statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        statusLabel.textAlignment = NSTextAlignmentCenter;
+        statusLabel.numberOfLines = 0;
+        statusLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+        statusLabel.textColor = UIColor.lightGrayColor;
+        if (self.audioPlayer) {
+            statusLabel.text = voiceTime > 0 ? [NSString stringWithFormat:@"约 %.1f 秒", voiceTime / 1000.0] : @"轻点播放预览";
+        } else if (voiceFormat == 4) {
+            statusLabel.text = voiceTime > 0 ? [NSString stringWithFormat:@"约 %.1f 秒 · 首次播放将快速解码", voiceTime / 1000.0] : @"首次播放将快速解码";
+        } else {
+            statusLabel.text = audioError.localizedDescription ?: @"无法读取该语音文件。";
+        }
         [self.view addSubview:waveform];
+        [self.view addSubview:playButton];
+        [self.view addSubview:statusLabel];
+        self.voicePlayButton = playButton;
+        self.voiceStatusLabel = statusLabel;
         [NSLayoutConstraint activateConstraints:@[
             [waveform.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-            [waveform.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+            [waveform.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-54.0],
             [waveform.widthAnchor constraintEqualToConstant:112.0],
             [waveform.heightAnchor constraintEqualToConstant:112.0],
+            [playButton.topAnchor constraintEqualToAnchor:waveform.bottomAnchor constant:18.0],
+            [playButton.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+            [statusLabel.topAnchor constraintEqualToAnchor:playButton.bottomAnchor constant:12.0],
+            [statusLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:32.0],
+            [statusLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-32.0],
         ]];
-        [self.audioPlayer play];
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:@selector(applicationDidEnterBackground:)
+                                                   name:UIApplicationDidEnterBackgroundNotification
+                                                 object:nil];
     } else if (self.item.type == NeoWCQuickReplyTypeVideo) {
         self.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:path ?: @""]];
         NeoWCQuickReplyPlayerView *playerView = [NeoWCQuickReplyPlayerView new];
@@ -239,6 +289,110 @@
     }
 }
 
+- (void)voicePlayTapped {
+    if (!self.audioPlayer) {
+        if ([self.item.metadata[@"voiceFormat"] unsignedIntegerValue] == 4) [self decodeSilkVoiceAndPlay];
+        return;
+    }
+    if (self.audioPlayer.isPlaying) {
+        [self.audioPlayer pause];
+        [self.voicePlayButton setTitle:@"继续播放" forState:UIControlStateNormal];
+        self.voiceStatusLabel.text = @"已暂停";
+    } else {
+        if (self.audioPlayer.currentTime >= self.audioPlayer.duration) self.audioPlayer.currentTime = 0;
+        if ([self.audioPlayer play]) {
+            [self.voicePlayButton setTitle:@"暂停" forState:UIControlStateNormal];
+            self.voiceStatusLabel.text = @"正在播放";
+        } else {
+            self.voicePlayButton.enabled = NO;
+            [self.voicePlayButton setTitle:@"暂不可预览" forState:UIControlStateNormal];
+            self.voiceStatusLabel.text = @"系统播放器无法播放该语音文件。";
+        }
+    }
+}
+
+- (void)decodeSilkVoiceAndPlay {
+    if (self.voiceDecodeInProgress || self.voiceSourcePath.length == 0) return;
+    self.voiceDecodeInProgress = YES;
+    NSUInteger generation = ++self.voiceDecodeGeneration;
+    self.voicePlayButton.enabled = NO;
+    [self.voicePlayButton setTitle:@"正在准备…" forState:UIControlStateNormal];
+    self.voiceStatusLabel.text = @"正在解码 Silk 语音";
+    NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"NeoWCVoicePreviews"];
+    NSError *directoryError = nil;
+    if (![NSFileManager.defaultManager createDirectoryAtPath:directory
+                                withIntermediateDirectories:YES
+                                                 attributes:nil
+                                                      error:&directoryError]) {
+        self.voiceDecodeInProgress = NO;
+        self.voicePlayButton.enabled = YES;
+        [self.voicePlayButton setTitle:@"重试" forState:UIControlStateNormal];
+        self.voiceStatusLabel.text = directoryError.localizedDescription ?: @"无法创建语音预览缓存";
+        return;
+    }
+    NSString *destination = [directory stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingPathExtension:@"wav"]];
+    NSString *source = self.voiceSourcePath;
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSError *decodeError = nil;
+        BOOL decoded = NeoWCSilkDecodeFileToWAV(source, destination, &decodeError);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NeoWCQuickReplyMediaPreviewViewController *strongSelf = weakSelf;
+            if (!strongSelf || generation != strongSelf.voiceDecodeGeneration || !strongSelf.viewIfLoaded.window) {
+                [NSFileManager.defaultManager removeItemAtPath:destination error:nil];
+                return;
+            }
+            strongSelf.voiceDecodeInProgress = NO;
+            if (!decoded) {
+                strongSelf.voicePlayButton.enabled = YES;
+                [strongSelf.voicePlayButton setTitle:@"重试" forState:UIControlStateNormal];
+                strongSelf.voiceStatusLabel.text = decodeError.localizedDescription ?: @"Silk 语音解码失败";
+                return;
+            }
+            NSError *audioError = nil;
+            AVAudioPlayer *player = [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:destination]
+                                                                           error:&audioError];
+            if (!player) {
+                [NSFileManager.defaultManager removeItemAtPath:destination error:nil];
+                strongSelf.voicePlayButton.enabled = YES;
+                [strongSelf.voicePlayButton setTitle:@"重试" forState:UIControlStateNormal];
+                strongSelf.voiceStatusLabel.text = audioError.localizedDescription ?: @"无法播放解码后的语音";
+                return;
+            }
+            strongSelf.voiceTemporaryWAVPath = destination;
+            strongSelf.audioPlayer = player;
+            [player prepareToPlay];
+            strongSelf.voicePlayButton.enabled = YES;
+            [strongSelf.voicePlayButton setTitle:@"播放" forState:UIControlStateNormal];
+            strongSelf.voiceStatusLabel.text = @"准备完成";
+            [strongSelf voicePlayTapped];
+        });
+    });
+}
+
+- (void)cleanupVoicePreview {
+    self.voiceDecodeGeneration++;
+    self.voiceDecodeInProgress = NO;
+    [self.audioPlayer stop];
+    if (self.voiceTemporaryWAVPath.length > 0) {
+        [NSFileManager.defaultManager removeItemAtPath:self.voiceTemporaryWAVPath error:nil];
+        self.voiceTemporaryWAVPath = nil;
+        self.audioPlayer = nil;
+    }
+    if ([self.item.metadata[@"voiceFormat"] unsignedIntegerValue] == 4 && self.voicePlayButton) {
+        self.voicePlayButton.enabled = self.voiceSourcePath.length > 0;
+        [self.voicePlayButton setTitle:@"播放" forState:UIControlStateNormal];
+        NSUInteger voiceTime = [self.item.metadata[@"voiceTime"] unsignedIntegerValue];
+        self.voiceStatusLabel.text = voiceTime > 0
+            ? [NSString stringWithFormat:@"约 %.1f 秒 · 首次播放将快速解码", voiceTime / 1000.0]
+            : @"首次播放将快速解码";
+    }
+}
+
+- (void)applicationDidEnterBackground:(__unused NSNotification *)notification {
+    [self cleanupVoicePreview];
+}
+
 - (void)sendTapped {
     self.navigationItem.rightBarButtonItem.enabled = NO;
     if (self.sendHandler) self.sendHandler();
@@ -247,7 +401,11 @@
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
     [self.player pause];
-    [self.audioPlayer stop];
+    [self cleanupVoicePreview];
+}
+
+- (void)dealloc {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
 @end
@@ -299,7 +457,11 @@
     self.searchController.obscuresBackgroundDuringPresentation = NO;
     self.searchController.searchResultsUpdater = self;
     self.searchController.searchBar.delegate = self;
-    self.searchController.searchBar.placeholder = @"搜索标题或文字";
+    self.searchController.searchBar.placeholder = @"搜索备注或文字";
+    self.searchController.searchBar.backgroundImage = [UIImage new];
+    self.searchController.searchBar.backgroundColor = UIColor.clearColor;
+    self.searchController.searchBar.barTintColor = UIColor.clearColor;
+    self.searchController.searchBar.searchTextField.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
     self.navigationItem.searchController = self.searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     self.definesPresentationContext = YES;
@@ -412,9 +574,9 @@
 
 - (void)editMediaItem:(NeoWCQuickReplyItem *)item {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"编辑媒体素材" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"修改标题" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"修改标题" message:nil preferredStyle:UIAlertControllerStyleAlert];
-        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"标题（可选）"; field.text = item.title; }];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"重命名备注" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"重命名备注" message:nil preferredStyle:UIAlertControllerStyleAlert];
+        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"备注（可选）"; field.text = item.title; }];
         [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
         [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *saveAction) {
             item.title = alert.textFields.firstObject.text ?: @"";
@@ -432,6 +594,24 @@
     UIPopoverPresentationController *popover = sheet.popoverPresentationController;
     if (popover) { popover.sourceView = self.view; popover.sourceRect = self.view.bounds; }
     [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)renameItem:(NeoWCQuickReplyItem *)item {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"重命名备注" message:nil preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"备注（可选）";
+        field.text = item.title;
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        item.title = alert.textFields.firstObject.text ?: @"";
+        NSError *error = nil;
+        [NeoWCQuickReplyStore.sharedStore updateItem:item error:&error];
+        if (error) [self showError:error];
+        [self reloadItems];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)chooseCategoryForItem:(NeoWCQuickReplyItem *)item {
@@ -664,16 +844,17 @@
     if (item.isPinned) [details addObject:@"已置顶"];
     cell.detailTextLabel.text = [details componentsJoinedByString:@" · "];
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-    NSString *thumbnailPath = [NeoWCQuickReplyStore.sharedStore absoluteThumbnailPathForItem:item];
-    UIImage *image = thumbnailPath.length > 0 ? [UIImage imageWithContentsOfFile:thumbnailPath] : nil;
-    if (!image) {
-        NSString *symbol = item.type == NeoWCQuickReplyTypeText ? @"text.bubble" :
-            (item.type == NeoWCQuickReplyTypeImage ? @"photo" : (item.type == NeoWCQuickReplyTypeVideo ? @"video" : @"waveform"));
-        image = [UIImage systemImageNamed:symbol];
-    }
-    cell.imageView.image = image;
-    cell.imageView.contentMode = UIViewContentModeScaleAspectFill;
-    cell.imageView.clipsToBounds = YES;
+    NSString *symbol = item.type == NeoWCQuickReplyTypeText ? @"text.bubble.fill" :
+        (item.type == NeoWCQuickReplyTypeImage ? @"photo.fill" :
+         (item.type == NeoWCQuickReplyTypeVideo ? @"video.fill" : @"waveform.circle.fill"));
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:24.0
+                                                                                                   weight:UIImageSymbolWeightRegular];
+    cell.imageView.image = [UIImage systemImageNamed:symbol withConfiguration:configuration];
+    cell.imageView.tintColor = item.type == NeoWCQuickReplyTypeText ? UIColor.systemGreenColor :
+        (item.type == NeoWCQuickReplyTypeImage ? UIColor.systemBlueColor :
+         (item.type == NeoWCQuickReplyTypeVideo ? UIColor.systemPurpleColor : UIColor.systemOrangeColor));
+    cell.imageView.contentMode = UIViewContentModeCenter;
+    cell.imageView.clipsToBounds = NO;
     return cell;
 }
 
@@ -709,7 +890,13 @@
         return;
     }
     NSString *path = [NeoWCQuickReplyStore.sharedStore absoluteMediaPathForItem:item];
-    if ((item.type == NeoWCQuickReplyTypeVideo || item.type == NeoWCQuickReplyTypeVoice) && path.length > 0) {
+    if (item.type == NeoWCQuickReplyTypeVoice && path.length > 0) {
+        NeoWCQuickReplyMediaPreviewViewController *preview = [[NeoWCQuickReplyMediaPreviewViewController alloc] initWithItem:item];
+        preview.showsSendButton = NO;
+        [self.navigationController pushViewController:preview animated:YES];
+        return;
+    }
+    if (item.type == NeoWCQuickReplyTypeVideo && path.length > 0) {
         AVPlayerViewController *player = [AVPlayerViewController new];
         player.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:path]];
         [self presentViewController:player animated:YES completion:^{ [player.player play]; }];
@@ -786,15 +973,21 @@
     if (self.selectionHandler) return nil;
     NeoWCQuickReplyItem *item = self.visibleItems[indexPath.row];
     __weak typeof(self) weakSelf = self;
-    UIContextualAction *edit = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
-                                                                        title:@"编辑"
+    UIContextualAction *rename = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                                        title:@"重命名"
                                                                       handler:^(__unused UIContextualAction *action, __unused UIView *sourceView, void (^completionHandler)(BOOL)) {
-        if (item.type == NeoWCQuickReplyTypeText) [weakSelf presentTextEditorForItem:item];
-        else [weakSelf editMediaItem:item];
+        [weakSelf renameItem:item];
         completionHandler(YES);
     }];
-    edit.backgroundColor = UIColor.systemBlueColor;
-    return [UISwipeActionsConfiguration configurationWithActions:@[edit]];
+    rename.backgroundColor = UIColor.systemBlueColor;
+    UIContextualAction *category = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                                          title:@"分类"
+                                                                        handler:^(__unused UIContextualAction *action, __unused UIView *sourceView, void (^completionHandler)(BOOL)) {
+        [weakSelf chooseCategoryForItem:item];
+        completionHandler(YES);
+    }];
+    category.backgroundColor = UIColor.systemTealColor;
+    return [UISwipeActionsConfiguration configurationWithActions:@[rename, category]];
 }
 
 @end
