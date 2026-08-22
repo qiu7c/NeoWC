@@ -14,7 +14,7 @@ FOUNDATION_EXPORT NSString *NeoWCSendConfirmationDisplayName(NSString *username)
 FOUNDATION_EXPORT BOOL NeoWCPresentSendConfirmationIfNeeded(UIViewController *presenter,
                                                              NSString *username,
                                                              NSString *summary,
-                                                             nullable NeoWCSendConfirmationValidator validator,
+                                                             NeoWCSendConfirmationValidator _Nullable validator,
                                                              dispatch_block_t confirmedAction);
 FOUNDATION_EXPORT void NeoWCCancelPendingSendConfirmations(void);
 

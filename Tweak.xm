@@ -8261,7 +8261,8 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook AppFileMessageCellViewV2
 
 - (NSArray *)operationMenuItems {
-    return NeoWCOperationMenuItemsWithQuickReply(self, %orig);
+    NSArray *items = %orig;
+    return NeoWCOperationMenuItemsWithQuickReply(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
@@ -10103,7 +10104,7 @@ static void NeoWCInstallDocumentPickerDelegateHook(id delegate,
         !NeoWCMethodArgumentIsObject(method, 2) || !NeoWCMethodArgumentIsObject(method, 3)) return;
     IMP original = NULL;
     MSHookMessageEx(delegateClass, selector, replacement, &original);
-    if (original) originals[className] = [NSValue valueWithPointer:original];
+    if (original) originals[className] = [NSValue valueWithPointer:(const void *)original];
 }
 
 %hook UIDocumentPickerViewController
