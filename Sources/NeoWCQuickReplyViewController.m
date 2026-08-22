@@ -9,8 +9,7 @@
 @interface NeoWCQuickReplyTextEditorViewController : UIViewController
 @property (nonatomic, strong) UITextField *titleField;
 @property (nonatomic, strong) UITextView *textView;
-@property (nonatomic, strong) UITextField *categoryField;
-@property (nonatomic, copy) void (^saveHandler)(NSString *title, NSString *text, NSString *category);
+@property (nonatomic, copy) void (^saveHandler)(NSString *title, NSString *text);
 - (instancetype)initWithItem:(nullable NeoWCQuickReplyItem *)item;
 @end
 
@@ -23,8 +22,6 @@
         _titleField.text = item.title;
         _textView = [UITextView new];
         _textView.text = item.text;
-        _categoryField = [UITextField new];
-        _categoryField.text = item.category;
         self.title = item ? @"编辑文字素材" : @"新建文字素材";
     }
     return self;
@@ -47,20 +44,6 @@
     self.titleField.leftView = padding;
     self.titleField.leftViewMode = UITextFieldViewModeAlways;
 
-    self.categoryField.translatesAutoresizingMaskIntoConstraints = NO;
-    self.categoryField.placeholder = @"分类（可选）";
-    self.categoryField.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
-    self.categoryField.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
-    self.categoryField.layer.cornerRadius = 10.0;
-    UIView *categoryPadding = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 12, 1)];
-    self.categoryField.leftView = categoryPadding;
-    self.categoryField.leftViewMode = UITextFieldViewModeAlways;
-    self.categoryField.userInteractionEnabled = NO;
-    UIButton *categoryButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    categoryButton.translatesAutoresizingMaskIntoConstraints = NO;
-    categoryButton.accessibilityLabel = @"选择分类";
-    [categoryButton addTarget:self action:@selector(chooseCategory) forControlEvents:UIControlEventTouchUpInside];
-
     self.textView.translatesAutoresizingMaskIntoConstraints = NO;
     self.textView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     self.textView.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
@@ -75,8 +58,6 @@
     hint.textColor = UIColor.secondaryLabelColor;
 
     [self.view addSubview:self.titleField];
-    [self.view addSubview:self.categoryField];
-    [self.view addSubview:categoryButton];
     [self.view addSubview:hint];
     [self.view addSubview:self.textView];
     [NSLayoutConstraint activateConstraints:@[
@@ -84,15 +65,7 @@
         [self.titleField.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
         [self.titleField.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
         [self.titleField.heightAnchor constraintEqualToConstant:48],
-        [self.categoryField.topAnchor constraintEqualToAnchor:self.titleField.bottomAnchor constant:10],
-        [self.categoryField.leadingAnchor constraintEqualToAnchor:self.titleField.leadingAnchor],
-        [self.categoryField.trailingAnchor constraintEqualToAnchor:self.titleField.trailingAnchor],
-        [self.categoryField.heightAnchor constraintEqualToConstant:48],
-        [categoryButton.topAnchor constraintEqualToAnchor:self.categoryField.topAnchor],
-        [categoryButton.bottomAnchor constraintEqualToAnchor:self.categoryField.bottomAnchor],
-        [categoryButton.leadingAnchor constraintEqualToAnchor:self.categoryField.leadingAnchor],
-        [categoryButton.trailingAnchor constraintEqualToAnchor:self.categoryField.trailingAnchor],
-        [hint.topAnchor constraintEqualToAnchor:self.categoryField.bottomAnchor constant:18],
+        [hint.topAnchor constraintEqualToAnchor:self.titleField.bottomAnchor constant:18],
         [hint.leadingAnchor constraintEqualToAnchor:self.titleField.leadingAnchor constant:2],
         [self.textView.topAnchor constraintEqualToAnchor:hint.bottomAnchor constant:7],
         [self.textView.leadingAnchor constraintEqualToAnchor:self.titleField.leadingAnchor],
@@ -100,37 +73,6 @@
         [self.textView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-16],
     ]];
     if (self.textView.text.length == 0) [self.textView becomeFirstResponder];
-}
-
-- (void)chooseCategory {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择分类" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"未分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        self.categoryField.text = @"";
-    }]];
-    for (NSString *category in NeoWCQuickReplyStore.sharedStore.categories) {
-        [sheet addAction:[UIAlertAction actionWithTitle:category style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-            self.categoryField.text = category;
-        }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"新建分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        [self createCategory];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
-    if (popover) { popover.sourceView = self.categoryField; popover.sourceRect = self.categoryField.bounds; }
-    [self presentViewController:sheet animated:YES completion:nil];
-}
-
-- (void)createCategory {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建分类" message:nil preferredStyle:UIAlertControllerStyleAlert];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"分类名称"; }];
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"创建" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        NSString *name = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        NSError *error = nil;
-        if ([NeoWCQuickReplyStore.sharedStore addCategory:name error:&error]) self.categoryField.text = name;
-    }]];
-    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)save {
@@ -143,7 +85,7 @@
         [self presentViewController:alert animated:YES completion:nil];
         return;
     }
-    if (self.saveHandler) self.saveHandler(self.titleField.text ?: @"", text, self.categoryField.text ?: @"");
+    if (self.saveHandler) self.saveHandler(self.titleField.text ?: @"", text);
     [self.navigationController popViewControllerAnimated:YES];
 }
 
@@ -415,9 +357,11 @@
 @property (nonatomic, copy, nullable) NeoWCQuickReplyDirectSendHandler directSendHandler;
 @property (nonatomic, copy) NSArray<NeoWCQuickReplyItem *> *allItems;
 @property (nonatomic, copy) NSArray<NeoWCQuickReplyItem *> *visibleItems;
+@property (nonatomic, copy) NSArray<NeoWCQuickReplyFolder *> *folders;
+@property (nonatomic, copy) NSArray<NeoWCQuickReplyFolder *> *visibleFolders;
 @property (nonatomic, strong) UISearchController *searchController;
-@property (nonatomic, copy) NSArray<NSString *> *categories;
-@property (nonatomic, copy) NSString *selectedCategory;
+@property (nonatomic, copy, nullable) NSString *currentFolderIdentifier;
+@property (nonatomic, copy, nullable) NSString *currentFolderName;
 @end
 
 @implementation NeoWCQuickReplyViewController
@@ -432,16 +376,19 @@
     if (self) {
         _selectionHandler = [selectionHandler copy];
         _directSendHandler = [directSendHandler copy];
-        _selectedCategory = @"";
     }
     return self;
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"快捷回复素材库";
+    self.title = self.currentFolderName.length ? self.currentFolderName : @"快捷回复素材库";
     self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
-    self.tableView.rowHeight = 68.0;
+    self.tableView.rowHeight = 56.0;
+    self.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
+    self.tableView.separatorInset = UIEdgeInsetsMake(0.0, 56.0, 0.0, 16.0);
+    self.tableView.sectionHeaderHeight = 0.01;
+    if (@available(iOS 15.0, *)) self.tableView.sectionHeaderTopPadding = 0.0;
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
     UIBarButtonItem *add = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd
                                                                          target:self
@@ -449,9 +396,11 @@
     self.navigationItem.rightBarButtonItem = add;
     if (!self.selectionHandler) {
         self.navigationItem.leftBarButtonItem = self.editButtonItem;
-        UIBarButtonItem *cleanup = [[UIBarButtonItem alloc] initWithTitle:@"清理" style:UIBarButtonItemStylePlain
-                                                                   target:self action:@selector(cleanupMediaTapped)];
-        self.navigationItem.rightBarButtonItems = @[add, cleanup];
+        if (!self.currentFolderIdentifier.length) {
+            UIBarButtonItem *cleanup = [[UIBarButtonItem alloc] initWithTitle:@"清理" style:UIBarButtonItemStylePlain
+                                                                       target:self action:@selector(cleanupMediaTapped)];
+            self.navigationItem.rightBarButtonItems = @[add, cleanup];
+        }
     }
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
     self.searchController.obscuresBackgroundDuringPresentation = NO;
@@ -459,11 +408,15 @@
     self.searchController.searchBar.delegate = self;
     self.searchController.searchBar.placeholder = @"搜索备注或文字";
     self.searchController.searchBar.backgroundImage = [UIImage new];
-    self.searchController.searchBar.backgroundColor = UIColor.clearColor;
+    self.searchController.searchBar.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.searchController.searchBar.barTintColor = UIColor.clearColor;
     self.searchController.searchBar.searchTextField.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
-    self.navigationItem.searchController = self.searchController;
-    self.navigationItem.hidesSearchBarWhenScrolling = NO;
+    UIView *searchHeader = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, self.tableView.bounds.size.width, 56.0)];
+    searchHeader.backgroundColor = UIColor.systemGroupedBackgroundColor;
+    self.searchController.searchBar.frame = searchHeader.bounds;
+    self.searchController.searchBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [searchHeader addSubview:self.searchController.searchBar];
+    self.tableView.tableHeaderView = searchHeader;
     self.definesPresentationContext = YES;
     if (self.directSendHandler) {
         UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(itemLongPressed:)];
@@ -481,10 +434,22 @@
 - (void)itemLongPressed:(UILongPressGestureRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateBegan || !self.directSendHandler) return;
     NSIndexPath *indexPath = [self.tableView indexPathForRowAtPoint:[recognizer locationInView:self.tableView]];
-    if (!indexPath || indexPath.row >= (NSInteger)self.visibleItems.count) return;
-    NeoWCQuickReplyItem *item = self.visibleItems[indexPath.row];
+    if (!indexPath) return;
+    NSInteger itemIndex = indexPath.row - (NSInteger)self.visibleFolders.count;
+    if (itemIndex < 0 || itemIndex >= (NSInteger)self.visibleItems.count) return;
+    NeoWCQuickReplyItem *item = self.visibleItems[itemIndex];
     if (NeoWCEnhancementEnabled(NeoWCQuickReplyInstantSendEnabledKey)) [self useItemNormally:item];
     else [self sendItemDirectly:item];
+}
+
+- (nullable NeoWCQuickReplyFolder *)folderAtIndexPath:(NSIndexPath *)indexPath {
+    return indexPath.row >= 0 && indexPath.row < (NSInteger)self.visibleFolders.count
+        ? self.visibleFolders[indexPath.row] : nil;
+}
+
+- (nullable NeoWCQuickReplyItem *)itemAtIndexPath:(NSIndexPath *)indexPath {
+    NSInteger index = indexPath.row - (NSInteger)self.visibleFolders.count;
+    return index >= 0 && index < (NSInteger)self.visibleItems.count ? self.visibleItems[index] : nil;
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -495,9 +460,7 @@
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     if (self.selectionHandler) return;
-    NSString *account = NeoWCQuickReplyStore.sharedStore.accountIdentifier;
-    if (account.length == 0) return;
-    NSString *key = [@"com.qiu7c.neowc.quick-reply.import-tip." stringByAppendingString:account];
+    NSString *key = @"com.qiu7c.neowc.quick-reply.import-tip.shared";
     if ([NSUserDefaults.standardUserDefaults boolForKey:key]) return;
     [NSUserDefaults.standardUserDefaults setBool:YES forKey:key];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"从文件传输助手加入素材"
@@ -516,33 +479,26 @@
 
 - (void)reloadItems {
     self.allItems = NeoWCQuickReplyStore.sharedStore.items;
-    self.categories = NeoWCQuickReplyStore.sharedStore.categories;
-    NSMutableArray<NSString *> *scopes = [NSMutableArray arrayWithObject:@"全部"];
-    [scopes addObjectsFromArray:self.categories];
-    self.searchController.searchBar.scopeButtonTitles = scopes;
-    self.searchController.searchBar.showsScopeBar = self.categories.count > 0;
-    NSUInteger selectedIndex = self.selectedCategory.length > 0 ? [self.categories indexOfObject:self.selectedCategory] : NSNotFound;
-    self.searchController.searchBar.selectedScopeButtonIndex = selectedIndex == NSNotFound ? 0 : selectedIndex + 1;
-    if (selectedIndex == NSNotFound) self.selectedCategory = @"";
+    self.folders = NeoWCQuickReplyStore.sharedStore.folders;
     [self applySearchText:self.searchController.searchBar.text];
 }
 
 - (void)applySearchText:(NSString *)query {
     NSString *trimmed = [query stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    BOOL searching = trimmed.length > 0;
+    self.visibleFolders = !self.currentFolderIdentifier.length && !searching ? self.folders : @[];
     self.visibleItems = [self.allItems filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NeoWCQuickReplyItem *item, NSDictionary *bindings) {
             (void)bindings;
-            BOOL categoryMatches = self.selectedCategory.length == 0 || [item.category isEqualToString:self.selectedCategory];
+            BOOL folderMatches = searching && !self.currentFolderIdentifier.length
+                ? YES
+                : (self.currentFolderIdentifier.length
+                    ? [item.folderIdentifier isEqualToString:self.currentFolderIdentifier]
+                    : item.folderIdentifier.length == 0);
             BOOL textMatches = trimmed.length == 0 || [item.title localizedCaseInsensitiveContainsString:trimmed] ||
                                [item.text localizedCaseInsensitiveContainsString:trimmed];
-            return categoryMatches && textMatches;
+            return folderMatches && textMatches;
     }]];
     [self.tableView reloadData];
-}
-
-- (void)searchBar:(UISearchBar *)searchBar selectedScopeButtonIndexDidChange:(NSInteger)selectedScope {
-    self.selectedCategory = selectedScope > 0 && selectedScope - 1 < (NSInteger)self.categories.count
-        ? self.categories[selectedScope - 1] : @"";
-    [self applySearchText:searchBar.text];
 }
 
 - (void)cleanupMediaTapped {
@@ -587,8 +543,8 @@
         }]];
         [self presentViewController:alert animated:YES completion:nil];
     }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"选择分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        [self chooseCategoryForItem:item];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"移动到文件夹" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [self chooseFolderForItem:item];
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     UIPopoverPresentationController *popover = sheet.popoverPresentationController;
@@ -614,37 +570,25 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)chooseCategoryForItem:(NeoWCQuickReplyItem *)item {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择分类" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-    NSMutableArray<NSString *> *options = [NSMutableArray arrayWithObject:@""];
-    [options addObjectsFromArray:NeoWCQuickReplyStore.sharedStore.categories];
-    for (NSString *category in options) {
-        NSString *title = category.length > 0 ? category : @"未分类";
-        if ([item.category isEqualToString:category]) title = [title stringByAppendingString:@" ✓"];
+- (void)chooseFolderForItem:(NeoWCQuickReplyItem *)item {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"移动到文件夹" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    NSString *rootTitle = item.folderIdentifier.length ? @"素材库根目录" : @"素材库根目录 ✓";
+    [sheet addAction:[UIAlertAction actionWithTitle:rootTitle style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSError *error = nil;
+        [NeoWCQuickReplyStore.sharedStore moveItemWithIdentifier:item.identifier toFolderIdentifier:nil error:&error];
+        if (error) [self showError:error];
+        [self reloadItems];
+    }]];
+    for (NeoWCQuickReplyFolder *folder in NeoWCQuickReplyStore.sharedStore.folders) {
+        NSString *title = [item.folderIdentifier isEqualToString:folder.identifier]
+            ? [folder.name stringByAppendingString:@" ✓"] : folder.name;
         [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-            item.category = category;
             NSError *error = nil;
-            [NeoWCQuickReplyStore.sharedStore updateItem:item error:&error];
+            [NeoWCQuickReplyStore.sharedStore moveItemWithIdentifier:item.identifier toFolderIdentifier:folder.identifier error:&error];
             if (error) [self showError:error];
             [self reloadItems];
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"新建分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建分类" message:nil preferredStyle:UIAlertControllerStyleAlert];
-        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"分类名称"; }];
-        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"创建并选择" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *saveAction) {
-            NSString *name = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-            NSError *error = nil;
-            if ([NeoWCQuickReplyStore.sharedStore addCategory:name error:&error]) {
-                item.category = name;
-                [NeoWCQuickReplyStore.sharedStore updateItem:item error:&error];
-            }
-            if (error) [self showError:error];
-            [self reloadItems];
-        }]];
-        [self presentViewController:alert animated:YES completion:nil];
-    }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     UIPopoverPresentationController *popover = sheet.popoverPresentationController;
     if (popover) { popover.sourceView = self.view; popover.sourceRect = self.view.bounds; }
@@ -657,7 +601,7 @@
 
 - (void)addTapped {
     if (!NeoWCQuickReplyStore.sharedStore.isAvailable) {
-        [self showError:[NSError errorWithDomain:@"NeoWC" code:1 userInfo:@{NSLocalizedDescriptionKey: @"尚未识别当前微信账号，无法创建素材。"}]];
+        [self showError:[NSError errorWithDomain:@"NeoWC" code:1 userInfo:@{NSLocalizedDescriptionKey: @"共享素材库暂时无法读写。"}]];
         return;
     }
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"添加素材" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
@@ -670,62 +614,48 @@
     [sheet addAction:[UIAlertAction actionWithTitle:@"前往文件传输助手" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         NeoWCOpenChatForUserName(@"filehelper");
     }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"管理分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        [self manageCategories];
-    }]];
+    if (!self.currentFolderIdentifier.length) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"新建文件夹" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [self createFolder];
+        }]];
+    }
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     UIPopoverPresentationController *popover = sheet.popoverPresentationController;
     popover.barButtonItem = self.navigationItem.rightBarButtonItem;
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
-- (void)manageCategories {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"管理分类" message:@"选择分类可重命名或删除" preferredStyle:UIAlertControllerStyleActionSheet];
-    for (NSString *category in NeoWCQuickReplyStore.sharedStore.categories) {
-        [sheet addAction:[UIAlertAction actionWithTitle:category style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-            [self editCategory:category];
-        }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"新建分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        [self createManagedCategory];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
-    if (popover) { popover.sourceView = self.view; popover.sourceRect = self.view.bounds; }
-    [self presentViewController:sheet animated:YES completion:nil];
-}
-
-- (void)createManagedCategory {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建分类" message:nil preferredStyle:UIAlertControllerStyleAlert];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"分类名称"; }];
+- (void)createFolder {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建文件夹" message:nil preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"文件夹名称"; }];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     __weak typeof(self) weakSelf = self;
     [alert addAction:[UIAlertAction actionWithTitle:@"创建" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         NSError *error = nil;
-        [NeoWCQuickReplyStore.sharedStore addCategory:alert.textFields.firstObject.text error:&error];
+        [NeoWCQuickReplyStore.sharedStore createFolderWithName:alert.textFields.firstObject.text error:&error];
         if (error) [weakSelf showError:error];
         [weakSelf reloadItems];
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)editCategory:(NSString *)category {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:category message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+- (void)editFolder:(NeoWCQuickReplyFolder *)folder {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:folder.name message:nil preferredStyle:UIAlertControllerStyleActionSheet];
     [sheet addAction:[UIAlertAction actionWithTitle:@"重命名" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"重命名分类" message:nil preferredStyle:UIAlertControllerStyleAlert];
-        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.text = category; }];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"重命名文件夹" message:nil preferredStyle:UIAlertControllerStyleAlert];
+        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.text = folder.name; }];
         [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
         [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *saveAction) {
             NSError *error = nil;
-            [NeoWCQuickReplyStore.sharedStore renameCategory:category toName:alert.textFields.firstObject.text error:&error];
+            [NeoWCQuickReplyStore.sharedStore renameFolderWithIdentifier:folder.identifier toName:alert.textFields.firstObject.text error:&error];
             if (error) [self showError:error];
             [self reloadItems];
         }]];
         [self presentViewController:alert animated:YES completion:nil];
     }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"删除分类" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"删除文件夹" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
         NSError *error = nil;
-        [NeoWCQuickReplyStore.sharedStore deleteCategory:category error:&error];
+        [NeoWCQuickReplyStore.sharedStore deleteFolderWithIdentifier:folder.identifier error:&error];
         if (error) [self showError:error];
         [self reloadItems];
     }]];
@@ -739,16 +669,17 @@
     NeoWCQuickReplyTextEditorViewController *editor = [[NeoWCQuickReplyTextEditorViewController alloc] initWithItem:item];
     __weak typeof(self) weakSelf = self;
     __weak NeoWCQuickReplyItem *weakItem = item;
-    editor.saveHandler = ^(NSString *title, NSString *text, NSString *category) {
+    editor.saveHandler = ^(NSString *title, NSString *text) {
         NSError *error = nil;
         NeoWCQuickReplyItem *strongItem = weakItem;
         if (strongItem) {
             strongItem.title = title;
             strongItem.text = text;
-            strongItem.category = category;
             [NeoWCQuickReplyStore.sharedStore updateItem:strongItem error:&error];
         } else {
-            [NeoWCQuickReplyStore.sharedStore addText:text title:title category:category sourceConversation:nil sourceMessageID:nil error:&error];
+            [NeoWCQuickReplyStore.sharedStore addText:text title:title
+                                     folderIdentifier:weakSelf.currentFolderIdentifier
+                                    sourceConversation:nil sourceMessageID:nil error:&error];
         }
         if (error) [weakSelf showError:error];
         [weakSelf reloadItems];
@@ -788,7 +719,9 @@
     }
     NSError *error = nil;
     if (URL) {
-        [NeoWCQuickReplyStore.sharedStore addMediaAtURL:URL type:type title:nil sourceConversation:nil sourceMessageID:nil error:&error];
+        [NeoWCQuickReplyStore.sharedStore addMediaAtURL:URL type:type title:nil
+                                      folderIdentifier:self.currentFolderIdentifier
+                                     sourceConversation:nil sourceMessageID:nil error:&error];
     } else {
         error = [NSError errorWithDomain:@"NeoWC" code:2 userInfo:@{NSLocalizedDescriptionKey: @"无法读取所选媒体文件。"}];
     }
@@ -816,23 +749,37 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     (void)tableView; (void)section;
-    return self.visibleItems.count;
+    return self.visibleFolders.count + self.visibleItems.count;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView; (void)section;
-    if (!NeoWCQuickReplyStore.sharedStore.isAvailable) return @"当前微信账号尚未识别，素材库已暂停读写。";
+    if (!NeoWCQuickReplyStore.sharedStore.isAvailable) return @"共享素材库暂时无法读写。";
     NSByteCountFormatter *formatter = [NSByteCountFormatter new];
     formatter.countStyle = NSByteCountFormatterCountStyleFile;
     NSString *size = [formatter stringFromByteCount:(long long)NeoWCQuickReplyStore.sharedStore.managedMediaSize];
-    return [NSString stringWithFormat:@"当前账号共 %lu 项，媒体占用 %@。素材文件独立保存，不依赖聊天缓存。", (unsigned long)self.allItems.count, size];
+    return [NSString stringWithFormat:@"全部账号共享，共 %lu 项，媒体占用 %@。素材文件独立保存，不依赖聊天缓存。", (unsigned long)self.allItems.count, size];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     static NSString *identifier = @"QuickReplyCell";
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
     if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:identifier];
-    NeoWCQuickReplyItem *item = self.visibleItems[indexPath.row];
+    NeoWCQuickReplyFolder *folder = [self folderAtIndexPath:indexPath];
+    if (folder) {
+        NSUInteger count = 0;
+        for (NeoWCQuickReplyItem *candidate in self.allItems) if ([candidate.folderIdentifier isEqualToString:folder.identifier]) count++;
+        cell.textLabel.text = folder.name;
+        cell.detailTextLabel.text = [NSString stringWithFormat:@"%lu 项素材", (unsigned long)count];
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:20.0 weight:UIImageSymbolWeightRegular];
+        cell.imageView.image = [[UIImage systemImageNamed:@"folder" withConfiguration:configuration]
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        cell.imageView.tintColor = UIColor.labelColor;
+        return cell;
+    }
+    NeoWCQuickReplyItem *item = [self itemAtIndexPath:indexPath];
+    if (!item) return cell;
     NSString *fallbackTitle = item.type == NeoWCQuickReplyTypeText ? item.text :
         (item.type == NeoWCQuickReplyTypeImage ? @"图片素材" : (item.type == NeoWCQuickReplyTypeVideo ? @"视频素材" : @"语音素材"));
     cell.textLabel.text = item.title.length > 0 ? item.title : fallbackTitle;
@@ -840,19 +787,17 @@
     NSString *typeName = item.type == NeoWCQuickReplyTypeText ? @"文字" :
         (item.type == NeoWCQuickReplyTypeImage ? @"图片" : (item.type == NeoWCQuickReplyTypeVideo ? @"视频" : @"语音"));
     NSMutableArray<NSString *> *details = [NSMutableArray arrayWithObject:typeName];
-    if (item.category.length > 0) [details addObject:item.category];
     if (item.isPinned) [details addObject:@"已置顶"];
     cell.detailTextLabel.text = [details componentsJoinedByString:@" · "];
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-    NSString *symbol = item.type == NeoWCQuickReplyTypeText ? @"text.bubble.fill" :
-        (item.type == NeoWCQuickReplyTypeImage ? @"photo.fill" :
-         (item.type == NeoWCQuickReplyTypeVideo ? @"video.fill" : @"waveform.circle.fill"));
-    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:24.0
+    NSString *symbol = item.type == NeoWCQuickReplyTypeText ? @"text.bubble" :
+        (item.type == NeoWCQuickReplyTypeImage ? @"photo" :
+         (item.type == NeoWCQuickReplyTypeVideo ? @"video" : @"waveform"));
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:20.0
                                                                                                    weight:UIImageSymbolWeightRegular];
-    cell.imageView.image = [UIImage systemImageNamed:symbol withConfiguration:configuration];
-    cell.imageView.tintColor = item.type == NeoWCQuickReplyTypeText ? UIColor.systemGreenColor :
-        (item.type == NeoWCQuickReplyTypeImage ? UIColor.systemBlueColor :
-         (item.type == NeoWCQuickReplyTypeVideo ? UIColor.systemPurpleColor : UIColor.systemOrangeColor));
+    cell.imageView.image = [[UIImage systemImageNamed:symbol withConfiguration:configuration]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    cell.imageView.tintColor = UIColor.labelColor;
     cell.imageView.contentMode = UIViewContentModeCenter;
     cell.imageView.clipsToBounds = NO;
     return cell;
@@ -860,12 +805,12 @@
 
 - (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView; (void)indexPath;
-    return !self.selectionHandler && self.searchController.searchBar.text.length == 0 && self.selectedCategory.length == 0;
+    return !self.selectionHandler && self.visibleFolders.count == 0 && self.searchController.searchBar.text.length == 0;
 }
 
 - (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)sourceIndexPath toIndexPath:(NSIndexPath *)destinationIndexPath {
     (void)tableView;
-    NSMutableArray *ordered = [self.allItems mutableCopy];
+    NSMutableArray *ordered = [self.visibleItems mutableCopy];
     NeoWCQuickReplyItem *item = ordered[sourceIndexPath.row];
     [ordered removeObjectAtIndex:sourceIndexPath.row];
     [ordered insertObject:item atIndex:destinationIndexPath.row];
@@ -879,7 +824,17 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    NeoWCQuickReplyItem *item = self.visibleItems[indexPath.row];
+    NeoWCQuickReplyFolder *folder = [self folderAtIndexPath:indexPath];
+    if (folder) {
+        NeoWCQuickReplyViewController *controller = [[NeoWCQuickReplyViewController alloc]
+            initWithSelectionHandler:self.selectionHandler directSendHandler:self.directSendHandler];
+        controller.currentFolderIdentifier = folder.identifier;
+        controller.currentFolderName = folder.name;
+        [self.navigationController pushViewController:controller animated:YES];
+        return;
+    }
+    NeoWCQuickReplyItem *item = [self itemAtIndexPath:indexPath];
+    if (!item) return;
     if (self.selectionHandler) {
         if (NeoWCEnhancementEnabled(NeoWCQuickReplyInstantSendEnabledKey)) [self sendItemDirectly:item];
         else [self useItemNormally:item];
@@ -896,27 +851,7 @@
         [self.navigationController pushViewController:preview animated:YES];
         return;
     }
-    if (item.type == NeoWCQuickReplyTypeVideo && path.length > 0) {
-        AVPlayerViewController *player = [AVPlayerViewController new];
-        player.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:path]];
-        [self presentViewController:player animated:YES completion:^{ [player.player play]; }];
-        return;
-    }
-    UIImage *image = path.length > 0 ? [UIImage imageWithContentsOfFile:path] : nil;
-    if (!image) return;
-    UIViewController *preview = [UIViewController new];
-    preview.view.backgroundColor = UIColor.blackColor;
-    UIImageView *imageView = [[UIImageView alloc] initWithImage:image];
-    imageView.translatesAutoresizingMaskIntoConstraints = NO;
-    imageView.contentMode = UIViewContentModeScaleAspectFit;
-    [preview.view addSubview:imageView];
-    [NSLayoutConstraint activateConstraints:@[
-        [imageView.topAnchor constraintEqualToAnchor:preview.view.topAnchor],
-        [imageView.bottomAnchor constraintEqualToAnchor:preview.view.bottomAnchor],
-        [imageView.leadingAnchor constraintEqualToAnchor:preview.view.leadingAnchor],
-        [imageView.trailingAnchor constraintEqualToAnchor:preview.view.trailingAnchor],
-    ]];
-    [self presentViewController:preview animated:YES completion:nil];
+    [self editMediaItem:item];
 }
 
 - (void)useItemNormally:(NeoWCQuickReplyItem *)item {
@@ -944,7 +879,20 @@
 }
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
-    NeoWCQuickReplyItem *item = self.visibleItems[indexPath.row];
+    NeoWCQuickReplyFolder *folder = [self folderAtIndexPath:indexPath];
+    if (folder) {
+        __weak typeof(self) weakSelf = self;
+        UIContextualAction *deleteFolder = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"删除" handler:^(__unused UIContextualAction *action, __unused UIView *sourceView, void (^completionHandler)(BOOL)) {
+            NSError *error = nil;
+            BOOL deleted = [NeoWCQuickReplyStore.sharedStore deleteFolderWithIdentifier:folder.identifier error:&error];
+            if (error) [weakSelf showError:error];
+            [weakSelf reloadItems];
+            completionHandler(deleted);
+        }];
+        return [UISwipeActionsConfiguration configurationWithActions:@[deleteFolder]];
+    }
+    NeoWCQuickReplyItem *item = [self itemAtIndexPath:indexPath];
+    if (!item) return nil;
     __weak typeof(self) weakSelf = self;
     UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive
                                                                                 title:@"删除"
@@ -971,7 +919,18 @@
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView;
     if (self.selectionHandler) return nil;
-    NeoWCQuickReplyItem *item = self.visibleItems[indexPath.row];
+    NeoWCQuickReplyFolder *folder = [self folderAtIndexPath:indexPath];
+    if (folder) {
+        __weak typeof(self) weakSelf = self;
+        UIContextualAction *renameFolder = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal title:@"重命名" handler:^(__unused UIContextualAction *action, __unused UIView *sourceView, void (^completionHandler)(BOOL)) {
+            [weakSelf editFolder:folder];
+            completionHandler(YES);
+        }];
+        renameFolder.backgroundColor = UIColor.systemBlueColor;
+        return [UISwipeActionsConfiguration configurationWithActions:@[renameFolder]];
+    }
+    NeoWCQuickReplyItem *item = [self itemAtIndexPath:indexPath];
+    if (!item) return nil;
     __weak typeof(self) weakSelf = self;
     UIContextualAction *rename = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
                                                                         title:@"重命名"
@@ -980,14 +939,14 @@
         completionHandler(YES);
     }];
     rename.backgroundColor = UIColor.systemBlueColor;
-    UIContextualAction *category = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
-                                                                          title:@"分类"
+    UIContextualAction *move = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                                          title:@"移动"
                                                                         handler:^(__unused UIContextualAction *action, __unused UIView *sourceView, void (^completionHandler)(BOOL)) {
-        [weakSelf chooseCategoryForItem:item];
+        [weakSelf chooseFolderForItem:item];
         completionHandler(YES);
     }];
-    category.backgroundColor = UIColor.systemTealColor;
-    return [UISwipeActionsConfiguration configurationWithActions:@[rename, category]];
+    move.backgroundColor = UIColor.systemTealColor;
+    return [UISwipeActionsConfiguration configurationWithActions:@[rename, move]];
 }
 
 @end

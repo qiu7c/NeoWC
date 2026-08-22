@@ -278,7 +278,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     NeoWCAddFeature(interaction,
                     NeoWCItem(@"快捷回复素材库", @"长按聊天“+”使用文字、图片、视频和语音素材", @"tray.full", NeoWCSettingRowKindSwitch, NeoWCQuickReplyEnabledKey, nil, NeoWCSettingActionNone),
                     @[NeoWCItem(@"点击秒发送", @"开启后点击直接发送，长按进入编辑或预览", @"bolt.fill", NeoWCSettingRowKindSwitch, NeoWCQuickReplyInstantSendEnabledKey, nil, NeoWCSettingActionNone),
-                      NeoWCItem(@"管理素材库", @"搜索、分类、编辑、置顶和清理独立素材副本", @"square.grid.2x2", NeoWCSettingRowKindDetail, nil,
+                      NeoWCItem(@"管理素材库", @"全账号共享，支持文件夹、搜索、编辑、置顶和清理", @"square.grid.2x2", NeoWCSettingRowKindDetail, nil,
                                 NeoWCCountText(NeoWCQuickReplyStore.sharedStore.items.count), NeoWCSettingActionQuickReplyLibrary)],
                     defaults,
                     collapsed);

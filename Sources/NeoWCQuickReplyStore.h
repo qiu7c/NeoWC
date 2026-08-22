@@ -14,7 +14,7 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
 @property (nonatomic, assign) NeoWCQuickReplyType type;
 @property (nonatomic, copy) NSString *title;
 @property (nonatomic, copy) NSString *text;
-@property (nonatomic, copy) NSString *category;
+@property (nonatomic, copy, nullable) NSString *folderIdentifier;
 @property (nonatomic, copy, nullable) NSString *mediaRelativePath;
 @property (nonatomic, copy, nullable) NSString *thumbnailRelativePath;
 @property (nonatomic, assign) NSInteger sortIndex;
@@ -22,7 +22,14 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
 @property (nonatomic, strong) NSDate *createdAt;
 @property (nonatomic, copy, nullable) NSString *sourceConversation;
 @property (nonatomic, copy, nullable) NSString *sourceMessageID;
+@property (nonatomic, copy, nullable) NSString *sourceAccountIdentifier;
 @property (nonatomic, copy) NSDictionary<NSString *, id> *metadata;
+@end
+
+@interface NeoWCQuickReplyFolder : NSObject <NSCopying>
+@property (nonatomic, copy) NSString *identifier;
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, assign) NSInteger sortIndex;
 @end
 
 @interface NeoWCQuickReplyStore : NSObject
@@ -30,19 +37,19 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
 + (instancetype)sharedStore;
 
 @property (nonatomic, readonly, getter=isAvailable) BOOL available;
-@property (nonatomic, copy, readonly, nullable) NSString *accountIdentifier;
 
 - (NSArray<NeoWCQuickReplyItem *> *)items;
-- (NSArray<NSString *> *)categories;
+- (NSArray<NeoWCQuickReplyFolder *> *)folders;
 - (nullable NeoWCQuickReplyItem *)addText:(NSString *)text
                                     title:(nullable NSString *)title
-                                 category:(nullable NSString *)category
+                        folderIdentifier:(nullable NSString *)folderIdentifier
                        sourceConversation:(nullable NSString *)sourceConversation
                           sourceMessageID:(nullable NSString *)sourceMessageID
                                     error:(NSError **)error;
 - (nullable NeoWCQuickReplyItem *)addMediaAtURL:(NSURL *)sourceURL
                                            type:(NeoWCQuickReplyType)type
                                           title:(nullable NSString *)title
+                              folderIdentifier:(nullable NSString *)folderIdentifier
                              sourceConversation:(nullable NSString *)sourceConversation
                                 sourceMessageID:(nullable NSString *)sourceMessageID
                                           error:(NSError **)error;
@@ -50,9 +57,12 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
 - (BOOL)setPinned:(BOOL)pinned forIdentifier:(NSString *)identifier error:(NSError **)error;
 - (BOOL)applyOrderedIdentifiers:(NSArray<NSString *> *)identifiers error:(NSError **)error;
 - (BOOL)deleteItemWithIdentifier:(NSString *)identifier error:(NSError **)error;
-- (BOOL)addCategory:(NSString *)category error:(NSError **)error;
-- (BOOL)renameCategory:(NSString *)category toName:(NSString *)newName error:(NSError **)error;
-- (BOOL)deleteCategory:(NSString *)category error:(NSError **)error;
+- (nullable NeoWCQuickReplyFolder *)createFolderWithName:(NSString *)name error:(NSError **)error;
+- (BOOL)renameFolderWithIdentifier:(NSString *)identifier toName:(NSString *)name error:(NSError **)error;
+- (BOOL)deleteFolderWithIdentifier:(NSString *)identifier error:(NSError **)error;
+- (BOOL)moveItemWithIdentifier:(NSString *)identifier
+            toFolderIdentifier:(nullable NSString *)folderIdentifier
+                         error:(NSError **)error;
 - (nullable NSString *)absoluteMediaPathForItem:(NeoWCQuickReplyItem *)item;
 - (nullable NSString *)absoluteThumbnailPathForItem:(NeoWCQuickReplyItem *)item;
 - (unsigned long long)managedMediaSize;

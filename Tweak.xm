@@ -35,6 +35,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
 @interface WCTimeLineViewController : UIViewController
 - (void)showPhotoAlert:(id)context;
+- (void)showImagePicker:(id)context;
 @end
 
 @interface WCCommentDetailViewControllerFB : UIViewController
@@ -110,6 +111,16 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 - (id)GetContact;
 - (void)returnToOriginalMsg:(id)message;
 - (void)neowc_toggleSendConfirmation:(UILongPressGestureRecognizer *)recognizer;
+@end
+
+@interface BaseMsgContentLogicController : NSObject
+- (NSString *)getCurrentChatName;
+- (void)SendImageMessageByMMAsset:(id)asset;
+@end
+
+@interface WeixinContentLogicController : NSObject
+- (NSString *)getCurrentChatName;
+- (void)AddMsg:(id)message MsgWrap:(id)wrap;
 @end
 
 @interface VoIPBubbleMessageCellView : UIView
@@ -200,6 +211,8 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 @property (nonatomic, assign) NSUInteger m_uiGameType;
 @property (nonatomic, assign) NSUInteger m_uiGameContent;
 @property (nonatomic, copy) NSString *m_nsEmoticonMD5;
+@property (nonatomic, copy) NSString *m_nsContent;
+@property (nonatomic, copy) NSString *m_nsToUsr;
 @end
 
 @interface UploadVoiceWrap : NSObject
@@ -211,6 +224,8 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 @end
 
 @interface CMessageMgr : NSObject
+- (void)AddMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap;
+- (id)AddVideoMsg:(id)message ToUsr:(NSString *)target VideoInfo:(id)videoInfo;
 - (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap;
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap;
 - (void)AsyncOnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap;
@@ -268,7 +283,6 @@ static char NeoWCMomentsForwardTaskKey;
 static char NeoWCMomentsSaveTaskKey;
 static char NeoWCMomentsDataItemSaveTaskKey;
 static char NeoWCMomentsHighQualityMenuKey;
-static char NeoWCMomentsHighQualityPickerDelegateKey;
 static char NeoWCImageJokerPickerDelegateKey;
 static char NeoWCEmoticonPreviewLongPressKey;
 static char NeoWCMomentsOriginalTimeTextKey;
@@ -297,6 +311,7 @@ static char NeoWCReplyPanDelegateKey;
 static char NeoWCMessageDoubleTapRecognizerKey;
 static char NeoWCMessageTripleTapRecognizerKey;
 static char NeoWCReplyOriginalTransformKey;
+static char NeoWCReplyTransformSnapshotsKey;
 static char NeoWCReplyFeedbackGeneratorKey;
 static char NeoWCReplyFeedbackTriggeredKey;
 static char NeoWCReplyPanRightwardKey;
@@ -353,11 +368,12 @@ static char NeoWCChatPinnedOriginalBorderColorKey;
 static char NeoWCRedEnvelopeOriginalAttributedTextKey;
 static char NeoWCCallVoiceConfirmedKey;
 static char NeoWCCallVideoConfirmedKey;
-static char NeoWCSendConfirmationPickerBypassKey;
-static char NeoWCSendConfirmationTextBypassKey;
-static char NeoWCSendConfirmationControlBypassKey;
-static char NeoWCSendConfirmationUIControlBypassKey;
+static char NeoWCSendConfirmationNativeBypassKey;
 static char NeoWCSendConfirmationDocumentPickerUsernameKey;
+static NSString *NeoWCSendConfirmationImageBypassUsername;
+static CFTimeInterval NeoWCSendConfirmationImageBypassDeadline;
+static NSString *NeoWCSendConfirmationVideoBypassUsername;
+static CFTimeInterval NeoWCSendConfirmationVideoBypassDeadline;
 static __weak BaseMsgContentViewController *NeoWCVisibleChatController;
 static __weak id NeoWCCurrentEditImageLogicController;
 static __weak UIViewController *NeoWCActiveMomentsDetailController;
@@ -374,6 +390,10 @@ static BOOL NeoWCMethodReturnsVoid(Method method);
 static BOOL NeoWCMethodArgumentIsObject(Method method, unsigned int index);
 static BOOL NeoWCMomentCanSaveMedia(id dataItem);
 static void NeoWCSaveMomentMedia(id dataItem, UIViewController *presenter);
+@class NeoWCReplyTransformSnapshot;
+static NSArray<NeoWCReplyTransformSnapshot *> *NeoWCReplyTransformSnapshots(CommonMessageCellView *sourceCell);
+static void NeoWCApplyReplyTransform(NSArray<NeoWCReplyTransformSnapshot *> *snapshots, CGFloat offset);
+static void NeoWCRestoreReplyTransforms(NSArray<NeoWCReplyTransformSnapshot *> *snapshots);
 
 @interface NeoWCBarButtonActionProxy : NSObject
 @property (nonatomic, strong) UIBarButtonItem *originalItem;
@@ -537,6 +557,14 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
 @property (nonatomic, assign) CGFloat initialWindowX;
 @end
 
+@interface NeoWCReplyTransformSnapshot : NSObject
+@property (nonatomic, strong) UIView *view;
+@property (nonatomic, assign) CGAffineTransform transform;
+@end
+
+@implementation NeoWCReplyTransformSnapshot
+@end
+
 @interface NeoWCQuickReplyPlusGestureDelegate : NSObject <UIGestureRecognizerDelegate>
 @property (nonatomic, weak) MMInputToolView *toolView;
 @end
@@ -631,13 +659,18 @@ static void NeoWCSynchronizeReplyGesture(CommonMessageCellView *cell) {
 
     if (!hasSwipeAction) {
         if (panRecognizer) {
-            NSValue *originalTransform = objc_getAssociatedObject(cell, &NeoWCReplyOriginalTransformKey);
-            if (originalTransform) cell.transform = originalTransform.CGAffineTransformValue;
+            NSArray *snapshots = objc_getAssociatedObject(cell, &NeoWCReplyTransformSnapshotsKey);
+            if (snapshots.count) NeoWCRestoreReplyTransforms(snapshots);
+            else {
+                NSValue *originalTransform = objc_getAssociatedObject(cell, &NeoWCReplyOriginalTransformKey);
+                if (originalTransform) cell.transform = originalTransform.CGAffineTransformValue;
+            }
             [cell removeGestureRecognizer:panRecognizer];
         }
         objc_setAssociatedObject(cell, &NeoWCReplyPanRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(cell, &NeoWCReplyPanDelegateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(cell, &NeoWCReplyOriginalTransformKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &NeoWCReplyTransformSnapshotsKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(cell, &NeoWCReplyFeedbackGeneratorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(cell, &NeoWCReplyFeedbackTriggeredKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(cell, &NeoWCReplyPanRightwardKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -1381,103 +1414,13 @@ static BOOL NeoWCConfigureMomentsPermissionsActionSheet(WCActionSheet *sheet, id
     return YES;
 }
 
-@interface NeoWCMomentsOriginalMediaPickerDelegate : NSObject <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
-@property (nonatomic, weak) UIViewController *timelineController;
-@end
-
-@implementation NeoWCMomentsOriginalMediaPickerDelegate
-
-- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
-    [picker dismissViewControllerAnimated:YES completion:nil];
-}
-
-- (void)imagePickerController:(UIImagePickerController *)picker
- didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey, id> *)info {
-    UIViewController *timelineController = self.timelineController;
-    NSString *mediaType = info[UIImagePickerControllerMediaType];
-    BOOL isVideo = [mediaType isEqualToString:@"public.movie"] || [mediaType isEqualToString:@"public.video"];
-    id commitObject = nil;
-
-    if (isVideo) {
-        NSURL *videoURL = info[UIImagePickerControllerMediaURL];
-        Class draftClass = NSClassFromString(@"SightDraft");
-        SEL draftSelector = NSSelectorFromString(@"draftWithVideoURL:");
-        if (videoURL.isFileURL && draftClass && [draftClass respondsToSelector:draftSelector]) {
-            commitObject = ((id (*)(id, SEL, id))objc_msgSend)(draftClass, draftSelector, videoURL);
-        }
-    } else {
-        UIImage *image = info[UIImagePickerControllerOriginalImage];
-        Class imageClass = NSClassFromString(@"MMImage");
-        SEL initializer = NSSelectorFromString(@"initWithImage:");
-        if ([image isKindOfClass:[UIImage class]] && imageClass && [imageClass instancesRespondToSelector:initializer]) {
-            commitObject = ((id (*)(id, SEL, id))objc_msgSend)([imageClass alloc], initializer, image);
-            id phAsset = info[UIImagePickerControllerPHAsset];
-            Class assetClass = NSClassFromString(@"MMAssetForPHAssetFramework");
-            SEL assetInitializer = NSSelectorFromString(@"initWithPHAsset:IsNeedOrigin:");
-            if ([phAsset isKindOfClass:[PHAsset class]] && assetClass && [assetClass instancesRespondToSelector:assetInitializer]) {
-                id asset = ((id (*)(id, SEL, id, BOOL))objc_msgSend)([assetClass alloc], assetInitializer, phAsset, YES);
-                SEL setAsset = NSSelectorFromString(@"setM_asset:");
-                SEL assetID = NSSelectorFromString(@"assetId");
-                SEL setAssetID = NSSelectorFromString(@"setM_assetID:");
-                SEL setAssetClass = NSSelectorFromString(@"setM_assetClassNameStr:");
-                SEL setImageFromAsset = NSSelectorFromString(@"setM_imageFromAsset:");
-                if ([commitObject respondsToSelector:setAsset]) ((void (*)(id, SEL, id))objc_msgSend)(commitObject, setAsset, asset);
-                if ([asset respondsToSelector:assetID] && [commitObject respondsToSelector:setAssetID]) {
-                    id identifier = ((id (*)(id, SEL))objc_msgSend)(asset, assetID);
-                    ((void (*)(id, SEL, id))objc_msgSend)(commitObject, setAssetID, identifier);
-                }
-                if ([commitObject respondsToSelector:setAssetClass]) {
-                    ((void (*)(id, SEL, id))objc_msgSend)(commitObject, setAssetClass, NSStringFromClass([asset class]));
-                }
-                if ([commitObject respondsToSelector:setImageFromAsset]) {
-                    ((void (*)(id, SEL, id))objc_msgSend)(commitObject, setImageFromAsset, image);
-                }
-            }
-        }
-    }
-
-    [picker dismissViewControllerAnimated:YES completion:^{
-        if (!timelineController || !commitObject) {
-            NeoWCShowTransientMessage(isVideo ? @"没有取得选中的原视频，请重新选择" : @"没有取得选中的原图，请重新选择", NO);
-            return;
-        }
-        SEL reportSelector = NSSelectorFromString(@"postReportSession");
-        id reportSession = [timelineController respondsToSelector:reportSelector]
-            ? ((id (*)(id, SEL))objc_msgSend)(timelineController, reportSelector) : nil;
-        if (isVideo) {
-            SEL selector = NSSelectorFromString(@"openCommitViewControllerWithSightDraft:postReportSession:trashReportData:withExtBean:");
-            if ([timelineController respondsToSelector:selector]) {
-                ((void (*)(id, SEL, id, id, id, id))objc_msgSend)(timelineController, selector, commitObject, reportSession, nil, nil);
-                return;
-            }
-        } else {
-            SEL selector = NSSelectorFromString(@"openCommitViewControllerWithShowLocation:arrImage:postReportSession:trashReportData:withExtBean:");
-            if ([timelineController respondsToSelector:selector]) {
-                ((void (*)(id, SEL, BOOL, id, id, id, id))objc_msgSend)(timelineController, selector, YES, @[commitObject], reportSession, nil, nil);
-                return;
-            }
-        }
-        NeoWCShowTransientMessage(@"当前微信版本不支持朋友圈高清发布", NO);
-    }];
-}
-
-@end
-
 static void NeoWCOpenMomentsHighQualityPicker(UIViewController *timelineController) {
-    if (!timelineController || ![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
-        NeoWCShowTransientMessage(@"当前无法访问系统相册，请稍后重试", NO);
+    SEL selector = NSSelectorFromString(@"showImagePicker:");
+    if (!timelineController || ![timelineController respondsToSelector:selector]) {
+        NeoWCShowTransientMessage(@"当前微信版本不支持朋友圈原生媒体选择", NO);
         return;
     }
-    UIImagePickerController *picker = [UIImagePickerController new];
-    NeoWCMomentsOriginalMediaPickerDelegate *delegate = [NeoWCMomentsOriginalMediaPickerDelegate new];
-    delegate.timelineController = timelineController;
-    picker.delegate = delegate;
-    objc_setAssociatedObject(picker, &NeoWCMomentsHighQualityPickerDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
-    picker.mediaTypes = @[@"public.image", @"public.movie"];
-    picker.allowsEditing = NO;
-    picker.videoExportPreset = AVAssetExportPresetPassthrough;
-    [timelineController presentViewController:picker animated:YES completion:nil];
+    ((void (*)(id, SEL, id))objc_msgSend)(timelineController, selector, nil);
 }
 
 static void NeoWCPrepareMomentsHighQualityMenu(WCActionSheet *sheet) {
@@ -1850,6 +1793,50 @@ static NSString *NeoWCImageJokerKeyForMessage(id message) {
     if (![chatName isKindOfClass:[NSString class]] || [chatName length] == 0) return nil;
     unsigned int localID = ((unsigned int (*)(id, SEL))objc_msgSend)(message, localIDSelector);
     return localID > 0 ? [NSString stringWithFormat:@"%@_%u", chatName, localID] : nil;
+}
+
+static void NeoWCCollectReplyTransformTargets(UIView *view,
+                                               NSString *messageKey,
+                                               NSMutableArray<NeoWCReplyTransformSnapshot *> *snapshots) {
+    if (!view || !messageKey.length) return;
+    id message = NeoWCMessageWrapForCell(view);
+    NSString *candidateKey = NeoWCImageJokerKeyForMessage(message);
+    if ([candidateKey isEqualToString:messageKey]) {
+        NeoWCReplyTransformSnapshot *snapshot = [NeoWCReplyTransformSnapshot new];
+        snapshot.view = view;
+        snapshot.transform = view.transform;
+        [snapshots addObject:snapshot];
+        return;
+    }
+    for (UIView *subview in view.subviews) NeoWCCollectReplyTransformTargets(subview, messageKey, snapshots);
+}
+
+static NSArray<NeoWCReplyTransformSnapshot *> *NeoWCReplyTransformSnapshots(CommonMessageCellView *sourceCell) {
+    NSString *messageKey = NeoWCImageJokerKeyForMessage(NeoWCMessageWrapForCell(sourceCell));
+    NSMutableArray<NeoWCReplyTransformSnapshot *> *snapshots = [NSMutableArray array];
+    if (messageKey.length && sourceCell.window) {
+        NeoWCCollectReplyTransformTargets(sourceCell.window, messageKey, snapshots);
+    }
+    if (snapshots.count == 0 && sourceCell) {
+        NeoWCReplyTransformSnapshot *snapshot = [NeoWCReplyTransformSnapshot new];
+        snapshot.view = sourceCell;
+        snapshot.transform = sourceCell.transform;
+        [snapshots addObject:snapshot];
+    }
+    return snapshots;
+}
+
+static void NeoWCApplyReplyTransform(NSArray<NeoWCReplyTransformSnapshot *> *snapshots, CGFloat offset) {
+    for (NeoWCReplyTransformSnapshot *snapshot in snapshots) {
+        UIView *view = snapshot.view;
+        if (view.window) view.transform = CGAffineTransformTranslate(snapshot.transform, offset, 0.0);
+    }
+}
+
+static void NeoWCRestoreReplyTransforms(NSArray<NeoWCReplyTransformSnapshot *> *snapshots) {
+    for (NeoWCReplyTransformSnapshot *snapshot in snapshots) {
+        if (snapshot.view) snapshot.view.transform = snapshot.transform;
+    }
 }
 
 static id NeoWCImageJokerMessageForObject(id object) {
@@ -4377,22 +4364,27 @@ static void NeoWCSetMomentsOriginalFlag(id object) {
 
 static void NeoWCSetMomentsCommitImagesOriginal(id controller) {
     if (!controller || !NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey)) return;
-    Class imageClass = NSClassFromString(@"MMImage");
-    for (Class cls = object_getClass(controller); cls && cls != NSObject.class; cls = class_getSuperclass(cls)) {
-        unsigned int count = 0;
-        Ivar *ivars = class_copyIvarList(cls, &count);
-        for (unsigned int index = 0; index < count; index++) {
-            const char *type = ivar_getTypeEncoding(ivars[index]);
-            if (!type || type[0] != '@') continue;
-            id value = nil;
-            @try { value = object_getIvar(controller, ivars[index]); }
-            @catch (__unused NSException *exception) { value = nil; }
-            if (![value isKindOfClass:NSArray.class]) continue;
-            for (id child in value) {
-                if (imageClass && [child isKindOfClass:imageClass]) NeoWCSetMomentsOriginalFlag(child);
+    SEL imageSelectorControllerSelector = NSSelectorFromString(@"imageSelectorController");
+    SEL imagesSelector = NSSelectorFromString(@"arrImages");
+    SEL assetSelector = NSSelectorFromString(@"m_asset");
+    SEL needOriginSelector = NSSelectorFromString(@"setM_isNeedOriginImage:");
+    SEL useAssetSelector = NSSelectorFromString(@"setM_isUseMMAsset:");
+    id imageSelectorController = [controller respondsToSelector:imageSelectorControllerSelector]
+        ? ((id (*)(id, SEL))objc_msgSend)(controller, imageSelectorControllerSelector) : nil;
+    id images = [imageSelectorController respondsToSelector:imagesSelector]
+        ? ((id (*)(id, SEL))objc_msgSend)(imageSelectorController, imagesSelector) : nil;
+    id stableImages = [images respondsToSelector:@selector(copy)] ? [images copy] : images;
+    if ([stableImages conformsToProtocol:@protocol(NSFastEnumeration)]) {
+        for (id image in stableImages) {
+            id asset = [image respondsToSelector:assetSelector]
+                ? ((id (*)(id, SEL))objc_msgSend)(image, assetSelector) : nil;
+            if ([asset respondsToSelector:needOriginSelector]) {
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(asset, needOriginSelector, YES);
             }
         }
-        free(ivars);
+    }
+    if ([controller respondsToSelector:useAssetSelector]) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, useAssetSelector, YES);
     }
 }
 
@@ -4564,9 +4556,8 @@ static NSDictionary *NeoWCQuickReplyVoiceMetadata(id message) {
 
 static void NeoWCCommitMessageToQuickReply(id message, NeoWCQuickReplyType type, NSString *session,
                                            NSString *messageID, NSString *path, NSString *remark,
-                                           NSString *category) {
+                                           NSString *folderIdentifier) {
     NSString *trimmedRemark = [remark stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    NSString *trimmedCategory = [category stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     NSUInteger beforeCount = NeoWCQuickReplyStore.sharedStore.items.count;
     NSError *error = nil;
     NeoWCQuickReplyItem *item = nil;
@@ -4574,7 +4565,7 @@ static void NeoWCCommitMessageToQuickReply(id message, NeoWCQuickReplyType type,
         NSString *text = NeoWCTweakSafeValue(message, @"m_nsContent");
         item = [NeoWCQuickReplyStore.sharedStore addText:text ?: @""
                                                     title:trimmedRemark
-                                                 category:trimmedCategory
+                                        folderIdentifier:folderIdentifier
                                        sourceConversation:session
                                           sourceMessageID:messageID
                                                     error:&error];
@@ -4582,12 +4573,12 @@ static void NeoWCCommitMessageToQuickReply(id message, NeoWCQuickReplyType type,
         item = [NeoWCQuickReplyStore.sharedStore addMediaAtURL:[NSURL fileURLWithPath:path]
                                                           type:type
                                                          title:trimmedRemark
+                                              folderIdentifier:folderIdentifier
                                             sourceConversation:session
                                                sourceMessageID:messageID
                                                          error:&error];
         if (item && NeoWCQuickReplyStore.sharedStore.items.count > beforeCount) {
             if (type == NeoWCQuickReplyTypeVoice) item.metadata = NeoWCQuickReplyVoiceMetadata(message);
-            item.category = trimmedCategory;
             [NeoWCQuickReplyStore.sharedStore updateItem:item error:&error];
         }
     }
@@ -4597,30 +4588,30 @@ static void NeoWCCommitMessageToQuickReply(id message, NeoWCQuickReplyType type,
     else NeoWCShowTransientMessage(@"加入快捷回复失败", NO);
 }
 
-static void NeoWCPresentQuickReplyCategoryPicker(UIViewController *presenter, id message, NeoWCQuickReplyType type,
-                                                  NSString *session, NSString *messageID, NSString *path,
-                                                  NSString *remark) {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择素材分类" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-    void (^commit)(NSString *) = ^(NSString *category) {
-        NeoWCCommitMessageToQuickReply(message, type, session, messageID, path, remark, category);
+static void NeoWCPresentQuickReplyFolderPicker(UIViewController *presenter, id message, NeoWCQuickReplyType type,
+                                                NSString *session, NSString *messageID, NSString *path,
+                                                NSString *remark) {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"存入文件夹" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    void (^commit)(NSString *) = ^(NSString *folderIdentifier) {
+        NeoWCCommitMessageToQuickReply(message, type, session, messageID, path, remark, folderIdentifier);
     };
-    [sheet addAction:[UIAlertAction actionWithTitle:@"未分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        commit(@"");
+    [sheet addAction:[UIAlertAction actionWithTitle:@"素材库根目录" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        commit(nil);
     }]];
-    for (NSString *category in NeoWCQuickReplyStore.sharedStore.categories) {
-        [sheet addAction:[UIAlertAction actionWithTitle:category style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-            commit(category);
+    for (NeoWCQuickReplyFolder *folder in NeoWCQuickReplyStore.sharedStore.folders) {
+        [sheet addAction:[UIAlertAction actionWithTitle:folder.name style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            commit(folder.identifier);
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"新建分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建分类" message:nil preferredStyle:UIAlertControllerStyleAlert];
-        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"分类名称"; }];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"新建文件夹" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建文件夹" message:nil preferredStyle:UIAlertControllerStyleAlert];
+        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"文件夹名称"; }];
         [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
         [alert addAction:[UIAlertAction actionWithTitle:@"创建并导入" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *saveAction) {
-            NSString *name = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
             NSError *error = nil;
-            if ([NeoWCQuickReplyStore.sharedStore addCategory:name error:&error]) commit(name);
-            else NeoWCShowTransientMessage(error.localizedDescription ?: @"创建分类失败", NO);
+            NeoWCQuickReplyFolder *folder = [NeoWCQuickReplyStore.sharedStore createFolderWithName:alert.textFields.firstObject.text error:&error];
+            if (folder) commit(folder.identifier);
+            else NeoWCShowTransientMessage(error.localizedDescription ?: @"创建文件夹失败", NO);
         }]];
         [presenter presentViewController:alert animated:YES completion:nil];
     }]];
@@ -4652,13 +4643,13 @@ static void NeoWCAddMessageToQuickReply(id cell) {
     NSString *session = NeoWCSessionForMessage(message);
     NSString *messageID = NeoWCQuickReplySourceMessageID(message);
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加入快捷回复素材库"
-                                                                   message:@"可填写备注并选择分类。"
+                                                                   message:@"可填写备注并选择保存文件夹。"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"备注（可选）"; }];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"选择分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        NeoWCPresentQuickReplyCategoryPicker(presenter, message, type, session, messageID, path,
-                                             alert.textFields.firstObject.text ?: @"");
+    [alert addAction:[UIAlertAction actionWithTitle:@"选择文件夹" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NeoWCPresentQuickReplyFolderPicker(presenter, message, type, session, messageID, path,
+                                           alert.textFields.firstObject.text ?: @"");
     }]];
     [presenter presentViewController:alert animated:YES completion:nil];
 }
@@ -5748,144 +5739,58 @@ didReceiveNotificationResponse:(id)response
 
 %end
 
-static MMInputToolView *NeoWCInputToolViewContainingView(UIView *view) {
-    Class toolClass = objc_getClass("MMInputToolView");
-    for (UIView *candidate = view; candidate; candidate = candidate.superview) {
-        if (toolClass && [candidate isKindOfClass:toolClass]) return (MMInputToolView *)candidate;
-    }
-    return nil;
-}
-
-static BOOL NeoWCStringIndicatesSendAction(NSString *value) {
-    NSString *text = [[value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] lowercaseString];
-    return [text containsString:@"发送"] || [text isEqualToString:@"send"] ||
-           [text hasPrefix:@"send "] || [text containsString:@"sendbutton"] ||
-           [text containsString:@"send_button"];
-}
-
-static BOOL NeoWCViewContainsExplicitSendLabel(UIView *view, NSUInteger depth) {
-    if (!view || depth > 3) return NO;
-    if (NeoWCStringIndicatesSendAction(view.accessibilityLabel) ||
-        NeoWCStringIndicatesSendAction(view.accessibilityIdentifier)) return YES;
-    if ([view isKindOfClass:UIButton.class]) {
-        if (NeoWCStringIndicatesSendAction(((UIButton *)view).currentTitle)) return YES;
-    }
-    if ([view isKindOfClass:UILabel.class]) {
-        if (NeoWCStringIndicatesSendAction(((UILabel *)view).text)) return YES;
-    }
-    for (UIView *subview in view.subviews) {
-        if (NeoWCViewContainsExplicitSendLabel(subview, depth + 1)) return YES;
-    }
-    return NO;
-}
-
-static BOOL NeoWCControlIsExplicitSendButton(id source) {
-    return [source isKindOfClass:UIControl.class] &&
-           NeoWCViewContainsExplicitSendLabel((UIView *)source, 0);
-}
-
-%hook UIControl
-
-- (void)sendAction:(SEL)action to:(id)target forEvent:(UIEvent *)event {
-    if ([objc_getAssociatedObject(self, &NeoWCSendConfirmationUIControlBypassKey) boolValue]) {
-        objc_setAssociatedObject(self, &NeoWCSendConfirmationUIControlBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(self, &NeoWCSendConfirmationControlBypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        %orig(action, target, event);
-        return;
-    }
+static BaseMsgContentViewController *NeoWCSendConfirmationPresenterForTarget(NSString *target) {
+    if (!NSThread.isMainThread || UIApplication.sharedApplication.applicationState != UIApplicationStateActive ||
+        target.length == 0 || !NeoWCSendConfirmationIsProtectedConversation(target)) return nil;
     BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
-    NSString *lockedUserName = [NeoWCChatUserName(controller) copy];
-    BOOL belongsToChat = self.window && controller.view.window &&
-                         ([self isDescendantOfView:controller.view] || self == controller.view);
-    if (!belongsToChat || !NeoWCControlIsExplicitSendButton(self) || lockedUserName.length == 0 ||
-        !NeoWCSendConfirmationIsProtectedConversation(lockedUserName)) {
-        %orig(action, target, event);
-        return;
-    }
-    Class toolClass = objc_getClass("MMInputToolView");
-    MMInputToolView *toolView = NeoWCInputToolViewContainingView(self);
-    if (!toolView && toolClass && [target isKindOfClass:toolClass]) toolView = (MMInputToolView *)target;
-    __weak UIControl *weakControl = self;
-    __weak MMInputToolView *weakToolView = toolView;
-    __weak BaseMsgContentViewController *weakController = controller;
-    id retainedTarget = target;
-    UIEvent *retainedEvent = event;
-    BOOL held = NeoWCPresentSendConfirmationIfNeeded(controller,
-                                                      lockedUserName,
-                                                      @"即将发送输入栏中的消息。",
-                                                      ^BOOL{
-        UIControl *strongControl = weakControl;
-        BaseMsgContentViewController *strongController = weakController;
-        return strongControl.window && strongController.view.window &&
-               [NeoWCChatUserName(strongController) isEqualToString:lockedUserName];
-    }, ^{
-        UIControl *strongControl = weakControl;
-        MMInputToolView *strongToolView = weakToolView;
-        if (!strongControl.window) return;
-        objc_setAssociatedObject(strongControl, &NeoWCSendConfirmationUIControlBypassKey, @YES,
-                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        if (strongToolView) objc_setAssociatedObject(strongToolView, &NeoWCSendConfirmationTextBypassKey, @YES,
-                                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [strongControl sendAction:action to:retainedTarget forEvent:retainedEvent];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (strongToolView) objc_setAssociatedObject(strongToolView, &NeoWCSendConfirmationTextBypassKey, nil,
-                                                         OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        });
-    });
-    if (!held) %orig(action, target, event);
+    if (!controller.view.window || ![NeoWCChatUserName(controller) isEqualToString:target]) return nil;
+    return controller;
 }
 
-%end
-
-%hook UIApplication
-
-- (BOOL)sendAction:(SEL)action to:(id)target from:(id)source forEvent:(UIEvent *)event {
-    if ([objc_getAssociatedObject(source, &NeoWCSendConfirmationControlBypassKey) boolValue]) {
-        objc_setAssociatedObject(source, &NeoWCSendConfirmationControlBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        return %orig(action, target, source, event);
-    }
-    UIView *sourceView = [source isKindOfClass:UIView.class] ? (UIView *)source : nil;
-    MMInputToolView *toolView = sourceView
-        ? NeoWCInputToolViewContainingView((UIView *)source) : nil;
-    Class toolClass = objc_getClass("MMInputToolView");
-    if (!toolView && toolClass && [target isKindOfClass:toolClass]) toolView = (MMInputToolView *)target;
-    BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
-    NSString *lockedUserName = [NeoWCChatUserName(controller) copy];
-    BOOL belongsToChat = sourceView.window && controller.view.window &&
-                         ([sourceView isDescendantOfView:controller.view] || sourceView == controller.view);
-    if (!belongsToChat || !NeoWCControlIsExplicitSendButton(source) ||
-        !controller.view.window || lockedUserName.length == 0 ||
-        !NeoWCSendConfirmationIsProtectedConversation(lockedUserName)) {
-        return %orig(action, target, source, event);
-    }
-    __weak UIApplication *weakApplication = self;
-    __weak MMInputToolView *weakToolView = toolView;
-    __weak BaseMsgContentViewController *weakController = controller;
-    id retainedTarget = target;
-    id retainedSource = source;
-    UIEvent *retainedEvent = event;
-    BOOL held = NeoWCPresentSendConfirmationIfNeeded(controller,
-                                                      lockedUserName,
-                                                      @"即将发送输入栏中的消息。",
-                                                      ^BOOL{
-        BaseMsgContentViewController *strongController = weakController;
-        return sourceView.window && strongController.view.window &&
-               [NeoWCChatUserName(strongController) isEqualToString:lockedUserName];
-    }, ^{
-        UIApplication *application = weakApplication;
-        MMInputToolView *strongToolView = weakToolView;
-        if (!application || !sourceView.window) return;
-        objc_setAssociatedObject(retainedSource, &NeoWCSendConfirmationControlBypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        if (strongToolView) objc_setAssociatedObject(strongToolView, &NeoWCSendConfirmationTextBypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [application sendAction:action to:retainedTarget from:retainedSource forEvent:retainedEvent];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (strongToolView) objc_setAssociatedObject(strongToolView, &NeoWCSendConfirmationTextBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        });
-    });
-    return held ? YES : %orig(action, target, source, event);
+static NSString *NeoWCSendConfirmationTextSummary(id wrap) {
+    NSString *content = NeoWCTweakSafeValue(wrap, @"m_nsContent");
+    if (![content isKindOfClass:NSString.class]) content = @"";
+    if (content.length > 60) content = [[content substringToIndex:60] stringByAppendingString:@"…"];
+    return content.length > 0 ? [NSString stringWithFormat:@"文字：%@", content] : @"即将发送文字消息。";
 }
 
-%end
+static BOOL NeoWCSendConfirmationValidateTarget(BaseMsgContentViewController *controller, NSString *target) {
+    return controller.view.window && [NeoWCChatUserName(controller) isEqualToString:target];
+}
+
+static void NeoWCArmImageSendConfirmationBypass(NSString *target) {
+    NeoWCSendConfirmationImageBypassUsername = [target copy];
+    NeoWCSendConfirmationImageBypassDeadline = CACurrentMediaTime() + 3.0;
+}
+
+static BOOL NeoWCConsumeImageSendConfirmationBypass(NSString *target) {
+    CFTimeInterval now = CACurrentMediaTime();
+    BOOL matches = target.length > 0 &&
+        [NeoWCSendConfirmationImageBypassUsername isEqualToString:target] &&
+        now <= NeoWCSendConfirmationImageBypassDeadline;
+    if (matches || now > NeoWCSendConfirmationImageBypassDeadline) {
+        NeoWCSendConfirmationImageBypassUsername = nil;
+        NeoWCSendConfirmationImageBypassDeadline = 0.0;
+    }
+    return matches;
+}
+
+static void NeoWCArmVideoSendConfirmationBypass(NSString *target) {
+    NeoWCSendConfirmationVideoBypassUsername = [target copy];
+    NeoWCSendConfirmationVideoBypassDeadline = CACurrentMediaTime() + 3.0;
+}
+
+static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
+    CFTimeInterval now = CACurrentMediaTime();
+    BOOL matches = target.length > 0 &&
+        [NeoWCSendConfirmationVideoBypassUsername isEqualToString:target] &&
+        now <= NeoWCSendConfirmationVideoBypassDeadline;
+    if (matches || now > NeoWCSendConfirmationVideoBypassDeadline) {
+        NeoWCSendConfirmationVideoBypassUsername = nil;
+        NeoWCSendConfirmationVideoBypassDeadline = 0.0;
+    }
+    return matches;
+}
 
 %hook MMInputToolView
 
@@ -5895,45 +5800,6 @@ static BOOL NeoWCControlIsExplicitSendButton(id source) {
         NeoWCApplyChatInputRoundingToToolView(self);
     }
     NeoWCSynchronizeQuickReplyPlusGesture(self);
-}
-
-- (void)sendMsgWithText:(id)text {
-    if ([objc_getAssociatedObject(self, &NeoWCSendConfirmationTextBypassKey) boolValue]) {
-        %orig(text);
-        __weak MMInputToolView *weakToolView = self;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            objc_setAssociatedObject(weakToolView, &NeoWCSendConfirmationTextBypassKey,
-                                     nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        });
-        return;
-    }
-    BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
-    NSString *lockedUserName = [NeoWCChatUserName(controller) copy];
-    if (!self.window || !controller.view.window || lockedUserName.length == 0 ||
-        !NeoWCSendConfirmationIsProtectedConversation(lockedUserName)) {
-        %orig(text);
-        return;
-    }
-    NSString *body = [text isKindOfClass:NSString.class] ? text : nil;
-    NSString *preview = body.length > 60 ? [[body substringToIndex:60] stringByAppendingString:@"…"] : body;
-    __weak MMInputToolView *weakToolView = self;
-    __weak BaseMsgContentViewController *weakController = controller;
-    id retainedText = text;
-    BOOL held = NeoWCPresentSendConfirmationIfNeeded(controller,
-                                                      lockedUserName,
-                                                      preview.length > 0 ? [NSString stringWithFormat:@"文字：%@", preview] : @"即将发送文字消息。",
-                                                      ^BOOL{
-        MMInputToolView *strongToolView = weakToolView;
-        BaseMsgContentViewController *strongController = weakController;
-        return strongToolView.window && strongController.view.window &&
-               [NeoWCChatUserName(strongController) isEqualToString:lockedUserName];
-    }, ^{
-        MMInputToolView *strongToolView = weakToolView;
-        if (!strongToolView.window) return;
-        objc_setAssociatedObject(strongToolView, &NeoWCSendConfirmationTextBypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        ((void (*)(id, SEL, id))objc_msgSend)(strongToolView, @selector(sendMsgWithText:), retainedText);
-    });
-    if (!held) %orig(text);
 }
 
 %new
@@ -6107,6 +5973,8 @@ static BOOL NeoWCSendQuickReplyTextNow(BaseMsgContentViewController *controller,
     NeoWCTweakSetValue(wrap, @"m_nsContent", text);
     NeoWCTweakSetValue(wrap, @"m_uiStatus", @1);
     NeoWCTweakSetValue(wrap, @"m_uiCreateTime", @(now));
+    objc_setAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey, @YES,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     ((void (*)(id, SEL, id, id))objc_msgSend)(manager, sendSelector, lockedUserName, wrap);
     return YES;
 }
@@ -6161,6 +6029,8 @@ static BOOL NeoWCSendQuickReplyImageNow(BaseMsgContentViewController *controller
     SEL sendSelector = sel_registerName("forwardNoConfirmForMsgList:toContacts:");
     if (!image || !contact || !providerClass || ![providerClass respondsToSelector:makeSelector] || !forwardClass) return NO;
     id message = ((id (*)(id, SEL, id, id))objc_msgSend)(providerClass, makeSelector, image, contact);
+    if (message) objc_setAssociatedObject(message, &NeoWCSendConfirmationNativeBypassKey, @YES,
+                                          OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     id logic = message ? [forwardClass new] : nil;
     if (!logic || ![logic respondsToSelector:sendSelector]) return NO;
     NeoWCMaterialSendSession *session = [NeoWCMaterialSendSession new];
@@ -6192,26 +6062,91 @@ static UIImage *NeoWCQuickReplyVideoThumbnail(NSString *path) {
     return image;
 }
 
+static id NeoWCQuickReplyVideoLogicController(BaseMsgContentViewController *controller) {
+    if (!controller) return nil;
+    id candidate = NeoWCTweakSafeValue(controller, @"m_delegate");
+    if (!candidate) {
+        SEL delegateSelector = sel_registerName("m_delegate");
+        if ([controller respondsToSelector:delegateSelector]) {
+            @try {
+                candidate = ((id (*)(id, SEL))objc_msgSend)(controller, delegateSelector);
+            } @catch (__unused NSException *exception) {
+                candidate = nil;
+            }
+        }
+    }
+    if (candidate) return candidate;
+
+    id manager = NeoWCServiceForClass(objc_getClass("MMMsgLogicManager"));
+    for (NSString *selectorName in @[@"getTopLogicController", @"topLogicController", @"GetCurrentLogicController"]) {
+        SEL selector = NSSelectorFromString(selectorName);
+        if (![manager respondsToSelector:selector]) continue;
+        @try {
+            candidate = ((id (*)(id, SEL))objc_msgSend)(manager, selector);
+        } @catch (__unused NSException *exception) {
+            candidate = nil;
+        }
+        if (candidate) return candidate;
+    }
+    return nil;
+}
+
 static BOOL NeoWCSendQuickReplyVideoNow(BaseMsgContentViewController *controller,
                                         NSString *lockedUserName,
                                         NSString *path,
-                                        NeoWCQuickReplyItem *item) {
+                                        NeoWCQuickReplyItem *item,
+                                        NSString **failureReason) {
     if (!controller.view.window || ![NeoWCChatUserName(controller) isEqualToString:lockedUserName] ||
-        ![NSFileManager.defaultManager fileExistsAtPath:path]) return NO;
-    id imageController = NeoWCTweakSafeValue(controller, @"m_imageController");
+        ![NSFileManager.defaultManager fileExistsAtPath:path]) {
+        if (failureReason) *failureReason = @"原会话或视频文件已失效";
+        return NO;
+    }
+    id logicController = NeoWCQuickReplyVideoLogicController(controller);
+    if (!logicController) {
+        if (failureReason) *failureReason = @"无法取得当前聊天的视频逻辑控制器";
+        NeoWCLog(@"快捷视频发送失败：BaseMsg=%@，未取得 m_delegate 或 MMMsgLogicManager controller",
+                 NSStringFromClass(controller.class));
+        return NO;
+    }
+    id imageController = NeoWCTweakSafeValue(logicController, @"m_imageController");
     if (!imageController) {
         SEL getter = sel_registerName("m_imageController");
-        if ([controller respondsToSelector:getter]) imageController = ((id (*)(id, SEL))objc_msgSend)(controller, getter);
+        if ([logicController respondsToSelector:getter]) {
+            @try {
+                imageController = ((id (*)(id, SEL))objc_msgSend)(logicController, getter);
+            } @catch (__unused NSException *exception) {
+                imageController = nil;
+            }
+        }
+    }
+    if (!imageController) {
+        if (failureReason) *failureReason = @"当前聊天没有可用的视频发送控制器";
+        NeoWCLog(@"快捷视频发送失败：logic=%@，未取得 m_imageController",
+                 NSStringFromClass([logicController class]));
+        return NO;
     }
     SEL selector = sel_registerName("onShortVideoTaken:thumbImg:editVideoAttr:paramModel:");
-    if (![imageController respondsToSelector:selector]) return NO;
+    if (![imageController respondsToSelector:selector]) {
+        if (failureReason) *failureReason = @"当前微信的视频发送方法已变化";
+        NeoWCLog(@"快捷视频发送失败：imageController=%@ 不响应 %@",
+                 NSStringFromClass([imageController class]), NSStringFromSelector(selector));
+        return NO;
+    }
     NSString *thumbnailPath = [NeoWCQuickReplyStore.sharedStore absoluteThumbnailPathForItem:item];
     UIImage *thumbnail = thumbnailPath.length > 0 ? [UIImage imageWithContentsOfFile:thumbnailPath] : nil;
     if (!thumbnail) thumbnail = NeoWCQuickReplyVideoThumbnail(path);
-    if (!thumbnail) return NO;
+    if (!thumbnail) {
+        if (failureReason) *failureReason = @"无法生成视频缩略图";
+        return NO;
+    }
     @try {
+        NeoWCArmVideoSendConfirmationBypass(lockedUserName);
         ((void (*)(id, SEL, id, id, id, id))objc_msgSend)(imageController, selector, path, thumbnail, nil, nil);
-    } @catch (__unused NSException *exception) {
+    } @catch (NSException *exception) {
+        NeoWCSendConfirmationVideoBypassUsername = nil;
+        NeoWCSendConfirmationVideoBypassDeadline = 0.0;
+        if (failureReason) *failureReason = @"调用微信视频发送方法失败";
+        NeoWCLog(@"快捷视频发送异常：%@", exception.reason ?: exception.name);
         return NO;
     }
     return YES;
@@ -6249,12 +6184,13 @@ static void NeoWCSendQuickReplyMediaWithConfirmation(BaseMsgContentViewControlle
     __weak BaseMsgContentViewController *weakController = controller;
     dispatch_block_t sendAction = ^{
         BaseMsgContentViewController *strongController = weakController;
+        NSString *failureReason = nil;
         BOOL sent = item.type == NeoWCQuickReplyTypeImage
             ? NeoWCSendQuickReplyImageNow(strongController, lockedUserName, path)
             : (item.type == NeoWCQuickReplyTypeVideo
-                ? NeoWCSendQuickReplyVideoNow(strongController, lockedUserName, path, item)
+                ? NeoWCSendQuickReplyVideoNow(strongController, lockedUserName, path, item, &failureReason)
                 : NeoWCSendQuickReplyVoiceNow(strongController, lockedUserName, path, item));
-        if (!sent) NeoWCShowTransientMessage(@"微信媒体发送接口已变化，未发送素材", NO);
+        if (!sent) NeoWCShowTransientMessage(failureReason ?: @"微信媒体发送接口已变化，未发送素材", NO);
     };
     BOOL held = NeoWCPresentSendConfirmationIfNeeded(controller,
                                                       lockedUserName,
@@ -8825,7 +8761,110 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 %end
 
+%hook BaseMsgContentLogicController
+
+- (void)SendImageMessageByMMAsset:(id)asset {
+    NSString *target = [self getCurrentChatName];
+    BaseMsgContentViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    if (!presenter) {
+        %orig(asset);
+        return;
+    }
+    __weak BaseMsgContentViewController *weakPresenter = presenter;
+    id retainedAsset = asset;
+    BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter, target, @"图片：1 张", ^BOOL{
+        return NeoWCSendConfirmationValidateTarget(weakPresenter, target);
+    }, ^{
+        NeoWCArmImageSendConfirmationBypass(target);
+        %orig(retainedAsset);
+    });
+    if (!held) %orig(asset);
+}
+
+%end
+
+%hook WeixinContentLogicController
+
+- (void)AddMsg:(id)message MsgWrap:(id)wrap {
+    if ([objc_getAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey) boolValue]) {
+        objc_setAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey, nil,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        %orig(message, wrap);
+        return;
+    }
+    NSUInteger messageType = [NeoWCTweakSafeValue(wrap, @"m_uiMessageType") unsignedIntegerValue];
+    NSString *target = NeoWCTweakSafeValue(wrap, @"m_nsToUsr");
+    if (messageType != 3 || ![target isKindOfClass:NSString.class] ||
+        NeoWCConsumeImageSendConfirmationBypass(target)) {
+        %orig(message, wrap);
+        return;
+    }
+    BaseMsgContentViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    if (!presenter) {
+        %orig(message, wrap);
+        return;
+    }
+    __weak BaseMsgContentViewController *weakPresenter = presenter;
+    id retainedMessage = message;
+    id retainedWrap = wrap;
+    BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter, target, @"图片：1 张", ^BOOL{
+        return NeoWCSendConfirmationValidateTarget(weakPresenter, target);
+    }, ^{
+        %orig(retainedMessage, retainedWrap);
+    });
+    if (!held) %orig(message, wrap);
+}
+
+%end
+
 %hook CMessageMgr
+
+- (void)AddMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap {
+    if ([objc_getAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey) boolValue]) {
+        objc_setAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey, nil,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        %orig(target, wrap);
+        return;
+    }
+    if (![target isKindOfClass:NSString.class] || wrap.m_uiMessageType != 1) {
+        %orig(target, wrap);
+        return;
+    }
+    BaseMsgContentViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    if (!presenter) {
+        %orig(target, wrap);
+        return;
+    }
+    __weak BaseMsgContentViewController *weakPresenter = presenter;
+    NSString *summary = NeoWCSendConfirmationTextSummary(wrap);
+    NSString *retainedTarget = [target copy];
+    CMessageWrap *retainedWrap = wrap;
+    BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter, target, summary, ^BOOL{
+        return NeoWCSendConfirmationValidateTarget(weakPresenter, retainedTarget);
+    }, ^{
+        %orig(retainedTarget, retainedWrap);
+    });
+    if (!held) %orig(target, wrap);
+}
+
+- (id)AddVideoMsg:(id)message ToUsr:(NSString *)target VideoInfo:(id)videoInfo {
+    if (![target isKindOfClass:NSString.class] || NeoWCConsumeVideoSendConfirmationBypass(target)) {
+        return %orig(message, target, videoInfo);
+    }
+    BaseMsgContentViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    if (!presenter) return %orig(message, target, videoInfo);
+    __weak BaseMsgContentViewController *weakPresenter = presenter;
+    id retainedMessage = message;
+    NSString *retainedTarget = [target copy];
+    id retainedVideoInfo = videoInfo;
+    BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter, target, @"视频：1 个", ^BOOL{
+        return NeoWCSendConfirmationValidateTarget(weakPresenter, retainedTarget);
+    }, ^{
+        id ignoredResult = %orig(retainedMessage, retainedTarget, retainedVideoInfo);
+        (void)ignoredResult;
+    });
+    return held ? nil : %orig(message, target, videoInfo);
+}
 
 - (void)AsyncOnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
     if (NeoWCShouldBlockIncomingMessage(sessionUserName, wrap)) {
@@ -9041,6 +9080,10 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
                                  &NeoWCReplyOriginalTransformKey,
                                  [NSValue valueWithCGAffineTransform:self.transform],
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(self,
+                                 &NeoWCReplyTransformSnapshotsKey,
+                                 NeoWCReplyTransformSnapshots(self),
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
         [feedback prepare];
         objc_setAssociatedObject(self, &NeoWCReplyFeedbackGeneratorKey, feedback, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -9053,13 +9096,16 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
         ? originalTransformValue.CGAffineTransformValue
         : CGAffineTransformIdentity;
     BOOL rightward = [objc_getAssociatedObject(self, &NeoWCReplyPanRightwardKey) boolValue];
+    NSArray<NeoWCReplyTransformSnapshot *> *snapshots = objc_getAssociatedObject(self, &NeoWCReplyTransformSnapshotsKey);
 
     if (recognizer.state == UIGestureRecognizerStateChanged) {
         CGFloat distance = MAX(0.0, rightward ? translation.x : -translation.x);
         if (distance > triggerDistance) {
             distance = triggerDistance + MIN(10.0, (distance - triggerDistance) * 0.18);
         }
-        self.transform = CGAffineTransformTranslate(originalTransform, rightward ? distance : -distance, 0.0);
+        CGFloat offset = rightward ? distance : -distance;
+        if (snapshots.count) NeoWCApplyReplyTransform(snapshots, offset);
+        else self.transform = CGAffineTransformTranslate(originalTransform, offset, 0.0);
         if (distance >= triggerDistance &&
             ![objc_getAssociatedObject(self, &NeoWCReplyFeedbackTriggeredKey) boolValue]) {
             UIImpactFeedbackGenerator *feedback = objc_getAssociatedObject(self, &NeoWCReplyFeedbackGeneratorKey);
@@ -9093,13 +9139,15 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
           initialSpringVelocity:0.25
                         options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionAllowUserInteraction
                      animations:^{
-                         weakCell.transform = originalTransform;
+                         if (snapshots.count) NeoWCRestoreReplyTransforms(snapshots);
+                         else weakCell.transform = originalTransform;
                      }
                      completion:^(BOOL finished) {
                          (void)finished;
                           CommonMessageCellView *cell = weakCell;
                           if (!cell) return;
                           objc_setAssociatedObject(cell, &NeoWCReplyOriginalTransformKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                          objc_setAssociatedObject(cell, &NeoWCReplyTransformSnapshotsKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                           objc_setAssociatedObject(cell, &NeoWCReplyFeedbackGeneratorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                           objc_setAssociatedObject(cell, &NeoWCReplyFeedbackTriggeredKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                           objc_setAssociatedObject(cell, &NeoWCReplyPanRightwardKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -10086,196 +10134,6 @@ static BOOL NeoWCPresentCallConfirmation(VoIPBubbleMessageCellView *cell, BOOL v
 
 %end
 
-static void (*NeoWCOriginalAssetPickerSendSelectedMedia)(id, SEL);
-static void (*NeoWCOriginalAssetPickerOnAssetSend)(id, SEL, id);
-static void (*NeoWCOriginalAssetPickerSendImageObject)(id, SEL, id);
-static void (*NeoWCOriginalAssetPickerSendImageScalar)(id, SEL, uintptr_t);
-static void (*NeoWCOriginalAssetPickerSendVideo)(id, SEL, id);
-static void (*NeoWCOriginalAssetPickerPreviewFinished)(id, SEL, id, id, BOOL);
-static BOOL NeoWCDidInstallAssetPickerConfirmationHooks = NO;
-
-static const char *NeoWCUnqualifiedType(const char *type) {
-    if (!type) return "";
-    while (*type && strchr("rnNoORV", *type)) type++;
-    return type;
-}
-
-static BOOL NeoWCMethodReturnsVoid(Method method) {
-    char *type = method ? method_copyReturnType(method) : NULL;
-    BOOL matches = type && strcmp(NeoWCUnqualifiedType(type), @encode(void)) == 0;
-    if (type) free(type);
-    return matches;
-}
-
-static BOOL NeoWCMethodArgumentIsObject(Method method, unsigned int index) {
-    char *type = method ? method_copyArgumentType(method, index) : NULL;
-    const char *unqualified = NeoWCUnqualifiedType(type);
-    BOOL matches = unqualified[0] == '@';
-    if (type) free(type);
-    return matches;
-}
-
-static BOOL NeoWCMethodArgumentIsScalar(Method method, unsigned int index) {
-    char *type = method ? method_copyArgumentType(method, index) : NULL;
-    const char *unqualified = NeoWCUnqualifiedType(type);
-    BOOL matches = unqualified[0] && strchr("cCsSiIlLqQB", unqualified[0]) != NULL;
-    if (type) free(type);
-    return matches;
-}
-
-static BOOL NeoWCMethodArgumentIsBoolean(Method method, unsigned int index) {
-    char *type = method ? method_copyArgumentType(method, index) : NULL;
-    const char *unqualified = NeoWCUnqualifiedType(type);
-    BOOL matches = unqualified[0] == 'B' || unqualified[0] == 'c';
-    if (type) free(type);
-    return matches;
-}
-
-static BOOL NeoWCHoldAssetPickerSendForConfirmation(id picker,
-                                                     NSString *summary,
-                                                     dispatch_block_t originalAction) {
-    if ([objc_getAssociatedObject(picker, &NeoWCSendConfirmationPickerBypassKey) boolValue]) return NO;
-    BaseMsgContentViewController *controller = NeoWCVisibleChatController;
-    NSString *lockedUserName = [NeoWCChatUserName(controller) copy];
-    if (!controller.view.window || lockedUserName.length == 0 ||
-        !NeoWCSendConfirmationIsProtectedConversation(lockedUserName)) return NO;
-    UIViewController *presenter = [picker isKindOfClass:UIViewController.class] ? picker : controller;
-    if (!presenter.view.window) return NO;
-    __weak BaseMsgContentViewController *weakController = controller;
-    __weak id weakPicker = picker;
-    __weak UIViewController *weakPresenter = presenter;
-    return NeoWCPresentSendConfirmationIfNeeded(presenter,
-                                                 lockedUserName,
-                                                 summary,
-                                                 ^BOOL{
-        BaseMsgContentViewController *strongController = weakController;
-        return strongController.view.window && weakPresenter.view.window &&
-               [NeoWCChatUserName(strongController) isEqualToString:lockedUserName];
-    }, ^{
-        id strongPicker = weakPicker;
-        if (!strongPicker) return;
-        objc_setAssociatedObject(strongPicker, &NeoWCSendConfirmationPickerBypassKey,
-                                 @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        originalAction();
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            objc_setAssociatedObject(strongPicker, &NeoWCSendConfirmationPickerBypassKey,
-                                     nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        });
-    });
-}
-
-static void NeoWCAssetPickerSendSelectedMedia(id self, SEL command) {
-    if (NeoWCHoldAssetPickerSendForConfirmation(self, @"即将发送所选图片或视频。", ^{
-        NeoWCOriginalAssetPickerSendSelectedMedia(self, command);
-    })) return;
-    NeoWCOriginalAssetPickerSendSelectedMedia(self, command);
-}
-
-static void NeoWCAssetPickerOnAssetSend(id self, SEL command, id asset) {
-    if (NeoWCHoldAssetPickerSendForConfirmation(self, @"即将发送所选媒体。", ^{
-        NeoWCOriginalAssetPickerOnAssetSend(self, command, asset);
-    })) return;
-    NeoWCOriginalAssetPickerOnAssetSend(self, command, asset);
-}
-
-static void NeoWCAssetPickerSendImageObject(id self, SEL command, id scene) {
-    if (NeoWCHoldAssetPickerSendForConfirmation(self, @"即将发送所选图片。", ^{
-        NeoWCOriginalAssetPickerSendImageObject(self, command, scene);
-    })) return;
-    NeoWCOriginalAssetPickerSendImageObject(self, command, scene);
-}
-
-static void NeoWCAssetPickerSendImageScalar(id self, SEL command, uintptr_t scene) {
-    if (NeoWCHoldAssetPickerSendForConfirmation(self, @"即将发送所选图片。", ^{
-        NeoWCOriginalAssetPickerSendImageScalar(self, command, scene);
-    })) return;
-    NeoWCOriginalAssetPickerSendImageScalar(self, command, scene);
-}
-
-static void NeoWCAssetPickerSendVideo(id self, SEL command, id asset) {
-    if (NeoWCHoldAssetPickerSendForConfirmation(self, @"即将发送所选视频。", ^{
-        NeoWCOriginalAssetPickerSendVideo(self, command, asset);
-    })) return;
-    NeoWCOriginalAssetPickerSendVideo(self, command, asset);
-}
-
-static void NeoWCAssetPickerPreviewFinished(id self, SEL command, id browser, id assetInfos, BOOL usingTemplate) {
-    if (NeoWCHoldAssetPickerSendForConfirmation(self, @"即将发送预览中的图片或视频。", ^{
-        NeoWCOriginalAssetPickerPreviewFinished(self, command, browser, assetInfos, usingTemplate);
-    })) return;
-    NeoWCOriginalAssetPickerPreviewFinished(self, command, browser, assetInfos, usingTemplate);
-}
-
-static BOOL NeoWCHookVoidMethod(Class targetClass,
-                                const char *selectorName,
-                                unsigned int argumentCount,
-                                IMP replacement,
-                                IMP *original) {
-    SEL selector = sel_registerName(selectorName);
-    Method method = class_getInstanceMethod(targetClass, selector);
-    if (!method || !NeoWCMethodReturnsVoid(method) || method_getNumberOfArguments(method) != argumentCount) return NO;
-    MSHookMessageEx(targetClass, selector, replacement, original);
-    return *original != NULL;
-}
-
-static void NeoWCInstallAssetPickerConfirmationHooks(void) {
-    if (NeoWCDidInstallAssetPickerConfirmationHooks) return;
-    Class pickerClass = objc_getClass("MMAssetPickerController");
-    if (!pickerClass) return;
-    BOOL installedAny = NO;
-
-    installedAny |= NeoWCHookVoidMethod(pickerClass, "sendSelectedMedia", 2,
-                                        (IMP)NeoWCAssetPickerSendSelectedMedia,
-                                        (IMP *)&NeoWCOriginalAssetPickerSendSelectedMedia);
-
-    Method onAsset = class_getInstanceMethod(pickerClass, sel_registerName("OnAssetSend:"));
-    if (onAsset && NeoWCMethodReturnsVoid(onAsset) && method_getNumberOfArguments(onAsset) == 3 &&
-        NeoWCMethodArgumentIsObject(onAsset, 2)) {
-        MSHookMessageEx(pickerClass, sel_registerName("OnAssetSend:"),
-                        (IMP)NeoWCAssetPickerOnAssetSend,
-                        (IMP *)&NeoWCOriginalAssetPickerOnAssetSend);
-        installedAny |= NeoWCOriginalAssetPickerOnAssetSend != NULL;
-    }
-
-    Method sendImage = class_getInstanceMethod(pickerClass, sel_registerName("sendImageFromScene:"));
-    if (sendImage && NeoWCMethodReturnsVoid(sendImage) && method_getNumberOfArguments(sendImage) == 3) {
-        if (NeoWCMethodArgumentIsObject(sendImage, 2)) {
-            MSHookMessageEx(pickerClass, sel_registerName("sendImageFromScene:"),
-                            (IMP)NeoWCAssetPickerSendImageObject,
-                            (IMP *)&NeoWCOriginalAssetPickerSendImageObject);
-            installedAny |= NeoWCOriginalAssetPickerSendImageObject != NULL;
-        } else if (NeoWCMethodArgumentIsScalar(sendImage, 2)) {
-            MSHookMessageEx(pickerClass, sel_registerName("sendImageFromScene:"),
-                            (IMP)NeoWCAssetPickerSendImageScalar,
-                            (IMP *)&NeoWCOriginalAssetPickerSendImageScalar);
-            installedAny |= NeoWCOriginalAssetPickerSendImageScalar != NULL;
-        }
-    }
-
-    Method sendVideo = class_getInstanceMethod(pickerClass, sel_registerName("sendVideoWithAsset:"));
-    if (sendVideo && NeoWCMethodReturnsVoid(sendVideo) && method_getNumberOfArguments(sendVideo) == 3 &&
-        NeoWCMethodArgumentIsObject(sendVideo, 2)) {
-        MSHookMessageEx(pickerClass, sel_registerName("sendVideoWithAsset:"),
-                        (IMP)NeoWCAssetPickerSendVideo,
-                        (IMP *)&NeoWCOriginalAssetPickerSendVideo);
-        installedAny |= NeoWCOriginalAssetPickerSendVideo != NULL;
-    }
-
-    Method preview = class_getInstanceMethod(pickerClass, sel_registerName("previewBrowser:didFinishPickingWithAssetInfos:isUsingTemplate:"));
-    if (preview && NeoWCMethodReturnsVoid(preview) && method_getNumberOfArguments(preview) == 5 &&
-        NeoWCMethodArgumentIsObject(preview, 2) && NeoWCMethodArgumentIsObject(preview, 3) &&
-        NeoWCMethodArgumentIsBoolean(preview, 4)) {
-        MSHookMessageEx(pickerClass, sel_registerName("previewBrowser:didFinishPickingWithAssetInfos:isUsingTemplate:"),
-                        (IMP)NeoWCAssetPickerPreviewFinished,
-                        (IMP *)&NeoWCOriginalAssetPickerPreviewFinished);
-        installedAny |= NeoWCOriginalAssetPickerPreviewFinished != NULL;
-    }
-
-    NeoWCDidInstallAssetPickerConfirmationHooks = installedAny;
-    if (installedAny) NeoWCLog(@"发送前确认已安装相册窄入口（运行时 ABI 已核对）");
-}
-
 typedef void (*NeoWCDocumentPickerOriginal)(id, SEL, id, id);
 
 static NSMutableDictionary<NSString *, NSValue *> *NeoWCDocumentPickerOriginals(BOOL multipleURLs) {
@@ -10350,6 +10208,26 @@ static void NeoWCDocumentPickerDidPickURLs(id self, SEL command, id picker, id U
 static void NeoWCDocumentPickerDidPickURL(id self, SEL command, id picker, id URL) {
     if (NeoWCHoldDocumentPickerCallback(self, command, picker, URL, NO)) return;
     NeoWCInvokeDocumentPickerOriginal(self, command, picker, URL, NO);
+}
+
+static const char *NeoWCUnqualifiedMethodType(const char *type) {
+    if (!type) return "";
+    while (*type && strchr("rnNoORV", *type)) type++;
+    return type;
+}
+
+static BOOL NeoWCMethodReturnsVoid(Method method) {
+    char *type = method ? method_copyReturnType(method) : NULL;
+    BOOL matches = type && strcmp(NeoWCUnqualifiedMethodType(type), @encode(void)) == 0;
+    if (type) free(type);
+    return matches;
+}
+
+static BOOL NeoWCMethodArgumentIsObject(Method method, unsigned int index) {
+    char *type = method ? method_copyArgumentType(method, index) : NULL;
+    BOOL matches = NeoWCUnqualifiedMethodType(type)[0] == '@';
+    if (type) free(type);
+    return matches;
 }
 
 static BOOL NeoWCClassDirectlyImplementsSelector(Class targetClass, SEL selector) {
@@ -10429,13 +10307,6 @@ static void NeoWCInstallDocumentPickerDelegateHook(id delegate,
 
 %ctor {
     %init;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NeoWCInstallAssetPickerConfirmationHooks();
-        if (!NeoWCDidInstallAssetPickerConfirmationHooks) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
-                           dispatch_get_main_queue(), ^{ NeoWCInstallAssetPickerConfirmationHooks(); });
-        }
-    });
     if ([CADisplayLink instancesRespondToSelector:@selector(setPreferredFrameRateRange:)]) {
         %init(NeoWCHighRefreshRateRange);
     }

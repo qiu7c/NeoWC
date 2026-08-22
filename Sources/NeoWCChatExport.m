@@ -127,9 +127,8 @@ static NSDictionary *NeoWCExportVoiceMetadata(id wrap) {
 }
 
 static void NeoWCImportSelectedQuickRepliesWithMetadata(UIViewController *controller, NSArray *messages,
-                                                        NSString *remark, NSString *category) {
+                                                        NSString *remark, NSString *folderIdentifier) {
     NSString *trimmedRemark = [remark stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    NSString *trimmedCategory = [category stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     NSUInteger imported = 0, alreadyPresent = 0, unavailable = 0, unsupported = 0;
     for (id wrap in messages) {
         NSInteger type = [NeoWCExportSafeValue(wrap, @"m_uiMessageType") integerValue];
@@ -139,23 +138,24 @@ static void NeoWCImportSelectedQuickRepliesWithMetadata(UIViewController *contro
         NeoWCQuickReplyItem *item = nil;
         if (type == 1) {
             NSString *text = NeoWCExportSafeValue(wrap, @"m_nsContent");
-            item = [NeoWCQuickReplyStore.sharedStore addText:text ?: @"" title:trimmedRemark category:trimmedCategory
+            item = [NeoWCQuickReplyStore.sharedStore addText:text ?: @"" title:trimmedRemark folderIdentifier:folderIdentifier
                                          sourceConversation:@"filehelper" sourceMessageID:sourceID error:&error];
         } else if (type == 3) {
             NSString *path = NeoWCExportExistingImagePath(wrap);
             if (path.length == 0) { unavailable++; continue; }
             item = [NeoWCQuickReplyStore.sharedStore addMediaAtURL:[NSURL fileURLWithPath:path]
                                                                type:NeoWCQuickReplyTypeImage title:trimmedRemark
+                                                   folderIdentifier:folderIdentifier
                                                   sourceConversation:@"filehelper" sourceMessageID:sourceID error:&error];
         } else if (type == 34) {
             NSString *path = NeoWCExportExistingVoicePath(wrap);
             if (path.length == 0) { unavailable++; continue; }
             item = [NeoWCQuickReplyStore.sharedStore addMediaAtURL:[NSURL fileURLWithPath:path]
                                                                type:NeoWCQuickReplyTypeVoice title:trimmedRemark
+                                                   folderIdentifier:folderIdentifier
                                                   sourceConversation:@"filehelper" sourceMessageID:sourceID error:&error];
             if (item && NeoWCQuickReplyStore.sharedStore.items.count > beforeCount) {
                 item.metadata = NeoWCExportVoiceMetadata(wrap);
-                item.category = trimmedCategory;
                 [NeoWCQuickReplyStore.sharedStore updateItem:item error:&error];
             }
         } else if (NeoWCExportMessageIsFile(wrap)) {
@@ -166,6 +166,7 @@ static void NeoWCImportSelectedQuickRepliesWithMetadata(UIViewController *contro
             if (path.length == 0) { unavailable++; continue; }
             item = [NeoWCQuickReplyStore.sharedStore addMediaAtURL:[NSURL fileURLWithPath:path]
                                                                type:NeoWCQuickReplyTypeVideo title:trimmedRemark
+                                                   folderIdentifier:folderIdentifier
                                                    sourceConversation:@"filehelper" sourceMessageID:sourceID error:&error];
         } else {
             unsupported++;
@@ -173,11 +174,6 @@ static void NeoWCImportSelectedQuickRepliesWithMetadata(UIViewController *contro
         }
         if (item) {
             BOOL isNew = NeoWCQuickReplyStore.sharedStore.items.count > beforeCount;
-            if (item.type != NeoWCQuickReplyTypeText && item.type != NeoWCQuickReplyTypeVoice &&
-                isNew) {
-                item.category = trimmedCategory;
-                [NeoWCQuickReplyStore.sharedStore updateItem:item error:&error];
-            }
             if (isNew) imported++;
             else alreadyPresent++;
         } else {
@@ -193,28 +189,28 @@ static void NeoWCImportSelectedQuickRepliesWithMetadata(UIViewController *contro
                            parts.count > 0 ? [parts componentsJoinedByString:@"，"] : @"没有可导入的消息。");
 }
 
-static void NeoWCPresentQuickReplyImportCategoryPicker(UIViewController *controller, NSArray *messages, NSString *remark) {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择素材分类" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-    void (^importWithCategory)(NSString *) = ^(NSString *category) {
-        NeoWCImportSelectedQuickRepliesWithMetadata(controller, messages, remark, category);
+static void NeoWCPresentQuickReplyImportFolderPicker(UIViewController *controller, NSArray *messages, NSString *remark) {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"存入文件夹" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    void (^importIntoFolder)(NSString *) = ^(NSString *folderIdentifier) {
+        NeoWCImportSelectedQuickRepliesWithMetadata(controller, messages, remark, folderIdentifier);
     };
-    [sheet addAction:[UIAlertAction actionWithTitle:@"未分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        importWithCategory(@"");
+    [sheet addAction:[UIAlertAction actionWithTitle:@"素材库根目录" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        importIntoFolder(nil);
     }]];
-    for (NSString *category in NeoWCQuickReplyStore.sharedStore.categories) {
-        [sheet addAction:[UIAlertAction actionWithTitle:category style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-            importWithCategory(category);
+    for (NeoWCQuickReplyFolder *folder in NeoWCQuickReplyStore.sharedStore.folders) {
+        [sheet addAction:[UIAlertAction actionWithTitle:folder.name style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            importIntoFolder(folder.identifier);
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"新建分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建分类" message:nil preferredStyle:UIAlertControllerStyleAlert];
-        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"分类名称"; }];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"新建文件夹" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建文件夹" message:nil preferredStyle:UIAlertControllerStyleAlert];
+        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"文件夹名称"; }];
         [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
         [alert addAction:[UIAlertAction actionWithTitle:@"创建并导入" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *saveAction) {
-            NSString *name = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
             NSError *error = nil;
-            if ([NeoWCQuickReplyStore.sharedStore addCategory:name error:&error]) importWithCategory(name);
-            else NeoWCShowExportMessage(controller, @"无法创建分类", error.localizedDescription ?: @"分类名称无效。");
+            NeoWCQuickReplyFolder *folder = [NeoWCQuickReplyStore.sharedStore createFolderWithName:alert.textFields.firstObject.text error:&error];
+            if (folder) importIntoFolder(folder.identifier);
+            else NeoWCShowExportMessage(controller, @"无法创建文件夹", error.localizedDescription ?: @"文件夹名称无效。");
         }]];
         [controller presentViewController:alert animated:YES completion:nil];
     }]];
@@ -226,16 +222,16 @@ static void NeoWCPresentQuickReplyImportCategoryPicker(UIViewController *control
 
 static void NeoWCPresentQuickReplyImportConfiguration(UIViewController *controller, NSArray *messages) {
     BOOL single = messages.count == 1;
-    NSString *message = single ? @"可填写备注并选择分类。" :
-        [NSString stringWithFormat:@"将导入 %lu 条消息并统一选择分类；每条备注可稍后在素材库右滑重命名。", (unsigned long)messages.count];
+    NSString *message = single ? @"可填写备注并选择保存文件夹。" :
+        [NSString stringWithFormat:@"将导入 %lu 条消息并统一存入一个文件夹；每条备注可稍后在素材库右滑重命名。", (unsigned long)messages.count];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加入快捷回复素材库"
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
     if (single) [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"备注（可选）"; }];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"选择分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"选择文件夹" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         NSString *remark = single ? alert.textFields.firstObject.text : @"";
-        NeoWCPresentQuickReplyImportCategoryPicker(controller, messages, remark ?: @"");
+        NeoWCPresentQuickReplyImportFolderPicker(controller, messages, remark ?: @"");
     }]];
     [controller presentViewController:alert animated:YES completion:nil];
 }

@@ -6,8 +6,7 @@
 static NSString *const NeoWCQuickReplyErrorDomain = @"com.qiu7c.neowc.quick-reply";
 
 typedef NS_ENUM(NSInteger, NeoWCQuickReplyErrorCode) {
-    NeoWCQuickReplyErrorAccountUnavailable = 1,
-    NeoWCQuickReplyErrorInvalidValue,
+    NeoWCQuickReplyErrorInvalidValue = 1,
     NeoWCQuickReplyErrorStorageUnavailable,
     NeoWCQuickReplyErrorMediaCopyFailed,
 };
@@ -23,14 +22,6 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
     return [(NSString *)value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
 }
 
-static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
-    NSData *data = [account dataUsingEncoding:NSUTF8StringEncoding];
-    NSString *encoded = [data base64EncodedStringWithOptions:0];
-    encoded = [encoded stringByReplacingOccurrencesOfString:@"/" withString:@"_"];
-    encoded = [encoded stringByReplacingOccurrencesOfString:@"+" withString:@"-"];
-    return [encoded stringByReplacingOccurrencesOfString:@"=" withString:@""];
-}
-
 @implementation NeoWCQuickReplyItem
 
 - (id)copyWithZone:(NSZone *)zone {
@@ -39,7 +30,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     copy.type = self.type;
     copy.title = self.title;
     copy.text = self.text;
-    copy.category = self.category;
+    copy.folderIdentifier = self.folderIdentifier;
     copy.mediaRelativePath = self.mediaRelativePath;
     copy.thumbnailRelativePath = self.thumbnailRelativePath;
     copy.sortIndex = self.sortIndex;
@@ -47,14 +38,27 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     copy.createdAt = self.createdAt;
     copy.sourceConversation = self.sourceConversation;
     copy.sourceMessageID = self.sourceMessageID;
+    copy.sourceAccountIdentifier = self.sourceAccountIdentifier;
     copy.metadata = self.metadata;
     return copy;
 }
 
 @end
 
+@implementation NeoWCQuickReplyFolder
+
+- (id)copyWithZone:(NSZone *)zone {
+    NeoWCQuickReplyFolder *copy = [[[self class] allocWithZone:zone] init];
+    copy.identifier = self.identifier;
+    copy.name = self.name;
+    copy.sortIndex = self.sortIndex;
+    return copy;
+}
+
+@end
+
 @interface NeoWCQuickReplyStore ()
-- (nullable NSURL *)accountDirectoryCreatingIfNeeded:(BOOL)create error:(NSError **)error;
+- (nullable NSURL *)sharedDirectoryCreatingIfNeeded:(BOOL)create error:(NSError **)error;
 @end
 
 @implementation NeoWCQuickReplyStore
@@ -66,30 +70,24 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     return store;
 }
 
-- (NSString *)accountIdentifier {
-    NSString *account = NeoWCCurrentUserWXID();
-    return NeoWCQuickReplyTrimmedString(account).length > 0 ? account : nil;
-}
-
 - (BOOL)isAvailable {
-    return self.accountIdentifier.length > 0;
+    return [self sharedDirectoryCreatingIfNeeded:YES error:nil] != nil;
 }
 
-- (NSURL *)accountDirectoryCreatingIfNeeded:(BOOL)create error:(NSError **)error {
-    NSString *account = self.accountIdentifier;
-    if (account.length == 0) {
-        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorAccountUnavailable, @"尚未取得当前微信账号，请进入 NeoWC 设置后重试");
-        return nil;
-    }
+- (NSURL *)quickRepliesRootURL {
     NSURL *applicationSupport = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
                                                                      inDomains:NSUserDomainMask].firstObject;
-    if (!applicationSupport) {
+    return applicationSupport ? [[applicationSupport URLByAppendingPathComponent:@"NeoWC" isDirectory:YES]
+                                 URLByAppendingPathComponent:@"QuickReplies" isDirectory:YES] : nil;
+}
+
+- (NSURL *)sharedDirectoryCreatingIfNeeded:(BOOL)create error:(NSError **)error {
+    NSURL *root = [self quickRepliesRootURL];
+    if (!root) {
         if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorStorageUnavailable, @"无法访问应用支持目录");
         return nil;
     }
-    NSURL *directory = [[[applicationSupport URLByAppendingPathComponent:@"NeoWC" isDirectory:YES]
-                         URLByAppendingPathComponent:@"QuickReplies" isDirectory:YES]
-                        URLByAppendingPathComponent:NeoWCQuickReplyEncodedAccount(account) isDirectory:YES];
+    NSURL *directory = [root URLByAppendingPathComponent:@"Shared" isDirectory:YES];
     if (!create) return directory;
     NSFileManager *manager = NSFileManager.defaultManager;
     for (NSString *component in @[@"media", @"thumbnails"]) {
@@ -100,7 +98,115 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
             return nil;
         }
     }
+    [self migrateLegacyLibrariesIntoDirectory:directory root:root];
     return directory;
+}
+
+- (void)migrateLegacyLibrariesIntoDirectory:(NSURL *)sharedDirectory root:(NSURL *)root {
+    NSURL *marker = [sharedDirectory URLByAppendingPathComponent:@".shared-library-v1"];
+    if ([NSFileManager.defaultManager fileExistsAtPath:marker.path]) return;
+    NSFileManager *manager = NSFileManager.defaultManager;
+    NSArray<NSURL *> *children = [manager contentsOfDirectoryAtURL:root
+                                       includingPropertiesForKeys:@[NSURLIsDirectoryKey]
+                                                          options:NSDirectoryEnumerationSkipsHiddenFiles
+                                                            error:nil] ?: @[];
+    NSMutableArray<NSMutableDictionary *> *mergedItems = [NSMutableArray array];
+    NSData *sharedData = [NSData dataWithContentsOfURL:[sharedDirectory URLByAppendingPathComponent:@"index.json"]];
+    id sharedObject = sharedData.length ? [NSJSONSerialization JSONObjectWithData:sharedData options:NSJSONReadingMutableContainers error:nil] : nil;
+    if ([sharedObject isKindOfClass:NSArray.class]) {
+        for (id value in sharedObject) if ([value isKindOfClass:NSDictionary.class]) [mergedItems addObject:[value mutableCopy]];
+    }
+    NSMutableArray<NSMutableDictionary *> *folders = [NSMutableArray array];
+    NSData *folderData = [NSData dataWithContentsOfURL:[sharedDirectory URLByAppendingPathComponent:@"folders.json"]];
+    id folderObject = folderData.length ? [NSJSONSerialization JSONObjectWithData:folderData options:NSJSONReadingMutableContainers error:nil] : nil;
+    if ([folderObject isKindOfClass:NSArray.class]) {
+        for (id value in folderObject) if ([value isKindOfClass:NSDictionary.class]) [folders addObject:[value mutableCopy]];
+    }
+    NSMutableDictionary<NSString *, NSString *> *folderIDByName = [NSMutableDictionary dictionary];
+    for (NSDictionary *folder in folders) {
+        NSString *name = NeoWCQuickReplyTrimmedString(folder[@"name"]);
+        NSString *identifier = NeoWCQuickReplyTrimmedString(folder[@"id"]);
+        if (name.length && identifier.length) folderIDByName[name] = identifier;
+    }
+    NSMutableSet<NSString *> *identifiers = [NSMutableSet set];
+    NSMutableSet<NSString *> *migrationOrigins = [NSMutableSet set];
+    for (NSDictionary *item in mergedItems) {
+        NSString *identifier = NeoWCQuickReplyTrimmedString(item[@"id"]);
+        if (identifier.length) [identifiers addObject:identifier];
+        NSString *origin = NeoWCQuickReplyTrimmedString(item[@"migrationOrigin"]);
+        if (origin.length) [migrationOrigins addObject:origin];
+    }
+    NSInteger nextSort = mergedItems.count;
+    for (NSURL *legacyDirectory in children) {
+        NSNumber *isDirectory = nil;
+        [legacyDirectory getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
+        if (!isDirectory.boolValue || [legacyDirectory.lastPathComponent isEqualToString:@"Shared"]) continue;
+        NSData *data = [NSData dataWithContentsOfURL:[legacyDirectory URLByAppendingPathComponent:@"index.json"]];
+        id object = data.length ? [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:nil] : nil;
+        if (![object isKindOfClass:NSArray.class]) continue;
+        NSData *categoriesData = [NSData dataWithContentsOfURL:[legacyDirectory URLByAppendingPathComponent:@"categories.json"]];
+        id categoriesObject = categoriesData.length ? [NSJSONSerialization JSONObjectWithData:categoriesData options:0 error:nil] : nil;
+        if ([categoriesObject isKindOfClass:NSArray.class]) {
+            for (id value in (NSArray *)categoriesObject) {
+                NSString *categoryName = NeoWCQuickReplyTrimmedString(value);
+                if (!categoryName.length || folderIDByName[categoryName]) continue;
+                NSString *folderID = NSUUID.UUID.UUIDString.lowercaseString;
+                folderIDByName[categoryName] = folderID;
+                [folders addObject:[@{@"id": folderID, @"name": categoryName, @"sort": @(folders.count)} mutableCopy]];
+            }
+        }
+        for (NSDictionary *rawItem in (NSArray *)object) {
+            if (![rawItem isKindOfClass:NSDictionary.class]) continue;
+            NSMutableDictionary *item = [rawItem mutableCopy];
+            NSString *oldIdentifier = NeoWCQuickReplyTrimmedString(item[@"id"]);
+            NSString *migrationOrigin = [legacyDirectory.lastPathComponent stringByAppendingFormat:@"/%@", oldIdentifier.length ? oldIdentifier : @"unknown"];
+            if ([migrationOrigins containsObject:migrationOrigin]) continue;
+            NSString *identifier = oldIdentifier;
+            if (!identifier.length || [identifiers containsObject:identifier]) identifier = NSUUID.UUID.UUIDString.lowercaseString;
+            item[@"id"] = identifier;
+            item[@"migrationOrigin"] = migrationOrigin;
+            item[@"sourceAccount"] = legacyDirectory.lastPathComponent;
+            NSString *category = NeoWCQuickReplyTrimmedString(item[@"category"]);
+            if (category.length) {
+                NSString *folderID = folderIDByName[category];
+                if (!folderID) {
+                    folderID = NSUUID.UUID.UUIDString.lowercaseString;
+                    folderIDByName[category] = folderID;
+                    [folders addObject:[@{@"id": folderID, @"name": category, @"sort": @(folders.count)} mutableCopy]];
+                }
+                item[@"folder"] = folderID;
+            }
+            [item removeObjectForKey:@"category"];
+            for (NSString *key in @[@"media", @"thumbnail"]) {
+                NSString *relativePath = NeoWCQuickReplyTrimmedString(item[key]);
+                if (!relativePath.length) continue;
+                NSURL *source = [legacyDirectory URLByAppendingPathComponent:relativePath];
+                NSString *child = [key isEqualToString:@"media"] ? @"media" : @"thumbnails";
+                NSString *extension = source.pathExtension.length ? source.pathExtension : ([key isEqualToString:@"media"] ? @"dat" : @"jpg");
+                NSString *newRelativePath = [child stringByAppendingPathComponent:[identifier stringByAppendingPathExtension:extension]];
+                NSURL *destination = [sharedDirectory URLByAppendingPathComponent:newRelativePath];
+                if (![manager fileExistsAtPath:source.path]) { [item removeObjectForKey:key]; continue; }
+                [manager removeItemAtURL:destination error:nil];
+                NSError *copyError = nil;
+                if (![manager copyItemAtURL:source toURL:destination error:&copyError]) {
+                    [item removeObjectForKey:key];
+                    continue;
+                }
+                item[key] = newRelativePath;
+            }
+            item[@"sort"] = @(nextSort++);
+            [mergedItems addObject:item];
+            [identifiers addObject:identifier];
+            [migrationOrigins addObject:migrationOrigin];
+        }
+    }
+    NSError *serializationError = nil;
+    NSData *itemsData = [NSJSONSerialization dataWithJSONObject:mergedItems options:0 error:&serializationError];
+    NSData *foldersData = [NSJSONSerialization dataWithJSONObject:folders options:0 error:&serializationError];
+    if (!itemsData || !foldersData) return;
+    if (![itemsData writeToURL:[sharedDirectory URLByAppendingPathComponent:@"index.json"] options:NSDataWritingAtomic error:nil]) return;
+    if (![foldersData writeToURL:[sharedDirectory URLByAppendingPathComponent:@"folders.json"] options:NSDataWritingAtomic error:nil]) return;
+    [[NSData data] writeToURL:marker options:NSDataWritingAtomic error:nil];
 }
 
 - (NeoWCQuickReplyItem *)itemFromDictionary:(NSDictionary *)dictionary {
@@ -115,7 +221,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     item.type = (NeoWCQuickReplyType)type;
     item.title = [dictionary[@"title"] isKindOfClass:NSString.class] ? dictionary[@"title"] : @"";
     item.text = [dictionary[@"text"] isKindOfClass:NSString.class] ? dictionary[@"text"] : @"";
-    item.category = [dictionary[@"category"] isKindOfClass:NSString.class] ? dictionary[@"category"] : @"";
+    item.folderIdentifier = [dictionary[@"folder"] isKindOfClass:NSString.class] ? dictionary[@"folder"] : nil;
     item.mediaRelativePath = [dictionary[@"media"] isKindOfClass:NSString.class] ? dictionary[@"media"] : nil;
     item.thumbnailRelativePath = [dictionary[@"thumbnail"] isKindOfClass:NSString.class] ? dictionary[@"thumbnail"] : nil;
     item.sortIndex = [dictionary[@"sort"] respondsToSelector:@selector(integerValue)] ? [dictionary[@"sort"] integerValue] : 0;
@@ -124,6 +230,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     item.createdAt = timestamp > 0 ? [NSDate dateWithTimeIntervalSince1970:timestamp] : NSDate.date;
     item.sourceConversation = [dictionary[@"sourceConversation"] isKindOfClass:NSString.class] ? dictionary[@"sourceConversation"] : nil;
     item.sourceMessageID = [dictionary[@"sourceMessageID"] isKindOfClass:NSString.class] ? dictionary[@"sourceMessageID"] : nil;
+    item.sourceAccountIdentifier = [dictionary[@"sourceAccount"] isKindOfClass:NSString.class] ? dictionary[@"sourceAccount"] : nil;
     item.metadata = [dictionary[@"metadata"] isKindOfClass:NSDictionary.class] ? dictionary[@"metadata"] : @{};
     return item;
 }
@@ -134,21 +241,22 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
         @"type": @(item.type),
         @"title": item.title ?: @"",
         @"text": item.text ?: @"",
-        @"category": item.category ?: @"",
         @"sort": @(item.sortIndex),
         @"pinned": @(item.isPinned),
         @"createdAt": @((item.createdAt ?: NSDate.date).timeIntervalSince1970),
     } mutableCopy];
     if (item.mediaRelativePath.length > 0) dictionary[@"media"] = item.mediaRelativePath;
     if (item.thumbnailRelativePath.length > 0) dictionary[@"thumbnail"] = item.thumbnailRelativePath;
+    if (item.folderIdentifier.length > 0) dictionary[@"folder"] = item.folderIdentifier;
     if (item.sourceConversation.length > 0) dictionary[@"sourceConversation"] = item.sourceConversation;
     if (item.sourceMessageID.length > 0) dictionary[@"sourceMessageID"] = item.sourceMessageID;
+    if (item.sourceAccountIdentifier.length > 0) dictionary[@"sourceAccount"] = item.sourceAccountIdentifier;
     if (item.metadata.count > 0) dictionary[@"metadata"] = item.metadata;
     return dictionary;
 }
 
 - (NSMutableArray<NeoWCQuickReplyItem *> *)loadItemsLocked {
-    NSURL *directory = [self accountDirectoryCreatingIfNeeded:NO error:nil];
+    NSURL *directory = [self sharedDirectoryCreatingIfNeeded:YES error:nil];
     if (!directory) return [NSMutableArray array];
     NSData *data = [NSData dataWithContentsOfURL:[directory URLByAppendingPathComponent:@"index.json"]];
     if (data.length == 0) return [NSMutableArray array];
@@ -163,7 +271,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
 }
 
 - (BOOL)saveItemsLocked:(NSArray<NeoWCQuickReplyItem *> *)items error:(NSError **)error {
-    NSURL *directory = [self accountDirectoryCreatingIfNeeded:YES error:error];
+    NSURL *directory = [self sharedDirectoryCreatingIfNeeded:YES error:error];
     if (!directory) return NO;
     NSMutableArray *dictionaries = [NSMutableArray arrayWithCapacity:items.count];
     for (NeoWCQuickReplyItem *item in items) [dictionaries addObject:[self dictionaryForItem:item]];
@@ -194,81 +302,97 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     }
 }
 
-- (NSMutableArray<NSString *> *)loadCategoriesLocked {
-    NSURL *directory = [self accountDirectoryCreatingIfNeeded:NO error:nil];
-    NSData *data = directory ? [NSData dataWithContentsOfURL:[directory URLByAppendingPathComponent:@"categories.json"]] : nil;
-    id object = data.length > 0 ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-    NSMutableOrderedSet<NSString *> *categories = [NSMutableOrderedSet orderedSet];
+- (NSMutableArray<NeoWCQuickReplyFolder *> *)loadFoldersLocked {
+    NSURL *directory = [self sharedDirectoryCreatingIfNeeded:YES error:nil];
+    NSData *data = directory ? [NSData dataWithContentsOfURL:[directory URLByAppendingPathComponent:@"folders.json"]] : nil;
+    id object = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    NSMutableArray<NeoWCQuickReplyFolder *> *folders = [NSMutableArray array];
     if ([object isKindOfClass:NSArray.class]) {
-        for (id value in (NSArray *)object) {
-            NSString *name = NeoWCQuickReplyTrimmedString(value);
-            if (name.length > 0) [categories addObject:name];
+        for (NSDictionary *dictionary in (NSArray *)object) {
+            if (![dictionary isKindOfClass:NSDictionary.class]) continue;
+            NSString *identifier = NeoWCQuickReplyTrimmedString(dictionary[@"id"]);
+            NSString *name = NeoWCQuickReplyTrimmedString(dictionary[@"name"]);
+            if (!identifier.length || !name.length) continue;
+            NeoWCQuickReplyFolder *folder = [NeoWCQuickReplyFolder new];
+            folder.identifier = identifier;
+            folder.name = name;
+            folder.sortIndex = [dictionary[@"sort"] respondsToSelector:@selector(integerValue)] ? [dictionary[@"sort"] integerValue] : folders.count;
+            [folders addObject:folder];
         }
     }
-    for (NeoWCQuickReplyItem *item in [self loadItemsLocked]) {
-        NSString *name = NeoWCQuickReplyTrimmedString(item.category);
-        if (name.length > 0) [categories addObject:name];
-    }
-    return [categories.array mutableCopy];
+    return folders;
 }
 
-- (BOOL)saveCategoriesLocked:(NSArray<NSString *> *)categories error:(NSError **)error {
-    NSURL *directory = [self accountDirectoryCreatingIfNeeded:YES error:error];
+- (BOOL)saveFoldersLocked:(NSArray<NeoWCQuickReplyFolder *> *)folders error:(NSError **)error {
+    NSURL *directory = [self sharedDirectoryCreatingIfNeeded:YES error:error];
     if (!directory) return NO;
-    NSData *data = [NSJSONSerialization dataWithJSONObject:categories ?: @[] options:0 error:error];
-    return data && [data writeToURL:[directory URLByAppendingPathComponent:@"categories.json"]
-                           options:NSDataWritingAtomic error:error];
+    NSMutableArray *values = [NSMutableArray arrayWithCapacity:folders.count];
+    for (NeoWCQuickReplyFolder *folder in folders) {
+        [values addObject:@{@"id": folder.identifier ?: @"", @"name": folder.name ?: @"", @"sort": @(folder.sortIndex)}];
+    }
+    NSData *data = [NSJSONSerialization dataWithJSONObject:values options:0 error:error];
+    return data && [data writeToURL:[directory URLByAppendingPathComponent:@"folders.json"] options:NSDataWritingAtomic error:error];
 }
 
-- (NSArray<NSString *> *)categories {
-    @synchronized (self) { return [[self loadCategoriesLocked] copy]; }
+- (NSArray<NeoWCQuickReplyFolder *> *)folders {
+    @synchronized (self) {
+        NSArray *folders = [[self loadFoldersLocked] sortedArrayUsingComparator:^NSComparisonResult(NeoWCQuickReplyFolder *left, NeoWCQuickReplyFolder *right) {
+            if (left.sortIndex != right.sortIndex) return left.sortIndex < right.sortIndex ? NSOrderedAscending : NSOrderedDescending;
+            return [left.name localizedCompare:right.name];
+        }];
+        NSMutableArray *copies = [NSMutableArray arrayWithCapacity:folders.count];
+        for (NeoWCQuickReplyFolder *folder in folders) [copies addObject:folder.copy];
+        return copies;
+    }
 }
 
-- (BOOL)addCategory:(NSString *)category error:(NSError **)error {
-    NSString *name = NeoWCQuickReplyTrimmedString(category);
-    if (name.length == 0) {
-        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"分类名称不能为空");
+- (NeoWCQuickReplyFolder *)createFolderWithName:(NSString *)name error:(NSError **)error {
+    NSString *trimmed = NeoWCQuickReplyTrimmedString(name);
+    if (!trimmed.length) {
+        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"文件夹名称不能为空");
+        return nil;
+    }
+    @synchronized (self) {
+        NSMutableArray *folders = [self loadFoldersLocked];
+        for (NeoWCQuickReplyFolder *candidate in folders) {
+            if ([candidate.name caseInsensitiveCompare:trimmed] == NSOrderedSame) return candidate.copy;
+        }
+        NeoWCQuickReplyFolder *folder = [NeoWCQuickReplyFolder new];
+        folder.identifier = NSUUID.UUID.UUIDString.lowercaseString;
+        folder.name = trimmed;
+        folder.sortIndex = folders.count;
+        [folders addObject:folder];
+        return [self saveFoldersLocked:folders error:error] ? folder.copy : nil;
+    }
+}
+
+- (BOOL)renameFolderWithIdentifier:(NSString *)identifier toName:(NSString *)name error:(NSError **)error {
+    NSString *trimmed = NeoWCQuickReplyTrimmedString(name);
+    if (!identifier.length || !trimmed.length) {
+        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"文件夹名称不能为空");
         return NO;
     }
     @synchronized (self) {
-        NSMutableArray<NSString *> *categories = [self loadCategoriesLocked];
-        if (![categories containsObject:name]) [categories addObject:name];
-        return [self saveCategoriesLocked:categories error:error];
-    }
-}
-
-- (BOOL)renameCategory:(NSString *)category toName:(NSString *)newName error:(NSError **)error {
-    NSString *oldValue = NeoWCQuickReplyTrimmedString(category);
-    NSString *newValue = NeoWCQuickReplyTrimmedString(newName);
-    if (oldValue.length == 0 || newValue.length == 0) {
-        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"分类名称不能为空");
+        NSMutableArray *folders = [self loadFoldersLocked];
+        for (NeoWCQuickReplyFolder *folder in folders) {
+            if ([folder.identifier isEqualToString:identifier]) { folder.name = trimmed; return [self saveFoldersLocked:folders error:error]; }
+        }
         return NO;
     }
-    @synchronized (self) {
-        NSMutableArray<NSString *> *categories = [self loadCategoriesLocked];
-        NSUInteger index = [categories indexOfObject:oldValue];
-        if (index != NSNotFound) categories[index] = newValue;
-        if (![categories containsObject:newValue]) [categories addObject:newValue];
-        categories = [[NSMutableOrderedSet orderedSetWithArray:categories].array mutableCopy];
-        NSMutableArray<NeoWCQuickReplyItem *> *items = [self loadItemsLocked];
-        for (NeoWCQuickReplyItem *item in items) {
-            if ([item.category isEqualToString:oldValue]) item.category = newValue;
-        }
-        return [self saveItemsLocked:items error:error] && [self saveCategoriesLocked:categories error:error];
-    }
 }
 
-- (BOOL)deleteCategory:(NSString *)category error:(NSError **)error {
-    NSString *name = NeoWCQuickReplyTrimmedString(category);
-    if (name.length == 0) return NO;
+- (BOOL)deleteFolderWithIdentifier:(NSString *)identifier error:(NSError **)error {
+    if (!identifier.length) return NO;
     @synchronized (self) {
-        NSMutableArray<NSString *> *categories = [self loadCategoriesLocked];
-        [categories removeObject:name];
-        NSMutableArray<NeoWCQuickReplyItem *> *items = [self loadItemsLocked];
-        for (NeoWCQuickReplyItem *item in items) {
-            if ([item.category isEqualToString:name]) item.category = @"";
-        }
-        return [self saveItemsLocked:items error:error] && [self saveCategoriesLocked:categories error:error];
+        NSMutableArray *folders = [self loadFoldersLocked];
+        NSIndexSet *matches = [folders indexesOfObjectsPassingTest:^BOOL(NeoWCQuickReplyFolder *folder, NSUInteger idx, BOOL *stop) {
+            (void)idx; (void)stop; return [folder.identifier isEqualToString:identifier];
+        }];
+        if (!matches.count) return NO;
+        [folders removeObjectsAtIndexes:matches];
+        NSMutableArray *items = [self loadItemsLocked];
+        for (NeoWCQuickReplyItem *item in items) if ([item.folderIdentifier isEqualToString:identifier]) item.folderIdentifier = nil;
+        return [self saveItemsLocked:items error:error] && [self saveFoldersLocked:folders error:error];
     }
 }
 
@@ -279,13 +403,16 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
 }
 
 - (NeoWCQuickReplyItem *)existingItemInItems:(NSArray<NeoWCQuickReplyItem *> *)items
+                     sourceAccountIdentifier:(NSString *)sourceAccountIdentifier
                            sourceConversation:(NSString *)sourceConversation
                               sourceMessageID:(NSString *)sourceMessageID {
     NSString *conversation = NeoWCQuickReplyTrimmedString(sourceConversation);
     NSString *messageID = NeoWCQuickReplyTrimmedString(sourceMessageID);
+    NSString *account = NeoWCQuickReplyTrimmedString(sourceAccountIdentifier);
     if (conversation.length == 0 || messageID.length == 0) return nil;
     for (NeoWCQuickReplyItem *item in items) {
-        if ([item.sourceConversation isEqualToString:conversation] &&
+        if ([NeoWCQuickReplyTrimmedString(item.sourceAccountIdentifier) isEqualToString:account] &&
+            [item.sourceConversation isEqualToString:conversation] &&
             [item.sourceMessageID isEqualToString:messageID]) return item;
     }
     return nil;
@@ -293,7 +420,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
 
 - (NeoWCQuickReplyItem *)addText:(NSString *)text
                             title:(NSString *)title
-                         category:(NSString *)category
+                folderIdentifier:(NSString *)folderIdentifier
                sourceConversation:(NSString *)sourceConversation
                   sourceMessageID:(NSString *)sourceMessageID
                             error:(NSError **)error {
@@ -305,6 +432,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     @synchronized (self) {
         NSMutableArray *items = [self loadItemsLocked];
         NeoWCQuickReplyItem *existing = [self existingItemInItems:items
+                                          sourceAccountIdentifier:NeoWCCurrentUserWXID()
                                                sourceConversation:sourceConversation
                                                   sourceMessageID:sourceMessageID];
         if (existing) return existing.copy;
@@ -313,12 +441,13 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
         item.type = NeoWCQuickReplyTypeText;
         item.title = NeoWCQuickReplyTrimmedString(title);
         item.text = trimmed;
-        item.category = NeoWCQuickReplyTrimmedString(category);
+        item.folderIdentifier = NeoWCQuickReplyTrimmedString(folderIdentifier).length ? folderIdentifier : nil;
         item.sortIndex = [self nextSortIndexForItems:items];
         item.pinned = NO;
         item.createdAt = NSDate.date;
         item.sourceConversation = NeoWCQuickReplyTrimmedString(sourceConversation).length > 0 ? sourceConversation : nil;
         item.sourceMessageID = NeoWCQuickReplyTrimmedString(sourceMessageID).length > 0 ? sourceMessageID : nil;
+        item.sourceAccountIdentifier = NeoWCQuickReplyTrimmedString(NeoWCCurrentUserWXID()).length ? NeoWCCurrentUserWXID() : nil;
         item.metadata = @{};
         [items addObject:item];
         return [self saveItemsLocked:items error:error] ? item.copy : nil;
@@ -355,6 +484,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
 - (NeoWCQuickReplyItem *)addMediaAtURL:(NSURL *)sourceURL
                                    type:(NeoWCQuickReplyType)type
                                   title:(NSString *)title
+                      folderIdentifier:(NSString *)folderIdentifier
                      sourceConversation:(NSString *)sourceConversation
                         sourceMessageID:(NSString *)sourceMessageID
                                   error:(NSError **)error {
@@ -369,10 +499,11 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
         return nil;
     }
     @synchronized (self) {
-        NSURL *directory = [self accountDirectoryCreatingIfNeeded:YES error:error];
+        NSURL *directory = [self sharedDirectoryCreatingIfNeeded:YES error:error];
         if (!directory) return nil;
         NSMutableArray *items = [self loadItemsLocked];
         NeoWCQuickReplyItem *existing = [self existingItemInItems:items
+                                          sourceAccountIdentifier:NeoWCCurrentUserWXID()
                                                sourceConversation:sourceConversation
                                                   sourceMessageID:sourceMessageID];
         if (existing) return existing.copy;
@@ -400,13 +531,14 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
         item.type = type;
         item.title = NeoWCQuickReplyTrimmedString(title);
         item.text = @"";
-        item.category = @"";
+        item.folderIdentifier = NeoWCQuickReplyTrimmedString(folderIdentifier).length ? folderIdentifier : nil;
         item.mediaRelativePath = mediaRelativePath;
         item.thumbnailRelativePath = thumbnailRelativePath;
         item.sortIndex = [self nextSortIndexForItems:items];
         item.createdAt = NSDate.date;
         item.sourceConversation = NeoWCQuickReplyTrimmedString(sourceConversation).length > 0 ? sourceConversation : nil;
         item.sourceMessageID = NeoWCQuickReplyTrimmedString(sourceMessageID).length > 0 ? sourceMessageID : nil;
+        item.sourceAccountIdentifier = NeoWCQuickReplyTrimmedString(NeoWCCurrentUserWXID()).length ? NeoWCCurrentUserWXID() : nil;
         item.metadata = @{};
         [items addObject:item];
         if ([self saveItemsLocked:items error:error]) return item.copy;
@@ -427,7 +559,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
         if (index == NSNotFound) return NO;
         NeoWCQuickReplyItem *stored = items[index];
         stored.title = NeoWCQuickReplyTrimmedString(item.title);
-        stored.category = NeoWCQuickReplyTrimmedString(item.category);
+        stored.folderIdentifier = NeoWCQuickReplyTrimmedString(item.folderIdentifier).length ? item.folderIdentifier : nil;
         stored.metadata = [item.metadata isKindOfClass:NSDictionary.class] ? item.metadata : @{};
         if (stored.type == NeoWCQuickReplyTypeText) {
             NSString *text = NeoWCQuickReplyTrimmedString(item.text);
@@ -475,9 +607,32 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     }
 }
 
+- (BOOL)moveItemWithIdentifier:(NSString *)identifier
+            toFolderIdentifier:(NSString *)folderIdentifier
+                         error:(NSError **)error {
+    if (!identifier.length) return NO;
+    NSString *destination = NeoWCQuickReplyTrimmedString(folderIdentifier);
+    @synchronized (self) {
+        if (destination.length) {
+            BOOL folderExists = NO;
+            for (NeoWCQuickReplyFolder *folder in [self loadFoldersLocked]) {
+                if ([folder.identifier isEqualToString:destination]) { folderExists = YES; break; }
+            }
+            if (!folderExists) return NO;
+        }
+        NSMutableArray *items = [self loadItemsLocked];
+        for (NeoWCQuickReplyItem *item in items) {
+            if (![item.identifier isEqualToString:identifier]) continue;
+            item.folderIdentifier = destination.length ? destination : nil;
+            return [self saveItemsLocked:items error:error];
+        }
+        return NO;
+    }
+}
+
 - (NSString *)safeAbsolutePathForRelativePath:(NSString *)relativePath {
     if (relativePath.length == 0 || relativePath.isAbsolutePath) return nil;
-    NSURL *directory = [self accountDirectoryCreatingIfNeeded:NO error:nil];
+    NSURL *directory = [self sharedDirectoryCreatingIfNeeded:NO error:nil];
     NSString *root = directory.URLByStandardizingPath.path;
     NSString *candidate = [[directory URLByAppendingPathComponent:relativePath] URLByStandardizingPath].path;
     NSString *prefix = [root stringByAppendingString:@"/"];
