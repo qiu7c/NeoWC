@@ -107,6 +107,7 @@ NSString *const NeoWCAntiRevokePersistRecordsKey = @"com.qiu7c.neowc.message.ant
 NSString *const NeoWCImageEditQuickSendEnabledKey = @"com.qiu7c.neowc.enhance.image-edit-quick-send";
 NSString *const NeoWCInputSwipeActionsEnabledKey = @"com.qiu7c.neowc.chat.input-swipe-actions";
 NSString *const NeoWCQuickReplyEnabledKey = @"com.qiu7c.neowc.chat.quick-reply-library";
+NSString *const NeoWCQuickReplyInstantSendEnabledKey = @"com.qiu7c.neowc.chat.quick-reply-library.instant-send";
 NSString *const NeoWCSendConfirmationEnabledKey = @"com.qiu7c.neowc.chat.send-confirmation";
 NSString *const NeoWCSendConfirmationUsersKey = @"com.qiu7c.neowc.chat.send-confirmation.users";
 NSString *const NeoWCMultiSelectExportEnabledKey = @"com.qiu7c.neowc.enhance.multi-select-export";

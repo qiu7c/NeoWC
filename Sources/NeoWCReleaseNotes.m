@@ -48,13 +48,13 @@ NSArray<NeoWCReleaseNote *> *NeoWCReleaseNotes(void) {
                                      headline:@"快捷回复与防误发"
                                         items:@[
                 [NeoWCReleaseNoteItem itemWithTitle:@"快捷回复素材库"
-                                              detail:@"支持文字、图片和视频素材，按账号隔离保存，并提供搜索、分类、置顶、排序、编辑与清理。"],
+                                              detail:@"支持文字、图片、视频和语音素材，按账号隔离保存，并提供独立分类、搜索、置顶、排序、编辑与清理。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"文件传输助手导入"
-                                              detail:@"可通过单条长按或微信多选，把已下载的文字、图片和视频文件加入素材库。"],
+                                              detail:@"可通过单条长按或微信多选，把已下载的文字、图片、视频文件和语音加入素材库。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"聊天页快捷入口"
-                                              detail:@"长按聊天输入栏的加号打开素材库；短按仍保持微信原功能。"],
+                                              detail:@"长按聊天输入栏的加号打开素材库；可切换点击秒发送，点击与长按在四种素材上保持一致。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"指定会话发送前确认"
-                                              detail:@"为指定联系人或群聊增加接收人、消息摘要确认，并在会话失效或进入后台时取消发送。"],
+                                              detail:@"从好友和群聊列表勾选受保护会话，发送按钮与已证实文字入口双层拦截，并在会话失效或进入后台时取消发送。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"朋友圈实况保存优化"
                                               detail:@"调整冷缓存下载完成后的媒体路径获取顺序，继续由微信原生实况配对流程保存。"],
             ]],

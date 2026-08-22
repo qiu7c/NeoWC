@@ -47,6 +47,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     copy.createdAt = self.createdAt;
     copy.sourceConversation = self.sourceConversation;
     copy.sourceMessageID = self.sourceMessageID;
+    copy.metadata = self.metadata;
     return copy;
 }
 
@@ -108,7 +109,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     NSNumber *typeValue = dictionary[@"type"];
     if (identifier.length == 0 || ![typeValue respondsToSelector:@selector(integerValue)]) return nil;
     NSInteger type = typeValue.integerValue;
-    if (type < NeoWCQuickReplyTypeText || type > NeoWCQuickReplyTypeVideo) return nil;
+    if (type < NeoWCQuickReplyTypeText || type > NeoWCQuickReplyTypeVoice) return nil;
     NeoWCQuickReplyItem *item = [NeoWCQuickReplyItem new];
     item.identifier = identifier;
     item.type = (NeoWCQuickReplyType)type;
@@ -123,6 +124,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     item.createdAt = timestamp > 0 ? [NSDate dateWithTimeIntervalSince1970:timestamp] : NSDate.date;
     item.sourceConversation = [dictionary[@"sourceConversation"] isKindOfClass:NSString.class] ? dictionary[@"sourceConversation"] : nil;
     item.sourceMessageID = [dictionary[@"sourceMessageID"] isKindOfClass:NSString.class] ? dictionary[@"sourceMessageID"] : nil;
+    item.metadata = [dictionary[@"metadata"] isKindOfClass:NSDictionary.class] ? dictionary[@"metadata"] : @{};
     return item;
 }
 
@@ -141,6 +143,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     if (item.thumbnailRelativePath.length > 0) dictionary[@"thumbnail"] = item.thumbnailRelativePath;
     if (item.sourceConversation.length > 0) dictionary[@"sourceConversation"] = item.sourceConversation;
     if (item.sourceMessageID.length > 0) dictionary[@"sourceMessageID"] = item.sourceMessageID;
+    if (item.metadata.count > 0) dictionary[@"metadata"] = item.metadata;
     return dictionary;
 }
 
@@ -191,6 +194,84 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
     }
 }
 
+- (NSMutableArray<NSString *> *)loadCategoriesLocked {
+    NSURL *directory = [self accountDirectoryCreatingIfNeeded:NO error:nil];
+    NSData *data = directory ? [NSData dataWithContentsOfURL:[directory URLByAppendingPathComponent:@"categories.json"]] : nil;
+    id object = data.length > 0 ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    NSMutableOrderedSet<NSString *> *categories = [NSMutableOrderedSet orderedSet];
+    if ([object isKindOfClass:NSArray.class]) {
+        for (id value in (NSArray *)object) {
+            NSString *name = NeoWCQuickReplyTrimmedString(value);
+            if (name.length > 0) [categories addObject:name];
+        }
+    }
+    for (NeoWCQuickReplyItem *item in [self loadItemsLocked]) {
+        NSString *name = NeoWCQuickReplyTrimmedString(item.category);
+        if (name.length > 0) [categories addObject:name];
+    }
+    return [categories.array mutableCopy];
+}
+
+- (BOOL)saveCategoriesLocked:(NSArray<NSString *> *)categories error:(NSError **)error {
+    NSURL *directory = [self accountDirectoryCreatingIfNeeded:YES error:error];
+    if (!directory) return NO;
+    NSData *data = [NSJSONSerialization dataWithJSONObject:categories ?: @[] options:0 error:error];
+    return data && [data writeToURL:[directory URLByAppendingPathComponent:@"categories.json"]
+                           options:NSDataWritingAtomic error:error];
+}
+
+- (NSArray<NSString *> *)categories {
+    @synchronized (self) { return [[self loadCategoriesLocked] copy]; }
+}
+
+- (BOOL)addCategory:(NSString *)category error:(NSError **)error {
+    NSString *name = NeoWCQuickReplyTrimmedString(category);
+    if (name.length == 0) {
+        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"分类名称不能为空");
+        return NO;
+    }
+    @synchronized (self) {
+        NSMutableArray<NSString *> *categories = [self loadCategoriesLocked];
+        if (![categories containsObject:name]) [categories addObject:name];
+        return [self saveCategoriesLocked:categories error:error];
+    }
+}
+
+- (BOOL)renameCategory:(NSString *)category toName:(NSString *)newName error:(NSError **)error {
+    NSString *oldValue = NeoWCQuickReplyTrimmedString(category);
+    NSString *newValue = NeoWCQuickReplyTrimmedString(newName);
+    if (oldValue.length == 0 || newValue.length == 0) {
+        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"分类名称不能为空");
+        return NO;
+    }
+    @synchronized (self) {
+        NSMutableArray<NSString *> *categories = [self loadCategoriesLocked];
+        NSUInteger index = [categories indexOfObject:oldValue];
+        if (index != NSNotFound) categories[index] = newValue;
+        if (![categories containsObject:newValue]) [categories addObject:newValue];
+        categories = [[NSMutableOrderedSet orderedSetWithArray:categories].array mutableCopy];
+        NSMutableArray<NeoWCQuickReplyItem *> *items = [self loadItemsLocked];
+        for (NeoWCQuickReplyItem *item in items) {
+            if ([item.category isEqualToString:oldValue]) item.category = newValue;
+        }
+        return [self saveItemsLocked:items error:error] && [self saveCategoriesLocked:categories error:error];
+    }
+}
+
+- (BOOL)deleteCategory:(NSString *)category error:(NSError **)error {
+    NSString *name = NeoWCQuickReplyTrimmedString(category);
+    if (name.length == 0) return NO;
+    @synchronized (self) {
+        NSMutableArray<NSString *> *categories = [self loadCategoriesLocked];
+        [categories removeObject:name];
+        NSMutableArray<NeoWCQuickReplyItem *> *items = [self loadItemsLocked];
+        for (NeoWCQuickReplyItem *item in items) {
+            if ([item.category isEqualToString:name]) item.category = @"";
+        }
+        return [self saveItemsLocked:items error:error] && [self saveCategoriesLocked:categories error:error];
+    }
+}
+
 - (NSInteger)nextSortIndexForItems:(NSArray<NeoWCQuickReplyItem *> *)items {
     NSInteger maximum = -1;
     for (NeoWCQuickReplyItem *item in items) maximum = MAX(maximum, item.sortIndex);
@@ -238,6 +319,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
         item.createdAt = NSDate.date;
         item.sourceConversation = NeoWCQuickReplyTrimmedString(sourceConversation).length > 0 ? sourceConversation : nil;
         item.sourceMessageID = NeoWCQuickReplyTrimmedString(sourceMessageID).length > 0 ? sourceMessageID : nil;
+        item.metadata = @{};
         [items addObject:item];
         return [self saveItemsLocked:items error:error] ? item.copy : nil;
     }
@@ -276,8 +358,8 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
                      sourceConversation:(NSString *)sourceConversation
                         sourceMessageID:(NSString *)sourceMessageID
                                   error:(NSError **)error {
-    if (type != NeoWCQuickReplyTypeImage && type != NeoWCQuickReplyTypeVideo) {
-        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"只支持图片和视频素材");
+    if (type != NeoWCQuickReplyTypeImage && type != NeoWCQuickReplyTypeVideo && type != NeoWCQuickReplyTypeVoice) {
+        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"只支持图片、视频和语音素材");
         return nil;
     }
     NSString *sourcePath = sourceURL.path;
@@ -296,7 +378,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
         if (existing) return existing.copy;
         NSString *identifier = NSUUID.UUID.UUIDString.lowercaseString;
         NSString *extension = sourceURL.pathExtension.lowercaseString;
-        if (extension.length == 0) extension = type == NeoWCQuickReplyTypeImage ? @"jpg" : @"mp4";
+        if (extension.length == 0) extension = type == NeoWCQuickReplyTypeImage ? @"jpg" : (type == NeoWCQuickReplyTypeVideo ? @"mp4" : @"aud");
         NSString *mediaRelativePath = [@"media" stringByAppendingPathComponent:[identifier stringByAppendingPathExtension:extension]];
         NSURL *destinationURL = [directory URLByAppendingPathComponent:mediaRelativePath];
         NSError *copyError = nil;
@@ -325,6 +407,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
         item.createdAt = NSDate.date;
         item.sourceConversation = NeoWCQuickReplyTrimmedString(sourceConversation).length > 0 ? sourceConversation : nil;
         item.sourceMessageID = NeoWCQuickReplyTrimmedString(sourceMessageID).length > 0 ? sourceMessageID : nil;
+        item.metadata = @{};
         [items addObject:item];
         if ([self saveItemsLocked:items error:error]) return item.copy;
         [NSFileManager.defaultManager removeItemAtURL:destinationURL error:nil];
@@ -345,6 +428,7 @@ static NSString *NeoWCQuickReplyEncodedAccount(NSString *account) {
         NeoWCQuickReplyItem *stored = items[index];
         stored.title = NeoWCQuickReplyTrimmedString(item.title);
         stored.category = NeoWCQuickReplyTrimmedString(item.category);
+        stored.metadata = [item.metadata isKindOfClass:NSDictionary.class] ? item.metadata : @{};
         if (stored.type == NeoWCQuickReplyTypeText) {
             NSString *text = NeoWCQuickReplyTrimmedString(item.text);
             if (text.length == 0) {

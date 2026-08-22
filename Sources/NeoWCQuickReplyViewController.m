@@ -1,5 +1,6 @@
 #import "NeoWCQuickReplyViewController.h"
 #import "NeoWCQuickReplyStore.h"
+#import "NeoWCEnhancements.h"
 #import "NeoWCRuntimeFeatures.h"
 #import <AVFoundation/AVFoundation.h>
 #import <AVKit/AVKit.h>
@@ -53,6 +54,11 @@
     UIView *categoryPadding = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 12, 1)];
     self.categoryField.leftView = categoryPadding;
     self.categoryField.leftViewMode = UITextFieldViewModeAlways;
+    self.categoryField.userInteractionEnabled = NO;
+    UIButton *categoryButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    categoryButton.translatesAutoresizingMaskIntoConstraints = NO;
+    categoryButton.accessibilityLabel = @"选择分类";
+    [categoryButton addTarget:self action:@selector(chooseCategory) forControlEvents:UIControlEventTouchUpInside];
 
     self.textView.translatesAutoresizingMaskIntoConstraints = NO;
     self.textView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
@@ -69,6 +75,7 @@
 
     [self.view addSubview:self.titleField];
     [self.view addSubview:self.categoryField];
+    [self.view addSubview:categoryButton];
     [self.view addSubview:hint];
     [self.view addSubview:self.textView];
     [NSLayoutConstraint activateConstraints:@[
@@ -80,6 +87,10 @@
         [self.categoryField.leadingAnchor constraintEqualToAnchor:self.titleField.leadingAnchor],
         [self.categoryField.trailingAnchor constraintEqualToAnchor:self.titleField.trailingAnchor],
         [self.categoryField.heightAnchor constraintEqualToConstant:48],
+        [categoryButton.topAnchor constraintEqualToAnchor:self.categoryField.topAnchor],
+        [categoryButton.bottomAnchor constraintEqualToAnchor:self.categoryField.bottomAnchor],
+        [categoryButton.leadingAnchor constraintEqualToAnchor:self.categoryField.leadingAnchor],
+        [categoryButton.trailingAnchor constraintEqualToAnchor:self.categoryField.trailingAnchor],
         [hint.topAnchor constraintEqualToAnchor:self.categoryField.bottomAnchor constant:18],
         [hint.leadingAnchor constraintEqualToAnchor:self.titleField.leadingAnchor constant:2],
         [self.textView.topAnchor constraintEqualToAnchor:hint.bottomAnchor constant:7],
@@ -88,6 +99,37 @@
         [self.textView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-16],
     ]];
     if (self.textView.text.length == 0) [self.textView becomeFirstResponder];
+}
+
+- (void)chooseCategory {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择分类" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"未分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        self.categoryField.text = @"";
+    }]];
+    for (NSString *category in NeoWCQuickReplyStore.sharedStore.categories) {
+        [sheet addAction:[UIAlertAction actionWithTitle:category style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            self.categoryField.text = category;
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"新建分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [self createCategory];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) { popover.sourceView = self.categoryField; popover.sourceRect = self.categoryField.bounds; }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)createCategory {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建分类" message:nil preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"分类名称"; }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"创建" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *name = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        NSError *error = nil;
+        if ([NeoWCQuickReplyStore.sharedStore addCategory:name error:&error]) self.categoryField.text = name;
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)save {
@@ -132,6 +174,7 @@
 @property (nonatomic, strong) NeoWCQuickReplyItem *item;
 @property (nonatomic, copy) dispatch_block_t sendHandler;
 @property (nonatomic, strong) AVPlayer *player;
+@property (nonatomic, strong) AVAudioPlayer *audioPlayer;
 - (instancetype)initWithItem:(NeoWCQuickReplyItem *)item;
 @end
 
@@ -141,7 +184,8 @@
     self = [super initWithNibName:nil bundle:nil];
     if (self) {
         _item = item;
-        self.title = item.type == NeoWCQuickReplyTypeImage ? @"确认图片素材" : @"确认视频素材";
+        self.title = item.type == NeoWCQuickReplyTypeImage ? @"确认图片素材" :
+                     (item.type == NeoWCQuickReplyTypeVideo ? @"确认视频素材" : @"确认语音素材");
     }
     return self;
 }
@@ -154,7 +198,21 @@
                                                                              target:self
                                                                              action:@selector(sendTapped)];
     NSString *path = [NeoWCQuickReplyStore.sharedStore absoluteMediaPathForItem:self.item];
-    if (self.item.type == NeoWCQuickReplyTypeVideo) {
+    if (self.item.type == NeoWCQuickReplyTypeVoice) {
+        self.audioPlayer = [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path ?: @""] error:nil];
+        UIImageView *waveform = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"waveform.circle.fill"]];
+        waveform.translatesAutoresizingMaskIntoConstraints = NO;
+        waveform.tintColor = UIColor.whiteColor;
+        waveform.contentMode = UIViewContentModeScaleAspectFit;
+        [self.view addSubview:waveform];
+        [NSLayoutConstraint activateConstraints:@[
+            [waveform.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+            [waveform.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+            [waveform.widthAnchor constraintEqualToConstant:112.0],
+            [waveform.heightAnchor constraintEqualToConstant:112.0],
+        ]];
+        [self.audioPlayer play];
+    } else if (self.item.type == NeoWCQuickReplyTypeVideo) {
         self.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:path ?: @""]];
         NeoWCQuickReplyPlayerView *playerView = [NeoWCQuickReplyPlayerView new];
         playerView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -189,16 +247,19 @@
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
     [self.player pause];
+    [self.audioPlayer stop];
 }
 
 @end
 
-@interface NeoWCQuickReplyViewController () <UISearchResultsUpdating, UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@interface NeoWCQuickReplyViewController () <UISearchResultsUpdating, UISearchBarDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate>
 @property (nonatomic, copy, nullable) NeoWCQuickReplySelectionHandler selectionHandler;
 @property (nonatomic, copy, nullable) NeoWCQuickReplyDirectSendHandler directSendHandler;
 @property (nonatomic, copy) NSArray<NeoWCQuickReplyItem *> *allItems;
 @property (nonatomic, copy) NSArray<NeoWCQuickReplyItem *> *visibleItems;
 @property (nonatomic, strong) UISearchController *searchController;
+@property (nonatomic, copy) NSArray<NSString *> *categories;
+@property (nonatomic, copy) NSString *selectedCategory;
 @end
 
 @implementation NeoWCQuickReplyViewController
@@ -213,6 +274,7 @@
     if (self) {
         _selectionHandler = [selectionHandler copy];
         _directSendHandler = [directSendHandler copy];
+        _selectedCategory = @"";
     }
     return self;
 }
@@ -236,6 +298,7 @@
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
     self.searchController.obscuresBackgroundDuringPresentation = NO;
     self.searchController.searchResultsUpdater = self;
+    self.searchController.searchBar.delegate = self;
     self.searchController.searchBar.placeholder = @"搜索标题或文字";
     self.navigationItem.searchController = self.searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
@@ -258,9 +321,8 @@
     NSIndexPath *indexPath = [self.tableView indexPathForRowAtPoint:[recognizer locationInView:self.tableView]];
     if (!indexPath || indexPath.row >= (NSInteger)self.visibleItems.count) return;
     NeoWCQuickReplyItem *item = self.visibleItems[indexPath.row];
-    if (item.type != NeoWCQuickReplyTypeText) return;
-    self.directSendHandler(item);
-    [self dismissViewControllerAnimated:YES completion:nil];
+    if (NeoWCEnhancementEnabled(NeoWCQuickReplyInstantSendEnabledKey)) [self useItemNormally:item];
+    else [self sendItemDirectly:item];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -277,7 +339,7 @@
     if ([NSUserDefaults.standardUserDefaults boolForKey:key]) return;
     [NSUserDefaults.standardUserDefaults setBool:YES forKey:key];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"从文件传输助手加入素材"
-                                                                   message:@"长按单条文字、图片或视频文件可加入；也可进入微信多选后批量加入。图片和视频需先下载到本机。"
+                                                                   message:@"长按单条文字、图片、视频文件或语音可加入；也可进入微信多选后批量加入。媒体需先下载到本机。"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"前往文件传输助手" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
@@ -292,33 +354,44 @@
 
 - (void)reloadItems {
     self.allItems = NeoWCQuickReplyStore.sharedStore.items;
+    self.categories = NeoWCQuickReplyStore.sharedStore.categories;
+    NSMutableArray<NSString *> *scopes = [NSMutableArray arrayWithObject:@"全部"];
+    [scopes addObjectsFromArray:self.categories];
+    self.searchController.searchBar.scopeButtonTitles = scopes;
+    self.searchController.searchBar.showsScopeBar = self.categories.count > 0;
+    NSUInteger selectedIndex = self.selectedCategory.length > 0 ? [self.categories indexOfObject:self.selectedCategory] : NSNotFound;
+    self.searchController.searchBar.selectedScopeButtonIndex = selectedIndex == NSNotFound ? 0 : selectedIndex + 1;
+    if (selectedIndex == NSNotFound) self.selectedCategory = @"";
     [self applySearchText:self.searchController.searchBar.text];
 }
 
 - (void)applySearchText:(NSString *)query {
     NSString *trimmed = [query stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    if (trimmed.length == 0) {
-        self.visibleItems = self.allItems;
-    } else {
-        self.visibleItems = [self.allItems filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NeoWCQuickReplyItem *item, NSDictionary *bindings) {
+    self.visibleItems = [self.allItems filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NeoWCQuickReplyItem *item, NSDictionary *bindings) {
             (void)bindings;
-            return [item.title localizedCaseInsensitiveContainsString:trimmed] ||
-                   [item.text localizedCaseInsensitiveContainsString:trimmed] ||
-                   [item.category localizedCaseInsensitiveContainsString:trimmed];
-        }]];
-    }
+            BOOL categoryMatches = self.selectedCategory.length == 0 || [item.category isEqualToString:self.selectedCategory];
+            BOOL textMatches = trimmed.length == 0 || [item.title localizedCaseInsensitiveContainsString:trimmed] ||
+                               [item.text localizedCaseInsensitiveContainsString:trimmed];
+            return categoryMatches && textMatches;
+    }]];
     [self.tableView reloadData];
+}
+
+- (void)searchBar:(UISearchBar *)searchBar selectedScopeButtonIndexDidChange:(NSInteger)selectedScope {
+    self.selectedCategory = selectedScope > 0 && selectedScope - 1 < (NSInteger)self.categories.count
+        ? self.categories[selectedScope - 1] : @"";
+    [self applySearchText:searchBar.text];
 }
 
 - (void)cleanupMediaTapped {
     NSUInteger mediaCount = 0;
     for (NeoWCQuickReplyItem *item in self.allItems) if (item.type != NeoWCQuickReplyTypeText) mediaCount++;
     if (mediaCount == 0) {
-        [self showError:[NSError errorWithDomain:@"NeoWC" code:3 userInfo:@{NSLocalizedDescriptionKey: @"素材库中没有图片或视频。"}]];
+        [self showError:[NSError errorWithDomain:@"NeoWC" code:3 userInfo:@{NSLocalizedDescriptionKey: @"素材库中没有媒体素材。"}]];
         return;
     }
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"清理全部媒体素材？"
-                                                                   message:[NSString stringWithFormat:@"将删除 NeoWC 管理的 %lu 个图片或视频副本；文字素材、聊天消息和系统相册不受影响。", (unsigned long)mediaCount]
+                                                                   message:[NSString stringWithFormat:@"将删除 NeoWC 管理的 %lu 个图片、视频或语音副本；文字素材、聊天消息和系统相册不受影响。", (unsigned long)mediaCount]
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     __weak typeof(self) weakSelf = self;
@@ -338,28 +411,64 @@
 }
 
 - (void)editMediaItem:(NeoWCQuickReplyItem *)item {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"编辑媒体素材"
-                                                                   message:nil
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
-        field.placeholder = @"标题（可选）";
-        field.text = item.title;
-    }];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
-        field.placeholder = @"分类（可选）";
-        field.text = item.category;
-    }];
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    __weak typeof(self) weakSelf = self;
-    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        item.title = alert.textFields.firstObject.text ?: @"";
-        item.category = alert.textFields.lastObject.text ?: @"";
-        NSError *error = nil;
-        [NeoWCQuickReplyStore.sharedStore updateItem:item error:&error];
-        [weakSelf reloadItems];
-        if (error) [weakSelf showError:error];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"编辑媒体素材" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"修改标题" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"修改标题" message:nil preferredStyle:UIAlertControllerStyleAlert];
+        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"标题（可选）"; field.text = item.title; }];
+        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *saveAction) {
+            item.title = alert.textFields.firstObject.text ?: @"";
+            NSError *error = nil;
+            [NeoWCQuickReplyStore.sharedStore updateItem:item error:&error];
+            if (error) [self showError:error];
+            [self reloadItems];
+        }]];
+        [self presentViewController:alert animated:YES completion:nil];
     }]];
-    [self presentViewController:alert animated:YES completion:nil];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"选择分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [self chooseCategoryForItem:item];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) { popover.sourceView = self.view; popover.sourceRect = self.view.bounds; }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)chooseCategoryForItem:(NeoWCQuickReplyItem *)item {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择分类" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    NSMutableArray<NSString *> *options = [NSMutableArray arrayWithObject:@""];
+    [options addObjectsFromArray:NeoWCQuickReplyStore.sharedStore.categories];
+    for (NSString *category in options) {
+        NSString *title = category.length > 0 ? category : @"未分类";
+        if ([item.category isEqualToString:category]) title = [title stringByAppendingString:@" ✓"];
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            item.category = category;
+            NSError *error = nil;
+            [NeoWCQuickReplyStore.sharedStore updateItem:item error:&error];
+            if (error) [self showError:error];
+            [self reloadItems];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"新建分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建分类" message:nil preferredStyle:UIAlertControllerStyleAlert];
+        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"分类名称"; }];
+        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"创建并选择" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *saveAction) {
+            NSString *name = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            NSError *error = nil;
+            if ([NeoWCQuickReplyStore.sharedStore addCategory:name error:&error]) {
+                item.category = name;
+                [NeoWCQuickReplyStore.sharedStore updateItem:item error:&error];
+            }
+            if (error) [self showError:error];
+            [self reloadItems];
+        }]];
+        [self presentViewController:alert animated:YES completion:nil];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) { popover.sourceView = self.view; popover.sourceRect = self.view.bounds; }
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
@@ -381,9 +490,68 @@
     [sheet addAction:[UIAlertAction actionWithTitle:@"前往文件传输助手" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         NeoWCOpenChatForUserName(@"filehelper");
     }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"管理分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [self manageCategories];
+    }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     UIPopoverPresentationController *popover = sheet.popoverPresentationController;
     popover.barButtonItem = self.navigationItem.rightBarButtonItem;
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)manageCategories {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"管理分类" message:@"选择分类可重命名或删除" preferredStyle:UIAlertControllerStyleActionSheet];
+    for (NSString *category in NeoWCQuickReplyStore.sharedStore.categories) {
+        [sheet addAction:[UIAlertAction actionWithTitle:category style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [self editCategory:category];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"新建分类" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [self createManagedCategory];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) { popover.sourceView = self.view; popover.sourceRect = self.view.bounds; }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)createManagedCategory {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建分类" message:nil preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"分类名称"; }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"创建" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSError *error = nil;
+        [NeoWCQuickReplyStore.sharedStore addCategory:alert.textFields.firstObject.text error:&error];
+        if (error) [weakSelf showError:error];
+        [weakSelf reloadItems];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)editCategory:(NSString *)category {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:category message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"重命名" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"重命名分类" message:nil preferredStyle:UIAlertControllerStyleAlert];
+        [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.text = category; }];
+        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *saveAction) {
+            NSError *error = nil;
+            [NeoWCQuickReplyStore.sharedStore renameCategory:category toName:alert.textFields.firstObject.text error:&error];
+            if (error) [self showError:error];
+            [self reloadItems];
+        }]];
+        [self presentViewController:alert animated:YES completion:nil];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"删除分类" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        NSError *error = nil;
+        [NeoWCQuickReplyStore.sharedStore deleteCategory:category error:&error];
+        if (error) [self showError:error];
+        [self reloadItems];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) { popover.sourceView = self.view; popover.sourceRect = self.view.bounds; }
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
@@ -485,10 +653,12 @@
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
     if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:identifier];
     NeoWCQuickReplyItem *item = self.visibleItems[indexPath.row];
-    NSString *fallbackTitle = item.type == NeoWCQuickReplyTypeText ? item.text : (item.type == NeoWCQuickReplyTypeImage ? @"图片素材" : @"视频素材");
+    NSString *fallbackTitle = item.type == NeoWCQuickReplyTypeText ? item.text :
+        (item.type == NeoWCQuickReplyTypeImage ? @"图片素材" : (item.type == NeoWCQuickReplyTypeVideo ? @"视频素材" : @"语音素材"));
     cell.textLabel.text = item.title.length > 0 ? item.title : fallbackTitle;
     cell.textLabel.numberOfLines = 1;
-    NSString *typeName = item.type == NeoWCQuickReplyTypeText ? @"文字" : (item.type == NeoWCQuickReplyTypeImage ? @"图片" : @"视频");
+    NSString *typeName = item.type == NeoWCQuickReplyTypeText ? @"文字" :
+        (item.type == NeoWCQuickReplyTypeImage ? @"图片" : (item.type == NeoWCQuickReplyTypeVideo ? @"视频" : @"语音"));
     NSMutableArray<NSString *> *details = [NSMutableArray arrayWithObject:typeName];
     if (item.category.length > 0) [details addObject:item.category];
     if (item.isPinned) [details addObject:@"已置顶"];
@@ -497,7 +667,8 @@
     NSString *thumbnailPath = [NeoWCQuickReplyStore.sharedStore absoluteThumbnailPathForItem:item];
     UIImage *image = thumbnailPath.length > 0 ? [UIImage imageWithContentsOfFile:thumbnailPath] : nil;
     if (!image) {
-        NSString *symbol = item.type == NeoWCQuickReplyTypeText ? @"text.bubble" : (item.type == NeoWCQuickReplyTypeImage ? @"photo" : @"video");
+        NSString *symbol = item.type == NeoWCQuickReplyTypeText ? @"text.bubble" :
+            (item.type == NeoWCQuickReplyTypeImage ? @"photo" : (item.type == NeoWCQuickReplyTypeVideo ? @"video" : @"waveform"));
         image = [UIImage systemImageNamed:symbol];
     }
     cell.imageView.image = image;
@@ -508,7 +679,7 @@
 
 - (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView; (void)indexPath;
-    return !self.selectionHandler && self.searchController.searchBar.text.length == 0;
+    return !self.selectionHandler && self.searchController.searchBar.text.length == 0 && self.selectedCategory.length == 0;
 }
 
 - (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)sourceIndexPath toIndexPath:(NSIndexPath *)destinationIndexPath {
@@ -529,23 +700,8 @@
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NeoWCQuickReplyItem *item = self.visibleItems[indexPath.row];
     if (self.selectionHandler) {
-        if (item.type == NeoWCQuickReplyTypeText) {
-            self.selectionHandler(item);
-            [self dismissViewControllerAnimated:YES completion:nil];
-        } else {
-            NeoWCQuickReplyMediaPreviewViewController *preview = [[NeoWCQuickReplyMediaPreviewViewController alloc] initWithItem:item];
-            __weak typeof(self) weakSelf = self;
-            __weak NeoWCQuickReplyMediaPreviewViewController *weakPreview = preview;
-            preview.sendHandler = ^{
-                NeoWCQuickReplyViewController *strongSelf = weakSelf;
-                if (!strongSelf) return;
-                NeoWCQuickReplySelectionHandler handler = strongSelf.selectionHandler;
-                [weakPreview dismissViewControllerAnimated:YES completion:^{
-                    if (handler) handler(item);
-                }];
-            };
-            [self.navigationController pushViewController:preview animated:YES];
-        }
+        if (NeoWCEnhancementEnabled(NeoWCQuickReplyInstantSendEnabledKey)) [self sendItemDirectly:item];
+        else [self useItemNormally:item];
         return;
     }
     if (item.type == NeoWCQuickReplyTypeText) {
@@ -553,7 +709,7 @@
         return;
     }
     NSString *path = [NeoWCQuickReplyStore.sharedStore absoluteMediaPathForItem:item];
-    if (item.type == NeoWCQuickReplyTypeVideo && path.length > 0) {
+    if ((item.type == NeoWCQuickReplyTypeVideo || item.type == NeoWCQuickReplyTypeVoice) && path.length > 0) {
         AVPlayerViewController *player = [AVPlayerViewController new];
         player.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:path]];
         [self presentViewController:player animated:YES completion:^{ [player.player play]; }];
@@ -574,6 +730,30 @@
         [imageView.trailingAnchor constraintEqualToAnchor:preview.view.trailingAnchor],
     ]];
     [self presentViewController:preview animated:YES completion:nil];
+}
+
+- (void)useItemNormally:(NeoWCQuickReplyItem *)item {
+    if (!self.selectionHandler) return;
+    if (item.type == NeoWCQuickReplyTypeText) {
+        NeoWCQuickReplySelectionHandler handler = self.selectionHandler;
+        [self dismissViewControllerAnimated:YES completion:^{ if (handler) handler(item); }];
+        return;
+    }
+    NeoWCQuickReplyMediaPreviewViewController *preview = [[NeoWCQuickReplyMediaPreviewViewController alloc] initWithItem:item];
+    __weak typeof(self) weakSelf = self;
+    preview.sendHandler = ^{
+        NeoWCQuickReplyViewController *strongSelf = weakSelf;
+        if (!strongSelf) return;
+        NeoWCQuickReplySelectionHandler handler = strongSelf.selectionHandler;
+        [strongSelf dismissViewControllerAnimated:YES completion:^{ if (handler) handler(item); }];
+    };
+    [self.navigationController pushViewController:preview animated:YES];
+}
+
+- (void)sendItemDirectly:(NeoWCQuickReplyItem *)item {
+    if (!self.directSendHandler) return;
+    NeoWCQuickReplyDirectSendHandler handler = self.directSendHandler;
+    [self dismissViewControllerAnimated:YES completion:^{ handler(item); }];
 }
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {

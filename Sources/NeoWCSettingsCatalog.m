@@ -171,6 +171,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCHideScreenshotForwardKey: @NO,
         NeoWCInputSwipeActionsEnabledKey: @NO,
         NeoWCQuickReplyEnabledKey: @NO,
+        NeoWCQuickReplyInstantSendEnabledKey: @NO,
         NeoWCSendConfirmationEnabledKey: @NO,
         NeoWCSendConfirmationUsersKey: @{},
         NeoWCMomentsLikeHapticEnabledKey: @NO,
@@ -275,9 +276,10 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"语音转发", @"在语音长按菜单中显示转发", @"waveform.badge.plus", NeoWCSettingRowKindSwitch, NeoWCVoiceForwardEnabledKey, nil, NeoWCSettingActionNone),
     ]];
     NeoWCAddFeature(interaction,
-                    NeoWCItem(@"快捷回复素材库", @"长按聊天“+”使用文字、图片和视频素材", @"tray.full", NeoWCSettingRowKindSwitch, NeoWCQuickReplyEnabledKey, nil, NeoWCSettingActionNone),
-                    @[NeoWCItem(@"管理素材库", @"搜索、编辑、置顶和清理独立素材副本", @"square.grid.2x2", NeoWCSettingRowKindDetail, nil,
-                               NeoWCCountText(NeoWCQuickReplyStore.sharedStore.items.count), NeoWCSettingActionQuickReplyLibrary)],
+                    NeoWCItem(@"快捷回复素材库", @"长按聊天“+”使用文字、图片、视频和语音素材", @"tray.full", NeoWCSettingRowKindSwitch, NeoWCQuickReplyEnabledKey, nil, NeoWCSettingActionNone),
+                    @[NeoWCItem(@"点击秒发送", @"开启后点击直接发送，长按进入编辑或预览", @"bolt.fill", NeoWCSettingRowKindSwitch, NeoWCQuickReplyInstantSendEnabledKey, nil, NeoWCSettingActionNone),
+                      NeoWCItem(@"管理素材库", @"搜索、分类、编辑、置顶和清理独立素材副本", @"square.grid.2x2", NeoWCSettingRowKindDetail, nil,
+                                NeoWCCountText(NeoWCQuickReplyStore.sharedStore.items.count), NeoWCSettingActionQuickReplyLibrary)],
                     defaults,
                     collapsed);
     NeoWCAddFeature(interaction, NeoWCItem(@"语音自动转文字", @"收到语音后自动转成文字", @"waveform.and.mic", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionEnabledKey, nil, NeoWCSettingActionNone), @[

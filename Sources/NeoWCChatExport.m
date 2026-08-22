@@ -108,6 +108,24 @@ static NSString *NeoWCExportExistingAttachmentPath(id wrap) {
     return path.length > 0 && [NSFileManager.defaultManager fileExistsAtPath:path] ? path : nil;
 }
 
+static NSString *NeoWCExportExistingVoicePath(id wrap) {
+    SEL selector = NSSelectorFromString(@"getVoicePath");
+    if (![wrap respondsToSelector:selector]) return nil;
+    id value = ((id (*)(id, SEL))objc_msgSend)(wrap, selector);
+    NSString *path = [value isKindOfClass:NSString.class] ? value : nil;
+    return path.length > 0 && [NSFileManager.defaultManager fileExistsAtPath:path] ? path : nil;
+}
+
+static NSDictionary *NeoWCExportVoiceMetadata(id wrap) {
+    id extendInfo = NeoWCExportSafeValue(wrap, @"m_extendInfoWithMsgType");
+    NSNumber *voiceTime = NeoWCExportSafeValue(extendInfo, @"m_uiVoiceTime");
+    NSNumber *voiceFormat = NeoWCExportSafeValue(extendInfo, @"m_uiVoiceFormat");
+    NSMutableDictionary *metadata = [NSMutableDictionary dictionary];
+    if ([voiceTime respondsToSelector:@selector(unsignedIntegerValue)] && voiceTime.unsignedIntegerValue > 0) metadata[@"voiceTime"] = voiceTime;
+    if ([voiceFormat respondsToSelector:@selector(unsignedIntegerValue)]) metadata[@"voiceFormat"] = voiceFormat;
+    return metadata;
+}
+
 static void NeoWCImportSelectedQuickReplies(UIViewController *controller, NSArray *messages) {
     NSUInteger imported = 0, alreadyPresent = 0, unavailable = 0, unsupported = 0;
     for (id wrap in messages) {
@@ -126,6 +144,16 @@ static void NeoWCImportSelectedQuickReplies(UIViewController *controller, NSArra
             item = [NeoWCQuickReplyStore.sharedStore addMediaAtURL:[NSURL fileURLWithPath:path]
                                                                type:NeoWCQuickReplyTypeImage title:nil
                                                   sourceConversation:@"filehelper" sourceMessageID:sourceID error:&error];
+        } else if (type == 34) {
+            NSString *path = NeoWCExportExistingVoicePath(wrap);
+            if (path.length == 0) { unavailable++; continue; }
+            item = [NeoWCQuickReplyStore.sharedStore addMediaAtURL:[NSURL fileURLWithPath:path]
+                                                               type:NeoWCQuickReplyTypeVoice title:@"语音素材"
+                                                  sourceConversation:@"filehelper" sourceMessageID:sourceID error:&error];
+            if (item) {
+                item.metadata = NeoWCExportVoiceMetadata(wrap);
+                [NeoWCQuickReplyStore.sharedStore updateItem:item error:&error];
+            }
         } else if (NeoWCExportMessageIsFile(wrap)) {
             NSString *fileName = NeoWCExportSafeValue(wrap, @"m_nsAppFileName");
             NSSet *extensions = [NSSet setWithArray:@[@"mp4", @"mov", @"m4v"]];

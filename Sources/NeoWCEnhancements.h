@@ -125,6 +125,7 @@ FOUNDATION_EXPORT NSString *const NeoWCAntiRevokePersistRecordsKey;
 FOUNDATION_EXPORT NSString *const NeoWCImageEditQuickSendEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCInputSwipeActionsEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuickReplyEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCQuickReplyInstantSendEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCSendConfirmationEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCSendConfirmationUsersKey;
 FOUNDATION_EXPORT NSString *const NeoWCMultiSelectExportEnabledKey;

@@ -6,6 +6,7 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
     NeoWCQuickReplyTypeText = 0,
     NeoWCQuickReplyTypeImage = 1,
     NeoWCQuickReplyTypeVideo = 2,
+    NeoWCQuickReplyTypeVoice = 3,
 };
 
 @interface NeoWCQuickReplyItem : NSObject <NSCopying>
@@ -21,6 +22,7 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
 @property (nonatomic, strong) NSDate *createdAt;
 @property (nonatomic, copy, nullable) NSString *sourceConversation;
 @property (nonatomic, copy, nullable) NSString *sourceMessageID;
+@property (nonatomic, copy) NSDictionary<NSString *, id> *metadata;
 @end
 
 @interface NeoWCQuickReplyStore : NSObject
@@ -31,6 +33,7 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
 @property (nonatomic, copy, readonly, nullable) NSString *accountIdentifier;
 
 - (NSArray<NeoWCQuickReplyItem *> *)items;
+- (NSArray<NSString *> *)categories;
 - (nullable NeoWCQuickReplyItem *)addText:(NSString *)text
                                     title:(nullable NSString *)title
                                  category:(nullable NSString *)category
@@ -47,6 +50,9 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
 - (BOOL)setPinned:(BOOL)pinned forIdentifier:(NSString *)identifier error:(NSError **)error;
 - (BOOL)applyOrderedIdentifiers:(NSArray<NSString *> *)identifiers error:(NSError **)error;
 - (BOOL)deleteItemWithIdentifier:(NSString *)identifier error:(NSError **)error;
+- (BOOL)addCategory:(NSString *)category error:(NSError **)error;
+- (BOOL)renameCategory:(NSString *)category toName:(NSString *)newName error:(NSError **)error;
+- (BOOL)deleteCategory:(NSString *)category error:(NSError **)error;
 - (nullable NSString *)absoluteMediaPathForItem:(NeoWCQuickReplyItem *)item;
 - (nullable NSString *)absoluteThumbnailPathForItem:(NeoWCQuickReplyItem *)item;
 - (unsigned long long)managedMediaSize;

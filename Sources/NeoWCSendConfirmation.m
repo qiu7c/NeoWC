@@ -60,6 +60,9 @@ void NeoWCSendConfirmationSetProtected(NSString *username, BOOL protectedConvers
     else [users removeObject:normalized];
     map[account] = users.array;
     [NSUserDefaults.standardUserDefaults setObject:map forKey:NeoWCSendConfirmationUsersKey];
+    if (protectedConversation) {
+        [NSUserDefaults.standardUserDefaults setBool:YES forKey:NeoWCSendConfirmationEnabledKey];
+    }
     [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification
                                                        object:NeoWCSendConfirmationUsersKey];
 }
