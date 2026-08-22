@@ -1,4 +1,5 @@
 #import "NeoWCDebug.h"
+#import "NeoWCInterfaceTweaks.h"
 #import <objc/runtime.h>
 #import <mach-o/dyld.h>
 
@@ -491,7 +492,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
         NSArray *symbols = @[@"square.3.layers.3d", @"viewfinder", @"magnifyingglass", @"doc.text"];
         cell.textLabel.text = titles[indexPath.row];
         cell.imageView.image = [UIImage systemImageNamed:symbols[indexPath.row]];
-        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        cell.accessoryType = UITableViewCellAccessoryNone;
     } else {
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         if (indexPath.row == 0) { cell.textLabel.text = @"系统"; cell.detailTextLabel.text = UIDevice.currentDevice.systemVersion; }
@@ -681,10 +682,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     searchController.searchResultsUpdater = self;
     searchController.obscuresBackgroundDuringPresentation = NO;
     searchController.searchBar.placeholder = @"输入微信类名";
-    searchController.searchBar.backgroundImage = [UIImage new];
-    searchController.searchBar.backgroundColor = UIColor.clearColor;
-    searchController.searchBar.barTintColor = UIColor.clearColor;
-    searchController.searchBar.searchTextField.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
+    NeoWCStyleSearchBar(searchController.searchBar);
     self.navigationItem.searchController = searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     self.searchController = searchController;
@@ -712,7 +710,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     Class cls = NSClassFromString(name);
     cell.textLabel.text = name;
     cell.detailTextLabel.text = [NSString stringWithFormat:@"super: %@", NSStringFromClass(class_getSuperclass(cls)) ?: @"-"];
-    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+    cell.accessoryType = UITableViewCellAccessoryNone;
     return cell;
 }
 

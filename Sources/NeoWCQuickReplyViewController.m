@@ -3,8 +3,10 @@
 #import "NeoWCSilkDecoder.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCRuntimeFeatures.h"
+#import "NeoWCInterfaceTweaks.h"
 #import <AVFoundation/AVFoundation.h>
 #import <AVKit/AVKit.h>
+#import <math.h>
 
 @interface NeoWCQuickReplyTextEditorViewController : UIViewController
 @property (nonatomic, strong) UITextField *titleField;
@@ -113,13 +115,16 @@
 
 @end
 
-@interface NeoWCQuickReplyMediaPreviewViewController : UIViewController
+@interface NeoWCQuickReplyMediaPreviewViewController : UIViewController <AVAudioPlayerDelegate>
 @property (nonatomic, strong) NeoWCQuickReplyItem *item;
 @property (nonatomic, copy) dispatch_block_t sendHandler;
 @property (nonatomic, strong) AVPlayer *player;
 @property (nonatomic, strong) AVAudioPlayer *audioPlayer;
 @property (nonatomic, strong) UIButton *voicePlayButton;
 @property (nonatomic, strong) UILabel *voiceStatusLabel;
+@property (nonatomic, strong) UISlider *voiceProgressSlider;
+@property (nonatomic, strong) UILabel *voiceTimeLabel;
+@property (nonatomic, strong) NSTimer *voiceProgressTimer;
 @property (nonatomic, assign) BOOL showsSendButton;
 @property (nonatomic, copy) NSString *voiceSourcePath;
 @property (nonatomic, copy) NSString *voiceTemporaryWAVPath;
@@ -129,6 +134,14 @@
 @end
 
 @implementation NeoWCQuickReplyMediaPreviewViewController
+
+static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInterval duration) {
+    NSInteger currentSeconds = MAX(0, (NSInteger)floor(currentTime));
+    NSInteger durationSeconds = MAX(0, (NSInteger)ceil(duration));
+    return [NSString stringWithFormat:@"%ld:%02ld / %ld:%02ld",
+            (long)(currentSeconds / 60), (long)(currentSeconds % 60),
+            (long)(durationSeconds / 60), (long)(durationSeconds % 60)];
+}
 
 - (instancetype)initWithItem:(NeoWCQuickReplyItem *)item {
     self = [super initWithNibName:nil bundle:nil];
@@ -178,25 +191,52 @@
         statusLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
         statusLabel.textColor = UIColor.lightGrayColor;
         if (self.audioPlayer) {
-            statusLabel.text = voiceTime > 0 ? [NSString stringWithFormat:@"约 %.1f 秒", voiceTime / 1000.0] : @"轻点播放预览";
+            statusLabel.text = @"轻点播放预览";
         } else if (voiceFormat == 4) {
-            statusLabel.text = voiceTime > 0 ? [NSString stringWithFormat:@"约 %.1f 秒 · 首次播放将快速解码", voiceTime / 1000.0] : @"首次播放将快速解码";
+            statusLabel.text = @"首次播放将快速解码";
         } else {
             statusLabel.text = audioError.localizedDescription ?: @"无法读取该语音文件。";
         }
+        UISlider *progressSlider = [UISlider new];
+        progressSlider.translatesAutoresizingMaskIntoConstraints = NO;
+        progressSlider.minimumValue = 0.0f;
+        NSTimeInterval metadataDuration = voiceTime / 1000.0;
+        NSTimeInterval initialDuration = self.audioPlayer.duration > 0.0 ? self.audioPlayer.duration : metadataDuration;
+        progressSlider.maximumValue = MAX(0.01, initialDuration);
+        progressSlider.value = 0.0f;
+        progressSlider.minimumTrackTintColor = UIColor.whiteColor;
+        progressSlider.maximumTrackTintColor = [UIColor colorWithWhite:1.0 alpha:0.28];
+        progressSlider.enabled = self.audioPlayer != nil;
+        [progressSlider addTarget:self action:@selector(voiceProgressChanged:) forControlEvents:UIControlEventValueChanged];
+        UILabel *timeLabel = [UILabel new];
+        timeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        timeLabel.font = [UIFont monospacedDigitSystemFontOfSize:13.0 weight:UIFontWeightRegular];
+        timeLabel.textColor = UIColor.lightGrayColor;
+        timeLabel.textAlignment = NSTextAlignmentCenter;
+        timeLabel.text = NeoWCVoicePreviewTimeText(0.0, initialDuration);
         [self.view addSubview:waveform];
         [self.view addSubview:playButton];
+        [self.view addSubview:progressSlider];
+        [self.view addSubview:timeLabel];
         [self.view addSubview:statusLabel];
         self.voicePlayButton = playButton;
         self.voiceStatusLabel = statusLabel;
+        self.voiceProgressSlider = progressSlider;
+        self.voiceTimeLabel = timeLabel;
+        self.audioPlayer.delegate = self;
         [NSLayoutConstraint activateConstraints:@[
             [waveform.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-            [waveform.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-54.0],
+            [waveform.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-88.0],
             [waveform.widthAnchor constraintEqualToConstant:112.0],
             [waveform.heightAnchor constraintEqualToConstant:112.0],
             [playButton.topAnchor constraintEqualToAnchor:waveform.bottomAnchor constant:18.0],
             [playButton.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-            [statusLabel.topAnchor constraintEqualToAnchor:playButton.bottomAnchor constant:12.0],
+            [progressSlider.topAnchor constraintEqualToAnchor:playButton.bottomAnchor constant:16.0],
+            [progressSlider.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:32.0],
+            [progressSlider.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-32.0],
+            [timeLabel.topAnchor constraintEqualToAnchor:progressSlider.bottomAnchor constant:2.0],
+            [timeLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+            [statusLabel.topAnchor constraintEqualToAnchor:timeLabel.bottomAnchor constant:10.0],
             [statusLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:32.0],
             [statusLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-32.0],
         ]];
@@ -231,6 +271,39 @@
     }
 }
 
+- (NSTimeInterval)voicePreviewDuration {
+    NSTimeInterval playerDuration = self.audioPlayer.duration;
+    if (isfinite(playerDuration) && playerDuration > 0.0) return playerDuration;
+    return [self.item.metadata[@"voiceTime"] unsignedIntegerValue] / 1000.0;
+}
+
+- (void)updateVoiceProgress {
+    NSTimeInterval duration = [self voicePreviewDuration];
+    NSTimeInterval currentTime = self.audioPlayer ? self.audioPlayer.currentTime : 0.0;
+    self.voiceProgressSlider.maximumValue = MAX(0.01, duration);
+    if (!self.voiceProgressSlider.tracking) self.voiceProgressSlider.value = MIN(duration, MAX(0.0, currentTime));
+    self.voiceTimeLabel.text = NeoWCVoicePreviewTimeText(currentTime, duration);
+}
+
+- (void)startVoiceProgressTimer {
+    [self.voiceProgressTimer invalidate];
+    __weak typeof(self) weakSelf = self;
+    self.voiceProgressTimer = [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(__unused NSTimer *timer) {
+        [weakSelf updateVoiceProgress];
+    }];
+}
+
+- (void)stopVoiceProgressTimer {
+    [self.voiceProgressTimer invalidate];
+    self.voiceProgressTimer = nil;
+}
+
+- (void)voiceProgressChanged:(UISlider *)slider {
+    if (!self.audioPlayer) return;
+    self.audioPlayer.currentTime = MIN(self.audioPlayer.duration, MAX(0.0, slider.value));
+    [self updateVoiceProgress];
+}
+
 - (void)voicePlayTapped {
     if (!self.audioPlayer) {
         if ([self.item.metadata[@"voiceFormat"] unsignedIntegerValue] == 4) [self decodeSilkVoiceAndPlay];
@@ -238,15 +311,20 @@
     }
     if (self.audioPlayer.isPlaying) {
         [self.audioPlayer pause];
+        [self stopVoiceProgressTimer];
+        [self updateVoiceProgress];
         [self.voicePlayButton setTitle:@"继续播放" forState:UIControlStateNormal];
         self.voiceStatusLabel.text = @"已暂停";
     } else {
         if (self.audioPlayer.currentTime >= self.audioPlayer.duration) self.audioPlayer.currentTime = 0;
         if ([self.audioPlayer play]) {
+            [self startVoiceProgressTimer];
+            [self updateVoiceProgress];
             [self.voicePlayButton setTitle:@"暂停" forState:UIControlStateNormal];
             self.voiceStatusLabel.text = @"正在播放";
         } else {
             self.voicePlayButton.enabled = NO;
+            self.voiceProgressSlider.enabled = NO;
             [self.voicePlayButton setTitle:@"暂不可预览" forState:UIControlStateNormal];
             self.voiceStatusLabel.text = @"系统播放器无法播放该语音文件。";
         }
@@ -258,6 +336,7 @@
     self.voiceDecodeInProgress = YES;
     NSUInteger generation = ++self.voiceDecodeGeneration;
     self.voicePlayButton.enabled = NO;
+    self.voiceProgressSlider.enabled = NO;
     [self.voicePlayButton setTitle:@"正在准备…" forState:UIControlStateNormal];
     self.voiceStatusLabel.text = @"正在解码 Silk 语音";
     NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"NeoWCVoicePreviews"];
@@ -287,6 +366,7 @@
             strongSelf.voiceDecodeInProgress = NO;
             if (!decoded) {
                 strongSelf.voicePlayButton.enabled = YES;
+                strongSelf.voiceProgressSlider.enabled = NO;
                 [strongSelf.voicePlayButton setTitle:@"重试" forState:UIControlStateNormal];
                 strongSelf.voiceStatusLabel.text = decodeError.localizedDescription ?: @"Silk 语音解码失败";
                 return;
@@ -297,16 +377,20 @@
             if (!player) {
                 [NSFileManager.defaultManager removeItemAtPath:destination error:nil];
                 strongSelf.voicePlayButton.enabled = YES;
+                strongSelf.voiceProgressSlider.enabled = NO;
                 [strongSelf.voicePlayButton setTitle:@"重试" forState:UIControlStateNormal];
                 strongSelf.voiceStatusLabel.text = audioError.localizedDescription ?: @"无法播放解码后的语音";
                 return;
             }
             strongSelf.voiceTemporaryWAVPath = destination;
             strongSelf.audioPlayer = player;
+            player.delegate = strongSelf;
             [player prepareToPlay];
             strongSelf.voicePlayButton.enabled = YES;
+            strongSelf.voiceProgressSlider.enabled = YES;
             [strongSelf.voicePlayButton setTitle:@"播放" forState:UIControlStateNormal];
             strongSelf.voiceStatusLabel.text = @"准备完成";
+            [strongSelf updateVoiceProgress];
             [strongSelf voicePlayTapped];
         });
     });
@@ -315,7 +399,10 @@
 - (void)cleanupVoicePreview {
     self.voiceDecodeGeneration++;
     self.voiceDecodeInProgress = NO;
+    [self stopVoiceProgressTimer];
     [self.audioPlayer stop];
+    self.audioPlayer.currentTime = 0.0;
+    [self updateVoiceProgress];
     if (self.voiceTemporaryWAVPath.length > 0) {
         [NSFileManager.defaultManager removeItemAtPath:self.voiceTemporaryWAVPath error:nil];
         self.voiceTemporaryWAVPath = nil;
@@ -323,12 +410,19 @@
     }
     if ([self.item.metadata[@"voiceFormat"] unsignedIntegerValue] == 4 && self.voicePlayButton) {
         self.voicePlayButton.enabled = self.voiceSourcePath.length > 0;
+        self.voiceProgressSlider.enabled = NO;
         [self.voicePlayButton setTitle:@"播放" forState:UIControlStateNormal];
-        NSUInteger voiceTime = [self.item.metadata[@"voiceTime"] unsignedIntegerValue];
-        self.voiceStatusLabel.text = voiceTime > 0
-            ? [NSString stringWithFormat:@"约 %.1f 秒 · 首次播放将快速解码", voiceTime / 1000.0]
-            : @"首次播放将快速解码";
+        self.voiceStatusLabel.text = @"首次播放将快速解码";
     }
+}
+
+- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag {
+    (void)player;
+    [self stopVoiceProgressTimer];
+    self.audioPlayer.currentTime = 0.0;
+    [self updateVoiceProgress];
+    [self.voicePlayButton setTitle:@"播放" forState:UIControlStateNormal];
+    self.voiceStatusLabel.text = flag ? @"播放完成" : @"播放已停止";
 }
 
 - (void)applicationDidEnterBackground:(__unused NSNotification *)notification {
@@ -407,10 +501,7 @@
     self.searchController.searchResultsUpdater = self;
     self.searchController.searchBar.delegate = self;
     self.searchController.searchBar.placeholder = @"搜索备注或文字";
-    self.searchController.searchBar.backgroundImage = [UIImage new];
-    self.searchController.searchBar.backgroundColor = UIColor.systemGroupedBackgroundColor;
-    self.searchController.searchBar.barTintColor = UIColor.clearColor;
-    self.searchController.searchBar.searchTextField.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
+    NeoWCStyleSearchBar(self.searchController.searchBar);
     UIView *searchHeader = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, self.tableView.bounds.size.width, 56.0)];
     searchHeader.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.searchController.searchBar.frame = searchHeader.bounds;

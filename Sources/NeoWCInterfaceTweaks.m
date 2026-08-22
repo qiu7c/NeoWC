@@ -17,6 +17,19 @@ NSString *const NeoWCHideChatMuteIconKey = @"com.qiu7c.neowc.interface.hide-chat
 NSString *const NeoWCGlobalAvatarRoundingEnabledKey = @"com.qiu7c.neowc.interface.global-avatar-rounding";
 NSString *const NeoWCGlobalAvatarCornerPercentKey = @"com.qiu7c.neowc.interface.global-avatar-corner-percent";
 
+void NeoWCStyleSearchBar(UISearchBar *searchBar) {
+    if (!searchBar) return;
+    searchBar.backgroundImage = [UIImage new];
+    searchBar.backgroundColor = UIColor.clearColor;
+    searchBar.barTintColor = UIColor.clearColor;
+    searchBar.translucent = YES;
+    UITextField *textField = searchBar.searchTextField;
+    textField.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
+    textField.layer.cornerRadius = 11.0;
+    textField.layer.cornerCurve = kCACornerCurveContinuous;
+    textField.layer.masksToBounds = YES;
+}
+
 static char NeoWCOriginalCornerRadiusKey;
 static char NeoWCOriginalMasksToBoundsKey;
 static char NeoWCOriginalCornerCurveKey;

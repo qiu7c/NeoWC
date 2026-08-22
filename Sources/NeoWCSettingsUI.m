@@ -68,18 +68,7 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
         toggle.accessibilityLabel = item.title;
         [toggle addTarget:self action:@selector(toggleChanged:) forControlEvents:UIControlEventValueChanged];
         if (item.hasChildren) {
-            UIImageView *chevron = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.down"]];
-            chevron.tintColor = UIColor.tertiaryLabelColor;
-            chevron.alpha = toggle.isOn ? 1.0 : 0.0;
-            chevron.transform = expanded ? CGAffineTransformIdentity : CGAffineTransformMakeRotation((CGFloat)-M_PI_2);
-            [chevron.widthAnchor constraintEqualToConstant:11.0].active = YES;
-            [chevron.heightAnchor constraintEqualToConstant:15.0].active = YES;
-            UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[chevron, toggle]];
-            stack.axis = UILayoutConstraintAxisHorizontal;
-            stack.alignment = UIStackViewAlignmentCenter;
-            stack.spacing = 8.0;
-            stack.frame = CGRectMake(0.0, 0.0, 72.0, 32.0);
-            self.accessoryView = stack;
+            self.accessoryView = toggle;
             self.selectionStyle = toggle.isOn ? UITableViewCellSelectionStyleDefault : UITableViewCellSelectionStyleNone;
             self.accessibilityHint = toggle.isOn ? (expanded ? @"轻点收起子选项" : @"轻点展开子选项") : nil;
         } else {
@@ -87,21 +76,16 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
             self.selectionStyle = UITableViewCellSelectionStyleNone;
         }
     } else if (item.kind == NeoWCSettingRowKindDetail) {
-        UILabel *value = [UILabel new];
-        value.text = item.value ?: @"";
-        value.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleSubheadline] scaledFontForFont:[UIFont systemFontOfSize:15.0 * scale]];
-        value.adjustsFontForContentSizeCategory = YES;
-        value.textColor = UIColor.tertiaryLabelColor;
-        value.adjustsFontSizeToFitWidth = YES;
-        value.minimumScaleFactor = 0.8;
-        UIImageView *chevron = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.right"]];
-        chevron.tintColor = UIColor.quaternaryLabelColor;
-        [chevron.widthAnchor constraintEqualToConstant:8.0].active = YES;
-        UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[value, chevron]];
-        stack.axis = UILayoutConstraintAxisHorizontal;
-        stack.alignment = UIStackViewAlignmentCenter;
-        stack.spacing = 6.0;
-        self.accessoryView = stack;
+        if (item.value.length > 0) {
+            UILabel *value = [UILabel new];
+            value.text = item.value;
+            value.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleSubheadline] scaledFontForFont:[UIFont systemFontOfSize:15.0 * scale]];
+            value.adjustsFontForContentSizeCategory = YES;
+            value.textColor = UIColor.tertiaryLabelColor;
+            value.adjustsFontSizeToFitWidth = YES;
+            value.minimumScaleFactor = 0.8;
+            self.accessoryView = value;
+        }
     } else if (item.value.length > 0) {
         UILabel *value = [UILabel new];
         value.text = item.value;

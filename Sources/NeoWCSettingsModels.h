@@ -68,6 +68,7 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionGlobalAvatarCornerPercent,
     NeoWCSettingActionQuickReplyLibrary,
     NeoWCSettingActionSendConfirmationConversations,
+    NeoWCSettingActionSendConfirmationPauseDuration,
 };
 
 @interface NeoWCSettingItem : NSObject

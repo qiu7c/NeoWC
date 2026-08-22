@@ -10,6 +10,7 @@
 #import "NeoWCListEditorViewController.h"
 #import "NeoWCLongPressMenuViewController.h"
 #import "NeoWCMeMenuViewController.h"
+#import "NeoWCMessageBlock.h"
 #import "NeoWCPluginManager.h"
 #import "NeoWCReleaseNotes.h"
 #import "NeoWCQuickReplyViewController.h"
@@ -188,6 +189,30 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         [NSUserDefaults.standardUserDefaults setDouble:value forKey:key];
         if (notifyChange) [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:key];
         if (weakSelf.reloadHandler) weakSelf.reloadHandler(applyScale);
+    }]];
+    [self.viewController presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentSendConfirmationPauseDurationEditor {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"临时暂停时长"
+                                                                   message:@"输入暂停确认的秒数"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        NSInteger saved = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCSendConfirmationPauseSecondsKey];
+        field.text = [NSString stringWithFormat:@"%ld", (long)(saved > 0 ? saved : 60)];
+        field.keyboardType = UIKeyboardTypeNumberPad;
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *raw = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        NSInteger seconds = raw.integerValue;
+        [NSUserDefaults.standardUserDefaults setInteger:seconds > 0 ? seconds : 60
+                                                 forKey:NeoWCSendConfirmationPauseSecondsKey];
+        [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification
+                                                           object:NeoWCSendConfirmationPauseSecondsKey];
+        if (weakSelf.reloadHandler) weakSelf.reloadHandler(NO);
     }]];
     [self.viewController presentViewController:alert animated:YES completion:nil];
 }
@@ -556,7 +581,7 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         case NeoWCSettingActionConfigManager: [self push:[NeoWCConfigManagerViewController new]]; break;
         case NeoWCSettingActionAuthorProfile: [self openAuthorProfile]; break;
         case NeoWCSettingActionReleaseNotes: [self.viewController presentViewController:[NeoWCReleaseNotesViewController new] animated:NO completion:nil]; break;
-        case NeoWCSettingActionBlockUsers: [self push:[[NeoWCListEditorViewController alloc] initWithTitle:item.title subtitle:@"每行填写一个 wxid 或以 @chatroom 结尾的群聊账号" defaultsKey:NeoWCMessageBlockUsersKey mode:NeoWCListEditorModeList]]; break;
+        case NeoWCSettingActionBlockUsers: [self push:[NeoWCMessageBlockViewController new]]; break;
         case NeoWCSettingActionBlockKeywords: [self push:[[NeoWCListEditorViewController alloc] initWithTitle:item.title subtitle:@"仅匹配新收到的普通文字消息，每行填写一个关键词" defaultsKey:NeoWCMessageBlockKeywordsKey mode:NeoWCListEditorModeList]]; break;
         case NeoWCSettingActionLongPressMenus: [self push:[NeoWCLongPressMenuViewController new]]; break;
         case NeoWCSettingActionMeMenu: [self push:[NeoWCMeMenuViewController new]]; break;
@@ -598,6 +623,7 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         case NeoWCSettingActionGlobalAvatarCornerPercent: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 100 之间的百分比；0 为直角，100 为圆形" key:NeoWCGlobalAvatarCornerPercentKey minimum:0 maximum:100 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionQuickReplyLibrary: [self push:[[NeoWCQuickReplyViewController alloc] initWithSelectionHandler:nil]]; break;
         case NeoWCSettingActionSendConfirmationConversations: [self push:[NeoWCSendConfirmationViewController new]]; break;
+        case NeoWCSettingActionSendConfirmationPauseDuration: [self presentSendConfirmationPauseDurationEditor]; break;
         default: break;
     }
 }

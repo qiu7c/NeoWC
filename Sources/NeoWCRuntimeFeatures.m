@@ -1,4 +1,5 @@
 #import "NeoWCRuntimeFeatures.h"
+#import "NeoWCMessageBlock.h"
 
 #import "NeoWCAccount.h"
 #import "NeoWCDebug.h"
@@ -191,20 +192,31 @@ static NSString *NeoWCContactDisplayName(id contact, NSString *fallback) {
 
 BOOL NeoWCShouldBlockIncomingMessage(NSString *sessionUserName, id message) {
     if (!NeoWCEnhancementEnabled(NeoWCMessageBlockEnabledKey) ||
-        NeoWCMessageType(message) != 1 ||
         !NeoWCMessageIsIncoming(message)) return NO;
 
     NSString *session = NeoWCMessageSession(sessionUserName, message);
     NSString *fromUserName = NeoWCRuntimeStringValue(message, @"m_nsFromUsr");
     NSString *realUserName = NeoWCRuntimeStringValue(message, @"m_nsRealChatUsr");
     NSArray *blockedUsers = NeoWCRuntimeStringList(NeoWCMessageBlockUsersKey);
-    BOOL blockedUser = NeoWCRuntimeStringMatchesAny(session, blockedUsers) ||
-                       NeoWCRuntimeStringMatchesAny(fromUserName, blockedUsers) ||
-                       NeoWCRuntimeStringMatchesAny(realUserName, blockedUsers);
-    NSString *content = NeoWCMessageDisplayContent(message, session);
-    NSString *blockedKeyword = NeoWCRuntimeMatchedTerm(content, NeoWCMessageBlockKeywordsKey);
+    NSUInteger messageType = NeoWCMessageType(message);
+    BOOL blockedUser = NeoWCRuntimeStringMatchesAny(session, blockedUsers) &&
+                       NeoWCMessageBlockConversationMatchesType(session, messageType);
+    // A private-chat fallback may use the sender field, but a group rule must
+    // stay bound to the group session and never inherit a member's private rule.
+    if (!blockedUser && ![session hasSuffix:@"@chatroom"]) {
+        blockedUser = (NeoWCRuntimeStringMatchesAny(fromUserName, blockedUsers) &&
+                       NeoWCMessageBlockConversationMatchesType(fromUserName, messageType)) ||
+                      (NeoWCRuntimeStringMatchesAny(realUserName, blockedUsers) &&
+                       NeoWCMessageBlockConversationMatchesType(realUserName, messageType));
+    }
+    NSString *blockedKeyword = nil;
+    if (NeoWCMessageType(message) == 1) {
+        NSString *content = NeoWCMessageDisplayContent(message, session);
+        blockedKeyword = NeoWCRuntimeMatchedTerm(content, NeoWCMessageBlockKeywordsKey);
+    }
     if (!blockedUser && blockedKeyword.length == 0) return NO;
-    NeoWCLog(@"已屏蔽一条新收到的普通文字消息（会话：%@）", session ?: @"未知");
+    NeoWCLog(@"已屏蔽一条新收到的消息（会话：%@，类型：%ld）",
+             session ?: @"未知", (long)messageType);
     return YES;
 }
 

@@ -7,12 +7,16 @@
 
 @interface NeoWCSendConfirmationCoordinator : NSObject
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UIViewController *> *pendingAlerts;
+@property (nonatomic, strong) NSMutableArray *pendingPresentations;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSDate *> *temporaryAllowances;
+@property (nonatomic, copy) NSString *temporaryAllowanceAccount;
 + (instancetype)sharedCoordinator;
 @end
 
 @interface NeoWCSendConfirmationAlertController : UIViewController
 @property (nonatomic, copy) dispatch_block_t cancelHandler;
 @property (nonatomic, copy) dispatch_block_t confirmHandler;
+@property (nonatomic, copy) dispatch_block_t pauseHandler;
 - (instancetype)initWithUsername:(NSString *)username displayName:(NSString *)displayName summary:(NSString *)summary;
 @end
 
@@ -24,6 +28,22 @@ static NSString *NeoWCSendConfirmationTrimmed(NSString *value) {
 static NSString *NeoWCSendConfirmationAccountKey(void) {
     NSString *account = NeoWCSendConfirmationTrimmed(NeoWCCurrentUserWXID());
     return account.length > 0 ? account : nil;
+}
+
+static NSInteger NeoWCSendConfirmationPauseSeconds(void) {
+    NSInteger seconds = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCSendConfirmationPauseSecondsKey];
+    return seconds > 0 ? seconds : 60;
+}
+
+static NSString *NeoWCSendConfirmationPauseDurationText(void) {
+    NSInteger seconds = NeoWCSendConfirmationPauseSeconds();
+    return seconds % 60 == 0 ?
+        [NSString stringWithFormat:@"%ld 分钟", (long)(seconds / 60)] :
+        [NSString stringWithFormat:@"%ld 秒", (long)seconds];
+}
+
+static NSString *NeoWCSendConfirmationPauseTitle(void) {
+    return [NSString stringWithFormat:@"发送并暂停确认 %@", NeoWCSendConfirmationPauseDurationText()];
 }
 
 static NSDictionary<NSString *, NSArray<NSString *> *> *NeoWCSendConfirmationStoredMap(void) {
@@ -154,6 +174,23 @@ static NSString *NeoWCSendConfirmationStringForSelector(id object, const char *s
     summary.textColor = UIColor.secondaryLabelColor;
     summary.textAlignment = NSTextAlignmentCenter;
     summary.numberOfLines = 4;
+    UIButton *confirm = [UIButton buttonWithType:UIButtonTypeSystem];
+    confirm.translatesAutoresizingMaskIntoConstraints = NO;
+    [confirm setTitle:@"仅发送本条" forState:UIControlStateNormal];
+    confirm.titleLabel.font = [UIFont systemFontOfSize:17.0 weight:UIFontWeightSemibold];
+    [confirm setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    confirm.backgroundColor = UIColor.systemGreenColor;
+    confirm.layer.cornerRadius = 12.0;
+    [confirm addTarget:self action:@selector(confirmTapped) forControlEvents:UIControlEventTouchUpInside];
+    UIButton *pause = [UIButton buttonWithType:UIButtonTypeSystem];
+    pause.translatesAutoresizingMaskIntoConstraints = NO;
+    [pause setTitle:NeoWCSendConfirmationPauseTitle() forState:UIControlStateNormal];
+    pause.titleLabel.font = [UIFont systemFontOfSize:16.0 weight:UIFontWeightSemibold];
+    pause.titleLabel.adjustsFontSizeToFitWidth = YES;
+    pause.titleLabel.minimumScaleFactor = 0.75;
+    pause.backgroundColor = UIColor.secondarySystemFillColor;
+    pause.layer.cornerRadius = 12.0;
+    [pause addTarget:self action:@selector(pauseTapped) forControlEvents:UIControlEventTouchUpInside];
     UIButton *cancel = [UIButton buttonWithType:UIButtonTypeSystem];
     cancel.translatesAutoresizingMaskIntoConstraints = NO;
     [cancel setTitle:@"取消" forState:UIControlStateNormal];
@@ -161,17 +198,9 @@ static NSString *NeoWCSendConfirmationStringForSelector(id object, const char *s
     cancel.backgroundColor = UIColor.tertiarySystemFillColor;
     cancel.layer.cornerRadius = 12.0;
     [cancel addTarget:self action:@selector(cancelTapped) forControlEvents:UIControlEventTouchUpInside];
-    UIButton *confirm = [UIButton buttonWithType:UIButtonTypeSystem];
-    confirm.translatesAutoresizingMaskIntoConstraints = NO;
-    [confirm setTitle:@"确认发送" forState:UIControlStateNormal];
-    confirm.titleLabel.font = [UIFont systemFontOfSize:17.0 weight:UIFontWeightSemibold];
-    [confirm setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    confirm.backgroundColor = UIColor.systemGreenColor;
-    confirm.layer.cornerRadius = 12.0;
-    [confirm addTarget:self action:@selector(confirmTapped) forControlEvents:UIControlEventTouchUpInside];
-    UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:@[cancel, confirm]];
+    UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:@[confirm, pause, cancel]];
     buttons.translatesAutoresizingMaskIntoConstraints = NO;
-    buttons.axis = UILayoutConstraintAxisHorizontal;
+    buttons.axis = UILayoutConstraintAxisVertical;
     buttons.spacing = 10.0;
     buttons.distribution = UIStackViewDistributionFillEqually;
     [card addSubview:avatar];
@@ -201,7 +230,7 @@ static NSString *NeoWCSendConfirmationStringForSelector(id object, const char *s
         [buttons.topAnchor constraintEqualToAnchor:summary.bottomAnchor constant:22.0],
         [buttons.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16.0],
         [buttons.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16.0],
-        [buttons.heightAnchor constraintEqualToConstant:48.0],
+        [buttons.heightAnchor constraintEqualToConstant:164.0],
         [buttons.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-16.0],
     ]];
 }
@@ -216,6 +245,11 @@ static NSString *NeoWCSendConfirmationStringForSelector(id object, const char *s
     [self dismissViewControllerAnimated:YES completion:handler];
 }
 
+- (void)pauseTapped {
+    dispatch_block_t handler = self.pauseHandler;
+    [self dismissViewControllerAnimated:YES completion:handler];
+}
+
 @end
 
 NSString *NeoWCSendConfirmationDisplayName(NSString *username) {
@@ -225,6 +259,49 @@ NSString *NeoWCSendConfirmationDisplayName(NSString *username) {
     NSString *name = NeoWCSendConfirmationStringForSelector(contact, "m_nsRemark");
     if (name.length == 0) name = NeoWCSendConfirmationStringForSelector(contact, "m_nsNickName");
     return name.length > 0 ? name : normalized;
+}
+
+static void NeoWCShowSendConfirmationToast(UIViewController *presenter, NSString *text) {
+    UIWindow *window = presenter.view.window;
+    if (!window) {
+        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if (scene.activationState != UISceneActivationStateForegroundActive ||
+                ![scene isKindOfClass:UIWindowScene.class]) continue;
+            for (UIWindow *candidate in ((UIWindowScene *)scene).windows) {
+                if (candidate.isKeyWindow) { window = candidate; break; }
+                if (!window && !candidate.hidden && candidate.alpha > 0.0 &&
+                    candidate.windowLevel == UIWindowLevelNormal) window = candidate;
+            }
+            if (window.isKeyWindow) break;
+        }
+    }
+    UIView *hostView = presenter.view.window ? presenter.view : window.rootViewController.view;
+    if (!hostView) return;
+    UILabel *label = [UILabel new];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.text = text;
+    label.textAlignment = NSTextAlignmentCenter;
+    label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    label.textColor = UIColor.whiteColor;
+    label.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.92];
+    label.layer.cornerRadius = 11.0;
+    label.layer.cornerCurve = kCACornerCurveContinuous;
+    label.layer.masksToBounds = YES;
+    label.alpha = 0.0;
+    [hostView addSubview:label];
+    [NSLayoutConstraint activateConstraints:@[
+        [label.centerXAnchor constraintEqualToAnchor:hostView.centerXAnchor],
+        [label.bottomAnchor constraintEqualToAnchor:hostView.safeAreaLayoutGuide.bottomAnchor constant:-36.0],
+        [label.heightAnchor constraintGreaterThanOrEqualToConstant:38.0],
+        [label.leadingAnchor constraintGreaterThanOrEqualToAnchor:hostView.leadingAnchor constant:24.0],
+        [label.trailingAnchor constraintLessThanOrEqualToAnchor:hostView.trailingAnchor constant:-24.0],
+    ]];
+    [UIView animateWithDuration:0.18 animations:^{ label.alpha = 1.0; }];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        [UIView animateWithDuration:0.2 animations:^{ label.alpha = 0.0; }
+                         completion:^(__unused BOOL finished) { [label removeFromSuperview]; }];
+    });
 }
 
 @implementation NeoWCSendConfirmationCoordinator
@@ -240,6 +317,8 @@ NSString *NeoWCSendConfirmationDisplayName(NSString *username) {
     self = [super init];
     if (self) {
         _pendingAlerts = [NSMutableDictionary dictionary];
+        _pendingPresentations = [NSMutableArray array];
+        _temporaryAllowances = [NSMutableDictionary dictionary];
         [NSNotificationCenter.defaultCenter addObserver:self
                                                selector:@selector(applicationDidEnterBackground)
                                                    name:UIApplicationDidEnterBackgroundNotification
@@ -255,9 +334,42 @@ NSString *NeoWCSendConfirmationDisplayName(NSString *username) {
 - (void)cancelAll {
     NSArray<UIViewController *> *alerts = self.pendingAlerts.allValues;
     [self.pendingAlerts removeAllObjects];
+    [self.pendingPresentations removeAllObjects];
+    [self.temporaryAllowances removeAllObjects];
     for (UIViewController *alert in alerts) {
         if (alert.presentingViewController) [alert dismissViewControllerAnimated:NO completion:nil];
     }
+}
+
+- (NSString *)temporaryAllowanceKeyForUsername:(NSString *)username {
+    NSString *account = NeoWCSendConfirmationAccountKey();
+    if (![self.temporaryAllowanceAccount isEqualToString:account]) {
+        [self.temporaryAllowances removeAllObjects];
+        self.temporaryAllowanceAccount = account;
+    }
+    return account.length > 0 && username.length > 0 ?
+        [NSString stringWithFormat:@"%@\n%@", account, username] : nil;
+}
+
+- (BOOL)isTemporarilyAllowedUsername:(NSString *)username {
+    NSString *key = [self temporaryAllowanceKeyForUsername:username];
+    NSDate *deadline = key ? self.temporaryAllowances[key] : nil;
+    if (!deadline) return NO;
+    if ([deadline timeIntervalSinceNow] > 0.0) return YES;
+    [self.temporaryAllowances removeObjectForKey:key];
+    return NO;
+}
+
+- (void)allowUsernameTemporarily:(NSString *)username {
+    NSString *key = [self temporaryAllowanceKeyForUsername:username];
+    if (key) self.temporaryAllowances[key] = [NSDate dateWithTimeIntervalSinceNow:NeoWCSendConfirmationPauseSeconds()];
+}
+
+- (void)presentNextIfNeeded {
+    if (self.pendingAlerts.count > 0 || self.pendingPresentations.count == 0) return;
+    dispatch_block_t next = self.pendingPresentations.firstObject;
+    [self.pendingPresentations removeObjectAtIndex:0];
+    dispatch_async(dispatch_get_main_queue(), next);
 }
 
 - (BOOL)presentFrom:(UIViewController *)presenter
@@ -266,7 +378,39 @@ NSString *NeoWCSendConfirmationDisplayName(NSString *username) {
           validator:(NeoWCSendConfirmationValidator)validator
           confirmed:(dispatch_block_t)confirmedAction {
     if (!presenter.view.window || !NeoWCSendConfirmationIsProtectedConversation(username)) return NO;
-    if (self.pendingAlerts.count > 0) return YES;
+    if ([self isTemporarilyAllowedUsername:username]) {
+        if (!validator || validator()) {
+            if (confirmedAction) confirmedAction();
+        }
+        return YES;
+    }
+    if (self.pendingAlerts.count > 0) {
+        UIViewController *queuedPresenter = presenter;
+        while ([queuedPresenter isKindOfClass:NeoWCSendConfirmationAlertController.class] &&
+               queuedPresenter.presentingViewController) {
+            queuedPresenter = queuedPresenter.presentingViewController;
+        }
+        NSString *retainedUsername = [username copy];
+        NSString *retainedSummary = [summary copy];
+        NeoWCSendConfirmationValidator retainedValidator = [validator copy];
+        dispatch_block_t retainedAction = [confirmedAction copy];
+        __weak typeof(self) weakSelf = self;
+        [self.pendingPresentations addObject:^{
+            NeoWCSendConfirmationCoordinator *strongSelf = weakSelf;
+            if (!strongSelf || !queuedPresenter.view.window ||
+                (retainedValidator && !retainedValidator())) {
+                [strongSelf presentNextIfNeeded];
+                return;
+            }
+            BOOL presented = [strongSelf presentFrom:queuedPresenter
+                                            username:retainedUsername
+                                             summary:retainedSummary
+                                           validator:retainedValidator
+                                           confirmed:retainedAction];
+            if (!presented) [strongSelf presentNextIfNeeded];
+        }];
+        return YES;
+    }
     NSString *token = NSUUID.UUID.UUIDString;
     NSString *displayName = NeoWCSendConfirmationDisplayName(username);
     NSString *message = NeoWCSendConfirmationTrimmed(summary);
@@ -276,17 +420,45 @@ NSString *NeoWCSendConfirmationDisplayName(NSString *username) {
                                                                                                          summary:message];
     __weak typeof(self) weakSelf = self;
     alert.cancelHandler = ^{
-        [weakSelf.pendingAlerts removeObjectForKey:token];
+        NeoWCSendConfirmationCoordinator *strongSelf = weakSelf;
+        [strongSelf.pendingAlerts removeObjectForKey:token];
+        [strongSelf presentNextIfNeeded];
     };
     alert.confirmHandler = ^{
         NeoWCSendConfirmationCoordinator *strongSelf = weakSelf;
         if (!strongSelf.pendingAlerts[token]) return;
         [strongSelf.pendingAlerts removeObjectForKey:token];
-        if (validator && !validator()) return;
-        if (confirmedAction) confirmedAction();
+        BOOL valid = !validator || validator();
+        if (valid && confirmedAction) confirmedAction();
+        [strongSelf presentNextIfNeeded];
+    };
+    alert.pauseHandler = ^{
+        NeoWCSendConfirmationCoordinator *strongSelf = weakSelf;
+        if (!strongSelf.pendingAlerts[token]) return;
+        [strongSelf.pendingAlerts removeObjectForKey:token];
+        BOOL valid = !validator || validator();
+        if (valid) {
+            [strongSelf allowUsernameTemporarily:username];
+            if (confirmedAction) confirmedAction();
+            NeoWCShowSendConfirmationToast(presenter,
+                                            [NSString stringWithFormat:@"本会话发送确认已暂停 %@",
+                                             NeoWCSendConfirmationPauseDurationText()]);
+        }
+        [strongSelf presentNextIfNeeded];
     };
     self.pendingAlerts[token] = alert;
     [presenter presentViewController:alert animated:YES completion:nil];
+    __weak NeoWCSendConfirmationAlertController *weakAlert = alert;
+    __weak typeof(self) weakCoordinator = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        NeoWCSendConfirmationCoordinator *strongCoordinator = weakCoordinator;
+        NeoWCSendConfirmationAlertController *strongAlert = weakAlert;
+        if (!strongCoordinator.pendingAlerts[token] || strongAlert.presentingViewController || strongAlert.view.window) return;
+        [strongCoordinator.pendingAlerts removeObjectForKey:token];
+        NeoWCShowSendConfirmationToast(presenter, @"确认窗口未能显示，本次发送已取消");
+        [strongCoordinator presentNextIfNeeded];
+    });
     return YES;
 }
 

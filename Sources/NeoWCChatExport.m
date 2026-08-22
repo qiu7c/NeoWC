@@ -68,7 +68,7 @@ NSArray<NSDictionary *> *NeoWCChatMultiSelectActions(UIViewController *controlle
     }
     if (NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey) &&
         [[NeoWCExportConversationUsername(controller) lowercaseString] isEqualToString:@"filehelper"]) {
-        [actions addObject:@{ @"id": NeoWCQuickReplyImportAction, @"title": @"加入快捷回复", @"symbol": @"tray.and.arrow.down.fill" }];
+        [actions addObject:@{ @"id": NeoWCQuickReplyImportAction, @"title": @"存入素材", @"symbol": @"tray.and.arrow.down.fill" }];
     }
     return actions;
 }

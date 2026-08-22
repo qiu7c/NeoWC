@@ -27,6 +27,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCQuickReplyStore.h"
 #import "Sources/NeoWCQuickReplyViewController.h"
 #import "Sources/NeoWCSendConfirmation.h"
+#import "Sources/NeoWCMessageBlock.h"
 
 @interface WCActionSheet : NSObject
 - (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
@@ -374,7 +375,11 @@ static NSString *NeoWCSendConfirmationImageBypassUsername;
 static CFTimeInterval NeoWCSendConfirmationImageBypassDeadline;
 static NSString *NeoWCSendConfirmationVideoBypassUsername;
 static CFTimeInterval NeoWCSendConfirmationVideoBypassDeadline;
+static NSString *NeoWCSendConfirmationRepeatBypassUsername;
+static CFTimeInterval NeoWCSendConfirmationRepeatBypassDeadline;
+static NSInteger NeoWCSendConfirmationRepeatBypassMessageType;
 static __weak BaseMsgContentViewController *NeoWCVisibleChatController;
+static __weak BaseMsgContentViewController *NeoWCSendConfirmationChatController;
 static __weak id NeoWCCurrentEditImageLogicController;
 static __weak UIViewController *NeoWCActiveMomentsDetailController;
 static BOOL NeoWCMomentsDispatchingQuickComment = NO;
@@ -406,6 +411,40 @@ static id NeoWCTweakSafeValue(id object, NSString *key);
 static void NeoWCTweakSetValue(id object, NSString *key, id value);
 static id NeoWCMessageWrapForCell(id cell);
 static id NeoWCContactForUserName(NSString *userName);
+static UIViewController *NeoWCSendConfirmationPresenterForTarget(NSString *target);
+static BOOL NeoWCSendConfirmationValidateTarget(NSString *target);
+
+static void NeoWCArmRepeatSendConfirmationBypass(NSString *target, NSInteger messageType) {
+    NeoWCSendConfirmationRepeatBypassUsername = [target copy];
+    NeoWCSendConfirmationRepeatBypassMessageType = messageType;
+    NeoWCSendConfirmationRepeatBypassDeadline = CACurrentMediaTime() + 3.0;
+}
+
+static void NeoWCClearRepeatSendConfirmationBypass(void) {
+    NeoWCSendConfirmationRepeatBypassUsername = nil;
+    NeoWCSendConfirmationRepeatBypassDeadline = 0.0;
+    NeoWCSendConfirmationRepeatBypassMessageType = 0;
+}
+
+static BOOL NeoWCConsumeRepeatSendConfirmationBypass(NSString *target,
+                                                       NSInteger messageType,
+                                                       BOOL keepForImageSecondStage) {
+    CFTimeInterval now = CACurrentMediaTime();
+    if (now > NeoWCSendConfirmationRepeatBypassDeadline) {
+        NeoWCClearRepeatSendConfirmationBypass();
+        return NO;
+    }
+    BOOL videoTypeMatches = (messageType == 43 || messageType == 62) &&
+                            (NeoWCSendConfirmationRepeatBypassMessageType == 43 ||
+                             NeoWCSendConfirmationRepeatBypassMessageType == 62);
+    BOOL matches = target.length > 0 &&
+                   [NeoWCSendConfirmationRepeatBypassUsername isEqualToString:target] &&
+                   (NeoWCSendConfirmationRepeatBypassMessageType == messageType || videoTypeMatches);
+    if (matches && !keepForImageSecondStage) {
+        NeoWCClearRepeatSendConfirmationBypass();
+    }
+    return matches;
+}
 
 static BOOL NeoWCMessageCellIsSender(CommonMessageCellView *cell) {
     if (!cell) return NO;
@@ -1084,6 +1123,55 @@ static BOOL NeoWCRepeatMessage(CommonMessageCellView *cell) {
     return NeoWCRepeatPlainTextMessageFallback(cell);
 }
 
+static NSString *NeoWCRepeatConfirmationSummary(id message) {
+    NSInteger messageType = [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue];
+    if (messageType == 1) {
+        NSString *content = NeoWCTweakSafeValue(message, @"m_nsContent");
+        if (content.length > 40) content = [[content substringToIndex:40] stringByAppendingString:@"…"];
+        return content.length > 0 ? [NSString stringWithFormat:@"复读文字：%@", content] : @"复读文字消息";
+    }
+    if (messageType == 3) return @"复读图片消息";
+    if (messageType == 34) return @"复读语音消息";
+    if (messageType == 43 || messageType == 62) return @"复读视频消息";
+    if (messageType == 47) return @"复读表情消息";
+    return @"复读这条消息";
+}
+
+static BOOL NeoWCRepeatMessageWithConfirmation(CommonMessageCellView *cell) {
+    id source = NeoWCMessageWrapForCell(cell);
+    NSString *target = NeoWCSessionForMessage(source);
+    UIViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    if (!presenter) return NeoWCRepeatMessage(cell);
+    __weak CommonMessageCellView *weakCell = cell;
+    id retainedSource = source;
+    BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter,
+                                                      target,
+                                                      NeoWCRepeatConfirmationSummary(source),
+                                                      ^BOOL{
+        CommonMessageCellView *strongCell = weakCell;
+        return strongCell && NeoWCSendConfirmationValidateTarget(target) &&
+               NeoWCMessageWrapForCell(strongCell) == retainedSource;
+    }, ^{
+        CommonMessageCellView *strongCell = weakCell;
+        if (strongCell && NeoWCMessageWrapForCell(strongCell) == retainedSource) {
+            NSInteger messageType = [NeoWCTweakSafeValue(retainedSource, @"m_uiMessageType") integerValue];
+            if (messageType == 1 || messageType == 3 || messageType == 43 ||
+                messageType == 47 || messageType == 62) {
+                NeoWCArmRepeatSendConfirmationBypass(target, messageType);
+            }
+            @try {
+                (void)NeoWCRepeatMessage(strongCell);
+            } @finally {
+                // The exemption belongs only to this synchronous repeat dispatch.
+                // If WeChat defers the real send, the downstream hook will ask again
+                // instead of allowing an unrelated message through later.
+                NeoWCClearRepeatSendConfirmationBypass();
+            }
+        }
+    });
+    return held ? YES : NeoWCRepeatMessage(cell);
+}
+
 static BOOL NeoWCPerformMessageGestureAction(CommonMessageCellView *cell, NeoWCReplySwipeAction action) {
     if (!cell.window || action == NeoWCReplySwipeActionNone) return NO;
     BOOL performed = NO;
@@ -1109,7 +1197,7 @@ static BOOL NeoWCPerformMessageGestureAction(CommonMessageCellView *cell, NeoWCR
             performed = NeoWCInvokeFirstMessageCellAction(cell, @[@"onDelete:", @"onDeleteMessage:"]);
             break;
         case NeoWCReplySwipeActionRepeat:
-            performed = NeoWCRepeatMessage(cell);
+            performed = NeoWCRepeatMessageWithConfirmation(cell);
             break;
         case NeoWCReplySwipeActionNone:
             break;
@@ -4659,14 +4747,15 @@ static NSArray *NeoWCOperationMenuItemsWithQuickReply(id target, NSArray *origin
     id message = NeoWCMessageWrapForCell(target);
     if (!NeoWCMessageCanAddToQuickReply(message)) return originalItems;
     for (id item in originalItems) {
-        if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"加入快捷回复"]) return originalItems;
+        NSString *title = NeoWCTweakSafeValue(item, @"title");
+        if ([title isEqualToString:@"存入素材"] || [title isEqualToString:@"加入快捷回复"]) return originalItems;
     }
     Class itemClass = objc_getClass("MMMenuItem");
     if (!itemClass || ![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) return originalItems;
     UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightRegular];
     UIImage *icon = [[UIImage systemImageNamed:@"tray.and.arrow.down.fill" withConfiguration:configuration]
         imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
-    MMMenuItem *menuItem = [[itemClass alloc] initWithTitle:@"加入快捷回复"
+    MMMenuItem *menuItem = [[itemClass alloc] initWithTitle:@"存入素材"
                                                        icon:icon
                                                      target:target
                                                      action:@selector(neowc_addToQuickReply:)];
@@ -5739,12 +5828,27 @@ didReceiveNotificationResponse:(id)response
 
 %end
 
-static BaseMsgContentViewController *NeoWCSendConfirmationPresenterForTarget(NSString *target) {
+static BaseMsgContentViewController *NeoWCSendConfirmationSourceControllerForTarget(NSString *target) {
+    BaseMsgContentViewController *controller = NeoWCSendConfirmationChatController;
+    if (!controller || controller.isMovingFromParentViewController || controller.isBeingDismissed) return nil;
+    if (controller.navigationController && controller.navigationController.topViewController != controller) return nil;
+    UITabBarController *tabController = controller.tabBarController;
+    if (tabController && tabController.selectedViewController != controller &&
+        tabController.selectedViewController != controller.navigationController) return nil;
+    return [NeoWCChatUserName(controller) isEqualToString:target] ? controller : nil;
+}
+
+static UIViewController *NeoWCSendConfirmationPresenterForTarget(NSString *target) {
     if (!NSThread.isMainThread || UIApplication.sharedApplication.applicationState != UIApplicationStateActive ||
         target.length == 0 || !NeoWCSendConfirmationIsProtectedConversation(target)) return nil;
-    BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
-    if (!controller.view.window || ![NeoWCChatUserName(controller) isEqualToString:target]) return nil;
-    return controller;
+    BaseMsgContentViewController *source = NeoWCSendConfirmationSourceControllerForTarget(target);
+    if (!source) return nil;
+    UIViewController *presentationRoot = source.tabBarController ?: source.navigationController ?: source;
+    UIViewController *presenter = NeoWCTopControllerForLoginToast(presentationRoot);
+    while (presenter.isBeingDismissed && presenter.presentingViewController) {
+        presenter = presenter.presentingViewController;
+    }
+    return presenter.view.window ? presenter : nil;
 }
 
 static NSString *NeoWCSendConfirmationTextSummary(id wrap) {
@@ -5754,8 +5858,10 @@ static NSString *NeoWCSendConfirmationTextSummary(id wrap) {
     return content.length > 0 ? [NSString stringWithFormat:@"文字：%@", content] : @"即将发送文字消息。";
 }
 
-static BOOL NeoWCSendConfirmationValidateTarget(BaseMsgContentViewController *controller, NSString *target) {
-    return controller.view.window && [NeoWCChatUserName(controller) isEqualToString:target];
+static BOOL NeoWCSendConfirmationValidateTarget(NSString *target) {
+    return UIApplication.sharedApplication.applicationState == UIApplicationStateActive &&
+           NeoWCSendConfirmationIsProtectedConversation(target) &&
+           NeoWCSendConfirmationSourceControllerForTarget(target) != nil;
 }
 
 static void NeoWCArmImageSendConfirmationBypass(NSString *target) {
@@ -7227,6 +7333,8 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
 
 static char NeoWCRawContactIDKey;
 static char NeoWCRawContactIDCellMarkerKey;
+static char NeoWCProfileMessageBlockCellMarkerKey;
+static char NeoWCProfileSendConfirmationCellMarkerKey;
 
 static NSUInteger NeoWCCallUnsignedSelector(id object, NSString *selectorName) {
     SEL selector = NSSelectorFromString(selectorName);
@@ -7382,6 +7490,135 @@ static BOOL NeoWCInsertRawIDCell(id section, id cell, NSUInteger index) {
         return YES;
     }
     return NO;
+}
+
+static BOOL NeoWCProfileSectionContainsMarker(id section, const void *markerKey, NSString *title) {
+    NSUInteger count = NeoWCTableCellCount(section);
+    for (NSUInteger index = 0; index < count; index++) {
+        id cell = NeoWCTableCellAtIndex(section, index);
+        if ([objc_getAssociatedObject(cell, markerKey) boolValue]) return YES;
+        if ([[NeoWCTableCellTitle(cell) stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
+             isEqualToString:title]) return YES;
+    }
+    return NO;
+}
+
+static id NeoWCCreateProfileSwitchCell(id target, SEL rowAction, SEL switchAction,
+                                       NSString *title, BOOL enabled) {
+    Class cellClass = NSClassFromString(@"WCTableViewCellManager");
+    UISwitch *toggle = [UISwitch new];
+    toggle.on = enabled;
+    [toggle addTarget:target action:switchAction forControlEvents:UIControlEventValueChanged];
+    SEL rightViewFactory = NSSelectorFromString(@"normalCellForSel:target:title:rightView:");
+    if ([cellClass respondsToSelector:rightViewFactory]) {
+        return ((id (*)(id, SEL, SEL, id, NSString *, UIView *))objc_msgSend)(cellClass,
+                                                                              rightViewFactory,
+                                                                              rowAction,
+                                                                              rowAction ? target : nil,
+                                                                              title,
+                                                                              toggle);
+    }
+    return nil;
+}
+
+static id NeoWCProfileFeatureTargetSection(id tableInfo, NSUInteger *insertionIndex) {
+    NSUInteger sectionCount = NeoWCCallUnsignedSelector(tableInfo, @"getSectionCount");
+    if (sectionCount == 0) sectionCount = NeoWCTableSections(tableInfo).count;
+    id bestSection = nil;
+    NSInteger bestScore = NSIntegerMin;
+    NSUInteger bestIndex = NSNotFound;
+    for (NSUInteger sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++) {
+        id section = NeoWCTableSectionAtIndex(tableInfo, sectionIndex);
+        NSUInteger cellCount = NeoWCTableCellCount(section);
+        NSInteger score = -((NSInteger)sectionIndex);
+        NSUInteger index = cellCount;
+        for (NSUInteger cellIndex = 0; cellIndex < cellCount; cellIndex++) {
+            id cell = NeoWCTableCellAtIndex(section, cellIndex);
+            NSString *title = NeoWCTableCellTitle(cell);
+            if ([objc_getAssociatedObject(cell, &NeoWCRawContactIDCellMarkerKey) boolValue] ||
+                [title isEqualToString:@"原始号码"] || [title isEqualToString:@"原始群号码"]) {
+                score += 200;
+                index = cellIndex + 1;
+            } else if ([title containsString:@"微信号"] || [title containsString:@"群聊名称"]) {
+                score += 100;
+                index = cellIndex + 1;
+            } else if ([title containsString:@"朋友资料"] || [title containsString:@"群聊"] ||
+                       [title containsString:@"备注"]) {
+                score += 30;
+            }
+        }
+        if (!bestSection || score > bestScore) {
+            bestSection = section;
+            bestScore = score;
+            bestIndex = index;
+        }
+    }
+    if (insertionIndex) *insertionIndex = bestIndex;
+    return bestSection;
+}
+
+static void NeoWCInjectProfileConversationSwitches(id controller, BOOL group) {
+    if (!controller) return;
+    NSArray<NSString *> *contactNames = group ?
+        @[@"m_chatRoomContact", @"chatRoomContact", @"contact", @"m_contact"] :
+        @[@"m_contact", @"contact", @"contactInfo", @"m_contactInfo"];
+    id contact = NeoWCRawProfileValue(controller, contactNames);
+    NSString *username = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+    if (![username isKindOfClass:NSString.class] || username.length == 0) return;
+    objc_setAssociatedObject(controller, &NeoWCRawContactIDKey, username, OBJC_ASSOCIATION_COPY_NONATOMIC);
+
+    id tableInfo = NeoWCRawProfileValue(controller,
+                                        @[@"m_tableViewInfo", @"tableViewInfo", @"m_tableViewMgr", @"tableViewMgr"]);
+    NSUInteger insertionIndex = NSNotFound;
+    id section = NeoWCProfileFeatureTargetSection(tableInfo, &insertionIndex);
+    if (!section) return;
+
+    BOOL showBlockSwitch = NeoWCEnhancementEnabled(NeoWCMessageBlockEnabledKey) &&
+                           [NSUserDefaults.standardUserDefaults boolForKey:NeoWCMessageBlockProfileSwitchEnabledKey];
+    NSString *blockTitle = group ? @"屏蔽本群消息" : @"屏蔽此人消息";
+    NSString *confirmTitle = group ? @"本群发送确认" : @"对其发送确认";
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    BOOL blocked = [defaults boolForKey:NeoWCMessageBlockEnabledKey] &&
+                   NeoWCMessageBlockTypesForConversation(username).count > 0;
+    if (showBlockSwitch && !NeoWCProfileSectionContainsMarker(section, &NeoWCProfileMessageBlockCellMarkerKey, blockTitle)) {
+        id cell = NeoWCCreateProfileSwitchCell(controller,
+                                               @selector(neowc_openProfileMessageBlockTypes),
+                                               @selector(neowc_toggleProfileMessageBlock:),
+                                               blockTitle, blocked);
+        if (cell) {
+            objc_setAssociatedObject(cell, &NeoWCProfileMessageBlockCellMarkerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            if (NeoWCInsertRawIDCell(section, cell, insertionIndex)) insertionIndex++;
+        }
+    }
+    if (!NeoWCProfileSectionContainsMarker(section, &NeoWCProfileSendConfirmationCellMarkerKey, confirmTitle)) {
+        id cell = NeoWCCreateProfileSwitchCell(controller, NULL,
+                                               @selector(neowc_toggleProfileSendConfirmation:),
+                                               confirmTitle, NeoWCSendConfirmationIsProtectedConversation(username));
+        if (cell) {
+            objc_setAssociatedObject(cell, &NeoWCProfileSendConfirmationCellMarkerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            NeoWCInsertRawIDCell(section, cell, insertionIndex);
+        }
+    }
+}
+
+static void NeoWCSetProfileMessageBlocked(NSString *username, BOOL blocked) {
+    NeoWCMessageBlockSetTypesForConversation(username, blocked ? @[@"all"] : @[]);
+}
+
+static UIViewController *NeoWCProfileOwnerViewController(id controller) {
+    if ([controller isKindOfClass:UIViewController.class]) return controller;
+    id candidate = NeoWCRawProfileValue(controller,
+                                        @[@"m_contactInfoViewController", @"contactInfoViewController",
+                                          @"m_viewController", @"viewController", @"delegate"]);
+    if ([candidate isKindOfClass:UIViewController.class]) return candidate;
+    id tableInfo = NeoWCRawProfileValue(controller,
+                                        @[@"m_tableViewInfo", @"tableViewInfo", @"m_tableViewMgr", @"tableViewMgr"]);
+    id tableView = NeoWCRawProfileValue(tableInfo, @[@"getTableView", @"tableView", @"m_tableView"]);
+    UIResponder *responder = [tableView isKindOfClass:UIView.class] ? tableView : nil;
+    while ((responder = responder.nextResponder)) {
+        if ([responder isKindOfClass:UIViewController.class]) return (UIViewController *)responder;
+    }
+    return nil;
 }
 
 static void NeoWCInjectRawIDCell(id controller, BOOL group) {
@@ -7836,17 +8073,40 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)initData {
     %orig;
     NeoWCInjectRawIDCell(self, NO);
+    NeoWCInjectProfileConversationSwitches(self, NO);
 }
 
 - (void)reloadTableView {
     %orig;
     NeoWCInjectRawIDCell(self, NO);
+    NeoWCInjectProfileConversationSwitches(self, NO);
 }
 
 %new
 - (void)neowc_copyRawContactID {
     NSString *rawID = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
     if (rawID.length > 0) UIPasteboard.generalPasteboard.string = rawID;
+}
+
+%new
+- (void)neowc_toggleProfileMessageBlock:(UISwitch *)sender {
+    NeoWCSetProfileMessageBlocked(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
+}
+
+%new
+- (void)neowc_openProfileMessageBlockTypes {
+    NSString *username = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
+    UIViewController *controller = NeoWCMessageBlockTypeController(username);
+    UIViewController *owner = NeoWCProfileOwnerViewController(self);
+    if (controller && owner) {
+        if (owner.navigationController) [owner.navigationController pushViewController:controller animated:YES];
+        else [owner presentViewController:controller animated:YES completion:nil];
+    }
+}
+
+%new
+- (void)neowc_toggleProfileSendConfirmation:(UISwitch *)sender {
+    NeoWCSendConfirmationSetProtected(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
 }
 
 %end
@@ -7856,22 +8116,46 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)initData {
     %orig;
     NeoWCInjectRawIDCell(self, YES);
+    NeoWCInjectProfileConversationSwitches(self, YES);
 }
 
 - (void)reloadTableData {
     %orig;
     NeoWCInjectRawIDCell(self, YES);
+    NeoWCInjectProfileConversationSwitches(self, YES);
 }
 
 - (void)reloadProfileTableData {
     %orig;
     NeoWCInjectRawIDCell(self, YES);
+    NeoWCInjectProfileConversationSwitches(self, YES);
 }
 
 %new
 - (void)neowc_copyRawContactID {
     NSString *rawID = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
     if (rawID.length > 0) UIPasteboard.generalPasteboard.string = rawID;
+}
+
+%new
+- (void)neowc_toggleProfileMessageBlock:(UISwitch *)sender {
+    NeoWCSetProfileMessageBlocked(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
+}
+
+%new
+- (void)neowc_openProfileMessageBlockTypes {
+    NSString *username = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
+    UIViewController *controller = NeoWCMessageBlockTypeController(username);
+    UIViewController *owner = NeoWCProfileOwnerViewController(self);
+    if (controller && owner) {
+        if (owner.navigationController) [owner.navigationController pushViewController:controller animated:YES];
+        else [owner presentViewController:controller animated:YES completion:nil];
+    }
+}
+
+%new
+- (void)neowc_toggleProfileSendConfirmation:(UISwitch *)sender {
+    NeoWCSendConfirmationSetProtected(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
 }
 
 %end
@@ -7959,6 +8243,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)viewWillAppear:(BOOL)animated {
     %orig(animated);
     NeoWCVisibleChatController = self;
+    NeoWCSendConfirmationChatController = self;
     NeoWCUpdateChatTopBar(self);
 }
 
@@ -8011,6 +8296,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
     NeoWCRestoreChatNavigationPresentation(self);
     UIViewController *controller = (UIViewController *)self;
     if (controller.isMovingFromParentViewController || controller.isBeingDismissed) {
+        if (NeoWCSendConfirmationChatController == self) NeoWCSendConfirmationChatController = nil;
         NeoWCCancelPendingSendConfirmations();
         NeoWCClearImageJokerOverrides();
     }
@@ -8019,6 +8305,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)viewDidAppear:(BOOL)animated {
     %orig(animated);
     NeoWCVisibleChatController = self;
+    NeoWCSendConfirmationChatController = self;
     __weak UIViewController *weakController = (UIViewController *)self;
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *controller = weakController;
@@ -8037,6 +8324,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 - (void)dealloc {
+    if (NeoWCSendConfirmationChatController == self) NeoWCSendConfirmationChatController = nil;
     NeoWCClearImageJokerOverrides();
     %orig;
 }
@@ -8765,15 +9053,18 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)SendImageMessageByMMAsset:(id)asset {
     NSString *target = [self getCurrentChatName];
-    BaseMsgContentViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    if (NeoWCConsumeRepeatSendConfirmationBypass(target, 3, YES)) {
+        %orig(asset);
+        return;
+    }
+    UIViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
     if (!presenter) {
         %orig(asset);
         return;
     }
-    __weak BaseMsgContentViewController *weakPresenter = presenter;
     id retainedAsset = asset;
     BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter, target, @"图片：1 张", ^BOOL{
-        return NeoWCSendConfirmationValidateTarget(weakPresenter, target);
+        return NeoWCSendConfirmationValidateTarget(target);
     }, ^{
         NeoWCArmImageSendConfirmationBypass(target);
         %orig(retainedAsset);
@@ -8795,20 +9086,20 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
     NSUInteger messageType = [NeoWCTweakSafeValue(wrap, @"m_uiMessageType") unsignedIntegerValue];
     NSString *target = NeoWCTweakSafeValue(wrap, @"m_nsToUsr");
     if (messageType != 3 || ![target isKindOfClass:NSString.class] ||
-        NeoWCConsumeImageSendConfirmationBypass(target)) {
+        NeoWCConsumeImageSendConfirmationBypass(target) ||
+        NeoWCConsumeRepeatSendConfirmationBypass(target, 3, NO)) {
         %orig(message, wrap);
         return;
     }
-    BaseMsgContentViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    UIViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
     if (!presenter) {
         %orig(message, wrap);
         return;
     }
-    __weak BaseMsgContentViewController *weakPresenter = presenter;
     id retainedMessage = message;
     id retainedWrap = wrap;
     BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter, target, @"图片：1 张", ^BOOL{
-        return NeoWCSendConfirmationValidateTarget(weakPresenter, target);
+        return NeoWCSendConfirmationValidateTarget(target);
     }, ^{
         %orig(retainedMessage, retainedWrap);
     });
@@ -8830,17 +9121,20 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
         %orig(target, wrap);
         return;
     }
-    BaseMsgContentViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    if (NeoWCConsumeRepeatSendConfirmationBypass(target, 1, NO)) {
+        %orig(target, wrap);
+        return;
+    }
+    UIViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
     if (!presenter) {
         %orig(target, wrap);
         return;
     }
-    __weak BaseMsgContentViewController *weakPresenter = presenter;
     NSString *summary = NeoWCSendConfirmationTextSummary(wrap);
     NSString *retainedTarget = [target copy];
     CMessageWrap *retainedWrap = wrap;
     BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter, target, summary, ^BOOL{
-        return NeoWCSendConfirmationValidateTarget(weakPresenter, retainedTarget);
+        return NeoWCSendConfirmationValidateTarget(retainedTarget);
     }, ^{
         %orig(retainedTarget, retainedWrap);
     });
@@ -8848,17 +9142,17 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 - (id)AddVideoMsg:(id)message ToUsr:(NSString *)target VideoInfo:(id)videoInfo {
-    if (![target isKindOfClass:NSString.class] || NeoWCConsumeVideoSendConfirmationBypass(target)) {
+    if (![target isKindOfClass:NSString.class] || NeoWCConsumeVideoSendConfirmationBypass(target) ||
+        NeoWCConsumeRepeatSendConfirmationBypass(target, 43, NO)) {
         return %orig(message, target, videoInfo);
     }
-    BaseMsgContentViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    UIViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
     if (!presenter) return %orig(message, target, videoInfo);
-    __weak BaseMsgContentViewController *weakPresenter = presenter;
     id retainedMessage = message;
     NSString *retainedTarget = [target copy];
     id retainedVideoInfo = videoInfo;
     BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter, target, @"视频：1 个", ^BOOL{
-        return NeoWCSendConfirmationValidateTarget(weakPresenter, retainedTarget);
+        return NeoWCSendConfirmationValidateTarget(retainedTarget);
     }, ^{
         id ignoredResult = %orig(retainedMessage, retainedTarget, retainedVideoInfo);
         (void)ignoredResult;
@@ -8888,6 +9182,39 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap {
     static dispatch_once_t compatibilityOnce;
     dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"game-selector"); });
+    BOOL repeatBypass = NeoWCConsumeRepeatSendConfirmationBypass(message, 47, NO);
+    if (repeatBypass) {
+        %orig(message, wrap);
+        return;
+    }
+    BOOL confirmationBypass = [objc_getAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey) boolValue];
+    if (confirmationBypass) {
+        objc_setAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey, nil,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    } else {
+        UIViewController *confirmationPresenter = NeoWCSendConfirmationPresenterForTarget(message);
+        if (confirmationPresenter) {
+            NSString *retainedTarget = [message copy];
+            CMessageWrap *retainedWrap = wrap;
+            __weak typeof(self) weakManager = self;
+            BOOL held = NeoWCPresentSendConfirmationIfNeeded(confirmationPresenter,
+                                                              retainedTarget,
+                                                              @"表情：1 个",
+                                                              ^BOOL{
+                return NeoWCSendConfirmationValidateTarget(retainedTarget);
+            }, ^{
+                id manager = weakManager;
+                if (!manager) return;
+                objc_setAssociatedObject(retainedWrap, &NeoWCSendConfirmationNativeBypassKey, @YES,
+                                         OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                ((void (*)(id, SEL, id, id))objc_msgSend)(manager,
+                                                          @selector(AddEmoticonMsg:MsgWrap:),
+                                                          retainedTarget,
+                                                          retainedWrap);
+            });
+            if (held) return;
+        }
+    }
     BOOL isGameMessage = wrap.m_uiMessageType == 47 && (wrap.m_uiGameType == 1 || wrap.m_uiGameType == 2);
     if (!NeoWCEnhancementEnabled(NeoWCGameSelectorKey) || !isGameMessage) {
         %orig;

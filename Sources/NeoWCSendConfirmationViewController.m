@@ -1,6 +1,7 @@
 #import "NeoWCSendConfirmationViewController.h"
 #import "NeoWCSendConfirmation.h"
 #import "NeoWCAccount.h"
+#import "NeoWCInterfaceTweaks.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
 
@@ -178,15 +179,35 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 @property (nonatomic, copy) NSArray<NSDictionary *> *visibleFriends;
 @property (nonatomic, copy) NSArray<NSDictionary *> *visibleGroups;
 @property (nonatomic, strong) UISearchController *searchController;
+@property (nonatomic, copy) NSString *pickerTitle;
+@property (nonatomic, copy) NSString *pickerFooter;
+@property (nonatomic, copy) NeoWCConversationPickerSelectedBlock selectedBlock;
+@property (nonatomic, copy) NeoWCConversationPickerToggleBlock toggleBlock;
+- (instancetype)initWithTitle:(NSString *)title
+                       footer:(NSString *)footer
+                     selected:(NeoWCConversationPickerSelectedBlock)selected
+                       toggle:(NeoWCConversationPickerToggleBlock)toggle;
 @end
 
 @implementation NeoWCSendConfirmationConversationPicker
 
-- (instancetype)init { return [super initWithStyle:UITableViewStyleInsetGrouped]; }
+- (instancetype)initWithTitle:(NSString *)title
+                       footer:(NSString *)footer
+                     selected:(NeoWCConversationPickerSelectedBlock)selected
+                       toggle:(NeoWCConversationPickerToggleBlock)toggle {
+    self = [super initWithStyle:UITableViewStyleInsetGrouped];
+    if (self) {
+        _pickerTitle = [title copy];
+        _pickerFooter = [footer copy];
+        _selectedBlock = [selected copy];
+        _toggleBlock = [toggle copy];
+    }
+    return self;
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"选择好友或群聊";
+    self.title = self.pickerTitle.length > 0 ? self.pickerTitle : @"选择好友或群聊";
     self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.tableView.rowHeight = 60.0;
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(done)];
@@ -194,10 +215,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
     self.searchController.obscuresBackgroundDuringPresentation = NO;
     self.searchController.searchResultsUpdater = self;
     self.searchController.searchBar.placeholder = @"搜索好友、群聊或 username";
-    self.searchController.searchBar.backgroundImage = [UIImage new];
-    self.searchController.searchBar.backgroundColor = UIColor.clearColor;
-    self.searchController.searchBar.barTintColor = UIColor.clearColor;
-    self.searchController.searchBar.searchTextField.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
+    NeoWCStyleSearchBar(self.searchController.searchBar);
     self.navigationItem.searchController = self.searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     self.definesPresentationContext = YES;
@@ -258,7 +276,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView;
     if (section != 1) return nil;
-    return self.allItems.count > 0 ? @"勾选的会话会立即开启发送前确认；再次点击可取消。" : @"微信尚未返回可用的好友或群聊列表。";
+    return self.allItems.count > 0 ? (self.pickerFooter ?: @"点击选择或取消会话。") : @"微信尚未返回可用的好友或群聊列表。";
 }
 - (NSDictionary *)itemAtIndexPath:(NSIndexPath *)indexPath {
     NSArray *items = indexPath.section == 0 ? self.visibleFriends : self.visibleGroups;
@@ -270,18 +288,27 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
     NSDictionary *item = [self itemAtIndexPath:indexPath];
     NSString *username = item[@"username"];
     [cell configureWithUsername:username name:item[@"name"] group:[item[@"group"] boolValue]];
-    cell.accessoryType = [NeoWCSendConfirmationProtectedConversations() containsObject:username] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
+    cell.accessoryType = self.selectedBlock && self.selectedBlock(username) ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
     return cell;
 }
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NSString *username = [self itemAtIndexPath:indexPath][@"username"];
-    BOOL isProtected = [NeoWCSendConfirmationProtectedConversations() containsObject:username];
-    NeoWCSendConfirmationSetProtected(username, !isProtected);
+    if (self.toggleBlock) self.toggleBlock(username);
     [tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
 }
 
 @end
+
+UIViewController *NeoWCCreateConversationPicker(NSString *title,
+                                                NSString *footer,
+                                                NeoWCConversationPickerSelectedBlock selected,
+                                                NeoWCConversationPickerToggleBlock toggle) {
+    return [[NeoWCSendConfirmationConversationPicker alloc] initWithTitle:title
+                                                                   footer:footer
+                                                                 selected:selected
+                                                                   toggle:toggle];
+}
 
 @interface NeoWCSendConfirmationViewController ()
 @property (nonatomic, copy) NSArray<NSString *> *usernames;
@@ -327,7 +354,15 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
         [self showMessage:@"尚未识别当前微信账号，请返回 NeoWC 设置后重试。" title:@"无法添加"];
         return;
     }
-    [self.navigationController pushViewController:[NeoWCSendConfirmationConversationPicker new] animated:YES];
+    UIViewController *picker = NeoWCCreateConversationPicker(@"选择好友或群聊",
+                                                              @"勾选的会话会立即开启发送前确认；再次点击可取消。",
+                                                              ^BOOL(NSString *username) {
+        return [NeoWCSendConfirmationProtectedConversations() containsObject:username];
+    }, ^(NSString *username) {
+        BOOL protectedConversation = [NeoWCSendConfirmationProtectedConversations() containsObject:username];
+        NeoWCSendConfirmationSetProtected(username, !protectedConversation);
+    });
+    [self.navigationController pushViewController:picker animated:YES];
 }
 
 - (void)showMessage:(NSString *)message title:(NSString *)title {

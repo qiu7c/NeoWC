@@ -19,6 +19,10 @@ FOUNDATION_EXPORT BOOL NeoWCHeadViewIsExcludedFromGlobalAvatarRounding(UIView *h
 FOUNDATION_EXPORT void NeoWCRefreshTrackedGlobalAvatarViews(void);
 FOUNDATION_EXPORT unsigned int NeoWCGlobalAvatarScaledCornerSize(unsigned int originalSize);
 
+/// Keeps NeoWC search bars visually continuous with their containing page and
+/// rounds the actual editable field instead of exposing a second square layer.
+FOUNDATION_EXPORT void NeoWCStyleSearchBar(UISearchBar *searchBar);
+
 /// Applies or restores NeoWC's chat input rounding on an existing MMInputToolView.
 FOUNDATION_EXPORT void NeoWCApplyChatInputRoundingToToolView(UIView *inputToolView);
 FOUNDATION_EXPORT void NeoWCRestoreChatInputRoundingFromToolView(UIView *inputToolView);

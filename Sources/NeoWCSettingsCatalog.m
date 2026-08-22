@@ -4,6 +4,7 @@
 #import "NeoWCInterfaceTweaks.h"
 #import "NeoWCDebug.h"
 #import "NeoWCQuickReplyStore.h"
+#import "NeoWCMessageBlock.h"
 #import "NeoWCSendConfirmation.h"
 #import <stdlib.h>
 
@@ -41,6 +42,12 @@ static NSString *NeoWCCountText(NSUInteger count) {
 
 static NSString *NeoWCCurrentSelection(NSString *value) {
     return [NSString stringWithFormat:@"当前选择：%@", value ?: @"未设置"];
+}
+
+static NSString *NeoWCSendConfirmationPauseDurationText(NSInteger seconds) {
+    seconds = seconds > 0 ? seconds : 60;
+    return seconds % 60 == 0 ? [NSString stringWithFormat:@"%ld 分钟", (long)(seconds / 60)] :
+                               [NSString stringWithFormat:@"%ld 秒", (long)seconds];
 }
 
 static long long NeoWCLongLongForKey(NSString *key) {
@@ -136,6 +143,8 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCMessageBlockEnabledKey: @NO,
         NeoWCMessageBlockUsersKey: @[],
         NeoWCMessageBlockKeywordsKey: @[],
+        NeoWCMessageBlockRulesKey: @{},
+        NeoWCMessageBlockProfileSwitchEnabledKey: @YES,
         NeoWCLongPressMenuEnabledKey: @NO,
         NeoWCLongPressMenuHiddenTitlesKey: @[],
         NeoWCLongPressMenuPreferredOrderKey: @[],
@@ -174,6 +183,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCQuickReplyInstantSendEnabledKey: @NO,
         NeoWCSendConfirmationEnabledKey: @NO,
         NeoWCSendConfirmationUsersKey: @{},
+        NeoWCSendConfirmationPauseSecondsKey: @60,
         NeoWCMomentsLikeHapticEnabledKey: @NO,
         NeoWCMomentsLikeHapticIntensityKey: @0.65,
         NeoWCMomentsQuickPermissionsKey: @NO,
@@ -253,14 +263,20 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     NeoWCAddFeature(protection, NeoWCItem(@"防撤回", @"保留好友撤回的消息并显示提示", @"arrow.uturn.backward.circle", NeoWCSettingRowKindSwitch, NeoWCAntiRevokeKey, nil, NeoWCSettingActionNone), revokeChildren, defaults, collapsed);
 
     NSArray *blockChildren = @[
-        NeoWCItem(@"屏蔽会话账号", @"每行一个 wxid 或群聊账号", @"person.crop.circle.badge.xmark", NeoWCSettingRowKindDetail, nil, NeoWCCountText([defaults arrayForKey:NeoWCMessageBlockUsersKey].count), NeoWCSettingActionBlockUsers),
+        NeoWCItem(@"管理屏蔽会话", @"按好友或群聊选择需要屏蔽的消息类型", @"person.crop.circle.badge.xmark", NeoWCSettingRowKindDetail, nil, NeoWCCountText(NeoWCMessageBlockedConversations().count), NeoWCSettingActionBlockUsers),
         NeoWCItem(@"屏蔽关键词", @"命中后不加入本地聊天记录", @"text.badge.xmark", NeoWCSettingRowKindDetail, nil, NeoWCCountText([defaults arrayForKey:NeoWCMessageBlockKeywordsKey].count), NeoWCSettingActionBlockKeywords),
+        NeoWCItem(@"资料页显示屏蔽开关", @"好友、非好友和群聊资料页均可快速设置", @"person.text.rectangle", NeoWCSettingRowKindSwitch, NeoWCMessageBlockProfileSwitchEnabledKey, nil, NeoWCSettingActionNone),
     ];
-    NeoWCAddFeature(protection, NeoWCItem(@"消息屏蔽", @"按账号或关键词忽略新收到的普通文字", @"eye.slash", NeoWCSettingRowKindSwitch, NeoWCMessageBlockEnabledKey, nil, NeoWCSettingActionNone), blockChildren, defaults, collapsed);
+    NeoWCAddFeature(protection, NeoWCItem(@"消息屏蔽", @"账号屏蔽全部收到的消息，关键词只匹配文字", @"eye.slash", NeoWCSettingRowKindSwitch, NeoWCMessageBlockEnabledKey, nil, NeoWCSettingActionNone), blockChildren, defaults, collapsed);
     NeoWCAddFeature(protection,
                     NeoWCItem(@"发送前确认", @"仅保护指定会话，默认关闭", @"checkmark.shield", NeoWCSettingRowKindSwitch, NeoWCSendConfirmationEnabledKey, nil, NeoWCSettingActionNone),
-                    @[NeoWCItem(@"管理受保护会话", @"只保存 username，名称运行时读取", @"person.crop.circle.badge.checkmark", NeoWCSettingRowKindDetail, nil,
-                               NeoWCCountText(NeoWCSendConfirmationProtectedConversations().count), NeoWCSettingActionSendConfirmationConversations)],
+                    @[
+                        NeoWCItem(@"临时暂停时长", @"确认后可暂时放行当前会话", @"timer", NeoWCSettingRowKindDetail, nil,
+                                  NeoWCSendConfirmationPauseDurationText([defaults integerForKey:NeoWCSendConfirmationPauseSecondsKey]),
+                                  NeoWCSettingActionSendConfirmationPauseDuration),
+                        NeoWCItem(@"管理受保护会话", @"只保存 username，名称运行时读取", @"person.crop.circle.badge.checkmark", NeoWCSettingRowKindDetail, nil,
+                                  NeoWCCountText(NeoWCSendConfirmationProtectedConversations().count), NeoWCSettingActionSendConfirmationConversations),
+                    ],
                     defaults,
                     collapsed);
     NSMutableSet *menuTitles = [NSMutableSet setWithArray:[defaults arrayForKey:NeoWCLongPressMenuKnownTitlesKey] ?: @[]];
