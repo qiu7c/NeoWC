@@ -106,6 +106,28 @@
 
 @end
 
+@interface NeoWCQuickReplyPlayerView : UIView
+@property (nonatomic, strong, nullable) AVPlayer *player;
+@end
+
+@implementation NeoWCQuickReplyPlayerView
+
++ (Class)layerClass {
+    return AVPlayerLayer.class;
+}
+
+- (AVPlayer *)player {
+    return ((AVPlayerLayer *)self.layer).player;
+}
+
+- (void)setPlayer:(AVPlayer *)player {
+    AVPlayerLayer *playerLayer = (AVPlayerLayer *)self.layer;
+    playerLayer.player = player;
+    playerLayer.videoGravity = AVLayerVideoGravityResizeAspect;
+}
+
+@end
+
 @interface NeoWCQuickReplyMediaPreviewViewController : UIViewController
 @property (nonatomic, strong) NeoWCQuickReplyItem *item;
 @property (nonatomic, copy) dispatch_block_t sendHandler;
@@ -134,11 +156,16 @@
     NSString *path = [NeoWCQuickReplyStore.sharedStore absoluteMediaPathForItem:self.item];
     if (self.item.type == NeoWCQuickReplyTypeVideo) {
         self.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:path ?: @""]];
-        AVPlayerLayer *layer = [AVPlayerLayer playerLayerWithPlayer:self.player];
-        layer.videoGravity = AVLayerVideoGravityResizeAspect;
-        layer.frame = self.view.bounds;
-        layer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
-        [self.view.layer addSublayer:layer];
+        NeoWCQuickReplyPlayerView *playerView = [NeoWCQuickReplyPlayerView new];
+        playerView.translatesAutoresizingMaskIntoConstraints = NO;
+        playerView.player = self.player;
+        [self.view addSubview:playerView];
+        [NSLayoutConstraint activateConstraints:@[
+            [playerView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+            [playerView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
+            [playerView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+            [playerView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        ]];
         [self.player play];
     } else {
         UIImageView *imageView = [[UIImageView alloc] initWithImage:[UIImage imageWithContentsOfFile:path]];
