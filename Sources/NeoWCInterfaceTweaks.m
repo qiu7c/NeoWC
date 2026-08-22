@@ -33,15 +33,16 @@ void NeoWCStyleSearchBar(UISearchBar *searchBar) {
     textField.layer.masksToBounds = YES;
 }
 
-void NeoWCStyleSearchNavigationItem(UINavigationItem *navigationItem) {
-    if (!navigationItem) return;
-    UINavigationBarAppearance *appearance = [UINavigationBarAppearance new];
-    [appearance configureWithOpaqueBackground];
-    appearance.backgroundColor = UIColor.systemGroupedBackgroundColor;
-    appearance.shadowColor = UIColor.clearColor;
-    navigationItem.standardAppearance = appearance;
-    navigationItem.scrollEdgeAppearance = appearance;
-    navigationItem.compactAppearance = appearance;
+void NeoWCInstallSearchBarInTableView(UISearchBar *searchBar, UITableView *tableView) {
+    if (!searchBar || !tableView) return;
+    CGFloat width = CGRectGetWidth(tableView.bounds);
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, width, 60.0)];
+    header.backgroundColor = UIColor.clearColor;
+    header.opaque = NO;
+    searchBar.frame = CGRectMake(0.0, 4.0, width, 52.0);
+    searchBar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [header addSubview:searchBar];
+    tableView.tableHeaderView = header;
 }
 
 static char NeoWCOriginalCornerRadiusKey;

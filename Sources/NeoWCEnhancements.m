@@ -27,6 +27,7 @@ NSString *const NeoWCMessageDoubleTapSelfActionKey = @"com.qiu7c.neowc.chat.mess
 NSString *const NeoWCMessageDoubleTapOtherActionKey = @"com.qiu7c.neowc.chat.message-gesture.double-tap.other-action";
 NSString *const NeoWCMessageTripleTapSelfActionKey = @"com.qiu7c.neowc.chat.message-gesture.triple-tap.self-action";
 NSString *const NeoWCMessageTripleTapOtherActionKey = @"com.qiu7c.neowc.chat.message-gesture.triple-tap.other-action";
+NSString *const NeoWCAvatarQuickMenuGestureKey = @"com.qiu7c.neowc.chat.avatar-quick-menu.gesture";
 NSString *const NeoWCChatMessageTimeEnabledKey = @"com.qiu7c.neowc.chat.message-time";
 NSString *const NeoWCChatMessageTimeBelowAvatarKey = @"com.qiu7c.neowc.chat.message-time.below-avatar";
 NSString *const NeoWCChatMessageTimeBubbleSideKey = @"com.qiu7c.neowc.chat.message-time.bubble-side";

@@ -576,6 +576,31 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
     [self presentSheet:sheet];
 }
 
+- (void)presentAvatarQuickMenuGesturePicker {
+    NSInteger current = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCAvatarQuickMenuGestureKey];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"头像快捷面板"
+                                                                   message:@"只启用一种头像手势，不影响消息气泡手势"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSDictionary *> *options = @[
+        @{@"title": @"关闭", @"value": @(NeoWCAvatarQuickMenuGestureOff)},
+        @{@"title": @"双击头像", @"value": @(NeoWCAvatarQuickMenuGestureDoubleTap)},
+        @{@"title": @"长按头像", @"value": @(NeoWCAvatarQuickMenuGestureLongPress)},
+    ];
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary *option in options) {
+        NSInteger value = [option[@"value"] integerValue];
+        NSString *title = value == current ? [@"✓  " stringByAppendingString:option[@"title"]] : option[@"title"];
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [NSUserDefaults.standardUserDefaults setInteger:value forKey:NeoWCAvatarQuickMenuGestureKey];
+            [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification
+                                                               object:NeoWCAvatarQuickMenuGestureKey];
+            [weakSelf reload];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentSheet:sheet];
+}
+
 - (void)performActionForItem:(NeoWCSettingItem *)item {
     switch (item.action) {
         case NeoWCSettingActionConfigManager: [self push:[NeoWCConfigManagerViewController new]]; break;
@@ -619,6 +644,7 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         case NeoWCSettingActionChatGlassBlurIntensity: [self presentNumberEditorWithTitle:item.title message:@"请输入 20 到 100 之间的百分比" key:NeoWCChatGlassBlurIntensityKey minimum:20 maximum:100 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatGlassTintOpacity: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 30 之间的百分比；0 表示不额外染色" key:NeoWCChatGlassTintOpacityKey minimum:0 maximum:30 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionMessageGestureAction: [self presentMessageGestureActionPickerForItem:item]; break;
+        case NeoWCSettingActionAvatarQuickMenuGesture: [self presentAvatarQuickMenuGesturePicker]; break;
         case NeoWCSettingActionReplySwipeTriggerDistance: [self presentNumberEditorWithTitle:item.title message:@"请输入 36 到 100 之间的触发距离；数值越小越容易触发" key:NeoWCReplySwipeTriggerDistanceKey minimum:36 maximum:100 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionGlobalAvatarCornerPercent: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 100 之间的百分比；0 为直角，100 为圆形" key:NeoWCGlobalAvatarCornerPercentKey minimum:0 maximum:100 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionQuickReplyLibrary: [self push:[[NeoWCQuickReplyViewController alloc] initWithSelectionHandler:nil]]; break;

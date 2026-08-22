@@ -502,12 +502,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     self.searchController.searchBar.delegate = self;
     self.searchController.searchBar.placeholder = @"搜索备注或文字";
     NeoWCStyleSearchBar(self.searchController.searchBar);
-    UIView *searchHeader = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, self.tableView.bounds.size.width, 56.0)];
-    searchHeader.backgroundColor = UIColor.systemGroupedBackgroundColor;
-    self.searchController.searchBar.frame = searchHeader.bounds;
-    self.searchController.searchBar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [searchHeader addSubview:self.searchController.searchBar];
-    self.tableView.tableHeaderView = searchHeader;
+    NeoWCInstallSearchBarInTableView(self.searchController.searchBar, self.tableView);
     self.definesPresentationContext = YES;
     if (self.directSendHandler) {
         UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(itemLongPressed:)];

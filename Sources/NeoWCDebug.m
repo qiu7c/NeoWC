@@ -684,9 +684,8 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     searchController.obscuresBackgroundDuringPresentation = NO;
     searchController.searchBar.placeholder = @"输入微信类名";
     NeoWCStyleSearchBar(searchController.searchBar);
-    NeoWCStyleSearchNavigationItem(self.navigationItem);
-    self.navigationItem.searchController = searchController;
-    self.navigationItem.hidesSearchBarWhenScrolling = NO;
+    NeoWCInstallSearchBarInTableView(searchController.searchBar, self.tableView);
+    self.definesPresentationContext = YES;
     self.searchController = searchController;
 }
 

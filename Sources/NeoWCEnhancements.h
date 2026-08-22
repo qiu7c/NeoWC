@@ -26,6 +26,7 @@ FOUNDATION_EXPORT NSString *const NeoWCMessageDoubleTapSelfActionKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageDoubleTapOtherActionKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageTripleTapSelfActionKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageTripleTapOtherActionKey;
+FOUNDATION_EXPORT NSString *const NeoWCAvatarQuickMenuGestureKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeBelowAvatarKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeBubbleSideKey;
@@ -103,6 +104,12 @@ typedef NS_ENUM(NSInteger, NeoWCReplySwipeAction) {
     NeoWCReplySwipeActionCopy = 3,
     NeoWCReplySwipeActionDelete = 4,
     NeoWCReplySwipeActionRepeat = 5,
+};
+
+typedef NS_ENUM(NSInteger, NeoWCAvatarQuickMenuGesture) {
+    NeoWCAvatarQuickMenuGestureOff = 0,
+    NeoWCAvatarQuickMenuGestureDoubleTap = 1,
+    NeoWCAvatarQuickMenuGestureLongPress = 2,
 };
 
 typedef NS_ENUM(NSInteger, NeoWCChatTopBarEffectStyle) {

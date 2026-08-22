@@ -338,6 +338,7 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
 
 @interface NeoWCAntiRevokeRecordsViewController () <UISearchResultsUpdating>
 @property (nonatomic, copy) NSArray<NSDictionary *> *visibleRecords;
+@property (nonatomic, strong) UISearchController *searchController;
 @end
 
 @implementation NeoWCAntiRevokeRecordsViewController
@@ -353,9 +354,9 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
     search.obscuresBackgroundDuringPresentation = NO;
     search.searchBar.placeholder = @"搜索联系人或内容";
     NeoWCStyleSearchBar(search.searchBar);
-    NeoWCStyleSearchNavigationItem(self.navigationItem);
-    self.navigationItem.searchController = search;
-    self.navigationItem.hidesSearchBarWhenScrolling = NO;
+    NeoWCInstallSearchBarInTableView(search.searchBar, self.tableView);
+    self.definesPresentationContext = YES;
+    self.searchController = search;
     [self reloadRecordsWithQuery:nil];
 }
 

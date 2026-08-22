@@ -216,9 +216,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
     self.searchController.searchResultsUpdater = self;
     self.searchController.searchBar.placeholder = @"搜索好友、群聊或 username";
     NeoWCStyleSearchBar(self.searchController.searchBar);
-    NeoWCStyleSearchNavigationItem(self.navigationItem);
-    self.navigationItem.searchController = self.searchController;
-    self.navigationItem.hidesSearchBarWhenScrolling = NO;
+    NeoWCInstallSearchBarInTableView(self.searchController.searchBar, self.tableView);
     self.definesPresentationContext = YES;
     [self loadConversations];
 }

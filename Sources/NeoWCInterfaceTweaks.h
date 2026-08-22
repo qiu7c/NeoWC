@@ -22,7 +22,9 @@ FOUNDATION_EXPORT unsigned int NeoWCGlobalAvatarScaledCornerSize(unsigned int or
 /// Keeps NeoWC search bars visually continuous with their containing page and
 /// rounds the actual editable field instead of exposing a second square layer.
 FOUNDATION_EXPORT void NeoWCStyleSearchBar(UISearchBar *searchBar);
-FOUNDATION_EXPORT void NeoWCStyleSearchNavigationItem(UINavigationItem *navigationItem);
+/// Places the search bar inside the table's scrollable page instead of letting
+/// UINavigationBar create a separate full-width search background layer.
+FOUNDATION_EXPORT void NeoWCInstallSearchBarInTableView(UISearchBar *searchBar, UITableView *tableView);
 
 /// Applies or restores NeoWC's chat input rounding on an existing MMInputToolView.
 FOUNDATION_EXPORT void NeoWCApplyChatInputRoundingToToolView(UIView *inputToolView);

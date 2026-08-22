@@ -264,9 +264,7 @@ UIViewController *NeoWCMessageBlockTypeController(NSString *username) {
     self.searchController.obscuresBackgroundDuringPresentation = NO;
     self.searchController.searchBar.placeholder = @"搜索名称或 username";
     NeoWCStyleSearchBar(self.searchController.searchBar);
-    NeoWCStyleSearchNavigationItem(self.navigationItem);
-    self.navigationItem.searchController = self.searchController;
-    self.navigationItem.hidesSearchBarWhenScrolling = NO;
+    NeoWCInstallSearchBarInTableView(self.searchController.searchBar, self.tableView);
     self.definesPresentationContext = YES;
 }
 - (void)viewWillAppear:(BOOL)animated { [super viewWillAppear:animated]; [self reloadRules]; }

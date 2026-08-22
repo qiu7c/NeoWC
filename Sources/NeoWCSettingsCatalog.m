@@ -130,6 +130,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCMessageDoubleTapOtherActionKey: @(NeoWCReplySwipeActionNone),
         NeoWCMessageTripleTapSelfActionKey: @(NeoWCReplySwipeActionNone),
         NeoWCMessageTripleTapOtherActionKey: @(NeoWCReplySwipeActionNone),
+        NeoWCAvatarQuickMenuGestureKey: @(NeoWCAvatarQuickMenuGestureOff),
         NeoWCQuoteJumpEnabledKey: @NO,
         NeoWCQuoteJumpImageEnabledKey: @YES,
         NeoWCQuoteJumpVideoEnabledKey: @YES,
@@ -307,6 +308,17 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"忽略私聊语音", @"私聊中的语音保持原样", @"person", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnorePrivateKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"忽略自己发送", @"不转换自己发出的语音", @"person.crop.circle", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnoreSelfKey, nil, NeoWCSettingActionNone),
     ], defaults, collapsed);
+    NSInteger avatarGesture = [defaults integerForKey:NeoWCAvatarQuickMenuGestureKey];
+    NSString *avatarGestureName = avatarGesture == NeoWCAvatarQuickMenuGestureDoubleTap
+        ? @"双击头像"
+        : (avatarGesture == NeoWCAvatarQuickMenuGestureLongPress ? @"长按头像" : @"关闭");
+    [interaction addObject:NeoWCItem(@"头像快捷面板",
+                                     [NSString stringWithFormat:@"呼出方式：%@", avatarGestureName],
+                                     @"person.crop.circle.badge.ellipsis",
+                                     NeoWCSettingRowKindDetail,
+                                     NeoWCAvatarQuickMenuGestureKey,
+                                     avatarGestureName,
+                                     NeoWCSettingActionAvatarQuickMenuGesture)];
     NSString *messageTimeFormat = [defaults stringForKey:NeoWCChatMessageTimeFormatKey];
     if (messageTimeFormat.length == 0) messageTimeFormat = @"MM-dd HH:mm:ss";
     BOOL messageTimeBubbleMode = [defaults boolForKey:NeoWCChatMessageTimeBubbleSideKey];
