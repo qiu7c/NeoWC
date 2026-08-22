@@ -3,6 +3,9 @@
 FOUNDATION_EXPORT NSArray *NeoWCManagedLongPressMenuItems(NSArray *items);
 
 FOUNDATION_EXPORT BOOL NeoWCShouldBlockIncomingMessage(NSString *sessionUserName, id message);
+FOUNDATION_EXPORT BOOL NeoWCDeleteBlockedIncomingMessage(id messageManager,
+                                                         NSString *sessionUserName,
+                                                         id message);
 
 FOUNDATION_EXPORT id NeoWCCaptureGroupMemberChange(id newContact, id oldContact);
 FOUNDATION_EXPORT void NeoWCCompleteGroupMemberChange(id snapshot, id contactManager, id newContact);

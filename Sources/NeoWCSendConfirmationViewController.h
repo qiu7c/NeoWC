@@ -1,6 +1,6 @@
-#import <UIKit/UIKit.h>
+#import "NeoWCCardTableViewController.h"
 
-@interface NeoWCSendConfirmationViewController : UITableViewController
+@interface NeoWCSendConfirmationViewController : NeoWCCardTableViewController
 @end
 
 typedef BOOL (^NeoWCConversationPickerSelectedBlock)(NSString *username);

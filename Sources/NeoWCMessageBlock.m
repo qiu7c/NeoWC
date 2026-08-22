@@ -194,7 +194,7 @@ static UIView *NeoWCMessageBlockAvatar(NSString *username) {
 }
 @end
 
-@interface NeoWCMessageBlockTypeViewController : UITableViewController
+@interface NeoWCMessageBlockTypeViewController : NeoWCCardTableViewController
 @property (nonatomic, copy) NSString *username;
 - (instancetype)initWithUsername:(NSString *)username;
 @end
@@ -264,6 +264,7 @@ UIViewController *NeoWCMessageBlockTypeController(NSString *username) {
     self.searchController.obscuresBackgroundDuringPresentation = NO;
     self.searchController.searchBar.placeholder = @"搜索名称或 username";
     NeoWCStyleSearchBar(self.searchController.searchBar);
+    NeoWCStyleSearchNavigationItem(self.navigationItem);
     self.navigationItem.searchController = self.searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     self.definesPresentationContext = YES;
@@ -298,7 +299,13 @@ UIViewController *NeoWCMessageBlockTypeController(NSString *username) {
 }
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 2; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { (void)tableView; return section == 0 ? self.friendUsernames.count : self.groupUsernames.count; }
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section { (void)tableView; return section == 0 ? @"好友" : @"群聊"; }
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    if ([self tableView:tableView numberOfRowsInSection:section] == 0) return nil;
+    return section == 0 ? @"好友" : @"群聊";
+}
+- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
+    return [self tableView:tableView numberOfRowsInSection:section] == 0 ? 0.01 : UITableViewAutomaticDimension;
+}
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView;
     if (section != 1) return nil;

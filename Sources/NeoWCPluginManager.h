@@ -1,4 +1,4 @@
-#import <UIKit/UIKit.h>
+#import "NeoWCCardTableViewController.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -21,7 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 @interface WCPluginsViewController : UITableViewController
 @end
 
-@interface WCPPluginOrderEditorController : UITableViewController
+@interface WCPPluginOrderEditorController : NeoWCCardTableViewController
 - (instancetype)initWithOwner:(WCPluginsViewController *)owner;
 @end
 

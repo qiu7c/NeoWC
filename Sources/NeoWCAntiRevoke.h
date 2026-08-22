@@ -1,4 +1,4 @@
-#import <UIKit/UIKit.h>
+#import "NeoWCCardTableViewController.h"
 
 /// Returns YES when the incoming revoke command was handled and must be swallowed.
 FOUNDATION_EXPORT BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage);
@@ -9,7 +9,7 @@ FOUNDATION_EXPORT BOOL NeoWCAntiRevokeIsLocalPromptMessage(id message);
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokePromptDidChangeNotification;
 FOUNDATION_EXPORT void NeoWCAntiRevokeSetPersistenceEnabled(BOOL enabled);
 
-@interface NeoWCAntiRevokeRecordsViewController : UITableViewController
+@interface NeoWCAntiRevokeRecordsViewController : NeoWCCardTableViewController
 @end
 
 @interface NeoWCAntiRevokeAppearanceViewController : UIViewController

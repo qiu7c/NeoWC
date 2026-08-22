@@ -1,4 +1,4 @@
-#import <UIKit/UIKit.h>
+#import "NeoWCCardTableViewController.h"
 
-@interface NeoWCLongPressMenuViewController : UITableViewController
+@interface NeoWCLongPressMenuViewController : NeoWCCardTableViewController
 @end

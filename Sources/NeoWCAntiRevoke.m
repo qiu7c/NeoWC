@@ -353,6 +353,7 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
     search.obscuresBackgroundDuringPresentation = NO;
     search.searchBar.placeholder = @"搜索联系人或内容";
     NeoWCStyleSearchBar(search.searchBar);
+    NeoWCStyleSearchNavigationItem(self.navigationItem);
     self.navigationItem.searchController = search;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     [self reloadRecordsWithQuery:nil];

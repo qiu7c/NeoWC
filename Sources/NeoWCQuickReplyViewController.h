@@ -1,4 +1,4 @@
-#import <UIKit/UIKit.h>
+#import "NeoWCCardTableViewController.h"
 
 @class NeoWCQuickReplyItem;
 
@@ -7,7 +7,7 @@ NS_ASSUME_NONNULL_BEGIN
 typedef void (^NeoWCQuickReplySelectionHandler)(NeoWCQuickReplyItem *item);
 typedef void (^NeoWCQuickReplyDirectSendHandler)(NeoWCQuickReplyItem *item);
 
-@interface NeoWCQuickReplyViewController : UITableViewController
+@interface NeoWCQuickReplyViewController : NeoWCCardTableViewController
 
 - (instancetype)initWithSelectionHandler:(NeoWCQuickReplySelectionHandler _Nullable)selectionHandler;
 - (instancetype)initWithSelectionHandler:(NeoWCQuickReplySelectionHandler _Nullable)selectionHandler

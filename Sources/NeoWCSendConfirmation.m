@@ -8,9 +8,15 @@
 @interface NeoWCSendConfirmationCoordinator : NSObject
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UIViewController *> *pendingAlerts;
 @property (nonatomic, strong) NSMutableArray *pendingPresentations;
+@property (nonatomic, strong) NSMutableSet<NSString *> *deferredPresentationTokens;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSDate *> *temporaryAllowances;
 @property (nonatomic, copy) NSString *temporaryAllowanceAccount;
 + (instancetype)sharedCoordinator;
+- (BOOL)presentFrom:(UIViewController *)presenter
+           username:(NSString *)username
+            summary:(NSString *)summary
+          validator:(NeoWCSendConfirmationValidator)validator
+          confirmed:(dispatch_block_t)confirmedAction;
 @end
 
 @interface NeoWCSendConfirmationAlertController : UIViewController
@@ -23,6 +29,32 @@
 static NSString *NeoWCSendConfirmationTrimmed(NSString *value) {
     if (![value isKindOfClass:NSString.class]) return @"";
     return [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+}
+
+static UIViewController *NeoWCSendConfirmationPresentedControllerInTree(UIViewController *controller) {
+    if (!controller) return nil;
+    UIViewController *presented = controller.presentedViewController;
+    if (presented) return presented;
+    if ([controller isKindOfClass:UINavigationController.class]) {
+        return NeoWCSendConfirmationPresentedControllerInTree(((UINavigationController *)controller).visibleViewController);
+    }
+    if ([controller isKindOfClass:UITabBarController.class]) {
+        return NeoWCSendConfirmationPresentedControllerInTree(((UITabBarController *)controller).selectedViewController);
+    }
+    return nil;
+}
+
+static BOOL NeoWCSendConfirmationHasAnimatedTransitionInTree(UIViewController *controller) {
+    if (!controller) return NO;
+    id<UIViewControllerTransitionCoordinator> transition = controller.transitionCoordinator;
+    if (transition && transition.isAnimated) return YES;
+    if ([controller isKindOfClass:UINavigationController.class]) {
+        return NeoWCSendConfirmationHasAnimatedTransitionInTree(((UINavigationController *)controller).visibleViewController);
+    }
+    if ([controller isKindOfClass:UITabBarController.class]) {
+        return NeoWCSendConfirmationHasAnimatedTransitionInTree(((UITabBarController *)controller).selectedViewController);
+    }
+    return NO;
 }
 
 static NSString *NeoWCSendConfirmationAccountKey(void) {
@@ -318,6 +350,7 @@ static void NeoWCShowSendConfirmationToast(UIViewController *presenter, NSString
     if (self) {
         _pendingAlerts = [NSMutableDictionary dictionary];
         _pendingPresentations = [NSMutableArray array];
+        _deferredPresentationTokens = [NSMutableSet set];
         _temporaryAllowances = [NSMutableDictionary dictionary];
         [NSNotificationCenter.defaultCenter addObserver:self
                                                selector:@selector(applicationDidEnterBackground)
@@ -335,6 +368,7 @@ static void NeoWCShowSendConfirmationToast(UIViewController *presenter, NSString
     NSArray<UIViewController *> *alerts = self.pendingAlerts.allValues;
     [self.pendingAlerts removeAllObjects];
     [self.pendingPresentations removeAllObjects];
+    [self.deferredPresentationTokens removeAllObjects];
     [self.temporaryAllowances removeAllObjects];
     for (UIViewController *alert in alerts) {
         if (alert.presentingViewController) [alert dismissViewControllerAnimated:NO completion:nil];
@@ -370,6 +404,69 @@ static void NeoWCShowSendConfirmationToast(UIViewController *presenter, NSString
     dispatch_block_t next = self.pendingPresentations.firstObject;
     [self.pendingPresentations removeObjectAtIndex:0];
     dispatch_async(dispatch_get_main_queue(), next);
+}
+
+- (BOOL)isPresentationHostReady:(UIViewController *)presenter {
+    if (!presenter.view.window || presenter.isBeingDismissed || presenter.isMovingFromParentViewController) return NO;
+    if (NeoWCSendConfirmationPresentedControllerInTree(presenter)) return NO;
+    return !NeoWCSendConfirmationHasAnimatedTransitionInTree(presenter);
+}
+
+- (void)retryDeferredPresentationWithToken:(NSString *)token
+                                  presenter:(UIViewController *)presenter
+                                   username:(NSString *)username
+                                    summary:(NSString *)summary
+                                  validator:(NeoWCSendConfirmationValidator)validator
+                                  confirmed:(dispatch_block_t)confirmedAction
+                                   deadline:(NSDate *)deadline {
+    if (![self.deferredPresentationTokens containsObject:token]) return;
+    if ((validator && !validator()) || !presenter.view.window) {
+        [self.deferredPresentationTokens removeObject:token];
+        return;
+    }
+    if ([self isPresentationHostReady:presenter]) {
+        [self.deferredPresentationTokens removeObject:token];
+        BOOL presented = [self presentFrom:presenter
+                                  username:username
+                                   summary:summary
+                                 validator:validator
+                                 confirmed:confirmedAction];
+        if (!presented) NeoWCShowSendConfirmationToast(presenter, @"确认窗口未能显示，本次发送已取消");
+        return;
+    }
+    if ([deadline timeIntervalSinceNow] <= 0.0) {
+        [self.deferredPresentationTokens removeObject:token];
+        NeoWCShowSendConfirmationToast(presenter, @"等待媒体选择界面关闭超时，本次发送已取消");
+        return;
+    }
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.08 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        [weakSelf retryDeferredPresentationWithToken:token
+                                            presenter:presenter
+                                             username:username
+                                              summary:summary
+                                            validator:validator
+                                            confirmed:confirmedAction
+                                             deadline:deadline];
+    });
+}
+
+- (BOOL)deferPresentationFrom:(UIViewController *)presenter
+                      username:(NSString *)username
+                       summary:(NSString *)summary
+                     validator:(NeoWCSendConfirmationValidator)validator
+                     confirmed:(dispatch_block_t)confirmedAction {
+    NSString *token = NSUUID.UUID.UUIDString;
+    [self.deferredPresentationTokens addObject:token];
+    [self retryDeferredPresentationWithToken:token
+                                   presenter:presenter
+                                    username:[username copy]
+                                     summary:[summary copy]
+                                   validator:[validator copy]
+                                   confirmed:[confirmedAction copy]
+                                    deadline:[NSDate dateWithTimeIntervalSinceNow:15.0]];
+    return YES;
 }
 
 - (BOOL)presentFrom:(UIViewController *)presenter
@@ -410,6 +507,13 @@ static void NeoWCShowSendConfirmationToast(UIViewController *presenter, NSString
             if (!presented) [strongSelf presentNextIfNeeded];
         }];
         return YES;
+    }
+    if (![self isPresentationHostReady:presenter]) {
+        return [self deferPresentationFrom:presenter
+                                  username:username
+                                   summary:summary
+                                 validator:validator
+                                 confirmed:confirmedAction];
     }
     NSString *token = NSUUID.UUID.UUIDString;
     NSString *displayName = NeoWCSendConfirmationDisplayName(username);

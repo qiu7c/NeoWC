@@ -201,13 +201,15 @@ BOOL NeoWCShouldBlockIncomingMessage(NSString *sessionUserName, id message) {
     NSUInteger messageType = NeoWCMessageType(message);
     BOOL blockedUser = NeoWCRuntimeStringMatchesAny(session, blockedUsers) &&
                        NeoWCMessageBlockConversationMatchesType(session, messageType);
-    // A private-chat fallback may use the sender field, but a group rule must
-    // stay bound to the group session and never inherit a member's private rule.
-    if (!blockedUser && ![session hasSuffix:@"@chatroom"]) {
-        blockedUser = (NeoWCRuntimeStringMatchesAny(fromUserName, blockedUsers) &&
-                       NeoWCMessageBlockConversationMatchesType(fromUserName, messageType)) ||
-                      (NeoWCRuntimeStringMatchesAny(realUserName, blockedUsers) &&
-                       NeoWCMessageBlockConversationMatchesType(realUserName, messageType));
+    // Group messages carry the actual sender in m_nsRealChatUsr. Match it
+    // before falling back to m_nsFromUsr, following WeChat's native field use.
+    if (!blockedUser && realUserName.length > 0) {
+        blockedUser = NeoWCRuntimeStringMatchesAny(realUserName, blockedUsers) &&
+                      NeoWCMessageBlockConversationMatchesType(realUserName, messageType);
+    }
+    if (!blockedUser && fromUserName.length > 0) {
+        blockedUser = NeoWCRuntimeStringMatchesAny(fromUserName, blockedUsers) &&
+                      NeoWCMessageBlockConversationMatchesType(fromUserName, messageType);
     }
     NSString *blockedKeyword = nil;
     if (NeoWCMessageType(message) == 1) {
@@ -217,6 +219,20 @@ BOOL NeoWCShouldBlockIncomingMessage(NSString *sessionUserName, id message) {
     if (!blockedUser && blockedKeyword.length == 0) return NO;
     NeoWCLog(@"已屏蔽一条新收到的消息（会话：%@，类型：%ld）",
              session ?: @"未知", (long)messageType);
+    return YES;
+}
+
+BOOL NeoWCDeleteBlockedIncomingMessage(id messageManager,
+                                       NSString *sessionUserName,
+                                       id message) {
+    if (!NeoWCShouldBlockIncomingMessage(sessionUserName, message)) return NO;
+
+    NSString *session = NeoWCMessageSession(sessionUserName, message);
+    SEL selector = sel_registerName("DelMsg:MsgWrap:");
+    if (!messageManager || session.length == 0 || !message ||
+        ![messageManager respondsToSelector:selector]) return NO;
+
+    ((void (*)(id, SEL, id, id))objc_msgSend)(messageManager, selector, session, message);
     return YES;
 }
 

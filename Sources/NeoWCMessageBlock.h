@@ -1,4 +1,4 @@
-#import <UIKit/UIKit.h>
+#import "NeoWCCardTableViewController.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -9,7 +9,7 @@ FOUNDATION_EXPORT void NeoWCMessageBlockSetTypesForConversation(NSString *userna
 FOUNDATION_EXPORT NSString *NeoWCMessageBlockSummaryForConversation(NSString *username);
 FOUNDATION_EXPORT UIViewController *NeoWCMessageBlockTypeController(NSString *username);
 
-@interface NeoWCMessageBlockViewController : UITableViewController
+@interface NeoWCMessageBlockViewController : NeoWCCardTableViewController
 @end
 
 NS_ASSUME_NONNULL_END

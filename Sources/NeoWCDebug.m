@@ -1,5 +1,6 @@
 #import "NeoWCDebug.h"
 #import "NeoWCInterfaceTweaks.h"
+#import "NeoWCCardTableViewController.h"
 #import <objc/runtime.h>
 #import <mach-o/dyld.h>
 
@@ -186,13 +187,13 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 - (instancetype)initWithObject:(id)object inspectedClass:(Class)inspectedClass;
 @end
 
-@interface NeoWCRuntimeSearchViewController : UITableViewController <UISearchResultsUpdating>
+@interface NeoWCRuntimeSearchViewController : NeoWCCardTableViewController <UISearchResultsUpdating>
 @end
 
-@interface NeoWCLogViewController : UITableViewController
+@interface NeoWCLogViewController : NeoWCCardTableViewController
 @end
 
-@interface NeoWCDebugDashboardViewController : UITableViewController
+@interface NeoWCDebugDashboardViewController : NeoWCCardTableViewController
 @property (nonatomic, copy) void (^closeHandler)(void);
 @property (nonatomic, weak) UIViewController *sourceViewController;
 @end
@@ -683,6 +684,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     searchController.obscuresBackgroundDuringPresentation = NO;
     searchController.searchBar.placeholder = @"输入微信类名";
     NeoWCStyleSearchBar(searchController.searchBar);
+    NeoWCStyleSearchNavigationItem(self.navigationItem);
     self.navigationItem.searchController = searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     self.searchController = searchController;

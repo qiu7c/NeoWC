@@ -19,15 +19,29 @@ NSString *const NeoWCGlobalAvatarCornerPercentKey = @"com.qiu7c.neowc.interface.
 
 void NeoWCStyleSearchBar(UISearchBar *searchBar) {
     if (!searchBar) return;
+    searchBar.searchBarStyle = UISearchBarStyleMinimal;
     searchBar.backgroundImage = [UIImage new];
     searchBar.backgroundColor = UIColor.clearColor;
     searchBar.barTintColor = UIColor.clearColor;
     searchBar.translucent = YES;
+    searchBar.layer.backgroundColor = UIColor.clearColor.CGColor;
     UITextField *textField = searchBar.searchTextField;
     textField.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
-    textField.layer.cornerRadius = 11.0;
+    textField.borderStyle = UITextBorderStyleNone;
+    textField.layer.cornerRadius = 14.0;
     textField.layer.cornerCurve = kCACornerCurveContinuous;
     textField.layer.masksToBounds = YES;
+}
+
+void NeoWCStyleSearchNavigationItem(UINavigationItem *navigationItem) {
+    if (!navigationItem) return;
+    UINavigationBarAppearance *appearance = [UINavigationBarAppearance new];
+    [appearance configureWithOpaqueBackground];
+    appearance.backgroundColor = UIColor.systemGroupedBackgroundColor;
+    appearance.shadowColor = UIColor.clearColor;
+    navigationItem.standardAppearance = appearance;
+    navigationItem.scrollEdgeAppearance = appearance;
+    navigationItem.compactAppearance = appearance;
 }
 
 static char NeoWCOriginalCornerRadiusKey;

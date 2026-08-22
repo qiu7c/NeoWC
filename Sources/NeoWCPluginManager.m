@@ -175,7 +175,7 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
 
 @class WCPluginsViewController;
 
-@interface WCPCategoryOrderEditorController : UITableViewController
+@interface WCPCategoryOrderEditorController : NeoWCCardTableViewController
 - (instancetype)initWithOwner:(WCPluginsViewController *)owner;
 @end
 

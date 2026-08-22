@@ -174,7 +174,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 
 @end
 
-@interface NeoWCSendConfirmationConversationPicker : UITableViewController <UISearchResultsUpdating>
+@interface NeoWCSendConfirmationConversationPicker : NeoWCCardTableViewController <UISearchResultsUpdating>
 @property (nonatomic, copy) NSArray<NSDictionary *> *allItems;
 @property (nonatomic, copy) NSArray<NSDictionary *> *visibleFriends;
 @property (nonatomic, copy) NSArray<NSDictionary *> *visibleGroups;
@@ -216,6 +216,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
     self.searchController.searchResultsUpdater = self;
     self.searchController.searchBar.placeholder = @"搜索好友、群聊或 username";
     NeoWCStyleSearchBar(self.searchController.searchBar);
+    NeoWCStyleSearchNavigationItem(self.navigationItem);
     self.navigationItem.searchController = self.searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     self.definesPresentationContext = YES;
@@ -270,8 +271,11 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
     return section == 0 ? self.visibleFriends.count : self.visibleGroups.count;
 }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    (void)tableView;
+    if ([self tableView:tableView numberOfRowsInSection:section] == 0) return nil;
     return section == 0 ? @"好友" : @"群聊";
+}
+- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
+    return [self tableView:tableView numberOfRowsInSection:section] == 0 ? 0.01 : UITableViewAutomaticDimension;
 }
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView;
@@ -382,8 +386,12 @@ UIViewController *NeoWCCreateConversationPicker(NSString *title,
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    (void)tableView;
+    if ([self tableView:tableView numberOfRowsInSection:section] == 0) return nil;
     return section == 0 ? @"好友" : @"群聊";
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
+    return [self tableView:tableView numberOfRowsInSection:section] == 0 ? 0.01 : UITableViewAutomaticDimension;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {

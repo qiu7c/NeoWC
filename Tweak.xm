@@ -230,6 +230,16 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 - (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap;
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap;
 - (void)AsyncOnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap;
+- (void)AsyncOnAddMsgForSession:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap;
+- (void)AsyncOnAddMsgForSession:(NSString *)sessionUserName
+                        MsgWrap:(CMessageWrap *)wrap
+             NewMsgArriveNotify:(BOOL)notify;
+- (void)HandleMsgList:(NSString *)sessionUserName MsgList:(NSArray *)messages;
+@end
+
+@interface MMNewSessionMgr : NSObject
+- (void)OnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap;
+- (void)OnMsgNotAddDBNotify:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap;
 @end
 
 @interface CContactMgr : NSObject
@@ -5844,11 +5854,7 @@ static UIViewController *NeoWCSendConfirmationPresenterForTarget(NSString *targe
     BaseMsgContentViewController *source = NeoWCSendConfirmationSourceControllerForTarget(target);
     if (!source) return nil;
     UIViewController *presentationRoot = source.tabBarController ?: source.navigationController ?: source;
-    UIViewController *presenter = NeoWCTopControllerForLoginToast(presentationRoot);
-    while (presenter.isBeingDismissed && presenter.presentingViewController) {
-        presenter = presenter.presentingViewController;
-    }
-    return presenter.view.window ? presenter : nil;
+    return presentationRoot.view.window ? presentationRoot : nil;
 }
 
 static NSString *NeoWCSendConfirmationTextSummary(id wrap) {
@@ -7575,6 +7581,8 @@ static void NeoWCInjectProfileConversationSwitches(id controller, BOOL group) {
 
     BOOL showBlockSwitch = NeoWCEnhancementEnabled(NeoWCMessageBlockEnabledKey) &&
                            [NSUserDefaults.standardUserDefaults boolForKey:NeoWCMessageBlockProfileSwitchEnabledKey];
+    BOOL showConfirmSwitch = NeoWCEnhancementEnabled(NeoWCSendConfirmationEnabledKey) &&
+                             [NSUserDefaults.standardUserDefaults boolForKey:NeoWCSendConfirmationProfileSwitchEnabledKey];
     NSString *blockTitle = group ? @"屏蔽本群消息" : @"屏蔽此人消息";
     NSString *confirmTitle = group ? @"本群发送确认" : @"对其发送确认";
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
@@ -7582,7 +7590,7 @@ static void NeoWCInjectProfileConversationSwitches(id controller, BOOL group) {
                    NeoWCMessageBlockTypesForConversation(username).count > 0;
     if (showBlockSwitch && !NeoWCProfileSectionContainsMarker(section, &NeoWCProfileMessageBlockCellMarkerKey, blockTitle)) {
         id cell = NeoWCCreateProfileSwitchCell(controller,
-                                               @selector(neowc_openProfileMessageBlockTypes),
+                                               NULL,
                                                @selector(neowc_toggleProfileMessageBlock:),
                                                blockTitle, blocked);
         if (cell) {
@@ -7590,7 +7598,8 @@ static void NeoWCInjectProfileConversationSwitches(id controller, BOOL group) {
             if (NeoWCInsertRawIDCell(section, cell, insertionIndex)) insertionIndex++;
         }
     }
-    if (!NeoWCProfileSectionContainsMarker(section, &NeoWCProfileSendConfirmationCellMarkerKey, confirmTitle)) {
+    if (showConfirmSwitch &&
+        !NeoWCProfileSectionContainsMarker(section, &NeoWCProfileSendConfirmationCellMarkerKey, confirmTitle)) {
         id cell = NeoWCCreateProfileSwitchCell(controller, NULL,
                                                @selector(neowc_toggleProfileSendConfirmation:),
                                                confirmTitle, NeoWCSendConfirmationIsProtectedConversation(username));
@@ -9161,11 +9170,36 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 - (void)AsyncOnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
-    if (NeoWCShouldBlockIncomingMessage(sessionUserName, wrap)) {
-        NeoWCCompatibilityMarkTriggered(@"message-block");
-        return;
-    }
     %orig;
+    if (NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap)) {
+        NeoWCCompatibilityMarkTriggered(@"message-block");
+    }
+}
+
+- (void)AsyncOnAddMsgForSession:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
+    %orig;
+    if (NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap)) {
+        NeoWCCompatibilityMarkTriggered(@"message-block");
+    }
+}
+
+- (void)AsyncOnAddMsgForSession:(NSString *)sessionUserName
+                        MsgWrap:(CMessageWrap *)wrap
+             NewMsgArriveNotify:(BOOL)notify {
+    %orig;
+    if (NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap)) {
+        NeoWCCompatibilityMarkTriggered(@"message-block");
+    }
+}
+
+- (void)HandleMsgList:(NSString *)sessionUserName MsgList:(NSArray *)messages {
+    %orig;
+    if (![messages isKindOfClass:NSArray.class]) return;
+    for (id message in messages) {
+        if (NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, message)) {
+            NeoWCCompatibilityMarkTriggered(@"message-block");
+        }
+    }
 }
 
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap {
@@ -9246,6 +9280,26 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
         objc_setAssociatedObject(wrap, &NeoWCGameSelectorPresentedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     };
     [presenter presentViewController:selector animated:NO completion:nil];
+}
+
+%end
+
+%hook MMNewSessionMgr
+
+- (void)OnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
+    if (NeoWCShouldBlockIncomingMessage(sessionUserName, wrap)) {
+        NeoWCCompatibilityMarkTriggered(@"message-block");
+        return;
+    }
+    %orig;
+}
+
+- (void)OnMsgNotAddDBNotify:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
+    if (NeoWCShouldBlockIncomingMessage(sessionUserName, wrap)) {
+        NeoWCCompatibilityMarkTriggered(@"message-block");
+        return;
+    }
+    %orig;
 }
 
 %end

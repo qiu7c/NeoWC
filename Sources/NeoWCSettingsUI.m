@@ -8,6 +8,66 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
     return image ?: [UIImage systemImageNamed:@"circle.grid.2x2"];
 }
 
+static UIImageView *NeoWCSettingsChevron(NSString *name, CGFloat scale) {
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:12.0 * scale
+                                                                                                  weight:UIImageSymbolWeightSemibold];
+    UIImageView *chevron = [[UIImageView alloc] initWithImage:[[UIImage systemImageNamed:name] imageWithConfiguration:configuration]];
+    chevron.tintColor = UIColor.tertiaryLabelColor;
+    chevron.contentMode = UIViewContentModeScaleAspectFit;
+    return chevron;
+}
+
+static UIView *NeoWCSettingsDetailAccessory(NSString *valueText, CGFloat scale) {
+    CGFloat height = 32.0 * scale;
+    CGFloat chevronWidth = 9.0 * scale;
+    CGFloat spacing = valueText.length > 0 ? 7.0 * scale : 0.0;
+    UILabel *value = nil;
+    CGFloat valueWidth = 0.0;
+    if (valueText.length > 0) {
+        value = [UILabel new];
+        value.text = valueText;
+        value.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleSubheadline]
+            scaledFontForFont:[UIFont systemFontOfSize:15.0 * scale]];
+        value.adjustsFontForContentSizeCategory = YES;
+        value.textColor = UIColor.tertiaryLabelColor;
+        value.textAlignment = NSTextAlignmentRight;
+        value.adjustsFontSizeToFitWidth = YES;
+        value.minimumScaleFactor = 0.75;
+        valueWidth = MIN(132.0 * scale, [value sizeThatFits:CGSizeMake(CGFLOAT_MAX, height)].width);
+    }
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0,
+                                                                 valueWidth + spacing + chevronWidth,
+                                                                 height)];
+    if (value) {
+        value.frame = CGRectMake(0.0, 0.0, valueWidth, height);
+        [container addSubview:value];
+    }
+    UIImageView *chevron = NeoWCSettingsChevron(@"chevron.right", scale);
+    chevron.frame = CGRectMake(valueWidth + spacing, 0.0, chevronWidth, height);
+    [container addSubview:chevron];
+    return container;
+}
+
+static UIView *NeoWCSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL expanded, CGFloat scale) {
+    [toggle sizeToFit];
+    CGFloat chevronWidth = 10.0 * scale;
+    CGFloat spacing = 8.0 * scale;
+    CGFloat height = MAX(toggle.bounds.size.height, 32.0 * scale);
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0,
+                                                                 chevronWidth + spacing + toggle.bounds.size.width,
+                                                                 height)];
+    UIImageView *chevron = NeoWCSettingsChevron(expanded ? @"chevron.down" : @"chevron.right", scale);
+    chevron.alpha = toggle.isOn ? 1.0 : 0.3;
+    chevron.frame = CGRectMake(0.0, 0.0, chevronWidth, height);
+    toggle.frame = CGRectMake(chevronWidth + spacing,
+                              (height - toggle.bounds.size.height) * 0.5,
+                              toggle.bounds.size.width,
+                              toggle.bounds.size.height);
+    [container addSubview:chevron];
+    [container addSubview:toggle];
+    return container;
+}
+
 @interface NeoWCSettingsCell ()
 @property (nonatomic, strong) NeoWCSettingItem *settingItem;
 @property (nonatomic, copy) NeoWCSettingsSwitchHandler switchHandler;
@@ -68,7 +128,7 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
         toggle.accessibilityLabel = item.title;
         [toggle addTarget:self action:@selector(toggleChanged:) forControlEvents:UIControlEventValueChanged];
         if (item.hasChildren) {
-            self.accessoryView = toggle;
+            self.accessoryView = NeoWCSettingsExpandableSwitchAccessory(toggle, expanded, scale);
             self.selectionStyle = toggle.isOn ? UITableViewCellSelectionStyleDefault : UITableViewCellSelectionStyleNone;
             self.accessibilityHint = toggle.isOn ? (expanded ? @"轻点收起子选项" : @"轻点展开子选项") : nil;
         } else {
@@ -76,16 +136,7 @@ static UIImage *NeoWCSettingsSymbol(NSString *name) {
             self.selectionStyle = UITableViewCellSelectionStyleNone;
         }
     } else if (item.kind == NeoWCSettingRowKindDetail) {
-        if (item.value.length > 0) {
-            UILabel *value = [UILabel new];
-            value.text = item.value;
-            value.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleSubheadline] scaledFontForFont:[UIFont systemFontOfSize:15.0 * scale]];
-            value.adjustsFontForContentSizeCategory = YES;
-            value.textColor = UIColor.tertiaryLabelColor;
-            value.adjustsFontSizeToFitWidth = YES;
-            value.minimumScaleFactor = 0.8;
-            self.accessoryView = value;
-        }
+        self.accessoryView = NeoWCSettingsDetailAccessory(item.value, scale);
     } else if (item.value.length > 0) {
         UILabel *value = [UILabel new];
         value.text = item.value;

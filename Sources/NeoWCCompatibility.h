@@ -1,6 +1,6 @@
-#import <UIKit/UIKit.h>
+#import "NeoWCCardTableViewController.h"
 
 FOUNDATION_EXPORT void NeoWCCompatibilityMarkTriggered(NSString *identifier);
 
-@interface NeoWCCompatibilityViewController : UITableViewController
+@interface NeoWCCompatibilityViewController : NeoWCCardTableViewController
 @end
