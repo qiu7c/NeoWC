@@ -4,10 +4,13 @@
 
 #import "NeoWCAccount.h"
 #import "NeoWCEnhancements.h"
+#import "NeoWCQuickReplyStore.h"
 
 static NSString *const NeoWCExportTextAction = @"com.qiu7c.neowc.chat-export.text";
 static NSString *const NeoWCSaveImagesAction = @"com.qiu7c.neowc.chat-export.images";
 static NSString *const NeoWCShareCardAction = @"com.qiu7c.neowc.chat-export.card";
+static NSString *const NeoWCQuickReplyImportAction = @"com.qiu7c.neowc.quick-reply.import";
+static void NeoWCShowExportMessage(UIViewController *controller, NSString *title, NSString *message);
 
 typedef NS_ENUM(NSInteger, NeoWCShareCardStyle) {
     NeoWCShareCardStyleMinimal = 0,
@@ -32,25 +35,124 @@ static NSArray *NeoWCSelectedMessages(UIViewController *controller) {
     return [selected isKindOfClass:[NSArray class]] ? selected : @[];
 }
 
+static NSString *NeoWCExportConversationUsername(UIViewController *controller) {
+    id contact = NeoWCExportCall(controller, @"getContact");
+    if (!contact) contact = NeoWCExportCall(controller, @"GetContact");
+    if (!contact) contact = NeoWCExportCall(controller, @"GetCContact");
+    if (!contact) contact = NeoWCExportSafeValue(controller, @"m_contact");
+    id value = NeoWCExportSafeValue(contact, @"m_nsUsrName");
+    if (![value isKindOfClass:NSString.class] || [value length] == 0) {
+        value = NeoWCExportSafeValue(controller, @"m_nsUsrName");
+    }
+    return [value isKindOfClass:NSString.class] ? value : nil;
+}
+
 static BOOL NeoWCExportOptionEnabled(NSString *key) {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     id value = [defaults objectForKey:key];
     return value ? [value boolValue] : YES;
 }
 
-NSArray<NSDictionary *> *NeoWCChatMultiSelectActions(void) {
-    if (!NeoWCEnhancementEnabled(NeoWCMultiSelectExportEnabledKey)) return @[];
+NSArray<NSDictionary *> *NeoWCChatMultiSelectActions(UIViewController *controller) {
     NSMutableArray<NSDictionary *> *actions = [NSMutableArray array];
-    if (NeoWCExportOptionEnabled(NeoWCMultiSelectExportTextKey)) {
-        [actions addObject:@{ @"id": NeoWCExportTextAction, @"title": @"纯文本", @"symbol": @"doc.on.clipboard" }];
+    if (NeoWCEnhancementEnabled(NeoWCMultiSelectExportEnabledKey)) {
+        if (NeoWCExportOptionEnabled(NeoWCMultiSelectExportTextKey)) {
+            [actions addObject:@{ @"id": NeoWCExportTextAction, @"title": @"纯文本", @"symbol": @"doc.on.clipboard" }];
+        }
+        if (NeoWCExportOptionEnabled(NeoWCMultiSelectSaveImagesKey)) {
+            [actions addObject:@{ @"id": NeoWCSaveImagesAction, @"title": @"保存图片", @"symbol": @"square.and.arrow.down" }];
+        }
+        if (NeoWCExportOptionEnabled(NeoWCMultiSelectShareCardKey)) {
+            [actions addObject:@{ @"id": NeoWCShareCardAction, @"title": @"分享卡片", @"symbol": @"rectangle.on.rectangle" }];
+        }
     }
-    if (NeoWCExportOptionEnabled(NeoWCMultiSelectSaveImagesKey)) {
-        [actions addObject:@{ @"id": NeoWCSaveImagesAction, @"title": @"保存图片", @"symbol": @"square.and.arrow.down" }];
-    }
-    if (NeoWCExportOptionEnabled(NeoWCMultiSelectShareCardKey)) {
-        [actions addObject:@{ @"id": NeoWCShareCardAction, @"title": @"分享卡片", @"symbol": @"rectangle.on.rectangle" }];
+    if (NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey) &&
+        [[NeoWCExportConversationUsername(controller) lowercaseString] isEqualToString:@"filehelper"]) {
+        [actions addObject:@{ @"id": NeoWCQuickReplyImportAction, @"title": @"加入快捷回复", @"symbol": @"tray.and.arrow.down.fill" }];
     }
     return actions;
+}
+
+static BOOL NeoWCExportMessageIsFile(id wrap) {
+    SEL selector = NSSelectorFromString(@"IsFileMsg");
+    if ([wrap respondsToSelector:selector] && ((BOOL (*)(id, SEL))objc_msgSend)(wrap, selector)) return YES;
+    return [NeoWCExportSafeValue(wrap, @"m_uiMessageType") integerValue] == 0x31 &&
+           [NeoWCExportSafeValue(wrap, @"m_uiAppMsgInnerType") integerValue] == 6;
+}
+
+static NSString *NeoWCExportSourceMessageID(id wrap) {
+    long long serverID = [NeoWCExportSafeValue(wrap, @"m_n64MesSvrID") longLongValue];
+    unsigned long long localID = [NeoWCExportSafeValue(wrap, @"m_uiMesLocalID") unsignedLongLongValue];
+    return serverID != 0 ? [NSString stringWithFormat:@"svr:%lld", serverID]
+                         : [NSString stringWithFormat:@"local:%llu", localID];
+}
+
+static NSString *NeoWCExportExistingImagePath(id wrap) {
+    Class wrapClass = NSClassFromString(@"CMessageWrap");
+    for (NSString *selectorName in @[@"getJpgPathOfMsgHDImg:", @"getJpgPathOfMsgHdOrMiddleImg:",
+                                      @"getJpgPathOfMsgMiddleImg:", @"getPathOfMsgImg:"]) {
+        SEL selector = NSSelectorFromString(selectorName);
+        if (![wrapClass respondsToSelector:selector]) continue;
+        id value = ((id (*)(id, SEL, id))objc_msgSend)(wrapClass, selector, wrap);
+        NSString *path = [value isKindOfClass:NSString.class] ? value : nil;
+        if (path.length > 0 && [NSFileManager.defaultManager fileExistsAtPath:path]) return path;
+    }
+    return nil;
+}
+
+static NSString *NeoWCExportExistingAttachmentPath(id wrap) {
+    SEL selector = NSSelectorFromString(@"GetAppAttachmentPath");
+    if (![wrap respondsToSelector:selector]) return nil;
+    id value = ((id (*)(id, SEL))objc_msgSend)(wrap, selector);
+    NSString *path = [value isKindOfClass:NSString.class] ? value : nil;
+    return path.length > 0 && [NSFileManager.defaultManager fileExistsAtPath:path] ? path : nil;
+}
+
+static void NeoWCImportSelectedQuickReplies(UIViewController *controller, NSArray *messages) {
+    NSUInteger imported = 0, alreadyPresent = 0, unavailable = 0, unsupported = 0;
+    for (id wrap in messages) {
+        NSInteger type = [NeoWCExportSafeValue(wrap, @"m_uiMessageType") integerValue];
+        NSString *sourceID = NeoWCExportSourceMessageID(wrap);
+        NSUInteger beforeCount = NeoWCQuickReplyStore.sharedStore.items.count;
+        NSError *error = nil;
+        NeoWCQuickReplyItem *item = nil;
+        if (type == 1) {
+            NSString *text = NeoWCExportSafeValue(wrap, @"m_nsContent");
+            item = [NeoWCQuickReplyStore.sharedStore addText:text ?: @"" title:nil category:nil
+                                         sourceConversation:@"filehelper" sourceMessageID:sourceID error:&error];
+        } else if (type == 3) {
+            NSString *path = NeoWCExportExistingImagePath(wrap);
+            if (path.length == 0) { unavailable++; continue; }
+            item = [NeoWCQuickReplyStore.sharedStore addMediaAtURL:[NSURL fileURLWithPath:path]
+                                                               type:NeoWCQuickReplyTypeImage title:nil
+                                                  sourceConversation:@"filehelper" sourceMessageID:sourceID error:&error];
+        } else if (NeoWCExportMessageIsFile(wrap)) {
+            NSString *fileName = NeoWCExportSafeValue(wrap, @"m_nsAppFileName");
+            NSSet *extensions = [NSSet setWithArray:@[@"mp4", @"mov", @"m4v"]];
+            if (![extensions containsObject:fileName.pathExtension.lowercaseString]) { unsupported++; continue; }
+            NSString *path = NeoWCExportExistingAttachmentPath(wrap);
+            if (path.length == 0) { unavailable++; continue; }
+            item = [NeoWCQuickReplyStore.sharedStore addMediaAtURL:[NSURL fileURLWithPath:path]
+                                                               type:NeoWCQuickReplyTypeVideo title:fileName
+                                                  sourceConversation:@"filehelper" sourceMessageID:sourceID error:&error];
+        } else {
+            unsupported++;
+            continue;
+        }
+        if (item) {
+            if (NeoWCQuickReplyStore.sharedStore.items.count > beforeCount) imported++;
+            else alreadyPresent++;
+        } else {
+            unavailable++;
+        }
+    }
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    if (imported) [parts addObject:[NSString stringWithFormat:@"新增 %lu 项", (unsigned long)imported]];
+    if (alreadyPresent) [parts addObject:[NSString stringWithFormat:@"已存在 %lu 项", (unsigned long)alreadyPresent]];
+    if (unavailable) [parts addObject:[NSString stringWithFormat:@"未下载或读取失败 %lu 项", (unsigned long)unavailable]];
+    if (unsupported) [parts addObject:[NSString stringWithFormat:@"不支持 %lu 项", (unsigned long)unsupported]];
+    NeoWCShowExportMessage(controller, imported > 0 ? @"已加入素材库" : @"没有新增素材",
+                           parts.count > 0 ? [parts componentsJoinedByString:@"，"] : @"没有可导入的消息。");
 }
 
 static NSString *NeoWCMessageBody(id wrap) {
@@ -247,14 +349,18 @@ BOOL NeoWCHandleChatMultiSelectAction(UIViewController *controller, NSString *id
     if (!controller || identifier.length == 0) return NO;
     BOOL recognized = [identifier isEqualToString:NeoWCExportTextAction] ||
                       [identifier isEqualToString:NeoWCSaveImagesAction] ||
-                      [identifier isEqualToString:NeoWCShareCardAction];
+                      [identifier isEqualToString:NeoWCShareCardAction] ||
+                      [identifier isEqualToString:NeoWCQuickReplyImportAction];
     if (!recognized) return NO;
     NSArray *messages = NeoWCSelectedMessages(controller);
     if (messages.count == 0) {
         NeoWCShowExportMessage(controller, @"没有选中消息", @"请先选择至少一条消息。");
         return YES;
     }
-    if ([identifier isEqualToString:NeoWCExportTextAction]) {
+    if ([identifier isEqualToString:NeoWCQuickReplyImportAction]) {
+        if (![[NeoWCExportConversationUsername(controller) lowercaseString] isEqualToString:@"filehelper"]) return YES;
+        NeoWCImportSelectedQuickReplies(controller, messages);
+    } else if ([identifier isEqualToString:NeoWCExportTextAction]) {
         NSMutableArray<NSString *> *bodies = [NSMutableArray arrayWithCapacity:messages.count];
         for (id wrap in messages) {
             NSString *body = [NeoWCMessageBody(wrap) stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];

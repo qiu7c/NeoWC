@@ -45,22 +45,18 @@ NSArray<NeoWCReleaseNote *> *NeoWCReleaseNotes(void) {
     dispatch_once(&onceToken, ^{
         notes = @[
             [NeoWCReleaseNote noteWithVersion:NeoWCDisplayVersion
-                                     headline:@"朋友圈、交互与流畅度全面升级"
+                                     headline:@"快捷回复与防误发"
                                         items:@[
-                [NeoWCReleaseNoteItem itemWithTitle:@"朋友圈高清发布"
-                                              detail:@"新增高清图片和原视频入口，减少发布过程中的画质损失。"],
-                [NeoWCReleaseNoteItem itemWithTitle:@"保存朋友圈媒体"
-                                              detail:@"支持保存朋友圈图片、视频和实况照片，并提供保存结果提示。"],
-                [NeoWCReleaseNoteItem itemWithTitle:@"锁定屏幕刷新率"
-                                              detail:@"前台锁定为设备支持的最高刷新率，120 Hz 与 60 Hz 屏幕分别使用对应上限。"],
-                [NeoWCReleaseNoteItem itemWithTitle:@"主页右滑扩展"
-                                              detail:@"增加备注、朋友圈、折叠群聊、勿扰和置顶等快捷操作。"],
-                [NeoWCReleaseNoteItem itemWithTitle:@"流畅度与手势优化"
-                                              detail:@"减少多处卡顿，并解决消息手势与页面返回手势之间的冲突。"],
-                [NeoWCReleaseNoteItem itemWithTitle:@"编辑图片快捷发送"
-                                              detail:@"优化图片和当前会话识别，编辑后可通过确认页发送到当前聊天。"],
-                [NeoWCReleaseNoteItem itemWithTitle:@"语音转发"
-                                              detail:@"在语音长按菜单中新增转发入口，补齐语音消息转发流程。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"快捷回复素材库"
+                                              detail:@"支持文字、图片和视频素材，按账号隔离保存，并提供搜索、分类、置顶、排序、编辑与清理。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"文件传输助手导入"
+                                              detail:@"可通过单条长按或微信多选，把已下载的文字、图片和视频文件加入素材库。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"聊天页快捷入口"
+                                              detail:@"长按聊天输入栏的加号打开素材库；短按仍保持微信原功能。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"指定会话发送前确认"
+                                              detail:@"为指定联系人或群聊增加接收人、消息摘要确认，并在会话失效或进入后台时取消发送。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"朋友圈实况保存优化"
+                                              detail:@"调整冷缓存下载完成后的媒体路径获取顺序，继续由微信原生实况配对流程保存。"],
             ]],
         ];
     });

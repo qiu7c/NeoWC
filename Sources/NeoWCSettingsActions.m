@@ -12,6 +12,8 @@
 #import "NeoWCMeMenuViewController.h"
 #import "NeoWCPluginManager.h"
 #import "NeoWCReleaseNotes.h"
+#import "NeoWCQuickReplyViewController.h"
+#import "NeoWCSendConfirmationViewController.h"
 #import <math.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -594,6 +596,8 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         case NeoWCSettingActionMessageGestureAction: [self presentMessageGestureActionPickerForItem:item]; break;
         case NeoWCSettingActionReplySwipeTriggerDistance: [self presentNumberEditorWithTitle:item.title message:@"请输入 36 到 100 之间的触发距离；数值越小越容易触发" key:NeoWCReplySwipeTriggerDistanceKey minimum:36 maximum:100 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionGlobalAvatarCornerPercent: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 100 之间的百分比；0 为直角，100 为圆形" key:NeoWCGlobalAvatarCornerPercentKey minimum:0 maximum:100 notifyChange:YES applyScale:NO]; break;
+        case NeoWCSettingActionQuickReplyLibrary: [self push:[[NeoWCQuickReplyViewController alloc] initWithSelectionHandler:nil]]; break;
+        case NeoWCSettingActionSendConfirmationConversations: [self push:[NeoWCSendConfirmationViewController new]]; break;
         default: break;
     }
 }

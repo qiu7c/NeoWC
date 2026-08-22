@@ -353,7 +353,7 @@ static id NeoWCServiceFromCurrentContext(Class serviceClass) {
     return ((id (*)(id, SEL, Class))objc_msgSend)(context, serviceSelector, serviceClass);
 }
 
-static void NeoWCOpenChatForUserName(NSString *userName) {
+void NeoWCOpenChatForUserName(NSString *userName) {
     if (userName.length == 0) return;
     UINavigationController *navigationController = NeoWCCurrentNavigationController();
     if (!navigationController) return;

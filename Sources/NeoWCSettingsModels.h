@@ -66,6 +66,8 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionMessageGestureAction,
     NeoWCSettingActionReplySwipeTriggerDistance,
     NeoWCSettingActionGlobalAvatarCornerPercent,
+    NeoWCSettingActionQuickReplyLibrary,
+    NeoWCSettingActionSendConfirmationConversations,
 };
 
 @interface NeoWCSettingItem : NSObject

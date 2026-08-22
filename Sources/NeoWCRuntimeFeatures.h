@@ -8,6 +8,7 @@ FOUNDATION_EXPORT id NeoWCCaptureGroupMemberChange(id newContact, id oldContact)
 FOUNDATION_EXPORT void NeoWCCompleteGroupMemberChange(id snapshot, id contactManager, id newContact);
 
 FOUNDATION_EXPORT BOOL NeoWCHandleNotificationResponse(id response, void (^completionHandler)(void));
+FOUNDATION_EXPORT void NeoWCOpenChatForUserName(NSString *userName);
 
 FOUNDATION_EXPORT UIView *NeoWCWalletHeaderForView(UIView *view);
 FOUNDATION_EXPORT BOOL NeoWCViewIsInsideWalletHeader(UIView *view);

@@ -3,13 +3,15 @@
 #import "NeoWCEnhancements.h"
 #import "NeoWCInterfaceTweaks.h"
 #import "NeoWCDebug.h"
+#import "NeoWCQuickReplyStore.h"
+#import "NeoWCSendConfirmation.h"
 #import <stdlib.h>
 
 NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 
-NSString *const NeoWCDisplayVersion = @"0.1.4";
+NSString *const NeoWCDisplayVersion = @"0.1.5";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -168,6 +170,9 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCHomeSwipeActionsEnabledKey: @NO,
         NeoWCHideScreenshotForwardKey: @NO,
         NeoWCInputSwipeActionsEnabledKey: @NO,
+        NeoWCQuickReplyEnabledKey: @NO,
+        NeoWCSendConfirmationEnabledKey: @NO,
+        NeoWCSendConfirmationUsersKey: @{},
         NeoWCMomentsLikeHapticEnabledKey: @NO,
         NeoWCMomentsLikeHapticIntensityKey: @0.65,
         NeoWCMomentsQuickPermissionsKey: @NO,
@@ -251,6 +256,12 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"屏蔽关键词", @"命中后不加入本地聊天记录", @"text.badge.xmark", NeoWCSettingRowKindDetail, nil, NeoWCCountText([defaults arrayForKey:NeoWCMessageBlockKeywordsKey].count), NeoWCSettingActionBlockKeywords),
     ];
     NeoWCAddFeature(protection, NeoWCItem(@"消息屏蔽", @"按账号或关键词忽略新收到的普通文字", @"eye.slash", NeoWCSettingRowKindSwitch, NeoWCMessageBlockEnabledKey, nil, NeoWCSettingActionNone), blockChildren, defaults, collapsed);
+    NeoWCAddFeature(protection,
+                    NeoWCItem(@"发送前确认", @"仅保护指定会话，默认关闭", @"checkmark.shield", NeoWCSettingRowKindSwitch, NeoWCSendConfirmationEnabledKey, nil, NeoWCSettingActionNone),
+                    @[NeoWCItem(@"管理受保护会话", @"只保存 username，名称运行时读取", @"person.crop.circle.badge.checkmark", NeoWCSettingRowKindDetail, nil,
+                               NeoWCCountText(NeoWCSendConfirmationProtectedConversations().count), NeoWCSettingActionSendConfirmationConversations)],
+                    defaults,
+                    collapsed);
     NSMutableSet *menuTitles = [NSMutableSet setWithArray:[defaults arrayForKey:NeoWCLongPressMenuKnownTitlesKey] ?: @[]];
     [menuTitles addObjectsFromArray:[defaults arrayForKey:NeoWCLongPressMenuManualTitlesKey] ?: @[]];
     NeoWCAddFeature(protection, NeoWCItem(@"长按菜单管理", @"管理聊天消息的长按菜单", @"list.bullet.rectangle", NeoWCSettingRowKindSwitch, NeoWCLongPressMenuEnabledKey, nil, NeoWCSettingActionNone), @[
@@ -263,6 +274,12 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"表情存入自拍", @"在表情菜单中存入自拍表情", @"camera", NeoWCSettingRowKindSwitch, NeoWCEmoticonToSelfieEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"语音转发", @"在语音长按菜单中显示转发", @"waveform.badge.plus", NeoWCSettingRowKindSwitch, NeoWCVoiceForwardEnabledKey, nil, NeoWCSettingActionNone),
     ]];
+    NeoWCAddFeature(interaction,
+                    NeoWCItem(@"快捷回复素材库", @"长按聊天“+”使用文字、图片和视频素材", @"tray.full", NeoWCSettingRowKindSwitch, NeoWCQuickReplyEnabledKey, nil, NeoWCSettingActionNone),
+                    @[NeoWCItem(@"管理素材库", @"搜索、编辑、置顶和清理独立素材副本", @"square.grid.2x2", NeoWCSettingRowKindDetail, nil,
+                               NeoWCCountText(NeoWCQuickReplyStore.sharedStore.items.count), NeoWCSettingActionQuickReplyLibrary)],
+                    defaults,
+                    collapsed);
     NeoWCAddFeature(interaction, NeoWCItem(@"语音自动转文字", @"收到语音后自动转成文字", @"waveform.and.mic", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"忽略群聊语音", @"群聊中的语音保持原样", @"person.3", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnoreGroupKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"忽略私聊语音", @"私聊中的语音保持原样", @"person", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnorePrivateKey, nil, NeoWCSettingActionNone),
