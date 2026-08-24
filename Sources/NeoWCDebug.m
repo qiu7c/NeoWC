@@ -143,7 +143,9 @@ static NSString *NeoWCDiagnosticJSONShape(id object, NSUInteger depth) {
                 NeoWCDiagnosticFingerprintForString(string)];
     }
     if ([object isKindOfClass:NSNumber.class]) {
-        return CFGetTypeID((__bridge CFTypeRef)object) == CFBooleanGetTypeID() ? @"bool" : @"number";
+        if (CFGetTypeID((__bridge CFTypeRef)object) == CFBooleanGetTypeID()) return @"bool";
+        return [NSString stringWithFormat:@"number(#%@)",
+                NeoWCDiagnosticFingerprintForString([(NSNumber *)object stringValue])];
     }
     return NSStringFromClass([object class]) ?: @"object";
 }
@@ -265,8 +267,15 @@ void NeoWCPaymentLinkDiagnosticsRecordAppMessage(NSString *entryPoint, id target
     NSString *title = NeoWCDiagnosticSafeValue(wrap, @"m_nsTitle");
     NSString *desc = NeoWCDiagnosticSafeValue(wrap, @"m_nsDesc");
     NSString *appID = NeoWCDiagnosticSafeValue(wrap, @"m_nsAppID");
+    NSString *appName = NeoWCDiagnosticSafeValue(wrap, @"m_nsAppName");
     NSString *msgSource = NeoWCDiagnosticSafeValue(wrap, @"m_nsMsgSource");
     id extension = NeoWCDiagnosticSafeValue(wrap, @"m_extendInfoWithMsgType");
+    id extensionInnerType = NeoWCDiagnosticSafeValue(extension, @"m_uiAppMsgInnerType");
+    NSString *extensionTitle = NeoWCDiagnosticSafeValue(extension, @"m_nsTitle");
+    NSString *extensionDesc = NeoWCDiagnosticSafeValue(extension, @"m_nsDesc");
+    NSString *extensionAppID = NeoWCDiagnosticSafeValue(extension, @"m_nsAppID");
+    NSString *extensionAppName = NeoWCDiagnosticSafeValue(extension, @"m_nsAppName");
+    NSString *extensionContent = NeoWCDiagnosticSafeValue(extension, @"m_nsContent");
     NSDictionary *flags = @{
         @"status": NeoWCDiagnosticSafeValue(wrap, @"m_uiStatus") ?: @"-",
         @"msgFlag": NeoWCDiagnosticSafeValue(wrap, @"m_uiMsgFlag") ?: @"-",
@@ -279,12 +288,18 @@ void NeoWCPaymentLinkDiagnosticsRecordAppMessage(NSString *entryPoint, id target
     NSString *payloadClass = dataOrPath ? NSStringFromClass([dataOrPath class]) : @"nil";
     NSUInteger payloadLength = [dataOrPath respondsToSelector:@selector(length)] ?
         (NSUInteger)[dataOrPath length] : 0;
-    NeoWCLogAlways(@"[收款诊断] appmsg entry=%@ scene=%u msgType=%@ innerType=%@ flags=%@ target(%@) title(%@) desc(%@) appID(%@) source(%@) extension=%@ xml(%@ fields=%@) payload=%@/%lu",
+    NeoWCLogAlways(@"[收款诊断] appmsg entry=%@ scene=%u msgType=%@ innerType=%@ flags=%@ target(%@) title(%@) desc(%@) appID(%@) appName(%@) source(%@ fields=%@) extension=%@ extInnerType=%@ extTitle(%@) extDesc(%@) extAppID(%@) extAppName(%@) extContent(%@ fields=%@) xml(%@ fields=%@) payload=%@/%lu",
                    entryPoint ?: @"-", scene, messageType ?: @"-", innerType ?: @"-", flags,
                    NeoWCDiagnosticStringSummary(targetString), NeoWCDiagnosticStringSummary(title),
                    NeoWCDiagnosticStringSummary(desc), NeoWCDiagnosticStringSummary(appID),
-                   NeoWCDiagnosticStringSummary(msgSource), extension ? NSStringFromClass([extension class]) : @"nil",
-                   NeoWCDiagnosticStringSummary(content), NeoWCDiagnosticXMLShape(content), payloadClass,
+                   NeoWCDiagnosticStringSummary(appName), NeoWCDiagnosticStringSummary(msgSource),
+                   NeoWCDiagnosticXMLShape(msgSource),
+                   extension ? NSStringFromClass([extension class]) : @"nil", extensionInnerType ?: @"-",
+                   NeoWCDiagnosticStringSummary(extensionTitle), NeoWCDiagnosticStringSummary(extensionDesc),
+                   NeoWCDiagnosticStringSummary(extensionAppID), NeoWCDiagnosticStringSummary(extensionAppName),
+                   NeoWCDiagnosticStringSummary(extensionContent),
+                   NeoWCDiagnosticXMLShape(extensionContent), NeoWCDiagnosticStringSummary(content),
+                   NeoWCDiagnosticXMLShape(content), payloadClass,
                    (unsigned long)payloadLength);
 }
 
