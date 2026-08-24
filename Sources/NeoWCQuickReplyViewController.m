@@ -8,6 +8,14 @@
 #import <AVKit/AVKit.h>
 #import <math.h>
 
+typedef NS_ENUM(NSInteger, NeoWCQuickReplySortMode) {
+    NeoWCQuickReplySortModeCustom = 0,
+    NeoWCQuickReplySortModeRecent,
+    NeoWCQuickReplySortModeFrequency,
+};
+
+static NSString *const NeoWCQuickReplySortModeKey = @"com.qiu7c.neowc.quick-reply.sort-mode";
+
 @interface NeoWCQuickReplyTextEditorViewController : UIViewController
 @property (nonatomic, strong) UITextField *titleField;
 @property (nonatomic, strong) UITextView *textView;
@@ -488,13 +496,18 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     UIBarButtonItem *add = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd
                                                                          target:self
                                                                          action:@selector(addTapped)];
-    self.navigationItem.rightBarButtonItem = add;
+    UIBarButtonItem *sort = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"arrow.up.arrow.down"]
+                                                             style:UIBarButtonItemStylePlain
+                                                            target:self
+                                                            action:@selector(sortTapped)];
+    sort.accessibilityLabel = @"排序";
+    self.navigationItem.rightBarButtonItems = @[add, sort];
     if (!self.selectionHandler) {
         self.navigationItem.leftBarButtonItem = self.editButtonItem;
         if (!self.currentFolderIdentifier.length) {
             UIBarButtonItem *cleanup = [[UIBarButtonItem alloc] initWithTitle:@"清理" style:UIBarButtonItemStylePlain
                                                                        target:self action:@selector(cleanupMediaTapped)];
-            self.navigationItem.rightBarButtonItems = @[add, cleanup];
+            self.navigationItem.rightBarButtonItems = @[add, sort, cleanup];
         }
     }
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
@@ -570,11 +583,60 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     [self applySearchText:self.searchController.searchBar.text];
 }
 
+- (NeoWCQuickReplySortMode)sortMode {
+    NSInteger value = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCQuickReplySortModeKey];
+    return value >= NeoWCQuickReplySortModeCustom && value <= NeoWCQuickReplySortModeFrequency
+        ? (NeoWCQuickReplySortMode)value : NeoWCQuickReplySortModeCustom;
+}
+
+- (NSArray<NeoWCQuickReplyItem *> *)sortedItems:(NSArray<NeoWCQuickReplyItem *> *)items {
+    NeoWCQuickReplySortMode mode = self.sortMode;
+    if (mode == NeoWCQuickReplySortModeCustom) return items;
+    return [items sortedArrayUsingComparator:^NSComparisonResult(NeoWCQuickReplyItem *left, NeoWCQuickReplyItem *right) {
+        if (left.isPinned != right.isPinned) return left.isPinned ? NSOrderedAscending : NSOrderedDescending;
+        if (mode == NeoWCQuickReplySortModeFrequency && left.useCount != right.useCount) {
+            return left.useCount > right.useCount ? NSOrderedAscending : NSOrderedDescending;
+        }
+        NSTimeInterval leftTime = left.lastUsedAt.timeIntervalSince1970;
+        NSTimeInterval rightTime = right.lastUsedAt.timeIntervalSince1970;
+        if (leftTime != rightTime) return leftTime > rightTime ? NSOrderedAscending : NSOrderedDescending;
+        if (left.sortIndex != right.sortIndex) return left.sortIndex < right.sortIndex ? NSOrderedAscending : NSOrderedDescending;
+        return [right.createdAt compare:left.createdAt];
+    }];
+}
+
+- (void)sortTapped {
+    NeoWCQuickReplySortMode selectedMode = self.sortMode;
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"消息排序"
+                                                                   message:@"置顶消息始终排在最前"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSDictionary *> *options = @[
+        @{@"title": @"自定义顺序", @"value": @(NeoWCQuickReplySortModeCustom)},
+        @{@"title": @"最近使用", @"value": @(NeoWCQuickReplySortModeRecent)},
+        @{@"title": @"使用频率", @"value": @(NeoWCQuickReplySortModeFrequency)},
+    ];
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary *option in options) {
+        NeoWCQuickReplySortMode mode = [option[@"value"] integerValue];
+        NSString *suffix = mode == selectedMode ? @" ✓" : @"";
+        NSString *title = [option[@"title"] stringByAppendingString:suffix];
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [NSUserDefaults.standardUserDefaults setInteger:mode forKey:NeoWCQuickReplySortModeKey];
+            [weakSelf reloadItems];
+            weakSelf.editing = NO;
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) { popover.barButtonItem = self.navigationItem.rightBarButtonItems.count > 1 ? self.navigationItem.rightBarButtonItems[1] : nil; }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
 - (void)applySearchText:(NSString *)query {
     NSString *trimmed = [query stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     BOOL searching = trimmed.length > 0;
     self.visibleFolders = !self.currentFolderIdentifier.length && !searching ? self.folders : @[];
-    self.visibleItems = [self.allItems filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NeoWCQuickReplyItem *item, NSDictionary *bindings) {
+    NSArray *matchingItems = [self.allItems filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NeoWCQuickReplyItem *item, NSDictionary *bindings) {
             (void)bindings;
             BOOL folderMatches = searching && !self.currentFolderIdentifier.length
                 ? YES
@@ -585,6 +647,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
                                [item.text localizedCaseInsensitiveContainsString:trimmed];
             return folderMatches && textMatches;
     }]];
+    self.visibleItems = [self sortedItems:matchingItems];
     [self.tableView reloadData];
 }
 
@@ -892,7 +955,8 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView; (void)indexPath;
-    return !self.selectionHandler && self.visibleFolders.count == 0 && self.searchController.searchBar.text.length == 0;
+    return !self.selectionHandler && self.sortMode == NeoWCQuickReplySortModeCustom &&
+           self.visibleFolders.count == 0 && self.searchController.searchBar.text.length == 0;
 }
 
 - (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)sourceIndexPath toIndexPath:(NSIndexPath *)destinationIndexPath {
@@ -944,6 +1008,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 - (void)useItemNormally:(NeoWCQuickReplyItem *)item {
     if (!self.selectionHandler) return;
     if (item.type == NeoWCQuickReplyTypeText) {
+        [NeoWCQuickReplyStore.sharedStore recordUsageForIdentifier:item.identifier error:nil];
         NeoWCQuickReplySelectionHandler handler = self.selectionHandler;
         [self dismissViewControllerAnimated:YES completion:^{ if (handler) handler(item); }];
         return;
@@ -953,6 +1018,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     preview.sendHandler = ^{
         NeoWCQuickReplyViewController *strongSelf = weakSelf;
         if (!strongSelf) return;
+        [NeoWCQuickReplyStore.sharedStore recordUsageForIdentifier:item.identifier error:nil];
         NeoWCQuickReplySelectionHandler handler = strongSelf.selectionHandler;
         [strongSelf dismissViewControllerAnimated:YES completion:^{ if (handler) handler(item); }];
     };
@@ -961,6 +1027,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (void)sendItemDirectly:(NeoWCQuickReplyItem *)item {
     if (!self.directSendHandler) return;
+    [NeoWCQuickReplyStore.sharedStore recordUsageForIdentifier:item.identifier error:nil];
     NeoWCQuickReplyDirectSendHandler handler = self.directSendHandler;
     [self dismissViewControllerAnimated:YES completion:^{ handler(item); }];
 }

@@ -48,7 +48,7 @@ NSArray<NeoWCReleaseNote *> *NeoWCReleaseNotes(void) {
                                      headline:@"快捷回复与防误发"
                                         items:@[
                 [NeoWCReleaseNoteItem itemWithTitle:@"快捷回复"
-                                               detail:@"支持文字、图片、视频和语音消息，全账号共享，并提供备注、文件夹、搜索、置顶、排序与清理；Silk 语音可按需解码预览。"],
+                                               detail:@"支持文字、图片、视频和语音消息，全账号共享，并提供备注、文件夹、搜索、置顶、自定义/最近使用/使用频率排序与清理；Silk 语音可按需解码预览。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"文件传输助手导入"
                                               detail:@"可通过单条长按或微信多选，把已下载的文字、图片、视频文件和语音加入消息库，并在导入时设置备注与文件夹。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"聊天页快捷入口"

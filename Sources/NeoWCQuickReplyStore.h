@@ -20,6 +20,8 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
 @property (nonatomic, assign) NSInteger sortIndex;
 @property (nonatomic, assign, getter=isPinned) BOOL pinned;
 @property (nonatomic, strong) NSDate *createdAt;
+@property (nonatomic, strong, nullable) NSDate *lastUsedAt;
+@property (nonatomic, assign) NSUInteger useCount;
 @property (nonatomic, copy, nullable) NSString *sourceConversation;
 @property (nonatomic, copy, nullable) NSString *sourceMessageID;
 @property (nonatomic, copy, nullable) NSString *sourceAccountIdentifier;
@@ -55,6 +57,7 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
                                           error:(NSError **)error;
 - (BOOL)updateItem:(NeoWCQuickReplyItem *)item error:(NSError **)error;
 - (BOOL)setPinned:(BOOL)pinned forIdentifier:(NSString *)identifier error:(NSError **)error;
+- (BOOL)recordUsageForIdentifier:(NSString *)identifier error:(NSError **)error;
 - (BOOL)applyOrderedIdentifiers:(NSArray<NSString *> *)identifiers error:(NSError **)error;
 - (BOOL)deleteItemWithIdentifier:(NSString *)identifier error:(NSError **)error;
 - (nullable NeoWCQuickReplyFolder *)createFolderWithName:(NSString *)name error:(NSError **)error;

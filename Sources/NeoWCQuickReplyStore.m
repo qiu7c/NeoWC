@@ -49,6 +49,8 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
     copy.sortIndex = self.sortIndex;
     copy.pinned = self.pinned;
     copy.createdAt = self.createdAt;
+    copy.lastUsedAt = self.lastUsedAt;
+    copy.useCount = self.useCount;
     copy.sourceConversation = self.sourceConversation;
     copy.sourceMessageID = self.sourceMessageID;
     copy.sourceAccountIdentifier = self.sourceAccountIdentifier;
@@ -342,6 +344,11 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
     item.pinned = [dictionary[@"pinned"] respondsToSelector:@selector(boolValue)] && [dictionary[@"pinned"] boolValue];
     NSTimeInterval timestamp = [dictionary[@"createdAt"] respondsToSelector:@selector(doubleValue)] ? [dictionary[@"createdAt"] doubleValue] : 0;
     item.createdAt = timestamp > 0 ? [NSDate dateWithTimeIntervalSince1970:timestamp] : NSDate.date;
+    NSTimeInterval lastUsedTimestamp = [dictionary[@"lastUsedAt"] respondsToSelector:@selector(doubleValue)]
+        ? [dictionary[@"lastUsedAt"] doubleValue] : 0;
+    item.lastUsedAt = lastUsedTimestamp > 0 ? [NSDate dateWithTimeIntervalSince1970:lastUsedTimestamp] : nil;
+    item.useCount = [dictionary[@"useCount"] respondsToSelector:@selector(unsignedIntegerValue)]
+        ? [dictionary[@"useCount"] unsignedIntegerValue] : 0;
     item.sourceConversation = [dictionary[@"sourceConversation"] isKindOfClass:NSString.class] ? dictionary[@"sourceConversation"] : nil;
     item.sourceMessageID = [dictionary[@"sourceMessageID"] isKindOfClass:NSString.class] ? dictionary[@"sourceMessageID"] : nil;
     item.sourceAccountIdentifier = [dictionary[@"sourceAccount"] isKindOfClass:NSString.class] ? dictionary[@"sourceAccount"] : nil;
@@ -358,7 +365,9 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
         @"sort": @(item.sortIndex),
         @"pinned": @(item.isPinned),
         @"createdAt": @((item.createdAt ?: NSDate.date).timeIntervalSince1970),
+        @"useCount": @(item.useCount),
     } mutableCopy];
+    if (item.lastUsedAt) dictionary[@"lastUsedAt"] = @(item.lastUsedAt.timeIntervalSince1970);
     if (item.mediaRelativePath.length > 0) dictionary[@"media"] = item.mediaRelativePath;
     if (item.thumbnailRelativePath.length > 0) dictionary[@"thumbnail"] = item.thumbnailRelativePath;
     if (item.folderIdentifier.length > 0) dictionary[@"folder"] = item.folderIdentifier;
@@ -857,6 +866,21 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
         if (!item) return NO;
         item.pinned = pinned;
         return [self saveItemsLocked:items error:error];
+    }
+}
+
+- (BOOL)recordUsageForIdentifier:(NSString *)identifier error:(NSError **)error {
+    if (!identifier.length) return NO;
+    @synchronized (self) {
+        NSMutableArray *items = [self loadItemsLocked];
+        if (!items) { NeoWCQuickReplySetIndexReadError(error); return NO; }
+        for (NeoWCQuickReplyItem *item in items) {
+            if (![item.identifier isEqualToString:identifier]) continue;
+            if (item.useCount < NSUIntegerMax) item.useCount++;
+            item.lastUsedAt = NSDate.date;
+            return [self saveItemsLocked:items error:error];
+        }
+        return NO;
     }
 }
 
