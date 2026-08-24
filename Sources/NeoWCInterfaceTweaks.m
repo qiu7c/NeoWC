@@ -33,6 +33,25 @@ static void NeoWCClearSearchBarChrome(UIView *view, UITextField *textField) {
     }
 }
 
+@interface NeoWCSearchTableHeaderView : UIView
+@property (nonatomic, weak) UISearchBar *searchBar;
+@end
+
+@implementation NeoWCSearchTableHeaderView
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    self.backgroundColor = UIColor.clearColor;
+    self.layer.backgroundColor = UIColor.clearColor.CGColor;
+    UISearchBar *searchBar = self.searchBar;
+    if (!searchBar) return;
+    searchBar.frame = CGRectMake(0.0, 4.0, CGRectGetWidth(self.bounds),
+                                 MAX(0.0, CGRectGetHeight(self.bounds) - 8.0));
+    NeoWCClearSearchBarChrome(searchBar, searchBar.searchTextField);
+}
+
+@end
+
 void NeoWCStyleSearchBar(UISearchBar *searchBar) {
     if (!searchBar) return;
     searchBar.searchBarStyle = UISearchBarStyleMinimal;
@@ -54,11 +73,12 @@ void NeoWCStyleSearchBar(UISearchBar *searchBar) {
 void NeoWCInstallSearchBarInTableView(UISearchBar *searchBar, UITableView *tableView) {
     if (!searchBar || !tableView) return;
     CGFloat width = CGRectGetWidth(tableView.bounds);
-    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, width, 60.0)];
-    UIColor *pageColor = tableView.backgroundColor ?: UIColor.systemGroupedBackgroundColor;
-    header.backgroundColor = pageColor;
-    header.layer.backgroundColor = pageColor.CGColor;
-    header.opaque = YES;
+    NeoWCSearchTableHeaderView *header = [[NeoWCSearchTableHeaderView alloc]
+        initWithFrame:CGRectMake(0.0, 0.0, width, 60.0)];
+    header.backgroundColor = UIColor.clearColor;
+    header.layer.backgroundColor = UIColor.clearColor.CGColor;
+    header.opaque = NO;
+    header.searchBar = searchBar;
     searchBar.frame = CGRectMake(0.0, 4.0, width, 52.0);
     searchBar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [header addSubview:searchBar];

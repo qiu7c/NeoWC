@@ -183,13 +183,13 @@ static char NeoWCAvatarQuickPanelActionKey;
 
 - (void)openProfile {
     void (^handler)(void) = self.profileHandler;
-    [self dismissViewControllerAnimated:YES completion:handler];
+    [self dismissViewControllerAnimated:NO completion:handler];
 }
 
 - (void)runAction:(UIButton *)sender {
     NeoWCAvatarQuickAction *action = objc_getAssociatedObject(sender, &NeoWCAvatarQuickPanelActionKey);
     void (^handler)(void) = action.handler;
-    [self dismissViewControllerAnimated:YES completion:handler];
+    [self dismissViewControllerAnimated:NO completion:handler];
 }
 
 @end
@@ -209,5 +209,5 @@ void NeoWCPresentAvatarQuickPanel(UIViewController *presenter,
     panel.profileHandler = profileHandler ?: ^{};
     panel.modalPresentationStyle = UIModalPresentationOverFullScreen;
     panel.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
-    [presenter presentViewController:panel animated:YES completion:nil];
+    [presenter presentViewController:panel animated:NO completion:nil];
 }

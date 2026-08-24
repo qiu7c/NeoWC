@@ -330,8 +330,15 @@ static char NeoWCAvatarQuickGestureProxyKey;
 static char NeoWCAvatarNativeDoubleTapTargetKey;
 static char NeoWCAvatarNativeDoubleTapActionKey;
 static char NeoWCAvatarNativeDoubleTapOwnedKey;
+static char NeoWCExclusiveRedEnvelopeContactKey;
+static char NeoWCExclusiveRedEnvelopeViewContactKey;
+static char NeoWCExclusiveRedEnvelopeViewDataKey;
 static BOOL NeoWCUpdatingAvatarNativeDoubleTap = NO;
 static BOOL NeoWCPerformingNativeAvatarLongPress = NO;
+static id NeoWCPendingExclusiveRedEnvelopeContact;
+static NSString *NeoWCPendingExclusiveRedEnvelopeGroupID;
+static CFTimeInterval NeoWCPendingExclusiveRedEnvelopeDeadline;
+static NSUInteger NeoWCPendingExclusiveRedEnvelopeGeneration;
 static char NeoWCReplyOriginalTransformKey;
 static char NeoWCReplyTransformSnapshotsKey;
 static char NeoWCReplyFeedbackGeneratorKey;
@@ -2416,6 +2423,15 @@ static id NeoWCContactForUserName(NSString *userName) {
     return ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
 }
 
+static id NeoWCMessageChatContact(id message) {
+    if (!message) return nil;
+    Class contactManagerClass = objc_getClass("CContactMgr");
+    id manager = contactManagerClass ? NeoWCServiceForClass(contactManagerClass) : nil;
+    SEL selector = sel_registerName("getMessageChatContactByMessageWrap:");
+    if (!manager || ![manager respondsToSelector:selector]) return nil;
+    return ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, message);
+}
+
 static UIView *NeoWCAvatarHeadViewForCell(CommonMessageCellView *cell) {
     id candidate = NeoWCTweakValueForSelectorNames(cell, @[@"getHeadImageView", @"m_headImageView", @"headImageView"]);
     if (!candidate) candidate = NeoWCTweakSafeValue(cell, @"m_headImageView");
@@ -2577,13 +2593,78 @@ static void NeoWCOpenAvatarProfile(UIViewController *chatController, UIView *hea
     else [chatController presentViewController:profile animated:YES completion:nil];
 }
 
-static void NeoWCOpenAvatarRedEnvelope(id chatController) {
+static void NeoWCClearPendingExclusiveRedEnvelope(void) {
+    NeoWCPendingExclusiveRedEnvelopeContact = nil;
+    NeoWCPendingExclusiveRedEnvelopeGroupID = nil;
+    NeoWCPendingExclusiveRedEnvelopeDeadline = 0.0;
+}
+
+static NSString *NeoWCContactUserName(id contact) {
+    if ([contact isKindOfClass:NSString.class]) return contact;
+    for (NSString *name in @[@"m_nsUsrName", @"userName", @"username"]) {
+        id value = NeoWCTweakValueForSelectorNames(contact, @[name]);
+        if (!value) value = NeoWCTweakSafeValue(contact, name);
+        if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
+    }
+    return nil;
+}
+
+static void NeoWCPrepareExclusiveRedEnvelopeData(id data) {
+    if (!data || !NeoWCPendingExclusiveRedEnvelopeContact ||
+        NeoWCPendingExclusiveRedEnvelopeGroupID.length == 0 ||
+        CACurrentMediaTime() > NeoWCPendingExclusiveRedEnvelopeDeadline) {
+        if (CACurrentMediaTime() > NeoWCPendingExclusiveRedEnvelopeDeadline) {
+            NeoWCClearPendingExclusiveRedEnvelope();
+        }
+        return;
+    }
+    id selectedConversation = NeoWCTweakValueForSelectorNames(data, @[@"m_oSelectContact"]);
+    if (!selectedConversation) selectedConversation = NeoWCTweakSafeValue(data, @"m_oSelectContact");
+    NSString *selectedUserName = NeoWCContactUserName(selectedConversation);
+    if (![selectedUserName isEqualToString:NeoWCPendingExclusiveRedEnvelopeGroupID]) return;
+
+    id targetContact = NeoWCPendingExclusiveRedEnvelopeContact;
+    SEL memberSelector = NSSelectorFromString(@"setSelectedMemberContact:");
+    if ([data respondsToSelector:memberSelector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(data, memberSelector, targetContact);
+    }
+    objc_setAssociatedObject(data, &NeoWCExclusiveRedEnvelopeContactKey,
+                             targetContact, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NeoWCClearPendingExclusiveRedEnvelope();
+}
+
+static void NeoWCOpenAvatarExclusiveRedEnvelope(id chatController,
+                                                 id targetContact,
+                                                 NSString *groupID) {
     SEL selector = NSSelectorFromString(@"redEnvelopesLogic");
     if (![chatController respondsToSelector:selector]) {
         NeoWCShowTransientMessage(@"当前页面无法发红包", NO);
         return;
     }
-    ((id (*)(id, SEL))objc_msgSend)(chatController, selector);
+    if (!targetContact || groupID.length == 0 || ![groupID hasSuffix:@"@chatroom"]) {
+        NeoWCShowTransientMessage(@"未取得群成员资料", NO);
+        return;
+    }
+    NSUInteger generation = ++NeoWCPendingExclusiveRedEnvelopeGeneration;
+    NeoWCPendingExclusiveRedEnvelopeContact = targetContact;
+    NeoWCPendingExclusiveRedEnvelopeGroupID = [groupID copy];
+    NeoWCPendingExclusiveRedEnvelopeDeadline = CACurrentMediaTime() + 2.0;
+    @try {
+        ((id (*)(id, SEL))objc_msgSend)(chatController, selector);
+    } @catch (NSException *exception) {
+        if (generation == NeoWCPendingExclusiveRedEnvelopeGeneration) {
+            NeoWCClearPendingExclusiveRedEnvelope();
+        }
+        NeoWCLog(@"打开专属红包失败：%@", exception.reason ?: exception.name);
+        NeoWCShowTransientMessage(@"打开红包失败", NO);
+        return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (generation == NeoWCPendingExclusiveRedEnvelopeGeneration) {
+            NeoWCClearPendingExclusiveRedEnvelope();
+        }
+    });
 }
 
 static void NeoWCOpenAvatarTransfer(id chatController, NSString *targetUserName, id targetContact, NSString *chatUserName) {
@@ -2622,7 +2703,9 @@ static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
     }
     BOOL group = [chatUserName hasSuffix:@"@chatroom"];
     BOOL isSelf = [targetUserName isEqualToString:NeoWCCurrentUserWXID()];
-    id contact = NeoWCContactForUserName(targetUserName);
+    id message = NeoWCMessageWrapForCell(cell);
+    id contact = group ? NeoWCMessageChatContact(message) : nil;
+    if (!contact) contact = NeoWCContactForUserName(targetUserName);
     NSString *displayName = NeoWCAvatarDisplayName(contact, targetUserName);
     UIImage *avatar = NeoWCAvatarSnapshot(headView);
     __weak UIViewController *weakController = chatController;
@@ -2641,9 +2724,11 @@ static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
     [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"拍一拍" symbolName:@"hand.tap" handler:^{
         NeoWCInvokeNativeAvatarDoubleTap(weakCell, weakHeadView);
     }]];
-    [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"红包" symbolName:@"envelope" handler:^{
-        NeoWCOpenAvatarRedEnvelope(weakController);
-    }]];
+    if (group && !isSelf) {
+        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"专属红包" symbolName:@"envelope" handler:^{
+            NeoWCOpenAvatarExclusiveRedEnvelope(weakController, retainedContact, retainedChat);
+        }]];
+    }
     if (!isSelf) {
         [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"转账" symbolName:@"arrow.left.arrow.right" handler:^{
             NeoWCOpenAvatarTransfer(weakController, retainedTarget, retainedContact, retainedChat);
@@ -11029,6 +11114,116 @@ static void NeoWCDocumentPickerDidPickURL(id self, SEL command, id picker, id UR
     NeoWCInvokeDocumentPickerOriginal(self, command, picker, URL, NO);
 }
 
+static id (*NeoWCOriginalRedEnvelopeInitWithData)(id, SEL, id) = NULL;
+static id (*NeoWCOriginalRedEnvelopeInitWithDataSceneType)(id, SEL, id, NSUInteger, NSUInteger) = NULL;
+static void (*NeoWCOriginalRedEnvelopeSetupWithData)(id, SEL, id) = NULL;
+static void (*NeoWCOriginalRedEnvelopeRefreshWithData)(id, SEL, id) = NULL;
+static NSInteger (*NeoWCOriginalRedEnvelopeSetupCurrentMode)(id, SEL) = NULL;
+static void (*NeoWCOriginalRedEnvelopeViewDidLoad)(id, SEL) = NULL;
+
+static void NeoWCApplyExclusiveRedEnvelopeContact(id controller, id data) {
+    id contact = objc_getAssociatedObject(data, &NeoWCExclusiveRedEnvelopeContactKey);
+    if (!controller || !data || !contact) return;
+    objc_setAssociatedObject(controller, &NeoWCExclusiveRedEnvelopeViewContactKey,
+                             contact, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &NeoWCExclusiveRedEnvelopeViewDataKey,
+                             data, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    SEL selector = NSSelectorFromString(@"setSelectedMemberContact:");
+    if ([data respondsToSelector:selector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(data, selector, contact);
+    }
+}
+
+static BOOL NeoWCRedEnvelopeControllerIsExclusive(id controller) {
+    SEL selector = NSSelectorFromString(@"isExclusiveHbMode");
+    return [controller respondsToSelector:selector] &&
+           ((BOOL (*)(id, SEL))objc_msgSend)(controller, selector);
+}
+
+static void NeoWCSetRedEnvelopeControllerMode(id controller, NSInteger mode) {
+    SEL selector = NSSelectorFromString(@"setCurrentMode:");
+    if ([controller respondsToSelector:selector]) {
+        ((void (*)(id, SEL, NSInteger))objc_msgSend)(controller, selector, mode);
+    }
+}
+
+static void NeoWCSetExclusiveRedEnvelopeData(id data, id contact, NSInteger mode) {
+    SEL modeSelector = NSSelectorFromString(@"setCurrentLaunchRedEnvMode:");
+    if ([data respondsToSelector:modeSelector]) {
+        ((void (*)(id, SEL, NSInteger))objc_msgSend)(data, modeSelector, mode);
+    }
+    SEL contactSelector = NSSelectorFromString(@"setSelectedMemberContact:");
+    if ([data respondsToSelector:contactSelector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(data, contactSelector, contact);
+    }
+}
+
+static NSInteger NeoWCSelectExclusiveRedEnvelopeMode(id controller,
+                                                      NSInteger originalMode,
+                                                      BOOL reloadContent) {
+    id contact = objc_getAssociatedObject(controller, &NeoWCExclusiveRedEnvelopeViewContactKey);
+    id data = objc_getAssociatedObject(controller, &NeoWCExclusiveRedEnvelopeViewDataKey);
+    if (!contact || !data) return originalMode;
+    if (reloadContent && NeoWCRedEnvelopeControllerIsExclusive(controller)) return originalMode;
+
+    for (NSInteger mode = 0; mode < 9; mode++) {
+        NeoWCSetRedEnvelopeControllerMode(controller, mode);
+        if (!NeoWCRedEnvelopeControllerIsExclusive(controller)) continue;
+        NeoWCSetRedEnvelopeControllerMode(controller, mode);
+        NeoWCSetExclusiveRedEnvelopeData(data, contact, mode);
+        if (reloadContent) {
+            SEL reloadSelector = NSSelectorFromString(@"reloadContentView");
+            if ([controller respondsToSelector:reloadSelector]) {
+                ((void (*)(id, SEL))objc_msgSend)(controller, reloadSelector);
+            }
+        }
+        return mode;
+    }
+    if (!reloadContent) NeoWCSetRedEnvelopeControllerMode(controller, originalMode);
+    return originalMode;
+}
+
+static id NeoWCRedEnvelopeInitWithData(id self, SEL command, id data) {
+    NeoWCPrepareExclusiveRedEnvelopeData(data);
+    return NeoWCOriginalRedEnvelopeInitWithData
+        ? NeoWCOriginalRedEnvelopeInitWithData(self, command, data) : nil;
+}
+
+static id NeoWCRedEnvelopeInitWithDataSceneType(id self,
+                                                SEL command,
+                                                id data,
+                                                NSUInteger scene,
+                                                NSUInteger type) {
+    NeoWCPrepareExclusiveRedEnvelopeData(data);
+    return NeoWCOriginalRedEnvelopeInitWithDataSceneType
+        ? NeoWCOriginalRedEnvelopeInitWithDataSceneType(self, command, data, scene, type) : nil;
+}
+
+static void NeoWCRedEnvelopeSetupWithData(id self, SEL command, id data) {
+    NeoWCApplyExclusiveRedEnvelopeContact(self, data);
+    if (NeoWCOriginalRedEnvelopeSetupWithData) {
+        NeoWCOriginalRedEnvelopeSetupWithData(self, command, data);
+    }
+}
+
+static void NeoWCRedEnvelopeRefreshWithData(id self, SEL command, id data) {
+    NeoWCApplyExclusiveRedEnvelopeContact(self, data);
+    if (NeoWCOriginalRedEnvelopeRefreshWithData) {
+        NeoWCOriginalRedEnvelopeRefreshWithData(self, command, data);
+    }
+}
+
+static NSInteger NeoWCRedEnvelopeSetupCurrentMode(id self, SEL command) {
+    NSInteger originalMode = NeoWCOriginalRedEnvelopeSetupCurrentMode
+        ? NeoWCOriginalRedEnvelopeSetupCurrentMode(self, command) : 0;
+    return NeoWCSelectExclusiveRedEnvelopeMode(self, originalMode, NO);
+}
+
+static void NeoWCRedEnvelopeViewDidLoad(id self, SEL command) {
+    if (NeoWCOriginalRedEnvelopeViewDidLoad) NeoWCOriginalRedEnvelopeViewDidLoad(self, command);
+    (void)NeoWCSelectExclusiveRedEnvelopeMode(self, 0, YES);
+}
+
 static const char *NeoWCUnqualifiedMethodType(const char *type) {
     if (!type) return "";
     while (*type && strchr("rnNoORV", *type)) type++;
@@ -11049,6 +11244,32 @@ static BOOL NeoWCMethodArgumentIsObject(Method method, unsigned int index) {
     return matches;
 }
 
+static BOOL NeoWCMethodReturnsObject(Method method) {
+    char *type = method ? method_copyReturnType(method) : NULL;
+    BOOL matches = NeoWCUnqualifiedMethodType(type)[0] == '@';
+    if (type) free(type);
+    return matches;
+}
+
+static BOOL NeoWCMethodTypeIsInteger(const char *type) {
+    const char value = NeoWCUnqualifiedMethodType(type)[0];
+    return value && strchr("cCsSiIlLqQB", value) != NULL;
+}
+
+static BOOL NeoWCMethodReturnsInteger(Method method) {
+    char *type = method ? method_copyReturnType(method) : NULL;
+    BOOL matches = NeoWCMethodTypeIsInteger(type);
+    if (type) free(type);
+    return matches;
+}
+
+static BOOL NeoWCMethodArgumentIsInteger(Method method, unsigned int index) {
+    char *type = method ? method_copyArgumentType(method, index) : NULL;
+    BOOL matches = NeoWCMethodTypeIsInteger(type);
+    if (type) free(type);
+    return matches;
+}
+
 static BOOL NeoWCClassDirectlyImplementsSelector(Class targetClass, SEL selector) {
     unsigned int count = 0;
     Method *methods = class_copyMethodList(targetClass, &count);
@@ -11058,6 +11279,70 @@ static BOOL NeoWCClassDirectlyImplementsSelector(Class targetClass, SEL selector
     }
     if (methods) free(methods);
     return found;
+}
+
+static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
+    Class logicClass = NSClassFromString(@"WCRedEnvelopesSendControlLogic");
+    if (logicClass) {
+        SEL selector = NSSelectorFromString(@"initWithData:");
+        Method method = class_getInstanceMethod(logicClass, selector);
+        if (method && method_getNumberOfArguments(method) == 3 &&
+            NeoWCMethodReturnsObject(method) && NeoWCMethodArgumentIsObject(method, 2)) {
+            IMP original = NULL;
+            MSHookMessageEx(logicClass, selector, (IMP)NeoWCRedEnvelopeInitWithData, &original);
+            NeoWCOriginalRedEnvelopeInitWithData =
+                (id (*)(id, SEL, id))original;
+        }
+
+        selector = NSSelectorFromString(@"initWithData:Scene:RedEnvelopesType:");
+        method = class_getInstanceMethod(logicClass, selector);
+        if (method && method_getNumberOfArguments(method) == 5 &&
+            NeoWCMethodReturnsObject(method) && NeoWCMethodArgumentIsObject(method, 2) &&
+            NeoWCMethodArgumentIsInteger(method, 3) && NeoWCMethodArgumentIsInteger(method, 4)) {
+            IMP original = NULL;
+            MSHookMessageEx(logicClass, selector,
+                            (IMP)NeoWCRedEnvelopeInitWithDataSceneType, &original);
+            NeoWCOriginalRedEnvelopeInitWithDataSceneType =
+                (id (*)(id, SEL, id, NSUInteger, NSUInteger))original;
+        }
+    }
+
+    Class controllerClass = NSClassFromString(@"WCRedEnvelopesMakeRedEnvelopesViewController");
+    if (!controllerClass) return;
+
+    SEL selector = NSSelectorFromString(@"setupWithData:");
+    Method method = class_getInstanceMethod(controllerClass, selector);
+    if (method && method_getNumberOfArguments(method) == 3 &&
+        NeoWCMethodReturnsVoid(method) && NeoWCMethodArgumentIsObject(method, 2)) {
+        IMP original = NULL;
+        MSHookMessageEx(controllerClass, selector, (IMP)NeoWCRedEnvelopeSetupWithData, &original);
+        NeoWCOriginalRedEnvelopeSetupWithData = (void (*)(id, SEL, id))original;
+    }
+
+    selector = NSSelectorFromString(@"refreshViewWithData:");
+    method = class_getInstanceMethod(controllerClass, selector);
+    if (method && method_getNumberOfArguments(method) == 3 &&
+        NeoWCMethodReturnsVoid(method) && NeoWCMethodArgumentIsObject(method, 2)) {
+        IMP original = NULL;
+        MSHookMessageEx(controllerClass, selector, (IMP)NeoWCRedEnvelopeRefreshWithData, &original);
+        NeoWCOriginalRedEnvelopeRefreshWithData = (void (*)(id, SEL, id))original;
+    }
+
+    selector = NSSelectorFromString(@"setupCurrentMode");
+    method = class_getInstanceMethod(controllerClass, selector);
+    if (method && method_getNumberOfArguments(method) == 2 && NeoWCMethodReturnsInteger(method)) {
+        IMP original = NULL;
+        MSHookMessageEx(controllerClass, selector, (IMP)NeoWCRedEnvelopeSetupCurrentMode, &original);
+        NeoWCOriginalRedEnvelopeSetupCurrentMode = (NSInteger (*)(id, SEL))original;
+    }
+
+    selector = NSSelectorFromString(@"viewDidLoad");
+    method = class_getInstanceMethod(controllerClass, selector);
+    if (method && method_getNumberOfArguments(method) == 2 && NeoWCMethodReturnsVoid(method)) {
+        IMP original = NULL;
+        MSHookMessageEx(controllerClass, selector, (IMP)NeoWCRedEnvelopeViewDidLoad, &original);
+        NeoWCOriginalRedEnvelopeViewDidLoad = (void (*)(id, SEL))original;
+    }
 }
 
 static void NeoWCInstallDocumentPickerDelegateHook(id delegate,
@@ -11126,6 +11411,7 @@ static void NeoWCInstallDocumentPickerDelegateHook(id delegate,
 
 %ctor {
     %init;
+    NeoWCInstallExclusiveRedEnvelopeHooks();
     if ([CADisplayLink instancesRespondToSelector:@selector(setPreferredFrameRateRange:)]) {
         %init(NeoWCHighRefreshRateRange);
     }
