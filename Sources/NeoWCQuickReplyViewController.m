@@ -476,7 +476,8 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = self.currentFolderName.length ? self.currentFolderName : @"快捷回复素材库";
+    self.title = self.currentFolderName.length ? self.currentFolderName :
+        (self.selectionHandler ? @"快捷回复" : @"管理消息库");
     self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.tableView.rowHeight = 56.0;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
@@ -591,7 +592,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     NSUInteger mediaCount = 0;
     for (NeoWCQuickReplyItem *item in self.allItems) if (item.type != NeoWCQuickReplyTypeText) mediaCount++;
     if (mediaCount == 0) {
-        [self showError:[NSError errorWithDomain:@"NeoWC" code:3 userInfo:@{NSLocalizedDescriptionKey: @"素材库中没有媒体素材。"}]];
+        [self showError:[NSError errorWithDomain:@"NeoWC" code:3 userInfo:@{NSLocalizedDescriptionKey: @"消息库中没有媒体消息。"}]];
         return;
     }
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"清理全部媒体素材？"
@@ -658,7 +659,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (void)chooseFolderForItem:(NeoWCQuickReplyItem *)item {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"移动到文件夹" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-    NSString *rootTitle = item.folderIdentifier.length ? @"素材库根目录" : @"素材库根目录 ✓";
+    NSString *rootTitle = item.folderIdentifier.length ? @"消息库根目录" : @"消息库根目录 ✓";
     [sheet addAction:[UIAlertAction actionWithTitle:rootTitle style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         NSError *error = nil;
         [NeoWCQuickReplyStore.sharedStore moveItemWithIdentifier:item.identifier toFolderIdentifier:nil error:&error];
@@ -687,7 +688,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (void)addTapped {
     if (!NeoWCQuickReplyStore.sharedStore.isAvailable) {
-        [self showError:[NSError errorWithDomain:@"NeoWC" code:1 userInfo:@{NSLocalizedDescriptionKey: @"共享素材库暂时无法读写。"}]];
+        [self showError:[NSError errorWithDomain:@"NeoWC" code:1 userInfo:@{NSLocalizedDescriptionKey: @"共享消息库暂时无法读写。"}]];
         return;
     }
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"添加素材" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
@@ -840,11 +841,11 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView; (void)section;
-    if (!NeoWCQuickReplyStore.sharedStore.isAvailable) return @"共享素材库暂时无法读写。";
+    if (!NeoWCQuickReplyStore.sharedStore.isAvailable) return @"共享消息库暂时无法读写。";
     NSByteCountFormatter *formatter = [NSByteCountFormatter new];
     formatter.countStyle = NSByteCountFormatterCountStyleFile;
     NSString *size = [formatter stringFromByteCount:(long long)NeoWCQuickReplyStore.sharedStore.managedMediaSize];
-    return [NSString stringWithFormat:@"全部账号共享，共 %lu 项，媒体占用 %@。素材文件独立保存，不依赖聊天缓存。", (unsigned long)self.allItems.count, size];
+    return [NSString stringWithFormat:@"全部账号共享，共 %lu 项，媒体占用 %@。消息索引和媒体均保留独立恢复副本，不依赖聊天缓存。", (unsigned long)self.allItems.count, size];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {

@@ -185,7 +185,7 @@ static void NeoWCImportSelectedQuickRepliesWithMetadata(UIViewController *contro
     if (alreadyPresent) [parts addObject:[NSString stringWithFormat:@"已存在 %lu 项", (unsigned long)alreadyPresent]];
     if (unavailable) [parts addObject:[NSString stringWithFormat:@"未下载或读取失败 %lu 项", (unsigned long)unavailable]];
     if (unsupported) [parts addObject:[NSString stringWithFormat:@"不支持 %lu 项", (unsigned long)unsupported]];
-    NeoWCShowExportMessage(controller, imported > 0 ? @"已加入素材库" : @"没有新增素材",
+    NeoWCShowExportMessage(controller, imported > 0 ? @"已加入快捷回复" : @"没有新增消息",
                            parts.count > 0 ? [parts componentsJoinedByString:@"，"] : @"没有可导入的消息。");
 }
 
@@ -194,7 +194,7 @@ static void NeoWCPresentQuickReplyImportFolderPicker(UIViewController *controlle
     void (^importIntoFolder)(NSString *) = ^(NSString *folderIdentifier) {
         NeoWCImportSelectedQuickRepliesWithMetadata(controller, messages, remark, folderIdentifier);
     };
-    [sheet addAction:[UIAlertAction actionWithTitle:@"素材库根目录" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"消息库根目录" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         importIntoFolder(nil);
     }]];
     for (NeoWCQuickReplyFolder *folder in NeoWCQuickReplyStore.sharedStore.folders) {
@@ -223,8 +223,8 @@ static void NeoWCPresentQuickReplyImportFolderPicker(UIViewController *controlle
 static void NeoWCPresentQuickReplyImportConfiguration(UIViewController *controller, NSArray *messages) {
     BOOL single = messages.count == 1;
     NSString *message = single ? @"可填写备注并选择保存文件夹。" :
-        [NSString stringWithFormat:@"将导入 %lu 条消息并统一存入一个文件夹；每条备注可稍后在素材库右滑重命名。", (unsigned long)messages.count];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加入快捷回复素材库"
+        [NSString stringWithFormat:@"将导入 %lu 条消息并统一存入一个文件夹；每条备注可稍后在消息库右滑重命名。", (unsigned long)messages.count];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加入快捷回复"
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
     if (single) [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"备注（可选）"; }];

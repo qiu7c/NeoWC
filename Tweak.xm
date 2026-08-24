@@ -101,6 +101,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 - (void)handleTapReferMessage;
 - (void)handleTapForReferMsg:(id)sender;
 - (void)onReturnToOriginalMsg;
+- (void)onHeadImageLongPressed:(id)sender;
 @end
 
 @interface RoomContentLogicController : NSObject
@@ -200,6 +201,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
                      headImgUrl:(NSString *)headImageURL
                     bAutoUpdate:(BOOL)autoUpdate
                    bRoundCorner:(BOOL)roundCorner;
+- (void)setTargetForDoubleClick:(id)target action:(SEL)action;
 - (void)setConerSize:(unsigned int)cornerSize;
 @end
 
@@ -324,8 +326,12 @@ static char NeoWCMessageDoubleTapRecognizerKey;
 static char NeoWCMessageTripleTapRecognizerKey;
 static char NeoWCAvatarQuickHeadViewKey;
 static char NeoWCAvatarQuickDoubleTapRecognizerKey;
-static char NeoWCAvatarQuickLongPressRecognizerKey;
 static char NeoWCAvatarQuickGestureProxyKey;
+static char NeoWCAvatarNativeDoubleTapTargetKey;
+static char NeoWCAvatarNativeDoubleTapActionKey;
+static char NeoWCAvatarNativeDoubleTapOwnedKey;
+static BOOL NeoWCUpdatingAvatarNativeDoubleTap = NO;
+static BOOL NeoWCPerformingNativeAvatarLongPress = NO;
 static char NeoWCReplyOriginalTransformKey;
 static char NeoWCReplyTransformSnapshotsKey;
 static char NeoWCReplyFeedbackGeneratorKey;
@@ -429,7 +435,7 @@ static id NeoWCContactForUserName(NSString *userName);
 static void NeoWCOpenHomeRemark(id owner, id contact, BOOL group);
 static void NeoWCOpenHomeMoments(id owner, id contact);
 static void NeoWCSynchronizeAvatarQuickGesture(CommonMessageCellView *cell);
-static void NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *headView);
+static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *headView);
 static UIViewController *NeoWCSendConfirmationPresenterForTarget(NSString *target);
 static BOOL NeoWCSendConfirmationValidateTarget(NSString *target);
 static BOOL NeoWCSendConfirmationMessageIsAppEmoticon(id wrap);
@@ -622,6 +628,10 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
 - (void)handleGesture:(UIGestureRecognizer *)recognizer;
 @end
 
+@interface NeoWCWeakObjectBox : NSObject
+@property (nonatomic, weak) id object;
+@end
+
 @interface NeoWCReplyTransformSnapshot : NSObject
 @property (nonatomic, strong) UIView *view;
 @property (nonatomic, assign) CGAffineTransform transform;
@@ -640,7 +650,7 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
     CommonMessageCellView *cell = self.cell;
     UIView *headView = self.headView;
     if (!cell.window || !headView.window) return;
-    NeoWCPresentAvatarQuickMenu(cell, headView);
+    (void)NeoWCPresentAvatarQuickMenu(cell, headView);
 }
 
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
@@ -656,6 +666,9 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
     return NO;
 }
 
+@end
+
+@implementation NeoWCWeakObjectBox
 @end
 
 @interface NeoWCQuickReplyPlusGestureDelegate : NSObject <UIGestureRecognizerDelegate>
@@ -2406,7 +2419,72 @@ static id NeoWCContactForUserName(NSString *userName) {
 static UIView *NeoWCAvatarHeadViewForCell(CommonMessageCellView *cell) {
     id candidate = NeoWCTweakValueForSelectorNames(cell, @[@"getHeadImageView", @"m_headImageView", @"headImageView"]);
     if (!candidate) candidate = NeoWCTweakSafeValue(cell, @"m_headImageView");
-    return [candidate isKindOfClass:UIView.class] ? candidate : nil;
+    if ([candidate isKindOfClass:UIView.class]) return candidate;
+    Class headViewClass = NSClassFromString(@"MMHeadImageView");
+    if (!headViewClass) return nil;
+    NSMutableArray<UIView *> *pending = [NSMutableArray arrayWithArray:cell.subviews ?: @[]];
+    while (pending.count) {
+        UIView *view = pending.lastObject;
+        [pending removeLastObject];
+        if ([view isKindOfClass:headViewClass]) return view;
+        if (view.subviews.count) [pending addObjectsFromArray:view.subviews];
+    }
+    return nil;
+}
+
+static CommonMessageCellView *NeoWCAvatarMessageCellForView(UIView *view) {
+    Class cellClass = NSClassFromString(@"CommonMessageCellView");
+    UIView *candidate = view.superview;
+    while (candidate) {
+        if (cellClass && [candidate isKindOfClass:cellClass]) return (CommonMessageCellView *)candidate;
+        candidate = candidate.superview;
+    }
+    return nil;
+}
+
+static void NeoWCResolveAvatarGestureConflicts(UIView *headView, UIGestureRecognizer *ownedRecognizer) {
+    if (!headView || !ownedRecognizer) return;
+    NSArray<UIGestureRecognizer *> *recognizers = [headView.gestureRecognizers copy];
+    for (UIGestureRecognizer *recognizer in recognizers) {
+        if (recognizer == ownedRecognizer) continue;
+        if ([ownedRecognizer isKindOfClass:UITapGestureRecognizer.class] &&
+            [recognizer isKindOfClass:UITapGestureRecognizer.class]) {
+            UITapGestureRecognizer *ownedTap = (UITapGestureRecognizer *)ownedRecognizer;
+            UITapGestureRecognizer *nativeTap = (UITapGestureRecognizer *)recognizer;
+            if (ownedTap.numberOfTapsRequired > nativeTap.numberOfTapsRequired) {
+                [nativeTap requireGestureRecognizerToFail:ownedTap];
+            }
+        } else if ([ownedRecognizer isKindOfClass:UILongPressGestureRecognizer.class] &&
+                   [recognizer isKindOfClass:UILongPressGestureRecognizer.class]) {
+            [recognizer requireGestureRecognizerToFail:ownedRecognizer];
+        }
+    }
+}
+
+static BOOL NeoWCConfigureNativeAvatarDoubleTap(UIView *headView,
+                                                NeoWCAvatarQuickGestureProxy *proxy,
+                                                BOOL enabled) {
+    SEL setter = NSSelectorFromString(@"setTargetForDoubleClick:action:");
+    if (![headView respondsToSelector:setter]) return NO;
+    NeoWCWeakObjectBox *originalTargetBox = objc_getAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapTargetKey);
+    NSString *originalActionName = objc_getAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapActionKey);
+    BOOL owned = [objc_getAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapOwnedKey) boolValue];
+    if (enabled) {
+        if (!originalTargetBox.object || originalActionName.length == 0) return NO;
+        NeoWCUpdatingAvatarNativeDoubleTap = YES;
+        ((void (*)(id, SEL, id, SEL))objc_msgSend)(headView, setter, proxy, @selector(handleGesture:));
+        NeoWCUpdatingAvatarNativeDoubleTap = NO;
+        objc_setAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapOwnedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return YES;
+    }
+    if (owned) {
+        SEL originalAction = NSSelectorFromString(originalActionName);
+        NeoWCUpdatingAvatarNativeDoubleTap = YES;
+        ((void (*)(id, SEL, id, SEL))objc_msgSend)(headView, setter, originalTargetBox.object, originalAction);
+        NeoWCUpdatingAvatarNativeDoubleTap = NO;
+        objc_setAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapOwnedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return NO;
 }
 
 static UIImage *NeoWCFirstImageInView(UIView *view) {
@@ -2454,13 +2532,32 @@ static NSString *NeoWCAvatarTargetUserName(CommonMessageCellView *cell, NSString
     return chatUserName;
 }
 
-static void NeoWCInvokeAvatarNativeAction(id chatController, NSString *selectorName, UIView *headView) {
-    SEL selector = NSSelectorFromString(selectorName);
-    if (chatController && headView && [chatController respondsToSelector:selector]) {
-        ((void (*)(id, SEL, id))objc_msgSend)(chatController, selector, headView);
-    } else {
-        NeoWCShowTransientMessage(@"当前微信版本不支持此操作", NO);
+static void NeoWCInvokeNativeAvatarDoubleTap(CommonMessageCellView *cell, UIView *headView) {
+    NeoWCWeakObjectBox *targetBox = objc_getAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapTargetKey);
+    NSString *actionName = objc_getAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapActionKey);
+    id target = targetBox.object;
+    SEL action = actionName.length ? NSSelectorFromString(actionName) : NULL;
+    if (target && action && [target respondsToSelector:action]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(target, action, headView);
+        return;
     }
+    SEL cellAction = NSSelectorFromString(@"onHeadImageDoubleClick:");
+    if (cell && [cell respondsToSelector:cellAction]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(cell, cellAction, headView);
+        return;
+    }
+    NeoWCShowTransientMessage(@"当前微信版本不支持拍一拍", NO);
+}
+
+static void NeoWCInvokeNativeAvatarLongPress(CommonMessageCellView *cell, UIView *headView) {
+    SEL selector = NSSelectorFromString(@"onHeadImageLongPressed:");
+    if (!cell || !headView || ![cell respondsToSelector:selector]) {
+        NeoWCShowTransientMessage(@"当前微信版本不支持艾特", NO);
+        return;
+    }
+    NeoWCPerformingNativeAvatarLongPress = YES;
+    ((void (*)(id, SEL, id))objc_msgSend)(cell, selector, headView);
+    NeoWCPerformingNativeAvatarLongPress = NO;
 }
 
 static void NeoWCOpenAvatarProfile(UIViewController *chatController, UIView *headView, id contact) {
@@ -2515,13 +2612,13 @@ static void NeoWCOpenAvatarTransfer(id chatController, NSString *targetUserName,
     ((void (*)(id, SEL, id, id))objc_msgSend)(manager, startSelector, chatController, data);
 }
 
-static void NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *headView) {
+static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *headView) {
     BaseMsgContentViewController *chatController = NeoWCResolveVisibleChatController();
     NSString *chatUserName = NeoWCChatUserName(chatController);
     NSString *targetUserName = NeoWCAvatarTargetUserName(cell, chatUserName);
     if (!chatController || targetUserName.length == 0) {
         NeoWCShowTransientMessage(@"未能识别头像对应的联系人", NO);
-        return;
+        return NO;
     }
     BOOL group = [chatUserName hasSuffix:@"@chatroom"];
     BOOL isSelf = [targetUserName isEqualToString:NeoWCCurrentUserWXID()];
@@ -2529,6 +2626,7 @@ static void NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
     NSString *displayName = NeoWCAvatarDisplayName(contact, targetUserName);
     UIImage *avatar = NeoWCAvatarSnapshot(headView);
     __weak UIViewController *weakController = chatController;
+    __weak CommonMessageCellView *weakCell = cell;
     __weak UIView *weakHeadView = headView;
     NSString *retainedTarget = [targetUserName copy];
     NSString *retainedChat = [chatUserName copy];
@@ -2537,11 +2635,11 @@ static void NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
     NSMutableArray<NeoWCAvatarQuickAction *> *actions = [NSMutableArray array];
     if (group && !isSelf) {
         [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"艾特" symbolName:@"at" handler:^{
-            NeoWCInvokeAvatarNativeAction(weakController, @"onHeadImageLongPressed:", weakHeadView);
+            NeoWCInvokeNativeAvatarLongPress(weakCell, weakHeadView);
         }]];
     }
     [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"拍一拍" symbolName:@"hand.tap" handler:^{
-        NeoWCInvokeAvatarNativeAction(weakController, @"onHeadImageDoubleClick:", weakHeadView);
+        NeoWCInvokeNativeAvatarDoubleTap(weakCell, weakHeadView);
     }]];
     [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"红包" symbolName:@"envelope" handler:^{
         NeoWCOpenAvatarRedEnvelope(weakController);
@@ -2572,13 +2670,14 @@ static void NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
                                  targetUserName,
                                  actions,
                                  ^{ NeoWCOpenAvatarProfile(weakController, weakHeadView, retainedContact); });
+    return YES;
 }
 
 static void NeoWCSynchronizeAvatarQuickGesture(CommonMessageCellView *cell) {
     if (!cell) return;
     UIView *oldHeadView = objc_getAssociatedObject(cell, &NeoWCAvatarQuickHeadViewKey);
     UITapGestureRecognizer *doubleTap = objc_getAssociatedObject(cell, &NeoWCAvatarQuickDoubleTapRecognizerKey);
-    UILongPressGestureRecognizer *longPress = objc_getAssociatedObject(cell, &NeoWCAvatarQuickLongPressRecognizerKey);
+    NeoWCAvatarQuickGestureProxy *oldProxy = objc_getAssociatedObject(cell, &NeoWCAvatarQuickGestureProxyKey);
     UIView *headView = cell.window ? NeoWCAvatarHeadViewForCell(cell) : nil;
     NSInteger mode = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCAvatarQuickMenuGestureKey];
     if (!NeoWCEnhancementEnabled(NeoWCAvatarQuickMenuGestureKey)) mode = NeoWCAvatarQuickMenuGestureOff;
@@ -2586,12 +2685,10 @@ static void NeoWCSynchronizeAvatarQuickGesture(CommonMessageCellView *cell) {
         mode = NeoWCAvatarQuickMenuGestureOff;
     }
     if (!headView || mode == NeoWCAvatarQuickMenuGestureOff || oldHeadView != headView) {
+        if (oldHeadView && oldProxy) NeoWCConfigureNativeAvatarDoubleTap(oldHeadView, oldProxy, NO);
         if (doubleTap && oldHeadView) [oldHeadView removeGestureRecognizer:doubleTap];
-        if (longPress && oldHeadView) [oldHeadView removeGestureRecognizer:longPress];
         doubleTap = nil;
-        longPress = nil;
         objc_setAssociatedObject(cell, &NeoWCAvatarQuickDoubleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(cell, &NeoWCAvatarQuickLongPressRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(cell, &NeoWCAvatarQuickGestureProxyKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(cell, &NeoWCAvatarQuickHeadViewKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         if (!headView || mode == NeoWCAvatarQuickMenuGestureOff) return;
@@ -2604,33 +2701,28 @@ static void NeoWCSynchronizeAvatarQuickGesture(CommonMessageCellView *cell) {
     headView.userInteractionEnabled = YES;
 
     if (mode == NeoWCAvatarQuickMenuGestureDoubleTap) {
-        if (longPress) {
-            [headView removeGestureRecognizer:longPress];
-            longPress = nil;
-        }
-        if (!doubleTap) {
+        BOOL usingNativeDoubleTap = NeoWCConfigureNativeAvatarDoubleTap(headView, proxy, YES);
+        if (usingNativeDoubleTap && doubleTap) {
+            [headView removeGestureRecognizer:doubleTap];
+            doubleTap = nil;
+        } else if (!usingNativeDoubleTap && !doubleTap) {
             doubleTap = [[UITapGestureRecognizer alloc] initWithTarget:proxy action:@selector(handleGesture:)];
             doubleTap.numberOfTapsRequired = 2;
             doubleTap.cancelsTouchesInView = YES;
+            doubleTap.delaysTouchesEnded = YES;
             doubleTap.delegate = proxy;
             [headView addGestureRecognizer:doubleTap];
         }
+        if (doubleTap) NeoWCResolveAvatarGestureConflicts(headView, doubleTap);
     } else {
+        NeoWCConfigureNativeAvatarDoubleTap(headView, proxy, NO);
         if (doubleTap) {
             [headView removeGestureRecognizer:doubleTap];
             doubleTap = nil;
         }
-        if (!longPress) {
-            longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:proxy action:@selector(handleGesture:)];
-            longPress.minimumPressDuration = 0.45;
-            longPress.cancelsTouchesInView = YES;
-            longPress.delegate = proxy;
-            [headView addGestureRecognizer:longPress];
-        }
     }
     objc_setAssociatedObject(cell, &NeoWCAvatarQuickHeadViewKey, headView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(cell, &NeoWCAvatarQuickDoubleTapRecognizerKey, doubleTap, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(cell, &NeoWCAvatarQuickLongPressRecognizerKey, longPress, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(cell, &NeoWCAvatarQuickGestureProxyKey, proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
@@ -4957,8 +5049,8 @@ static void NeoWCCommitMessageToQuickReply(id message, NeoWCQuickReplyType type,
         }
     }
     if (error) NeoWCShowTransientMessage(error.localizedDescription ?: @"加入快捷回复失败", NO);
-    else if (item && NeoWCQuickReplyStore.sharedStore.items.count > beforeCount) NeoWCShowTransientMessage(@"已加入快捷回复素材库", YES);
-    else if (item) NeoWCShowTransientMessage(@"该消息已在素材库中", YES);
+    else if (item && NeoWCQuickReplyStore.sharedStore.items.count > beforeCount) NeoWCShowTransientMessage(@"已加入快捷回复", YES);
+    else if (item) NeoWCShowTransientMessage(@"该消息已在消息库中", YES);
     else NeoWCShowTransientMessage(@"加入快捷回复失败", NO);
 }
 
@@ -4969,7 +5061,7 @@ static void NeoWCPresentQuickReplyFolderPicker(UIViewController *presenter, id m
     void (^commit)(NSString *) = ^(NSString *folderIdentifier) {
         NeoWCCommitMessageToQuickReply(message, type, session, messageID, path, remark, folderIdentifier);
     };
-    [sheet addAction:[UIAlertAction actionWithTitle:@"素材库根目录" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"消息库根目录" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         commit(nil);
     }]];
     for (NeoWCQuickReplyFolder *folder in NeoWCQuickReplyStore.sharedStore.folders) {
@@ -5006,8 +5098,8 @@ static void NeoWCAddMessageToQuickReply(id cell) {
         path = type == NeoWCQuickReplyTypeImage ? NeoWCExistingQuickReplyImagePath(message) :
             (type == NeoWCQuickReplyTypeVoice ? NeoWCExistingQuickReplyVoicePath(message) : NeoWCExistingQuickReplyAttachmentPath(message));
         if (path.length == 0) {
-            NSString *notice = type == NeoWCQuickReplyTypeImage ? @"请先下载或打开原图后再加入素材库" :
-                (type == NeoWCQuickReplyTypeVoice ? @"请先播放或下载语音后再加入素材库" : @"请先下载视频文件后再加入素材库");
+            NSString *notice = type == NeoWCQuickReplyTypeImage ? @"请先下载或打开原图后再加入快捷回复" :
+                (type == NeoWCQuickReplyTypeVoice ? @"请先播放或下载语音后再加入快捷回复" : @"请先下载视频文件后再加入快捷回复");
             NeoWCShowTransientMessage(notice, NO);
             return;
         }
@@ -5016,7 +5108,7 @@ static void NeoWCAddMessageToQuickReply(id cell) {
     if (!presenter.view.window) return;
     NSString *session = NeoWCSessionForMessage(message);
     NSString *messageID = NeoWCQuickReplySourceMessageID(message);
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加入快捷回复素材库"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加入快捷回复"
                                                                    message:@"可填写备注并选择保存文件夹。"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"备注（可选）"; }];
@@ -6213,6 +6305,41 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
 
 %hook MMHeadImageView
 
+- (void)setTargetForDoubleClick:(id)target action:(SEL)action {
+    BOOL nativeAssignment = !NeoWCUpdatingAvatarNativeDoubleTap;
+    if (nativeAssignment) {
+        if (target && action) {
+            NeoWCWeakObjectBox *box = [NeoWCWeakObjectBox new];
+            box.object = target;
+            objc_setAssociatedObject(self, &NeoWCAvatarNativeDoubleTapTargetKey, box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, &NeoWCAvatarNativeDoubleTapActionKey,
+                                     NSStringFromSelector(action), OBJC_ASSOCIATION_COPY_NONATOMIC);
+        } else {
+            objc_setAssociatedObject(self, &NeoWCAvatarNativeDoubleTapTargetKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, &NeoWCAvatarNativeDoubleTapActionKey, nil, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        }
+    }
+    %orig(target, action);
+    if (nativeAssignment && self.window) {
+        __weak MMHeadImageView *weakHeadView = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            MMHeadImageView *headView = weakHeadView;
+            CommonMessageCellView *cell = headView ? NeoWCAvatarMessageCellForView(headView) : nil;
+            if (cell.window) NeoWCSynchronizeAvatarQuickGesture(cell);
+        });
+    }
+}
+
+- (void)didMoveToSuperview {
+    %orig;
+    __weak MMHeadImageView *weakHeadView = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        MMHeadImageView *headView = weakHeadView;
+        CommonMessageCellView *cell = headView ? NeoWCAvatarMessageCellForView(headView) : nil;
+        if (cell.window) NeoWCSynchronizeAvatarQuickGesture(cell);
+    });
+}
+
 - (void)layoutSubviews {
     %orig;
     if (NeoWCHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
@@ -6227,6 +6354,8 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
 - (void)didMoveToWindow {
     %orig;
     NeoWCApplyGlobalAvatarRoundingToHeadView(self);
+    CommonMessageCellView *cell = NeoWCAvatarMessageCellForView(self);
+    if (cell.window) NeoWCSynchronizeAvatarQuickGesture(cell);
 }
 
 - (void)setConerSize:(unsigned int)cornerSize {
@@ -9690,6 +9819,25 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 }
 
 %hook CommonMessageCellView
+
+- (void)onHeadImageLongPressed:(id)sender {
+    if (NeoWCPerformingNativeAvatarLongPress) {
+        %orig(sender);
+        return;
+    }
+    NSInteger mode = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCAvatarQuickMenuGestureKey];
+    BOOL enabled = NeoWCEnhancementEnabled(NeoWCAvatarQuickMenuGestureKey) &&
+                   mode == NeoWCAvatarQuickMenuGestureLongPress;
+    if (enabled && self.window) {
+        UIView *headView = NeoWCAvatarHeadViewForCell(self);
+        if (!headView && [sender isKindOfClass:UIView.class]) headView = sender;
+        if (!headView && [sender isKindOfClass:UIGestureRecognizer.class]) {
+            headView = ((UIGestureRecognizer *)sender).view;
+        }
+        if (headView.window && NeoWCPresentAvatarQuickMenu(self, headView)) return;
+    }
+    %orig(sender);
+}
 
 - (void)setViewModel:(id)viewModel {
     %orig;
