@@ -10756,18 +10756,21 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request
                             completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
-    if (NeoWCPaymentLinkMatchesRequest(request)) {
+    BOOL paymentRequest = NeoWCPaymentLinkMatchesRequest(request);
+    BOOL diagnosticsRequest = NeoWCPaymentLinkDiagnosticsMatchesRequest(request);
+    if (paymentRequest) {
         NeoWCPaymentLinkLearnFromRequest(request, nil);
     }
-    if (!NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) {
+    if (!paymentRequest && !diagnosticsRequest) {
         return %orig(request, completionHandler);
     }
-    NeoWCPaymentLinkDiagnosticsRecordRequest(request, nil);
+    if (diagnosticsRequest) NeoWCPaymentLinkDiagnosticsRecordRequest(request, nil);
     if (!completionHandler) return %orig(request, completionHandler);
     NSURLRequest *retainedRequest = request;
     void (^retainedCompletion)(NSData *, NSURLResponse *, NSError *) = [completionHandler copy];
     return %orig(request, ^(NSData *data, NSURLResponse *response, NSError *error) {
-        NeoWCPaymentLinkDiagnosticsRecordResponse(retainedRequest, data, response, error);
+        if (paymentRequest) NeoWCPaymentLinkLearnFromResponse(data);
+        if (diagnosticsRequest) NeoWCPaymentLinkDiagnosticsRecordResponse(retainedRequest, data, response, error);
         if (retainedCompletion) retainedCompletion(data, response, error);
     });
 }
@@ -10775,18 +10778,21 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (NSURLSessionUploadTask *)uploadTaskWithRequest:(NSURLRequest *)request
                                          fromData:(NSData *)bodyData
                                 completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
-    if (NeoWCPaymentLinkMatchesRequest(request)) {
+    BOOL paymentRequest = NeoWCPaymentLinkMatchesRequest(request);
+    BOOL diagnosticsRequest = NeoWCPaymentLinkDiagnosticsMatchesRequest(request);
+    if (paymentRequest) {
         NeoWCPaymentLinkLearnFromRequest(request, bodyData);
     }
-    if (!NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) {
+    if (!paymentRequest && !diagnosticsRequest) {
         return %orig(request, bodyData, completionHandler);
     }
-    NeoWCPaymentLinkDiagnosticsRecordRequest(request, bodyData);
+    if (diagnosticsRequest) NeoWCPaymentLinkDiagnosticsRecordRequest(request, bodyData);
     if (!completionHandler) return %orig(request, bodyData, completionHandler);
     NSURLRequest *retainedRequest = request;
     void (^retainedCompletion)(NSData *, NSURLResponse *, NSError *) = [completionHandler copy];
     return %orig(request, bodyData, ^(NSData *data, NSURLResponse *response, NSError *error) {
-        NeoWCPaymentLinkDiagnosticsRecordResponse(retainedRequest, data, response, error);
+        if (paymentRequest) NeoWCPaymentLinkLearnFromResponse(data);
+        if (diagnosticsRequest) NeoWCPaymentLinkDiagnosticsRecordResponse(retainedRequest, data, response, error);
         if (retainedCompletion) retainedCompletion(data, response, error);
     });
 }

@@ -1,5 +1,8 @@
 #import "NeoWCPaymentLink.h"
+#import "NeoWCAccount.h"
 #import "NeoWCEnhancements.h"
+#import <objc/message.h>
+#import <objc/runtime.h>
 
 NSString *const NeoWCPaymentLinkEnabledKey = @"com.qiu7c.neowc.chat.payment-link";
 
@@ -36,14 +39,29 @@ static NSDictionary *NeoWCPaymentJSONDictionary(NSData *data) {
     return [object isKindOfClass:NSDictionary.class] ? object : nil;
 }
 
+static NSString *NeoWCPaymentCurrentAccount(void) {
+    Class settingUtilClass = objc_getClass("SettingUtil");
+    SEL selector = sel_registerName("getLocalUsrName:");
+    if ([settingUtilClass respondsToSelector:selector]) {
+        id value = ((id (*)(id, SEL, BOOL))objc_msgSend)(settingUtilClass, selector, NO);
+        NSString *username = NeoWCPaymentTrimmedString(value);
+        if (username) return username;
+    }
+    return NeoWCPaymentTrimmedString(NeoWCCurrentUserWXID());
+}
+
 static NSString *NeoWCPaymentCacheKey(NSString *field) {
-    return [NeoWCPaymentCachePrefix stringByAppendingString:field ?: @""];
+    NSString *account = NeoWCPaymentCurrentAccount();
+    if (!account || field.length == 0) return nil;
+    return [NSString stringWithFormat:@"%@%@.%@", NeoWCPaymentCachePrefix, account, field];
 }
 
 static void NeoWCPaymentStoreValue(NSUserDefaults *defaults, NSString *field, id value) {
     if (!value || value == NSNull.null) return;
+    NSString *key = NeoWCPaymentCacheKey(field);
+    if (!key) return;
     NSString *string = NeoWCPaymentTrimmedString(value) ?: @"";
-    [defaults setObject:string forKey:NeoWCPaymentCacheKey(field)];
+    [defaults setObject:string forKey:key];
 }
 
 void NeoWCPaymentLinkLearnFromRequest(NSURLRequest *request, NSData *uploadData) {
@@ -64,68 +82,113 @@ void NeoWCPaymentLinkLearnFromRequest(NSURLRequest *request, NSData *uploadData)
     }
 }
 
-static NSString *NeoWCPaymentCachedValue(NSString *field, NSString *legacyKey) {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSString *cacheKey = NeoWCPaymentCacheKey(field);
-    id cachedObject = [defaults objectForKey:cacheKey];
-    if (cachedObject != nil) return NeoWCPaymentTrimmedString(cachedObject) ?: @"";
-    NSString *value = nil;
-    if (legacyKey.length > 0) {
-        id legacyObject = [defaults objectForKey:legacyKey];
-        if (legacyObject != nil) {
-            value = NeoWCPaymentTrimmedString(legacyObject) ?: @"";
-            [defaults setObject:value forKey:cacheKey];
+static id NeoWCPaymentDecodedResponseObject(NSData *data) {
+    if (![data isKindOfClass:NSData.class] || data.length == 0) return nil;
+    id outer = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    if (![outer isKindOfClass:NSDictionary.class]) return outer;
+    NSDictionary *outerDictionary = outer;
+    id encoded = outerDictionary[@"data"];
+    if (![encoded isKindOfClass:NSString.class] || [encoded length] == 0) return outer;
+    NSData *innerData = [encoded dataUsingEncoding:NSUTF8StringEncoding];
+    id inner = innerData.length ? [NSJSONSerialization JSONObjectWithData:innerData options:0 error:nil] : nil;
+    if (![inner isKindOfClass:NSDictionary.class]) return outer;
+    NSMutableDictionary *merged = [inner mutableCopy];
+    for (NSString *field in @[@"sid", @"v", @"errcode", @"errmsg"]) {
+        if (!merged[field] && outerDictionary[field]) merged[field] = outerDictionary[field];
+    }
+    return merged;
+}
+
+static id NeoWCPaymentValueForAliases(NSDictionary *dictionary, NSArray<NSString *> *aliases) {
+    for (NSString *alias in aliases) {
+        id value = dictionary[alias];
+        if (value && value != NSNull.null) return value;
+    }
+    return nil;
+}
+
+static NSInteger NeoWCPaymentSubjectScore(NSDictionary *dictionary) {
+    NSInteger score = 0;
+    if (NeoWCPaymentValueForAliases(dictionary, @[@"receipt_id"])) score += 4;
+    if (NeoWCPaymentValueForAliases(dictionary, @[@"account_type"])) score += 3;
+    if (NeoWCPaymentValueForAliases(dictionary, @[@"operator_role"])) score += 3;
+    if (NeoWCPaymentValueForAliases(dictionary, @[@"merchant_identifier", @"merchant_id", @"merchantId"])) score += 1;
+    if (NeoWCPaymentValueForAliases(dictionary, @[@"shop_name", @"shopname", @"shopName"])) score += 1;
+    return score;
+}
+
+static NSDictionary *NeoWCPaymentBestSubjectInObject(id object, NSUInteger depth) {
+    if (!object || depth > 5) return nil;
+    NSDictionary *best = nil;
+    if ([object isKindOfClass:NSDictionary.class]) {
+        NSDictionary *dictionary = object;
+        if (NeoWCPaymentSubjectScore(dictionary) > 0) best = dictionary;
+        NSArray *preferredKeys = @[@"current_shop", @"shop_info", @"shop_data", @"shop", @"data", @"list"];
+        NSMutableArray *values = [NSMutableArray array];
+        for (NSString *key in preferredKeys) if (dictionary[key]) [values addObject:dictionary[key]];
+        for (id key in dictionary) {
+            id value = dictionary[key];
+            if (![values containsObject:value]) [values addObject:value];
+        }
+        for (id value in values) {
+            NSDictionary *candidate = NeoWCPaymentBestSubjectInObject(value, depth + 1);
+            if (NeoWCPaymentSubjectScore(candidate) > NeoWCPaymentSubjectScore(best)) best = candidate;
+        }
+    } else if ([object isKindOfClass:NSArray.class]) {
+        for (id value in (NSArray *)object) {
+            NSDictionary *candidate = NeoWCPaymentBestSubjectInObject(value, depth + 1);
+            if (NeoWCPaymentSubjectScore(candidate) > NeoWCPaymentSubjectScore(best)) best = candidate;
         }
     }
-    return value;
+    return best;
+}
+
+void NeoWCPaymentLinkLearnFromResponse(NSData *data) {
+    id object = NeoWCPaymentDecodedResponseObject(data);
+    if (!object) return;
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSDictionary *root = [object isKindOfClass:NSDictionary.class] ? object : nil;
+    for (NSString *field in @[@"sid", @"v"]) NeoWCPaymentStoreValue(defaults, field, root[field]);
+    NSDictionary *subject = NeoWCPaymentBestSubjectInObject(object, 0);
+    if (!subject) return;
+    NSDictionary<NSString *, NSArray<NSString *> *> *aliases = @{
+        @"receipt_id": @[@"receipt_id"],
+        @"account_type": @[@"account_type"],
+        @"operator_role": @[@"operator_role"],
+        @"merchant_identifier": @[@"merchant_identifier", @"merchant_id", @"merchantId"],
+        @"shop_name": @[@"shop_name", @"shopname", @"shopName"],
+        @"remark": @[@"remark"],
+    };
+    for (NSString *field in aliases) {
+        NeoWCPaymentStoreValue(defaults, field, NeoWCPaymentValueForAliases(subject, aliases[field]));
+    }
+}
+
+static NSString *NeoWCPaymentCachedValue(NSString *field) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSString *cacheKey = NeoWCPaymentCacheKey(field);
+    if (!cacheKey) return nil;
+    id cachedObject = [defaults objectForKey:cacheKey];
+    return cachedObject != nil ? (NeoWCPaymentTrimmedString(cachedObject) ?: @"") : nil;
 }
 
 static NSDictionary *NeoWCPaymentConfiguration(void) {
-    NSDictionary *legacy = @{
-        @"sid": @"wcr.payment-link.sjt.sid",
-        @"v": @"wcr.payment-link.sjt.version",
-        @"receipt_id": @"wcr.payment-link.sjt.receipt-id",
-        @"account_type": @"wcr.payment-link.sjt.account-type",
-        @"operator_role": @"wcr.payment-link.sjt.operator-role",
-        @"merchant_identifier": @"wcr.payment-link.sjt.merchant-id",
-        @"shop_name": @"wcr.payment-link.sjt.shop-name",
-        @"remark": @"wcr.payment-link.sjt.link-remark",
-        @"link_number": @"wcr.payment-link.sjt.link-number",
-        @"number": @"",
-    };
     NSMutableDictionary *configuration = [NSMutableDictionary dictionary];
-    for (NSString *field in legacy) {
-        NSString *value = NeoWCPaymentCachedValue(field, legacy[field]);
+    for (NSString *field in @[@"sid", @"v", @"receipt_id", @"account_type", @"operator_role",
+                              @"merchant_identifier", @"shop_name", @"remark", @"link_number", @"number"]) {
+        NSString *value = NeoWCPaymentCachedValue(field);
         if (value) configuration[field] = value;
     }
     return configuration;
 }
 
-static NSDictionary *NeoWCPaymentParseTemplate(NSString *text) {
-    NSString *trimmed = NeoWCPaymentTrimmedString(text);
-    NSString *prefix = [trimmed hasPrefix:@"#付款:"] ? @"#付款:" :
-                       ([trimmed hasPrefix:@"#付款："] ? @"#付款：" : nil);
-    if (!trimmed) return nil;
-    NSString *suffix = prefix ? [trimmed substringFromIndex:prefix.length] : trimmed;
-    NSArray<NSString *> *rawParts = [suffix componentsSeparatedByString:@"/"];
-    if (rawParts.count != 3) return @{ @"error": @"格式应为 #付款:名称(微信号)/标题/编号" };
-    NSString *identity = NeoWCPaymentTrimmedString(rawParts[0]);
-    NSString *cardTitle = NeoWCPaymentTrimmedString(rawParts[1]);
-    NSString *number = NeoWCPaymentTrimmedString(rawParts[2]);
-    if (!identity || !cardTitle || !number) return @{ @"error": @"名称、标题和编号都不能为空" };
-    NSRange opening = [identity rangeOfString:@"(" options:NSBackwardsSearch];
-    if (opening.location == NSNotFound || ![identity hasSuffix:@")"] || opening.location == 0) {
-        return @{ @"error": @"名称后需要填写括号内微信号" };
+static void NeoWCPaymentClearLearnedSubject(void) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    for (NSString *field in @[@"sid", @"v", @"receipt_id", @"account_type", @"operator_role",
+                              @"merchant_identifier", @"shop_name", @"remark"]) {
+        NSString *key = NeoWCPaymentCacheKey(field);
+        if (key) [defaults removeObjectForKey:key];
     }
-    NSString *displayName = NeoWCPaymentTrimmedString([identity substringToIndex:opening.location]);
-    NSString *wechatID = NeoWCPaymentTrimmedString([identity substringWithRange:
-        NSMakeRange(NSMaxRange(opening), identity.length - NSMaxRange(opening) - 1)]);
-    NSCharacterSet *invalidNumber = [NSCharacterSet.decimalDigitCharacterSet invertedSet];
-    if (!displayName || !wechatID || [number rangeOfCharacterFromSet:invalidNumber].location != NSNotFound) {
-        return @{ @"error": @"微信号不能为空，编号只能包含数字" };
-    }
-    return @{ @"title": suffix, @"displayName": displayName, @"wechatID": wechatID,
-              @"cardTitle": cardTitle, @"number": number };
 }
 
 BOOL NeoWCPaymentLinkIsTriggerText(NSString *text) {
@@ -136,26 +199,13 @@ BOOL NeoWCPaymentLinkIsTriggerText(NSString *text) {
 NSString *NeoWCPaymentLinkSuggestedCardTitle(void) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     NSString *stored = NeoWCPaymentTrimmedString([defaults objectForKey:NeoWCPaymentCardTitleKey]);
-    if (stored) return stored;
-    for (NSString *legacyKey in @[@"paymentLinkTemplate", @"wcr.payment-link.template"]) {
-        NSDictionary *template = NeoWCPaymentParseTemplate([defaults objectForKey:legacyKey]);
-        NSString *legacyTitle = template[@"cardTitle"];
-        if (legacyTitle.length > 0) return legacyTitle;
-    }
-    return @"快捷付款";
+    return stored ?: @"快捷付款";
 }
 
 NSString *NeoWCPaymentLinkDisplayNumber(void) {
     NSDictionary *configuration = NeoWCPaymentConfiguration();
     NSString *number = NeoWCPaymentTrimmedString(configuration[@"link_number"]);
     if (!number) number = NeoWCPaymentTrimmedString(configuration[@"number"]);
-    if (!number) {
-        NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-        for (NSString *legacyKey in @[@"paymentLinkNumber", @"wcr.payment-link.number"]) {
-            number = NeoWCPaymentTrimmedString([defaults objectForKey:legacyKey]);
-            if (number) break;
-        }
-    }
     return number;
 }
 
@@ -216,6 +266,13 @@ static void NeoWCPaymentPerform(NSURLRequest *request, void (^completion)(NSDict
                     ? [NSString stringWithFormat:@"%@（%@）", serverMessage, serverHint]
                     : serverHint;
             }
+            if (errorCode == 268564837) {
+                NeoWCPaymentClearLearnedSubject();
+                NSString *refresh = @"已清除当前账号的旧主体配置，请打开微信官方收款小账本后重试";
+                serverMessage = serverMessage.length > 0
+                    ? [NSString stringWithFormat:@"%@（%@）", serverMessage, refresh]
+                    : refresh;
+            }
             NSString *message = serverMessage ?: @"小账本登记失败，请先打开微信收款小账本刷新链接";
             completion(nil, error ?: NeoWCPaymentError(5, message));
             return;
@@ -264,10 +321,17 @@ BOOL NeoWCPaymentLinkSend(NSString *cardTitle, NSString *identityUsername,
     NSString *accountType = configuration[@"account_type"];
     NSString *operatorRole = configuration[@"operator_role"];
     NSString *number = NeoWCPaymentLinkDisplayNumber();
-    if (sid.length == 0 || version.length == 0 || receiptID.length == 0 ||
-        accountType.length == 0 || operatorRole.length == 0) {
+    NSMutableArray<NSString *> *missing = [NSMutableArray array];
+    if (sid.length == 0) [missing addObject:@"sid"];
+    if (version.length == 0) [missing addObject:@"v"];
+    if (receiptID.length == 0) [missing addObject:@"receipt_id"];
+    if (accountType.length == 0) [missing addObject:@"account_type"];
+    if (operatorRole.length == 0) [missing addObject:@"operator_role"];
+    if (missing.count > 0) {
+        NSString *detail = [missing componentsJoinedByString:@"、"];
         dispatch_async(dispatch_get_main_queue(), ^{
-            finish(nil, NeoWCPaymentError(3, @"尚未取得小账本请求参数，请先在微信收款小账本中打开一次收款链接"));
+            finish(nil, NeoWCPaymentError(3,
+                [NSString stringWithFormat:@"尚未取得当前账号的小账本参数：%@。请打开微信官方收款小账本后重试", detail]));
         });
         return YES;
     }
