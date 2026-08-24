@@ -25,7 +25,7 @@ static NSArray<NSDictionary *> *NeoWCCompatibilityDefinitions(void) {
             @{ @"id": @"anti-revoke", @"title": @"防撤回", @"class": @"CMessageMgr", @"selector": @"onNewSyncNotAddDBMessage:" },
             @{ @"id": @"multi-select-export", @"title": @"多选消息导出", @"class": @"BaseMsgContentViewController", @"selector": @"ShowMultiSelectMoreOperation:" },
             @{ @"id": @"multi-select-limit", @"title": @"突破多选限制", @"class": @"BaseMsgContentViewController", @"selector": @"getMultiSelectMaxCount" },
-            @{ @"id": @"raw-contact-id", @"title": @"显示原始号码", @"class": @"WeixinContactInfoAssist", @"selector": @"reloadTableView" },
+            @{ @"id": @"raw-contact-id", @"title": @"显示信息卡片", @"class": @"WeixinContactInfoAssist", @"selector": @"reloadTableView" },
             @{ @"id": @"home-swipe-actions", @"title": @"主页右滑扩展", @"class": @"NewMainFrameViewController", @"selector": @"tableView:leadingSwipeActionsConfigurationForRowAtIndexPath:" },
             @{ @"id": @"image-edit", @"title": @"图片编辑快捷发送", @"class": @"EditImageForwardAndEditLogicController", @"selector": @"OnClickEditImageDoneBarButton" },
             @{ @"id": @"device-login", @"title": @"设备扫码自动登录", @"class": @"MultiDeviceCardLoginContentView", @"selector": @"onTapConfirmButton" },

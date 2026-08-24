@@ -68,9 +68,9 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
     if (controller) [self.viewController.navigationController pushViewController:controller animated:YES];
 }
 
-- (void)openAuthorProfile {
+- (void)openProfileForUserName:(NSString *)requestedUserName {
     UIViewController *sourceController = self.viewController;
-    NSString *userName = NeoWCAuthorUserName;
+    NSString *userName = [requestedUserName stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     if (!sourceController || userName.length == 0) return;
 
     Class handlerClass = NSClassFromString(@"MMURLHandler");
@@ -125,11 +125,33 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
     }
 
     UIPasteboard.generalPasteboard.string = userName;
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"无法打开作者主页"
-                                                                   message:@"作者微信号已复制，可在微信中搜索添加。"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"暂时无法打开资料页"
+                                                                   message:@"账号已复制，可在微信中继续搜索。"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
     [sourceController presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)openAuthorProfile {
+    [self openProfileForUserName:NeoWCAuthorUserName];
+}
+
+- (void)presentFindFriend {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"查找好友"
+                                                                   message:@"输入微信号或 wxid，将使用微信的原生联系人搜索链路。"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"微信号 / wxid";
+        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        field.autocorrectionType = UITextAutocorrectionTypeNo;
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"查找" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [weakSelf openProfileForUserName:alert.textFields.firstObject.text];
+    }]];
+    [self.viewController presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)presentRevokeFilterPicker {
@@ -605,6 +627,7 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
     switch (item.action) {
         case NeoWCSettingActionConfigManager: [self push:[NeoWCConfigManagerViewController new]]; break;
         case NeoWCSettingActionAuthorProfile: [self openAuthorProfile]; break;
+        case NeoWCSettingActionFindFriend: [self presentFindFriend]; break;
         case NeoWCSettingActionReleaseNotes: [self.viewController presentViewController:[NeoWCReleaseNotesViewController new] animated:NO completion:nil]; break;
         case NeoWCSettingActionBlockUsers: [self push:[NeoWCMessageBlockViewController new]]; break;
         case NeoWCSettingActionBlockKeywords: [self push:[[NeoWCListEditorViewController alloc] initWithTitle:item.title subtitle:@"仅匹配新收到的普通文字消息，每行填写一个关键词" defaultsKey:NeoWCMessageBlockKeywordsKey mode:NeoWCListEditorModeList]]; break;

@@ -454,14 +454,14 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 @end
 
-@interface NeoWCQuickReplyViewController () <UISearchResultsUpdating, UISearchBarDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@interface NeoWCQuickReplyViewController () <UISearchBarDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate>
 @property (nonatomic, copy, nullable) NeoWCQuickReplySelectionHandler selectionHandler;
 @property (nonatomic, copy, nullable) NeoWCQuickReplyDirectSendHandler directSendHandler;
 @property (nonatomic, copy) NSArray<NeoWCQuickReplyItem *> *allItems;
 @property (nonatomic, copy) NSArray<NeoWCQuickReplyItem *> *visibleItems;
 @property (nonatomic, copy) NSArray<NeoWCQuickReplyFolder *> *folders;
 @property (nonatomic, copy) NSArray<NeoWCQuickReplyFolder *> *visibleFolders;
-@property (nonatomic, strong) UISearchController *searchController;
+@property (nonatomic, strong) UISearchBar *searchBar;
 @property (nonatomic, copy, nullable) NSString *currentFolderIdentifier;
 @property (nonatomic, copy, nullable) NSString *currentFolderName;
 @end
@@ -510,14 +510,10 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
             self.navigationItem.rightBarButtonItems = @[add, sort, cleanup];
         }
     }
-    self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
-    self.searchController.obscuresBackgroundDuringPresentation = NO;
-    self.searchController.searchResultsUpdater = self;
-    self.searchController.searchBar.delegate = self;
-    self.searchController.searchBar.placeholder = @"搜索备注或文字";
-    NeoWCStyleSearchBar(self.searchController.searchBar);
-    NeoWCInstallSearchBarInTableView(self.searchController.searchBar, self.tableView);
-    self.definesPresentationContext = YES;
+    self.searchBar = [UISearchBar new];
+    self.searchBar.delegate = self;
+    self.searchBar.placeholder = @"搜索备注或文字";
+    NeoWCInstallSearchBarInTableView(self.searchBar, self.tableView);
     if (self.directSendHandler) {
         UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(itemLongPressed:)];
         longPress.minimumPressDuration = 0.55;
@@ -580,7 +576,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 - (void)reloadItems {
     self.allItems = NeoWCQuickReplyStore.sharedStore.items;
     self.folders = NeoWCQuickReplyStore.sharedStore.folders;
-    [self applySearchText:self.searchController.searchBar.text];
+    [self applySearchText:self.searchBar.text];
 }
 
 - (NeoWCQuickReplySortMode)sortMode {
@@ -745,8 +741,9 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
-- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
-    [self applySearchText:searchController.searchBar.text];
+- (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
+    (void)searchBar;
+    [self applySearchText:searchText];
 }
 
 - (void)addTapped {
@@ -956,7 +953,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 - (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView; (void)indexPath;
     return !self.selectionHandler && self.sortMode == NeoWCQuickReplySortModeCustom &&
-           self.visibleFolders.count == 0 && self.searchController.searchBar.text.length == 0;
+           self.visibleFolders.count == 0 && self.searchBar.text.length == 0;
 }
 
 - (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)sourceIndexPath toIndexPath:(NSIndexPath *)destinationIndexPath {

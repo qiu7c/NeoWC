@@ -187,7 +187,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 - (instancetype)initWithObject:(id)object inspectedClass:(Class)inspectedClass;
 @end
 
-@interface NeoWCRuntimeSearchViewController : NeoWCCardTableViewController <UISearchResultsUpdating>
+@interface NeoWCRuntimeSearchViewController : NeoWCCardTableViewController <UISearchBarDelegate>
 @end
 
 @interface NeoWCLogViewController : NeoWCCardTableViewController
@@ -657,7 +657,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 @interface NeoWCRuntimeSearchViewController ()
 @property (nonatomic, copy) NSArray<NSString *> *allClassNames;
 @property (nonatomic, copy) NSArray<NSString *> *results;
-@property (nonatomic, strong) UISearchController *searchController;
+@property (nonatomic, strong) UISearchBar *searchBar;
 @end
 
 @implementation NeoWCRuntimeSearchViewController
@@ -679,18 +679,16 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     self.allClassNames = [names sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
     self.results = @[];
 
-    UISearchController *searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
-    searchController.searchResultsUpdater = self;
-    searchController.obscuresBackgroundDuringPresentation = NO;
-    searchController.searchBar.placeholder = @"输入微信类名";
-    NeoWCStyleSearchBar(searchController.searchBar);
-    NeoWCInstallSearchBarInTableView(searchController.searchBar, self.tableView);
-    self.definesPresentationContext = YES;
-    self.searchController = searchController;
+    UISearchBar *searchBar = [UISearchBar new];
+    searchBar.delegate = self;
+    searchBar.placeholder = @"输入微信类名";
+    NeoWCInstallSearchBarInTableView(searchBar, self.tableView);
+    self.searchBar = searchBar;
 }
 
-- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
-    NSString *query = [searchController.searchBar.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+- (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
+    (void)searchBar;
+    NSString *query = [searchText stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     if (query.length == 0) {
         self.results = @[];
     } else {

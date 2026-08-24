@@ -245,11 +245,11 @@ UIViewController *NeoWCMessageBlockTypeController(NSString *username) {
     return [[NeoWCMessageBlockTypeViewController alloc] initWithUsername:username];
 }
 
-@interface NeoWCMessageBlockViewController () <UISearchResultsUpdating>
+@interface NeoWCMessageBlockViewController () <UISearchBarDelegate>
 @property (nonatomic, copy) NSArray<NSString *> *allUsernames;
 @property (nonatomic, copy) NSArray<NSString *> *friendUsernames;
 @property (nonatomic, copy) NSArray<NSString *> *groupUsernames;
-@property (nonatomic, strong) UISearchController *searchController;
+@property (nonatomic, strong) UISearchBar *searchBar;
 @end
 
 @implementation NeoWCMessageBlockViewController
@@ -259,13 +259,10 @@ UIViewController *NeoWCMessageBlockTypeController(NSString *username) {
     self.title = @"屏蔽会话";
     self.tableView.rowHeight = 62.0;
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(addConversation)];
-    self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
-    self.searchController.searchResultsUpdater = self;
-    self.searchController.obscuresBackgroundDuringPresentation = NO;
-    self.searchController.searchBar.placeholder = @"搜索名称或 username";
-    NeoWCStyleSearchBar(self.searchController.searchBar);
-    NeoWCInstallSearchBarInTableView(self.searchController.searchBar, self.tableView);
-    self.definesPresentationContext = YES;
+    self.searchBar = [UISearchBar new];
+    self.searchBar.delegate = self;
+    self.searchBar.placeholder = @"搜索名称或 username";
+    NeoWCInstallSearchBarInTableView(self.searchBar, self.tableView);
 }
 - (void)viewWillAppear:(BOOL)animated { [super viewWillAppear:animated]; [self reloadRules]; }
 - (void)reloadRules {
@@ -273,7 +270,7 @@ UIViewController *NeoWCMessageBlockTypeController(NSString *username) {
         return [NeoWCSendConfirmationDisplayName(left) localizedCaseInsensitiveCompare:
                 NeoWCSendConfirmationDisplayName(right)];
     }];
-    [self applyQuery:self.searchController.searchBar.text];
+    [self applyQuery:self.searchBar.text];
 }
 - (void)applyQuery:(NSString *)query {
     NSString *trimmed = [query stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
@@ -285,7 +282,7 @@ UIViewController *NeoWCMessageBlockTypeController(NSString *username) {
     self.groupUsernames = [visible filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSString *username, __unused NSDictionary *bindings) { return [username hasSuffix:@"@chatroom"]; }]];
     [self.tableView reloadData];
 }
-- (void)updateSearchResultsForSearchController:(UISearchController *)searchController { [self applyQuery:searchController.searchBar.text]; }
+- (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText { (void)searchBar; [self applyQuery:searchText]; }
 - (void)addConversation {
     UIViewController *picker = NeoWCCreateConversationPicker(@"添加屏蔽会话", @"新选择的会话默认屏蔽全部消息，再次点击可移除。", ^BOOL(NSString *username) {
         return NeoWCMessageBlockTypesForConversation(username).count > 0;

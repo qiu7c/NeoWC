@@ -437,7 +437,8 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     ], defaults, collapsed);
 
     NSMutableArray *local = [NSMutableArray array];
-    [local addObject:NeoWCItem(@"显示原始号码", @"在好友和群聊资料页显示可复制的原始 ID", @"number.square", NeoWCSettingRowKindSwitch, NeoWCShowRawContactIDEnabledKey, nil, NeoWCSettingActionNone)];
+    [local addObject:NeoWCItem(@"查找好友", @"输入微信号或原始号码打开指定账号资料", @"person.crop.circle.badge.magnifyingglass", NeoWCSettingRowKindDetail, nil, @"查找", NeoWCSettingActionFindFriend)];
+    [local addObject:NeoWCItem(@"显示信息卡片", @"在好友、群聊和群成员资料中集中显示账号信息", @"person.text.rectangle", NeoWCSettingRowKindSwitch, NeoWCShowRawContactIDEnabledKey, nil, NeoWCSettingActionNone)];
     NeoWCStepMode stepMode = [defaults integerForKey:NeoWCStepModeKey] == NeoWCStepModeDailyRandom ? NeoWCStepModeDailyRandom : NeoWCStepModeDailyFixed;
     NSInteger configuredSteps = MIN(100000, MAX(0, [defaults integerForKey:NeoWCStepCountKey]));
     NSInteger effectiveSteps = [defaults integerForKey:NeoWCStepDailyTargetKey];

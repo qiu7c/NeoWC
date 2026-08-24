@@ -29,6 +29,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCSendConfirmation.h"
 #import "Sources/NeoWCMessageBlock.h"
 #import "Sources/NeoWCAvatarQuickPanel.h"
+#import "Sources/NeoWCContactInfoCard.h"
 
 @interface WCActionSheet : NSObject
 - (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
@@ -165,10 +166,18 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
 @interface WeixinContactInfoAssist : NSObject
 - (void)neowc_copyRawContactID;
+- (void)neowc_openInfoCard;
 @end
 
 @interface ChatRoomInfoViewController : UIViewController
 - (void)neowc_copyRawContactID;
+- (void)neowc_openInfoCard;
+@end
+
+@interface SocialInfomationViewController : UIViewController
+- (void)setM_contact:(id)contact;
+- (void)reloadTableView;
+- (void)onCRGDataUpdated;
 @end
 
 @interface SessionSelectController : UIViewController
@@ -330,6 +339,9 @@ static char NeoWCAvatarQuickGestureProxyKey;
 static char NeoWCAvatarNativeDoubleTapTargetKey;
 static char NeoWCAvatarNativeDoubleTapActionKey;
 static char NeoWCAvatarNativeDoubleTapOwnedKey;
+static char NeoWCOfficialInfoCardBoxKey;
+static char NeoWCOfficialInfoBaseRowsKey;
+static char NeoWCInfoCardOfficialControllerKey;
 static char NeoWCExclusiveRedEnvelopeContactKey;
 static char NeoWCExclusiveRedEnvelopeViewContactKey;
 static char NeoWCExclusiveRedEnvelopeViewDataKey;
@@ -443,6 +455,14 @@ static void NeoWCOpenHomeRemark(id owner, id contact, BOOL group);
 static void NeoWCOpenHomeMoments(id owner, id contact);
 static void NeoWCSynchronizeAvatarQuickGesture(CommonMessageCellView *cell);
 static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *headView);
+static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id contact, BOOL group);
+static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCGroupMemberInfoRows(id contact,
+                                                                                   id groupContact,
+                                                                                   NSString *userName);
+static UIViewController *NeoWCCreateOfficialSocialInformation(id contact);
+static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCOfficialSocialInformationRows(id controller);
+static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCMergeInfoCardRows(NSArray *baseRows,
+                                                                                NSArray *officialRows);
 static UIViewController *NeoWCSendConfirmationPresenterForTarget(NSString *target);
 static BOOL NeoWCSendConfirmationValidateTarget(NSString *target);
 static BOOL NeoWCSendConfirmationMessageIsAppEmoticon(id wrap);
@@ -2693,6 +2713,48 @@ static void NeoWCOpenAvatarTransfer(id chatController, NSString *targetUserName,
     ((void (*)(id, SEL, id, id))objc_msgSend)(manager, startSelector, chatController, data);
 }
 
+static void NeoWCOpenAvatarInfoCard(UIViewController *chatController,
+                                    id contact,
+                                    UIImage *avatar,
+                                    NSString *displayName,
+                                    NSString *targetUserName,
+                                    NSString *chatUserName) {
+    if (!chatController || targetUserName.length == 0) return;
+    NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows =
+        [NeoWCProfileInfoRows(contact, NO) mutableCopy] ?: [NSMutableArray array];
+    if ([chatUserName hasSuffix:@"@chatroom"]) {
+        id groupContact = NeoWCContactForUserName(chatUserName);
+        [rows addObject:@{ @"title": @"所在群聊", @"value": chatUserName }];
+        [rows addObjectsFromArray:NeoWCGroupMemberInfoRows(contact, groupContact, targetUserName)];
+    }
+    NSArray *baseRows = [rows copy];
+    UIViewController *officialController = contact ? NeoWCCreateOfficialSocialInformation(contact) : nil;
+    NSArray *displayRows = NeoWCMergeInfoCardRows(baseRows,
+        officialController ? NeoWCOfficialSocialInformationRows(officialController) : @[]);
+    UIViewController *card = [[NeoWCContactInfoCardViewController alloc]
+        initWithTitle:[chatUserName hasSuffix:@"@chatroom"] ? @"群成员详细信息" : @"详细信息"
+               avatar:avatar
+                 name:displayName ?: targetUserName
+             userName:targetUserName
+                 rows:displayRows];
+    if (officialController) {
+        NeoWCWeakObjectBox *box = [NeoWCWeakObjectBox new];
+        box.object = card;
+        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoCardBoxKey,
+                                 box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoBaseRowsKey,
+                                 baseRows, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        objc_setAssociatedObject(card, &NeoWCInfoCardOfficialControllerKey,
+                                 officialController, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (chatController.navigationController) {
+        [chatController.navigationController pushViewController:card animated:YES];
+    } else {
+        [chatController presentViewController:[[UINavigationController alloc] initWithRootViewController:card]
+                                      animated:YES completion:nil];
+    }
+}
+
 static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *headView) {
     BaseMsgContentViewController *chatController = NeoWCResolveVisibleChatController();
     NSString *chatUserName = NeoWCChatUserName(chatController);
@@ -2716,6 +2778,12 @@ static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
     id retainedContact = contact;
 
     NSMutableArray<NeoWCAvatarQuickAction *> *actions = [NSMutableArray array];
+    if (NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey)) {
+        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"详细信息" symbolName:@"person.text.rectangle" handler:^{
+            NeoWCOpenAvatarInfoCard(weakController, retainedContact, avatar, displayName,
+                                   retainedTarget, retainedChat);
+        }]];
+    }
     if (group && !isSelf) {
         [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"艾特" symbolName:@"at" handler:^{
             NeoWCInvokeNativeAvatarLongPress(weakCell, weakHeadView);
@@ -3313,6 +3381,51 @@ static NSString *NeoWCMomentsExistingMediaPath(id mediaItem, NSArray<NSString *>
     return nil;
 }
 
+static BOOL NeoWCMomentsMediaFileIsUsable(NSString *path) {
+    if (path.length == 0) return NO;
+    BOOL directory = NO;
+    NSFileManager *manager = NSFileManager.defaultManager;
+    if (![manager fileExistsAtPath:path isDirectory:&directory] || directory) return NO;
+    NSNumber *size = [[manager attributesOfItemAtPath:path error:nil] objectForKey:NSFileSize];
+    return size.unsignedLongLongValue > 0;
+}
+
+static void NeoWCAppendUniqueMomentObject(NSMutableArray *objects, id object) {
+    if (!object) return;
+    for (id existing in objects) if (existing == object) return;
+    [objects addObject:object];
+}
+
+static NSArray *NeoWCLivePhotoVideoCandidateObjects(id mediaItem, id parentMediaItem) {
+    NSMutableArray *objects = [NSMutableArray array];
+    NeoWCAppendUniqueMomentObject(objects, mediaItem);
+    for (id owner in @[mediaItem ?: NSNull.null, parentMediaItem ?: NSNull.null]) {
+        if (owner == NSNull.null) continue;
+        for (NSString *selectorName in @[@"livePhotoVideoMediaItem", @"pairedVideoMediaItem",
+                                         @"livePhotoMediaItem"]) {
+            NeoWCAppendUniqueMomentObject(objects, NeoWCMomentsObjectForSelector(owner, selectorName));
+        }
+    }
+    NeoWCAppendUniqueMomentObject(objects, parentMediaItem);
+    return objects;
+}
+
+static NSString *NeoWCLivePhotoExistingVideoPath(id mediaItem, id parentMediaItem) {
+    NSArray *selectors = @[@"pathForSightData", @"pathForData", @"pathForAttachVideoData",
+                           @"pathForExistData", @"tempPathForSightData",
+                           @"pathForTempAttachVideoData", @"livePhotoVideoPath",
+                           @"pairedVideoPath"];
+    for (id object in NeoWCLivePhotoVideoCandidateObjects(mediaItem, parentMediaItem)) {
+        for (NSString *selectorName in selectors) {
+            id value = NeoWCMomentsObjectForSelector(object, selectorName);
+            NSString *path = [value isKindOfClass:NSURL.class] ? [value path]
+                : ([value isKindOfClass:NSString.class] ? value : nil);
+            if (NeoWCMomentsMediaFileIsUsable(path)) return path;
+        }
+    }
+    return nil;
+}
+
 static BOOL NeoWCMomentsLongLongForSelector(id object, NSString *selectorName, long long *result) {
     if (!object || selectorName.length == 0 || !result) return NO;
     SEL selector = NSSelectorFromString(selectorName);
@@ -3608,6 +3721,13 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 @property (nonatomic, assign) BOOL saveStarted;
 @property (nonatomic, assign) BOOL finished;
 - (void)start;
+- (void)finishDownloadedMediaItem:(id)mediaItem
+                  parentMediaItem:(id)parentMediaItem
+                            index:(NSUInteger)index
+                        videoPath:(BOOL)videoPath
+                    pathSelectors:(NSArray *)pathSelectors
+                       downloader:(id)downloader
+                          attempt:(NSUInteger)attempt;
 @end
 
 @implementation NeoWCMomentsMediaSaveTask
@@ -3882,13 +4002,16 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 }
 
 - (void)resolvePathForMediaItem:(id)mediaItem
+                parentMediaItem:(id)parentMediaItem
                           index:(NSUInteger)index
                     videoPath:(BOOL)videoPath {
     BOOL useVideoSelectors = self.video || videoPath;
     NSArray *pathSelectors = useVideoSelectors
         ? @[@"pathForSightData", @"pathForData", @"pathForAttachVideoData", @"pathForExistData"]
         : @[@"pathForUhdData", @"pathForHdData", @"pathForData", @"pathForExistData"];
-    NSString *path = NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
+    NSString *path = videoPath
+        ? NeoWCLivePhotoExistingVideoPath(mediaItem, parentMediaItem)
+        : NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
     if (path.length > 0) {
         NSMutableArray *targetPaths = videoPath ? self.resolvedVideoPaths : self.resolvedPaths;
         targetPaths[index] = path;
@@ -3914,19 +4037,55 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf || strongSelf.finished) return;
-            NSString *resolvedPath = NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
-            if (resolvedPath.length > 0) {
-                NSMutableArray *targetPaths = videoPath ? strongSelf.resolvedVideoPaths : strongSelf.resolvedPaths;
-                targetPaths[index] = resolvedPath;
-            } else {
-                strongSelf.failed = YES;
-            }
-            [strongSelf.downloaders removeObject:downloader];
-            strongSelf.remainingDownloads--;
-            [strongSelf finishMediaResolutionIfNeeded];
+            [strongSelf finishDownloadedMediaItem:mediaItem
+                                  parentMediaItem:parentMediaItem
+                                            index:index
+                                        videoPath:videoPath
+                                    pathSelectors:pathSelectors
+                                       downloader:downloader
+                                          attempt:0];
         });
     };
     ((void (*)(id, SEL, id))objc_msgSend)(downloader, startSelector, completion);
+}
+
+- (void)finishDownloadedMediaItem:(id)mediaItem
+                  parentMediaItem:(id)parentMediaItem
+                            index:(NSUInteger)index
+                        videoPath:(BOOL)videoPath
+                    pathSelectors:(NSArray *)pathSelectors
+                       downloader:(id)downloader
+                          attempt:(NSUInteger)attempt {
+    if (self.finished) return;
+    NSString *resolvedPath = videoPath
+        ? NeoWCLivePhotoExistingVideoPath(mediaItem, parentMediaItem)
+        : NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
+    // AFN also rechecks after its completion when the path/file-size update is
+    // slightly behind the callback. Keep this bounded below one second.
+    if (resolvedPath.length == 0 && videoPath && attempt < 3) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.22 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            [strongSelf finishDownloadedMediaItem:mediaItem
+                                  parentMediaItem:parentMediaItem
+                                            index:index
+                                        videoPath:videoPath
+                                    pathSelectors:pathSelectors
+                                       downloader:downloader
+                                          attempt:attempt + 1];
+        });
+        return;
+    }
+    if (resolvedPath.length > 0) {
+        NSMutableArray *targetPaths = videoPath ? self.resolvedVideoPaths : self.resolvedPaths;
+        targetPaths[index] = resolvedPath;
+    } else {
+        self.failed = YES;
+    }
+    [self.downloaders removeObject:downloader];
+    self.remainingDownloads--;
+    [self finishMediaResolutionIfNeeded];
 }
 
 - (void)start {
@@ -3976,13 +4135,15 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
             // the MOV finishes downloading, the save path derives a safe time
             // from its duration instead of requiring playback to prime it.
             self.livePhotoTimes[index] = @(hasStillImageTime ? stillImageTimeMs : 0);
-            [requests addObject:@{ @"item": livePhotoMediaItem, @"index": @(index), @"video": @YES }];
+            [requests addObject:@{ @"item": livePhotoMediaItem, @"parent": mediaItem,
+                                   @"index": @(index), @"video": @YES }];
         }
     }
     self.livePhotoSaveQueue = [self.livePhotoIndexes mutableCopy];
     self.remainingDownloads = requests.count;
     for (NSDictionary *request in requests) {
         [self resolvePathForMediaItem:request[@"item"]
+                      parentMediaItem:request[@"parent"]
                                 index:[request[@"index"] unsignedIntegerValue]
                           videoPath:[request[@"video"] boolValue]];
     }
@@ -7838,6 +7999,9 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
 }
 
 static char NeoWCRawContactIDKey;
+static char NeoWCProfileContactKey;
+static char NeoWCProfileIsGroupKey;
+static char NeoWCProfileChatRoomKey;
 static char NeoWCRawContactIDCellMarkerKey;
 static char NeoWCProfileMessageBlockCellMarkerKey;
 static char NeoWCProfileSendConfirmationCellMarkerKey;
@@ -7930,6 +8094,141 @@ static NSString *NeoWCTableCellTitle(id cell) {
     return [title isKindOfClass:NSString.class] ? title : nil;
 }
 
+static void NeoWCCollectLabels(UIView *view, NSMutableArray<UILabel *> *labels) {
+    if ([view isKindOfClass:UILabel.class] && [(UILabel *)view text].length > 0) {
+        [labels addObject:(UILabel *)view];
+    }
+    for (UIView *subview in view.subviews) NeoWCCollectLabels(subview, labels);
+}
+
+static NSString *NeoWCTableCellLeftmostText(id cell) {
+    if (![cell isKindOfClass:UIView.class]) return nil;
+    NSMutableArray<UILabel *> *labels = [NSMutableArray array];
+    NeoWCCollectLabels(cell, labels);
+    UILabel *leftmost = nil;
+    for (UILabel *label in labels) {
+        if (!leftmost || CGRectGetMinX(label.frame) < CGRectGetMinX(leftmost.frame)) leftmost = label;
+    }
+    return leftmost.text;
+}
+
+static NSString *NeoWCTableCellRightText(id cell, NSString *title) {
+    for (NSString *name in @[@"rightValue", @"m_rightValue", @"detail", @"value", @"rightText"]) {
+        id value = NeoWCRawProfileValue(cell, @[name]);
+        if ([value isKindOfClass:NSString.class] && [value length] > 0 && ![value isEqualToString:title]) return value;
+    }
+    for (NSString *name in @[@"detailTextLabel", @"rightLabel", @"m_rightLabel", @"valueLabel"]) {
+        UILabel *label = NeoWCRawProfileValue(cell, @[name]);
+        if ([label isKindOfClass:UILabel.class] && label.text.length > 0 && ![label.text isEqualToString:title]) return label.text;
+    }
+    id cellConfig = NeoWCRawProfileValue(cell, @[@"cellConfig", @"m_cellConfig"]);
+    id rightConfig = NeoWCRawProfileValue(cellConfig, @[@"rightConfig", @"m_rightConfig"]);
+    id configured = NeoWCRawProfileValue(rightConfig, @[@"title", @"text", @"value"]);
+    if ([configured isKindOfClass:NSString.class] && [configured length] > 0 && ![configured isEqualToString:title]) return configured;
+    if ([cell isKindOfClass:UIView.class]) {
+        NSMutableArray<UILabel *> *labels = [NSMutableArray array];
+        NeoWCCollectLabels(cell, labels);
+        UILabel *rightmost = nil;
+        for (UILabel *label in labels) {
+            if ([label.text isEqualToString:title]) continue;
+            if (!rightmost || CGRectGetMinX(label.frame) > CGRectGetMinX(rightmost.frame)) rightmost = label;
+        }
+        if (rightmost.text.length > 0) return rightmost.text;
+    }
+    return nil;
+}
+
+static NSString *NeoWCAdditionDurationValue(NSString *title, NSString *value) {
+    if (![title containsString:@"添加时间"] || value.length == 0) return value;
+    NSArray<NSDictionary *> *formats = @[
+        @{ @"format": @"yyyy年M月d日", @"approximate": @NO },
+        @{ @"format": @"yyyy-MM-dd", @"approximate": @NO },
+        @{ @"format": @"yyyy/MM/dd", @"approximate": @NO },
+        @{ @"format": @"yyyy年M月", @"approximate": @YES },
+        @{ @"format": @"yyyy-MM", @"approximate": @YES },
+        @{ @"format": @"yyyy/MM", @"approximate": @YES },
+    ];
+    NSDate *date = nil;
+    BOOL approximate = NO;
+    for (NSDictionary *entry in formats) {
+        NSDateFormatter *formatter = [NSDateFormatter new];
+        formatter.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"zh_CN"];
+        formatter.timeZone = NSTimeZone.localTimeZone;
+        formatter.dateFormat = entry[@"format"];
+        formatter.lenient = NO;
+        date = [formatter dateFromString:value];
+        if (date) {
+            approximate = [entry[@"approximate"] boolValue];
+            break;
+        }
+    }
+    if (!date) return value;
+    NSCalendar *calendar = NSCalendar.currentCalendar;
+    if (approximate) date = [calendar dateByAddingUnit:NSCalendarUnitDay value:14 toDate:date options:0] ?: date;
+    NSDate *start = [calendar startOfDayForDate:date];
+    NSDate *today = [calendar startOfDayForDate:NSDate.date];
+    NSInteger days = [calendar components:NSCalendarUnitDay fromDate:start toDate:today options:0].day;
+    if (days < 0) return value;
+    return [NSString stringWithFormat:@"%@ · 已添加%@%ld 天", value,
+            approximate ? @"约 " : @"", (long)days];
+}
+
+static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCOfficialSocialInformationRows(id controller) {
+    id tableInfo = NeoWCRawProfileValue(controller, @[@"m_tableViewInfo", @"tableViewInfo"]);
+    NSUInteger sectionCount = NeoWCCallUnsignedSelector(tableInfo, @"getSectionCount");
+    if (sectionCount == 0) sectionCount = NeoWCTableSections(tableInfo).count;
+    NSMutableArray *rows = [NSMutableArray array];
+    NSMutableSet *titles = [NSMutableSet set];
+    for (NSUInteger sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++) {
+        id section = NeoWCTableSectionAtIndex(tableInfo, sectionIndex);
+        NSUInteger cellCount = NeoWCTableCellCount(section);
+        for (NSUInteger cellIndex = 0; cellIndex < cellCount; cellIndex++) {
+            id cell = NeoWCTableCellAtIndex(section, cellIndex);
+            NSString *title = [NeoWCTableCellTitle(cell)
+                stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            if (title.length == 0) {
+                title = [NeoWCTableCellLeftmostText(cell)
+                    stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            }
+            NSString *value = [NeoWCTableCellRightText(cell, title)
+                stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            if (title.length == 0 || value.length == 0 || [titles containsObject:title]) continue;
+            [titles addObject:title];
+            [rows addObject:@{ @"title": title,
+                               @"value": NeoWCAdditionDurationValue(title, value) ?: value }];
+        }
+    }
+    return rows;
+}
+
+static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCMergeInfoCardRows(NSArray *baseRows,
+                                                                                NSArray *officialRows) {
+    NSMutableArray *rows = [NSMutableArray array];
+    NSMutableSet *titles = [NSMutableSet set];
+    NSArray *combined = [(baseRows ?: @[]) arrayByAddingObjectsFromArray:officialRows ?: @[]];
+    for (NSDictionary *row in combined) {
+        NSString *title = row[@"title"];
+        NSString *value = row[@"value"];
+        if (title.length == 0 || value.length == 0 || [titles containsObject:title]) continue;
+        [titles addObject:title];
+        [rows addObject:@{ @"title": title, @"value": value }];
+    }
+    return rows;
+}
+
+static void NeoWCRefreshInfoCardFromOfficialController(id officialController) {
+    if (!NSThread.isMainThread) {
+        dispatch_async(dispatch_get_main_queue(), ^{ NeoWCRefreshInfoCardFromOfficialController(officialController); });
+        return;
+    }
+    NeoWCWeakObjectBox *box = objc_getAssociatedObject(officialController, &NeoWCOfficialInfoCardBoxKey);
+    NeoWCContactInfoCardViewController *card = [box.object isKindOfClass:NeoWCContactInfoCardViewController.class]
+        ? box.object : nil;
+    NSArray *baseRows = objc_getAssociatedObject(officialController, &NeoWCOfficialInfoBaseRowsKey) ?: @[];
+    if (card) [card updateRows:NeoWCMergeInfoCardRows(baseRows,
+        NeoWCOfficialSocialInformationRows(officialController))];
+}
+
 static BOOL NeoWCSectionContainsRawIDCell(id section, NSString *title) {
     NSUInteger count = NeoWCTableCellCount(section);
     for (NSUInteger index = 0; index < count; index++) {
@@ -7952,22 +8251,21 @@ static id NeoWCCreateRawIDCell(id target, NSString *title, NSString *rawID) {
     if ([cellClass respondsToSelector:copyFactory]) {
         cell = ((id (*)(id, SEL, SEL, id, NSString *, NSString *, BOOL))objc_msgSend)(cellClass,
                                                                                      copyFactory,
-                                                                                     NULL,
-                                                                                     nil,
+                                                                                     @selector(neowc_openInfoCard),
+                                                                                     target,
                                                                                      title,
-                                                                                     rawID,
-                                                                                     YES);
+                                                                                     @"查看",
+                                                                                     NO);
     } else if ([cellClass respondsToSelector:basicFactory]) {
         cell = ((id (*)(id, SEL, SEL, id, NSString *, NSString *))objc_msgSend)(cellClass,
                                                                                 basicFactory,
-                                                                                @selector(neowc_copyRawContactID),
+                                                                                @selector(neowc_openInfoCard),
                                                                                 target,
                                                                                 title,
-                                                                                rawID);
+                                                                                @"查看");
     }
     if (cell) {
-        NeoWCTweakSetValue(cell, @"userInfo", [title containsString:@"群"] ?
-                           @"neowc_profile_raw_group_id_cell" : @"neowc_profile_raw_id_cell");
+        NeoWCTweakSetValue(cell, @"userInfo", @"neowc_profile_info_card_cell");
         SEL heightSelector = NSSelectorFromString(@"setFCellHeight:");
         if ([cell respondsToSelector:heightSelector]) {
             ((void (*)(id, SEL, CGFloat))objc_msgSend)(cell, heightSelector, 56.0);
@@ -8130,6 +8428,142 @@ static UIViewController *NeoWCProfileOwnerViewController(id controller) {
     return nil;
 }
 
+static void NeoWCAddInfoCardRow(NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows,
+                                NSString *title,
+                                id value) {
+    NSString *text = [value isKindOfClass:NSString.class]
+        ? [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] : nil;
+    if (title.length > 0 && text.length > 0) [rows addObject:@{ @"title": title, @"value": text }];
+}
+
+static NSArray<NSString *> *NeoWCProfileStringList(id value) {
+    if ([value isKindOfClass:NSString.class]) {
+        NSMutableArray *items = [NSMutableArray array];
+        for (NSString *part in [(NSString *)value componentsSeparatedByCharactersInSet:
+                                [NSCharacterSet characterSetWithCharactersInString:@";,|"]]) {
+            NSString *item = [part stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            if (item.length > 0) [items addObject:item];
+        }
+        return items;
+    }
+    if ([value conformsToProtocol:@protocol(NSFastEnumeration)]) {
+        NSMutableArray *items = [NSMutableArray array];
+        for (id item in value) if ([item isKindOfClass:NSString.class] && [item length] > 0) [items addObject:item];
+        return items;
+    }
+    return @[];
+}
+
+static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id contact, BOOL group) {
+    NSMutableArray *rows = [NSMutableArray array];
+    NeoWCAddInfoCardRow(rows, group ? @"原始群号码" : @"原始号码",
+                       NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]));
+    if (group) {
+        NeoWCAddInfoCardRow(rows, @"群聊名称",
+                           NeoWCRawProfileValue(contact, @[@"getContactDisplayName", @"m_nsNickName"]));
+        NSString *members = NeoWCRawProfileValue(contact, @[@"m_nsChatRoomMemList"]);
+        if ([members isKindOfClass:NSString.class] && members.length > 0) {
+            NSUInteger count = 0;
+            for (NSString *member in [members componentsSeparatedByString:@";"]) {
+                if ([member stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length > 0) count++;
+            }
+            if (count > 0) NeoWCAddInfoCardRow(rows, @"群成员", [NSString stringWithFormat:@"%lu 人", (unsigned long)count]);
+        }
+        NeoWCAddInfoCardRow(rows, @"群主", NeoWCRawProfileValue(contact,
+            @[@"m_nsChatRoomOwner", @"m_nsOwner", @"ownerUserName", @"owner"]));
+        NSArray *admins = NeoWCProfileStringList(NeoWCRawProfileValue(contact,
+            @[@"m_nsChatRoomAdminList", @"m_nsAdminList", @"m_adminList", @"adminList", @"admins", @"m_arrAdmin"]));
+        if (admins.count > 0) NeoWCAddInfoCardRow(rows, @"管理员", [admins componentsJoinedByString:@"、"]);
+        NeoWCAddInfoCardRow(rows, @"群简介", NeoWCRawProfileValue(contact, @[@"groupSummary"]));
+        NeoWCAddInfoCardRow(rows, @"群链接", NeoWCRawProfileValue(contact, @[@"groupURL"]));
+    } else {
+        NeoWCAddInfoCardRow(rows, @"备注", NeoWCRawProfileValue(contact, @[@"m_nsRemark"]));
+        NeoWCAddInfoCardRow(rows, @"昵称", NeoWCRawProfileValue(contact, @[@"m_nsNickName"]));
+        NeoWCAddInfoCardRow(rows, @"微信号", NeoWCRawProfileValue(contact, @[@"m_nsAliasName", @"m_nsAlias"]));
+    }
+    return rows;
+}
+
+static UIViewController *NeoWCCreateOfficialSocialInformation(id contact) {
+    if (!contact) return nil;
+    Class controllerClass = NSClassFromString(@"SocialInfomationViewController");
+    SEL setter = NSSelectorFromString(@"setM_contact:");
+    UIViewController *controller = controllerClass ? [[controllerClass alloc] init] : nil;
+    if (!controller || ![controller respondsToSelector:setter]) {
+        return nil;
+    }
+    ((void (*)(id, SEL, id))objc_msgSend)(controller, setter, contact);
+    (void)controller.view;
+    SEL reloadSelector = NSSelectorFromString(@"reloadTableView");
+    if ([controller respondsToSelector:reloadSelector]) {
+        ((void (*)(id, SEL))objc_msgSend)(controller, reloadSelector);
+    }
+    return controller;
+}
+
+static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCGroupMemberInfoRows(id contact,
+                                                                                   id groupContact,
+                                                                                   NSString *userName) {
+    NSMutableArray *rows = [NSMutableArray array];
+    SEL displaySelector = NSSelectorFromString(@"getChatRoomMemberDisplayName:");
+    if (groupContact && contact && [groupContact respondsToSelector:displaySelector]) {
+        @try {
+            id value = ((id (*)(id, SEL, id))objc_msgSend)(groupContact, displaySelector, contact);
+            NeoWCAddInfoCardRow(rows, @"群昵称", value);
+        } @catch (__unused NSException *exception) {}
+    }
+    NSString *owner = NeoWCRawProfileValue(groupContact,
+        @[@"m_nsChatRoomOwner", @"m_nsOwner", @"ownerUserName", @"owner"]);
+    NSArray *admins = NeoWCProfileStringList(NeoWCRawProfileValue(groupContact,
+        @[@"m_nsChatRoomAdminList", @"m_nsAdminList", @"m_adminList", @"adminList", @"admins", @"m_arrAdmin"]));
+    NSString *role = [owner isEqualToString:userName] ? @"群主"
+        : ([admins containsObject:userName] ? @"管理员" : @"群成员");
+    NeoWCAddInfoCardRow(rows, @"群身份", role);
+    return rows;
+}
+
+static void NeoWCOpenProfileInfoCard(id controller) {
+    id contact = objc_getAssociatedObject(controller, &NeoWCProfileContactKey);
+    BOOL group = [objc_getAssociatedObject(controller, &NeoWCProfileIsGroupKey) boolValue];
+    NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+    if (userName.length == 0) userName = objc_getAssociatedObject(controller, &NeoWCRawContactIDKey);
+    if (userName.length == 0) return;
+    NSString *name = NeoWCRawProfileValue(contact, @[@"getContactDisplayName", @"m_nsRemark", @"m_nsNickName"]);
+    id imageValue = NeoWCRawProfileValue(contact, @[@"getContactHeadImage"]);
+    UIImage *avatar = [imageValue isKindOfClass:UIImage.class] ? imageValue : nil;
+    NSString *chatRoomUserName = objc_getAssociatedObject(controller, &NeoWCProfileChatRoomKey);
+    NSMutableArray *rows = [NeoWCProfileInfoRows(contact, group) mutableCopy];
+    if (!group && [chatRoomUserName hasSuffix:@"@chatroom"]) {
+        [rows addObject:@{ @"title": @"所在群聊", @"value": chatRoomUserName }];
+        [rows addObjectsFromArray:NeoWCGroupMemberInfoRows(contact,
+            NeoWCContactForUserName(chatRoomUserName), userName)];
+    }
+    NSArray *baseRows = [rows copy];
+    UIViewController *officialController = !group ? NeoWCCreateOfficialSocialInformation(contact) : nil;
+    NSArray *displayRows = NeoWCMergeInfoCardRows(baseRows,
+        officialController ? NeoWCOfficialSocialInformationRows(officialController) : @[]);
+    UIViewController *card = [[NeoWCContactInfoCardViewController alloc]
+        initWithTitle:(!group && [chatRoomUserName hasSuffix:@"@chatroom"]) ? @"群成员详细信息" : @"详细信息"
+               avatar:avatar
+                 name:name ?: userName
+             userName:userName
+                 rows:displayRows];
+    if (officialController) {
+        NeoWCWeakObjectBox *box = [NeoWCWeakObjectBox new];
+        box.object = card;
+        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoCardBoxKey,
+                                 box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoBaseRowsKey,
+                                 baseRows, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        objc_setAssociatedObject(card, &NeoWCInfoCardOfficialControllerKey,
+                                 officialController, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    UIViewController *owner = NeoWCProfileOwnerViewController(controller);
+    if (owner.navigationController) [owner.navigationController pushViewController:card animated:YES];
+    else if (owner) [owner presentViewController:[[UINavigationController alloc] initWithRootViewController:card]
+                                         animated:YES completion:nil];
+}
+
 static void NeoWCInjectRawIDCell(id controller, BOOL group) {
     if (!NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey) || !controller) return;
     NSArray<NSString *> *contactNames = group ?
@@ -8144,7 +8578,17 @@ static void NeoWCInjectRawIDCell(id controller, BOOL group) {
     NSUInteger sectionCount = NeoWCCallUnsignedSelector(tableInfo, @"getSectionCount");
     if (sectionCount == 0) sectionCount = NeoWCTableSections(tableInfo).count;
     if (!tableInfo || sectionCount == 0) return;
-    NSString *title = group ? @"原始群号码" : @"原始号码";
+    objc_setAssociatedObject(controller, &NeoWCProfileContactKey, contact, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &NeoWCProfileIsGroupKey, @(group), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSString *chatRoomUserName = group ? rawID : NeoWCRawProfileValue(controller,
+        @[@"m_nsChatRoomUserName", @"sessionUserName"]);
+    if (![chatRoomUserName hasSuffix:@"@chatroom"]) {
+        chatRoomUserName = NeoWCRawProfileValue(contact, @[@"m_nsChatRoomUserName", @"sessionUserName"]);
+    }
+    objc_setAssociatedObject(controller, &NeoWCProfileChatRoomKey,
+                             [chatRoomUserName hasSuffix:@"@chatroom"] ? chatRoomUserName : nil,
+                             OBJC_ASSOCIATION_COPY_NONATOMIC);
+    NSString *title = @"详细信息";
     id targetSection = nil;
     NSUInteger targetIndex = NSNotFound;
     NSInteger targetScore = NSIntegerMin;
@@ -8598,6 +9042,11 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 %new
+- (void)neowc_openInfoCard {
+    NeoWCOpenProfileInfoCard(self);
+}
+
+%new
 - (void)neowc_toggleProfileMessageBlock:(UISwitch *)sender {
     NeoWCSetProfileMessageBlocked(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
 }
@@ -8616,6 +9065,22 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %new
 - (void)neowc_toggleProfileSendConfirmation:(UISwitch *)sender {
     NeoWCSendConfirmationSetProtected(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
+}
+
+%end
+
+%hook SocialInfomationViewController
+
+- (void)onCRGDataUpdated {
+    %orig;
+    NeoWCRefreshInfoCardFromOfficialController(self);
+}
+
+- (void)reloadTableView {
+    %orig;
+    if (objc_getAssociatedObject(self, &NeoWCOfficialInfoCardBoxKey)) {
+        NeoWCRefreshInfoCardFromOfficialController(self);
+    }
 }
 
 %end
@@ -8644,6 +9109,11 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)neowc_copyRawContactID {
     NSString *rawID = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
     if (rawID.length > 0) UIPasteboard.generalPasteboard.string = rawID;
+}
+
+%new
+- (void)neowc_openInfoCard {
+    NeoWCOpenProfileInfoCard(self);
 }
 
 %new

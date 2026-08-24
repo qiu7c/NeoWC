@@ -336,9 +336,9 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
     return YES;
 }
 
-@interface NeoWCAntiRevokeRecordsViewController () <UISearchResultsUpdating>
+@interface NeoWCAntiRevokeRecordsViewController () <UISearchBarDelegate>
 @property (nonatomic, copy) NSArray<NSDictionary *> *visibleRecords;
-@property (nonatomic, strong) UISearchController *searchController;
+@property (nonatomic, strong) UISearchBar *searchBar;
 @end
 
 @implementation NeoWCAntiRevokeRecordsViewController
@@ -349,14 +349,11 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
     [super viewDidLoad];
     self.title = @"防撤回记录";
     self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
-    UISearchController *search = [[UISearchController alloc] initWithSearchResultsController:nil];
-    search.searchResultsUpdater = self;
-    search.obscuresBackgroundDuringPresentation = NO;
-    search.searchBar.placeholder = @"搜索联系人或内容";
-    NeoWCStyleSearchBar(search.searchBar);
-    NeoWCInstallSearchBarInTableView(search.searchBar, self.tableView);
-    self.definesPresentationContext = YES;
-    self.searchController = search;
+    UISearchBar *searchBar = [UISearchBar new];
+    searchBar.delegate = self;
+    searchBar.placeholder = @"搜索联系人或内容";
+    NeoWCInstallSearchBarInTableView(searchBar, self.tableView);
+    self.searchBar = searchBar;
     [self reloadRecordsWithQuery:nil];
 }
 
@@ -376,8 +373,9 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
     [self.tableView reloadData];
 }
 
-- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
-    [self reloadRecordsWithQuery:searchController.searchBar.text];
+- (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
+    (void)searchBar;
+    [self reloadRecordsWithQuery:searchText];
 }
 
 - (NSInteger)tableView:(__unused UITableView *)tableView numberOfRowsInSection:(__unused NSInteger)section { return self.visibleRecords.count; }

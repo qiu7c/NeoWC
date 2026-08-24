@@ -174,11 +174,11 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 
 @end
 
-@interface NeoWCSendConfirmationConversationPicker : NeoWCCardTableViewController <UISearchResultsUpdating>
+@interface NeoWCSendConfirmationConversationPicker : NeoWCCardTableViewController <UISearchBarDelegate>
 @property (nonatomic, copy) NSArray<NSDictionary *> *allItems;
 @property (nonatomic, copy) NSArray<NSDictionary *> *visibleFriends;
 @property (nonatomic, copy) NSArray<NSDictionary *> *visibleGroups;
-@property (nonatomic, strong) UISearchController *searchController;
+@property (nonatomic, strong) UISearchBar *searchBar;
 @property (nonatomic, copy) NSString *pickerTitle;
 @property (nonatomic, copy) NSString *pickerFooter;
 @property (nonatomic, copy) NeoWCConversationPickerSelectedBlock selectedBlock;
@@ -211,13 +211,10 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
     self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.tableView.rowHeight = 60.0;
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(done)];
-    self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
-    self.searchController.obscuresBackgroundDuringPresentation = NO;
-    self.searchController.searchResultsUpdater = self;
-    self.searchController.searchBar.placeholder = @"搜索好友、群聊或 username";
-    NeoWCStyleSearchBar(self.searchController.searchBar);
-    NeoWCInstallSearchBarInTableView(self.searchController.searchBar, self.tableView);
-    self.definesPresentationContext = YES;
+    self.searchBar = [UISearchBar new];
+    self.searchBar.delegate = self;
+    self.searchBar.placeholder = @"搜索好友、群聊或 username";
+    NeoWCInstallSearchBarInTableView(self.searchBar, self.tableView);
     [self loadConversations];
 }
 
@@ -243,7 +240,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
         if (leftGroup != rightGroup) return leftGroup ? NSOrderedDescending : NSOrderedAscending;
         return [left[@"name"] localizedCaseInsensitiveCompare:right[@"name"]];
     }];
-    [self applyQuery:self.searchController.searchBar.text];
+    [self applyQuery:self.searchBar.text];
 }
 
 - (void)applyQuery:(NSString *)query {
@@ -262,7 +259,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
     [self.tableView reloadData];
 }
 
-- (void)updateSearchResultsForSearchController:(UISearchController *)searchController { [self applyQuery:searchController.searchBar.text]; }
+- (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText { (void)searchBar; [self applyQuery:searchText]; }
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 2; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     (void)tableView;
