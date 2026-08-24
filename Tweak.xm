@@ -10594,13 +10594,15 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook CMessageMgr
 
 - (void)AddAppMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap Data:(NSData *)data Scene:(unsigned int)scene {
-    NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"Data", target, wrap, data, scene);
+    NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataBefore", target, wrap, data, scene);
     %orig(target, wrap, data, scene);
+    NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataAfter", target, wrap, data, scene);
 }
 
 - (void)AddAppMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap DataPath:(NSString *)path Scene:(unsigned int)scene {
-    NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataPath", target, wrap, path, scene);
+    NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataPathBefore", target, wrap, path, scene);
     %orig(target, wrap, path, scene);
+    NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataPathAfter", target, wrap, path, scene);
 }
 
 - (void)AddMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap {
