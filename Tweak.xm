@@ -10742,6 +10742,25 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 %end
 
+%hook WAJSEventHandler
+
+- (void)handleJSEvent:(id)event {
+    NeoWCPaymentLinkLearnFromWAJSEvent(event);
+    %orig(event);
+}
+
+- (void)innerHandleJSEvent:(id)event isForceCellularNetwork:(BOOL)forceCellular {
+    NeoWCPaymentLinkLearnFromWAJSEvent(event);
+    %orig(event, forceCellular);
+}
+
+- (void)operateWXData:(id)data {
+    NeoWCPaymentLinkLearnFromWAJSEvent(data);
+    %orig(data);
+}
+
+%end
+
 %hook NSURLSession
 
 - (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request {

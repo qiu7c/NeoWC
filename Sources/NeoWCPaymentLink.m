@@ -1,5 +1,6 @@
 #import "NeoWCPaymentLink.h"
 #import "NeoWCAccount.h"
+#import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -141,6 +142,113 @@ static NSDictionary *NeoWCPaymentBestSubjectInObject(id object, NSUInteger depth
         }
     }
     return best;
+}
+
+static id NeoWCPaymentJSONObjectFromValue(id value) {
+    if ([value isKindOfClass:NSData.class]) {
+        return [(NSData *)value length] > 0
+            ? [NSJSONSerialization JSONObjectWithData:value options:0 error:nil] : nil;
+    }
+    if ([value isKindOfClass:NSString.class]) {
+        NSData *data = [(NSString *)value dataUsingEncoding:NSUTF8StringEncoding];
+        return data.length > 0 ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    }
+    if ([value isKindOfClass:NSDictionary.class] || [value isKindOfClass:NSArray.class]) return value;
+    return nil;
+}
+
+static id NeoWCPaymentRuntimeValueForKey(id object, NSString *key) {
+    if (!object || key.length == 0) return nil;
+    if ([object isKindOfClass:NSDictionary.class]) return [(NSDictionary *)object objectForKey:key];
+    SEL stringSelector = sel_registerName("stringForKey:");
+    @try {
+        if ([object respondsToSelector:stringSelector]) {
+            return ((id (*)(id, SEL, id))objc_msgSend)(object, stringSelector, key);
+        }
+        return [object valueForKey:key];
+    } @catch (__unused NSException *exception) {
+        return nil;
+    }
+}
+
+static NSString *NeoWCPaymentRuntimeURLString(id event, id *payloadValue) {
+    id payload = NeoWCPaymentRuntimeValueForKey(event, @"data");
+    if (payloadValue) *payloadValue = payload;
+    NSString *URLString = NeoWCPaymentTrimmedString(NeoWCPaymentRuntimeValueForKey(event, @"url"));
+    if (URLString) return URLString;
+    id payloadObject = NeoWCPaymentJSONObjectFromValue(payload) ?: payload;
+    if ([payloadObject isKindOfClass:NSDictionary.class]) {
+        return NeoWCPaymentTrimmedString(payloadObject[@"url"]);
+    }
+    return nil;
+}
+
+static NSString *NeoWCPaymentMatchedRuntimeEndpoint(NSString *URLString) {
+    if (URLString.length == 0) return nil;
+    for (NSString *endpoint in @[@"linkqrcode/list", @"linkqrcode/homeextra",
+                                 @"linkqrcode/modify", @"linkqrcodesource/getshopinfo",
+                                 @"payshortlink/checkoccupation"]) {
+        if ([URLString rangeOfString:endpoint options:NSCaseInsensitiveSearch].location != NSNotFound) {
+            return endpoint;
+        }
+    }
+    return nil;
+}
+
+static NSArray<NSString *> *NeoWCPaymentStoreRuntimeObject(id object, NSString *URLString) {
+    NSMutableArray<NSString *> *storedFields = [NSMutableArray array];
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSURLComponents *components = [NSURLComponents componentsWithString:URLString];
+    for (NSURLQueryItem *item in components.queryItems ?: @[]) {
+        if (([item.name isEqualToString:@"sid"] || [item.name isEqualToString:@"v"]) && item.value.length) {
+            NeoWCPaymentStoreValue(defaults, item.name, item.value);
+            [storedFields addObject:item.name];
+        }
+    }
+    NSDictionary *root = [object isKindOfClass:NSDictionary.class] ? object : nil;
+    for (NSString *field in @[@"sid", @"v"]) {
+        if (root[field]) {
+            NeoWCPaymentStoreValue(defaults, field, root[field]);
+            if (![storedFields containsObject:field]) [storedFields addObject:field];
+        }
+    }
+    NSDictionary *subject = NeoWCPaymentBestSubjectInObject(object, 0);
+    NSDictionary<NSString *, NSArray<NSString *> *> *aliases = @{
+        @"receipt_id": @[@"receipt_id"],
+        @"account_type": @[@"account_type"],
+        @"operator_role": @[@"operator_role"],
+        @"merchant_identifier": @[@"merchant_identifier", @"merchant_id", @"merchantId"],
+        @"shop_name": @[@"shop_name", @"shopname", @"shopName"],
+        @"remark": @[@"remark"],
+        @"link_number": @[@"link_number", @"number", @"qrcode_index", @"link_index", @"seq", @"index"],
+    };
+    for (NSString *field in aliases) {
+        id value = NeoWCPaymentValueForAliases(subject, aliases[field]);
+        if (!value) continue;
+        NeoWCPaymentStoreValue(defaults, field, value);
+        [storedFields addObject:field];
+    }
+    return storedFields;
+}
+
+void NeoWCPaymentLinkLearnFromWAJSEvent(id event) {
+    if (!event) return;
+    id payload = nil;
+    NSString *URLString = NeoWCPaymentRuntimeURLString(event, &payload);
+    NSString *endpoint = NeoWCPaymentMatchedRuntimeEndpoint(URLString);
+    if (!endpoint) return;
+    id object = NeoWCPaymentJSONObjectFromValue(payload);
+    if ([object isKindOfClass:NSDictionary.class]) {
+        id nestedData = object[@"data"];
+        id nestedObject = NeoWCPaymentJSONObjectFromValue(nestedData);
+        if (nestedObject) object = nestedObject;
+    }
+    NSArray<NSString *> *storedFields = NeoWCPaymentStoreRuntimeObject(object, URLString);
+    if ([NSUserDefaults.standardUserDefaults boolForKey:NeoWCPaymentLinkDiagnosticsEnabledKey]) {
+        NeoWCLogAlways(@"[收款诊断] WAJS endpoint=%@ event=%@ payload=%@ fields=%@",
+                       endpoint, NSStringFromClass([event class]),
+                       payload ? NSStringFromClass([payload class]) : @"nil", storedFields);
+    }
 }
 
 void NeoWCPaymentLinkLearnFromResponse(NSData *data) {
