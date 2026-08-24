@@ -183,6 +183,12 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCInputSwipeActionsEnabledKey: @NO,
         NeoWCQuickReplyEnabledKey: @NO,
         NeoWCQuickReplyInstantSendEnabledKey: @NO,
+        NeoWCVideoParserEnabledKey: @NO,
+        NeoWCVideoParserCustomURLKey: @"",
+        NeoWCVideoParserSendModeKey: @0,
+        NeoWCVideoParserGroupsKey: @[],
+        NeoWCMusicOrderEnabledKey: @NO,
+        NeoWCMusicOrderGroupsKey: @[],
         NeoWCSendConfirmationEnabledKey: @NO,
         NeoWCSendConfirmationUsersKey: @{},
         NeoWCSendConfirmationPauseSecondsKey: @60,
@@ -303,6 +309,27 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
                                 NeoWCCountText(NeoWCQuickReplyStore.sharedStore.items.count), NeoWCSettingActionQuickReplyLibrary)],
                     defaults,
                     collapsed);
+    // 暂停开放：保留完整实现，等待稳定的视频解析和点歌接口后恢复。
+#if 0
+    NSInteger videoSendMode = [defaults integerForKey:NeoWCVideoParserSendModeKey];
+    NSString *videoAPI = [defaults stringForKey:NeoWCVideoParserCustomURLKey];
+    NeoWCAddFeature(interaction,
+                    NeoWCItem(@"视频解析", @"识别已开启群聊中的视频分享链接", @"play.rectangle", NeoWCSettingRowKindSwitch, NeoWCVideoParserEnabledKey, nil, NeoWCSettingActionNone),
+                    @[
+                        NeoWCItem(@"解析接口", @"填写返回视频地址与封面地址的 HTTPS 接口", @"link", NeoWCSettingRowKindDetail, nil,
+                                  videoAPI.length > 0 ? @"已设置" : @"未设置", NeoWCSettingActionVideoParserURL),
+                        NeoWCItem(@"发送方式", @"原生视频会下载后发送；链接卡片由微信浏览器打开", @"paperplane", NeoWCSettingRowKindDetail, nil,
+                                  videoSendMode == 1 ? @"链接卡片" : @"原生视频", NeoWCSettingActionVideoParserSendMode),
+                        NeoWCItem(@"启用群聊", @"只识别所选群聊中新收到的视频分享消息", @"person.3", NeoWCSettingRowKindDetail, nil,
+                                  NeoWCCountText([defaults arrayForKey:NeoWCVideoParserGroupsKey].count), NeoWCSettingActionVideoParserGroups),
+                    ],
+                    defaults,
+                    collapsed);
+    NeoWCAddFeature(interaction,
+                    NeoWCItem(@"音乐点歌", @"识别群聊中的“点歌 + 歌名”并回复音乐卡片", @"music.note", NeoWCSettingRowKindSwitch, NeoWCMusicOrderEnabledKey, nil, NeoWCSettingActionNone),
+                    @[NeoWCItem(@"启用群聊", @"只在所选群聊中识别点歌消息", @"person.3", NeoWCSettingRowKindDetail, nil,
+                                NeoWCCountText([defaults arrayForKey:NeoWCMusicOrderGroupsKey].count), NeoWCSettingActionMusicOrderGroups)], defaults, collapsed);
+#endif
     NeoWCAddFeature(interaction, NeoWCItem(@"语音自动转文字", @"收到语音后自动转成文字", @"waveform.and.mic", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"忽略群聊语音", @"群聊中的语音保持原样", @"person.3", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnoreGroupKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"忽略私聊语音", @"私聊中的语音保持原样", @"person", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnorePrivateKey, nil, NeoWCSettingActionNone),

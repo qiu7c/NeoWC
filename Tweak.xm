@@ -410,7 +410,7 @@ static char NeoWCRedEnvelopeOriginalAttributedTextKey;
 static char NeoWCCallVoiceConfirmedKey;
 static char NeoWCCallVideoConfirmedKey;
 static char NeoWCSendConfirmationNativeBypassKey;
-static char NeoWCSendConfirmationDocumentPickerUsernameKey;
+static char NeoWCMediaRecognitionHandledKey;
 static NSString *NeoWCSendConfirmationImageBypassUsername;
 static CFTimeInterval NeoWCSendConfirmationImageBypassDeadline;
 static NSString *NeoWCSendConfirmationVideoBypassUsername;
@@ -432,6 +432,7 @@ static void NeoWCPresentQuickReplyLibrary(BaseMsgContentViewController *controll
 static NSString *NeoWCChatUserName(id controller);
 static void NeoWCShowTransientMessage(NSString *message, BOOL success);
 static BOOL NeoWCMethodReturnsVoid(Method method);
+static BOOL NeoWCMethodReturnsObject(Method method);
 static BOOL NeoWCMethodArgumentIsObject(Method method, unsigned int index);
 static BOOL NeoWCMomentCanSaveMedia(id dataItem);
 static void NeoWCSaveMomentMedia(id dataItem, UIViewController *presenter);
@@ -6864,11 +6865,11 @@ static id NeoWCQuickReplyVideoLogicController(BaseMsgContentViewController *cont
     return nil;
 }
 
-static BOOL NeoWCSendQuickReplyVideoNow(BaseMsgContentViewController *controller,
-                                        NSString *lockedUserName,
-                                        NSString *path,
-                                        NeoWCQuickReplyItem *item,
-                                        NSString **failureReason) {
+static BOOL NeoWCSendLocalVideoNow(BaseMsgContentViewController *controller,
+                                   NSString *lockedUserName,
+                                   NSString *path,
+                                   UIImage *providedThumbnail,
+                                   NSString **failureReason) {
     if (!controller.view.window || ![NeoWCChatUserName(controller) isEqualToString:lockedUserName] ||
         ![NSFileManager.defaultManager fileExistsAtPath:path]) {
         if (failureReason) *failureReason = @"原会话或视频文件已失效";
@@ -6905,8 +6906,7 @@ static BOOL NeoWCSendQuickReplyVideoNow(BaseMsgContentViewController *controller
                  NSStringFromClass([imageController class]), NSStringFromSelector(selector));
         return NO;
     }
-    NSString *thumbnailPath = [NeoWCQuickReplyStore.sharedStore absoluteThumbnailPathForItem:item];
-    UIImage *thumbnail = thumbnailPath.length > 0 ? [UIImage imageWithContentsOfFile:thumbnailPath] : nil;
+    UIImage *thumbnail = providedThumbnail;
     if (!thumbnail) thumbnail = NeoWCQuickReplyVideoThumbnail(path);
     if (!thumbnail) {
         if (failureReason) *failureReason = @"无法生成视频缩略图";
@@ -6923,6 +6923,16 @@ static BOOL NeoWCSendQuickReplyVideoNow(BaseMsgContentViewController *controller
         return NO;
     }
     return YES;
+}
+
+static BOOL NeoWCSendQuickReplyVideoNow(BaseMsgContentViewController *controller,
+                                        NSString *lockedUserName,
+                                        NSString *path,
+                                        NeoWCQuickReplyItem *item,
+                                        NSString **failureReason) {
+    NSString *thumbnailPath = [NeoWCQuickReplyStore.sharedStore absoluteThumbnailPathForItem:item];
+    UIImage *thumbnail = thumbnailPath.length > 0 ? [UIImage imageWithContentsOfFile:thumbnailPath] : nil;
+    return NeoWCSendLocalVideoNow(controller, lockedUserName, path, thumbnail, failureReason);
 }
 
 static BOOL NeoWCSendQuickReplyVoiceNow(BaseMsgContentViewController *controller,
@@ -6975,6 +6985,388 @@ static void NeoWCSendQuickReplyMediaWithConfirmation(BaseMsgContentViewControlle
                [NeoWCChatUserName(strongController) isEqualToString:lockedUserName];
     }, sendAction);
     if (!held) sendAction();
+}
+
+static NSString *NeoWCMediaXMLText(id value) {
+    NSString *text = [value isKindOfClass:NSString.class] ? value : ([value respondsToSelector:@selector(stringValue)] ? [value stringValue] : @"");
+    if (text.length == 0) return @"";
+    text = [text stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
+    text = [text stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
+    text = [text stringByReplacingOccurrencesOfString:@">" withString:@"&gt;"];
+    text = [text stringByReplacingOccurrencesOfString:@"\"" withString:@"&quot;"];
+    return [text stringByReplacingOccurrencesOfString:@"'" withString:@"&apos;"];
+}
+
+static NSString *NeoWCMediaString(id value) {
+    if ([value isKindOfClass:NSString.class]) return [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if ([value respondsToSelector:@selector(stringValue)]) return [[value stringValue] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    return @"";
+}
+
+static BOOL NeoWCSendAppMessageNow(BaseMsgContentViewController *controller,
+                                   NSString *lockedUserName,
+                                   NSString *XML,
+                                   NSUInteger innerType,
+                                   NSString **failureReason) {
+    if (XML.length == 0 || lockedUserName.length == 0 ||
+        (controller && (!controller.view.window || ![NeoWCChatUserName(controller) isEqualToString:lockedUserName]))) {
+        if (failureReason) *failureReason = @"原会话已离开";
+        return NO;
+    }
+    Class wrapClass = objc_getClass("CMessageWrap");
+    if (!wrapClass) wrapClass = objc_getClass("MMMessageWrap");
+    SEL initializer = sel_registerName("initWithMsgType:");
+    id wrap = nil;
+    if (wrapClass && [wrapClass instancesRespondToSelector:initializer]) {
+        wrap = ((id (*)(id, SEL, NSUInteger))objc_msgSend)([wrapClass alloc], initializer, 0x31);
+    } else if (wrapClass) {
+        wrap = [[wrapClass alloc] init];
+    }
+    id manager = NeoWCMessageManager();
+    SEL dataSelector = sel_registerName("AddAppMsg:MsgWrap:Data:Scene:");
+    SEL pathSelector = sel_registerName("AddAppMsg:MsgWrap:DataPath:Scene:");
+    if (!wrap || !manager || (![manager respondsToSelector:dataSelector] && ![manager respondsToSelector:pathSelector])) {
+        if (failureReason) *failureReason = @"当前微信的卡片发送接口已变化";
+        return NO;
+    }
+    NSUInteger now = (NSUInteger)NSDate.date.timeIntervalSince1970;
+    NeoWCTweakSetValue(wrap, @"m_uiMessageType", @0x31);
+    NeoWCTweakSetValue(wrap, @"m_uiAppMsgInnerType", @(innerType));
+    NeoWCTweakSetValue(wrap, @"m_nsFromUsr", NeoWCCurrentUserWXID() ?: @"");
+    NeoWCTweakSetValue(wrap, @"m_nsToUsr", lockedUserName);
+    NeoWCTweakSetValue(wrap, @"m_nsContent", XML);
+    NeoWCTweakSetValue(wrap, @"m_uiStatus", @1);
+    NeoWCTweakSetValue(wrap, @"m_bIsForceUpdate", @1);
+    NeoWCTweakSetValue(wrap, @"m_isDirectSend", @1);
+    NeoWCTweakSetValue(wrap, @"m_uiCreateTime", @(now));
+    Class extendClass = objc_getClass("CExtendInfoOfAPP");
+    if (extendClass) NeoWCTweakSetValue(wrap, @"m_extendInfoWithMsgType", [[extendClass alloc] init]);
+    objc_setAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey, @YES,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    @try {
+        SEL selector = [manager respondsToSelector:dataSelector] ? dataSelector : pathSelector;
+        ((void (*)(id, SEL, id, id, id, NSUInteger))objc_msgSend)(manager, selector,
+                                                                  lockedUserName, wrap, nil, 0);
+        return YES;
+    } @catch (NSException *exception) {
+        if (failureReason) *failureReason = @"调用微信卡片发送接口失败";
+        NeoWCLog(@"媒体卡片发送异常：%@", exception.reason ?: exception.name);
+        return NO;
+    }
+}
+
+static id NeoWCJSONValueForKeys(id object, NSArray<NSString *> *keys) {
+    if ([object isKindOfClass:NSDictionary.class]) {
+        NSDictionary *dictionary = object;
+        for (NSString *key in keys) {
+            id value = dictionary[key];
+            if (value && value != NSNull.null && NeoWCMediaString(value).length > 0) return value;
+        }
+        for (NSString *containerKey in @[@"data", @"result", @"video_data", @"videoData"]) {
+            id value = dictionary[containerKey];
+            id nested = NeoWCJSONValueForKeys(value, keys);
+            if (nested) return nested;
+        }
+    } else if ([object isKindOfClass:NSArray.class]) {
+        for (id value in (NSArray *)object) {
+            id nested = NeoWCJSONValueForKeys(value, keys);
+            if (nested) return nested;
+        }
+    }
+    return nil;
+}
+
+static BOOL NeoWCMediaHTTPURLIsValid(NSString *value) {
+    NSURL *URL = value.length > 0 ? [NSURL URLWithString:value] : nil;
+    NSString *scheme = URL.scheme.lowercaseString;
+    return URL.host.length > 0 && ([scheme isEqualToString:@"https"] || [scheme isEqualToString:@"http"]);
+}
+
+static NSString *NeoWCFormEncoded(NSString *value) {
+    NSMutableCharacterSet *allowed = [NSCharacterSet.alphanumericCharacterSet mutableCopy];
+    [allowed addCharactersInString:@"-._~"];
+    return [value stringByAddingPercentEncodingWithAllowedCharacters:allowed] ?: @"";
+}
+
+static void NeoWCSendVideoLinkCard(BaseMsgContentViewController *controller,
+                                   NSString *lockedUserName,
+                                   NSDictionary *result) {
+    NSString *videoURL = NeoWCMediaString(result[@"videoURL"]);
+    NSString *coverURL = NeoWCMediaString(result[@"coverURL"]);
+    NSString *title = NeoWCMediaString(result[@"title"]);
+    NSString *desc = NeoWCMediaString(result[@"desc"]);
+    if (title.length == 0) title = @"视频";
+    if (desc.length == 0) desc = @"点击播放视频";
+    NSString *XML = [NSString stringWithFormat:
+        @"<msg><appmsg appid=\"\" sdkver=\"0\"><title>%@</title><des>%@</des><action></action><type>5</type><showtype>0</showtype><content></content><url>%@</url><lowurl></lowurl><appattach><totallen>0</totallen><attachid></attachid><fileext></fileext></appattach><extinfo></extinfo><sourceusername></sourceusername><sourcedisplayname></sourcedisplayname><thumburl>%@</thumburl></appmsg><fromusername>%@</fromusername><scene>0</scene></msg>",
+        NeoWCMediaXMLText(title), NeoWCMediaXMLText(desc), NeoWCMediaXMLText(videoURL),
+        NeoWCMediaXMLText(coverURL), NeoWCMediaXMLText(NeoWCCurrentUserWXID() ?: @"")];
+    NSString *failure = nil;
+    if (!NeoWCSendAppMessageNow(controller, lockedUserName, XML, 5, &failure)) {
+        NeoWCShowTransientMessage(failure ?: @"视频卡片发送失败", NO);
+    }
+}
+
+static void NeoWCDownloadAndSendParsedVideo(BaseMsgContentViewController *controller,
+                                            NSString *lockedUserName,
+                                            NSDictionary *result) {
+    NSString *videoURLString = NeoWCMediaString(result[@"videoURL"]);
+    NSString *coverURLString = NeoWCMediaString(result[@"coverURL"]);
+    NSURL *videoURL = [NSURL URLWithString:videoURLString];
+    if (!videoURL) return;
+    NeoWCShowTransientMessage(@"正在下载原视频…", YES);
+    __weak BaseMsgContentViewController *weakController = controller;
+    [[[NSURLSession sharedSession] downloadTaskWithURL:videoURL completionHandler:^(NSURL *location, __unused NSURLResponse *response, NSError *error) {
+        NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"NeoWCVideoParser"];
+        NSString *extension = videoURL.pathExtension.length > 0 ? videoURL.pathExtension : @"mp4";
+        NSString *path = [directory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.%@", NSUUID.UUID.UUIDString, extension]];
+        BOOL copied = NO;
+        if (!error && location) {
+            [NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
+            [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+            copied = [NSFileManager.defaultManager copyItemAtURL:location toURL:[NSURL fileURLWithPath:path] error:nil];
+        }
+        UIImage *cover = nil;
+        if (copied && NeoWCMediaHTTPURLIsValid(coverURLString)) {
+            NSData *coverData = [NSData dataWithContentsOfURL:[NSURL URLWithString:coverURLString]];
+            if (coverData.length > 0) cover = [UIImage imageWithData:coverData];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            BaseMsgContentViewController *strongController = weakController;
+            if (!copied || !strongController.view.window || ![NeoWCChatUserName(strongController) isEqualToString:lockedUserName]) {
+                if (copied) [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+                NeoWCShowTransientMessage(error ? @"原视频下载失败" : @"原会话已离开，未发送视频", NO);
+                return;
+            }
+            NSString *failure = nil;
+            if (!NeoWCSendLocalVideoNow(strongController, lockedUserName, path, cover, &failure)) {
+                [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+                NeoWCShowTransientMessage(failure ?: @"原生视频发送失败", NO);
+                return;
+            }
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(600 * NSEC_PER_SEC)),
+                           dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+            });
+        });
+    }] resume];
+}
+
+static void NeoWCHandleParsedVideoResult(BaseMsgContentViewController *controller,
+                                         NSString *lockedUserName,
+                                         NSDictionary *result) {
+    NSString *videoURL = NeoWCMediaString(result[@"videoURL"]);
+    if (!NeoWCMediaHTTPURLIsValid(videoURL)) {
+        NeoWCShowTransientMessage(@"解析接口没有返回有效的视频地址", NO);
+        return;
+    }
+    NSInteger mode = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCVideoParserSendModeKey];
+    if (mode == 1) {
+        NeoWCSendVideoLinkCard(controller, lockedUserName, result);
+    } else if (controller.view.window && [NeoWCChatUserName(controller) isEqualToString:lockedUserName]) {
+        NeoWCDownloadAndSendParsedVideo(controller, lockedUserName, result);
+    } else {
+        NeoWCLog(@"视频解析得到原生视频结果，但当前群聊不在前台，等待 AFN 原生后台发送链补证：%@", lockedUserName);
+    }
+}
+
+static void NeoWCParseVideoText(BaseMsgContentViewController *controller,
+                                NSString *lockedUserName,
+                                NSString *input) {
+    NSString *APIString = [[NSUserDefaults.standardUserDefaults stringForKey:NeoWCVideoParserCustomURLKey]
+        stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (!NeoWCMediaHTTPURLIsValid(APIString) || ![[NSURL URLWithString:APIString].scheme.lowercaseString isEqualToString:@"https"]) {
+        NeoWCLog(@"视频解析已触发，但尚未设置有效的 HTTPS 接口");
+        return;
+    }
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:APIString]
+                                                           cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+                                                       timeoutInterval:30.0];
+    request.HTTPMethod = @"POST";
+    [request setValue:@"application/x-www-form-urlencoded; charset=utf-8" forHTTPHeaderField:@"Content-Type"];
+    NSString *body = [NSString stringWithFormat:@"wxid=%@&url=%@",
+                      NeoWCFormEncoded(NeoWCCurrentUserWXID() ?: @""), NeoWCFormEncoded(input)];
+    request.HTTPBody = [body dataUsingEncoding:NSUTF8StringEncoding];
+    NeoWCLog(@"开始解析群聊视频消息：%@", lockedUserName);
+    __weak BaseMsgContentViewController *weakController = controller;
+    [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        id JSON = data.length > 0 ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class] ? ((NSHTTPURLResponse *)response).statusCode : 0;
+        NSString *videoURL = NeoWCMediaString(NeoWCJSONValueForKeys(JSON, @[@"nwm_video_url", @"video_url", @"videoUrl", @"play_url", @"download_url", @"downloadUrl", @"download_addr", @"downloadAddr"]));
+        NSString *coverURL = NeoWCMediaString(NeoWCJSONValueForKeys(JSON, @[@"cover_url", @"pic_url", @"coverURL", @"cover", @"picUrl"]));
+        NSString *title = NeoWCMediaString(NeoWCJSONValueForKeys(JSON, @[@"title", @"name"]));
+        NSString *desc = NeoWCMediaString(NeoWCJSONValueForKeys(JSON, @[@"desc", @"description", @"author"]));
+        dispatch_async(dispatch_get_main_queue(), ^{
+            BaseMsgContentViewController *strongController = weakController;
+            if (error || status >= 400 || videoURL.length == 0) {
+                NeoWCLog(@"视频解析失败：%@", error.localizedDescription ?: @"接口未返回视频地址");
+                return;
+            }
+            NeoWCHandleParsedVideoResult(strongController, lockedUserName,
+                                         @{@"videoURL": videoURL, @"coverURL": coverURL ?: @"",
+                                           @"title": title ?: @"", @"desc": desc ?: @""});
+        });
+    }] resume];
+}
+
+static NSString *NeoWCMusicArtistText(NSDictionary *song) {
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
+    NSArray *artists = [song[@"ar"] isKindOfClass:NSArray.class] ? song[@"ar"] : song[@"artists"];
+    for (NSDictionary *artist in artists) {
+        NSString *name = NeoWCMediaString(artist[@"name"]);
+        if (name.length > 0) [names addObject:name];
+    }
+    return names.count > 0 ? [names componentsJoinedByString:@" / "] : @"未知歌手";
+}
+
+static void NeoWCSendMusicResult(BaseMsgContentViewController *controller,
+                                 NSString *lockedUserName,
+                                 NSDictionary *song) {
+    NSString *songID = NeoWCMediaString(song[@"id"]);
+    NSString *title = NeoWCMediaString(song[@"name"]);
+    NSString *artist = NeoWCMusicArtistText(song);
+    NSDictionary *album = [song[@"al"] isKindOfClass:NSDictionary.class] ? song[@"al"] : song[@"album"];
+    NSString *coverURL = NeoWCMediaString(album[@"picUrl"]);
+    NSString *webURL = [NSString stringWithFormat:@"https://music.163.com/song?id=%@", songID];
+    NSString *playURL = [NSString stringWithFormat:@"https://music.163.com/song/media/outer/url?id=%@.mp3", songID];
+    NSString *XML = [NSString stringWithFormat:
+        @"<msg><appmsg appid=\"\" sdkver=\"0\"><title>%@</title><des>%@</des><action></action><type>3</type><showtype>0</showtype><content></content><url>%@</url><lowurl>%@</lowurl><dataurl>%@</dataurl><lowdataurl>%@</lowdataurl><songalbumurl>%@</songalbumurl><songlyric></songlyric><appattach><totallen>0</totallen><attachid></attachid><fileext></fileext></appattach><extinfo></extinfo><sourceusername></sourceusername><sourcedisplayname></sourcedisplayname><thumburl>%@</thumburl></appmsg><fromusername>%@</fromusername><scene>0</scene></msg>",
+        NeoWCMediaXMLText(title), NeoWCMediaXMLText(artist), NeoWCMediaXMLText(webURL), NeoWCMediaXMLText(webURL),
+        NeoWCMediaXMLText(playURL), NeoWCMediaXMLText(playURL), NeoWCMediaXMLText(coverURL), NeoWCMediaXMLText(coverURL),
+        NeoWCMediaXMLText(NeoWCCurrentUserWXID() ?: @"")];
+    __weak BaseMsgContentViewController *weakController = controller;
+    dispatch_block_t sendAction = ^{
+        NSString *failure = nil;
+        if (!NeoWCSendAppMessageNow(weakController, lockedUserName, XML, 3, &failure)) {
+            if (weakController.view.window) NeoWCShowTransientMessage(failure ?: @"音乐卡片发送失败", NO);
+            else NeoWCLog(@"音乐卡片发送失败：%@", failure ?: @"未知错误");
+        }
+    };
+    if (!controller) {
+        sendAction();
+        return;
+    }
+    BOOL held = NeoWCPresentSendConfirmationIfNeeded(controller, lockedUserName,
+                                                      [NSString stringWithFormat:@"音乐：%@ · %@", title, artist], ^BOOL{
+        BaseMsgContentViewController *strongController = weakController;
+        return strongController.view.window && [NeoWCChatUserName(strongController) isEqualToString:lockedUserName];
+    }, sendAction);
+    if (!held) sendAction();
+}
+
+static void NeoWCSearchAndSendMusicCommand(NSString *lockedUserName, NSString *keyword) {
+    NSURLComponents *components = [NSURLComponents componentsWithString:@"https://music.163.com/api/cloudsearch/pc"];
+    components.queryItems = @[
+        [NSURLQueryItem queryItemWithName:@"type" value:@"1"],
+        [NSURLQueryItem queryItemWithName:@"s" value:keyword],
+        [NSURLQueryItem queryItemWithName:@"offset" value:@"0"],
+        [NSURLQueryItem queryItemWithName:@"total" value:@"true"],
+        [NSURLQueryItem queryItemWithName:@"limit" value:@"1"],
+    ];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:components.URL cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:20.0];
+    [request setValue:@"https://music.163.com/" forHTTPHeaderField:@"Referer"];
+    [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, __unused NSURLResponse *response, NSError *error) {
+        id JSON = data.length > 0 ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        NSDictionary *root = [JSON isKindOfClass:NSDictionary.class] ? JSON : nil;
+        NSDictionary *result = [root[@"result"] isKindOfClass:NSDictionary.class] ? root[@"result"] : nil;
+        NSArray *songs = [result[@"songs"] isKindOfClass:NSArray.class] ? result[@"songs"] : @[];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error || songs.count == 0) {
+                NeoWCLog(@"音乐点歌搜索失败：%@", error.localizedDescription ?: @"没有找到歌曲");
+                return;
+            }
+            NeoWCSendMusicResult(nil, lockedUserName, songs.firstObject);
+        });
+    }] resume];
+}
+
+static NSString *NeoWCMediaCommandText(id wrap) {
+    NSString *content = NeoWCMediaString(NeoWCTweakSafeValue(wrap, @"m_nsContent"));
+    NSRange separator = [content rangeOfString:@":\n"];
+    if (separator.location != NSNotFound && separator.location < 96) {
+        NSString *prefix = [content substringToIndex:separator.location];
+        if ([prefix hasPrefix:@"wxid_"] || [prefix containsString:@"@"] || prefix.length >= 5) {
+            content = [content substringFromIndex:NSMaxRange(separator)];
+        }
+    }
+    return [content stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+}
+
+static NSString *NeoWCFirstHTTPURLString(NSString *text) {
+    if (text.length == 0) return nil;
+    NSDataDetector *detector = [NSDataDetector dataDetectorWithTypes:NSTextCheckingTypeLink error:nil];
+    NSTextCheckingResult *match = [detector firstMatchInString:text options:0 range:NSMakeRange(0, text.length)];
+    NSString *value = match.URL.absoluteString;
+    return NeoWCMediaHTTPURLIsValid(value) ? value : nil;
+}
+
+static BOOL NeoWCMediaGroupEnabled(NSString *sessionUserName, NSString *defaultsKey) {
+    if (![sessionUserName hasSuffix:@"@chatroom"]) return NO;
+    NSArray *groups = [NSUserDefaults.standardUserDefaults arrayForKey:defaultsKey];
+    return [groups containsObject:sessionUserName];
+}
+
+static BOOL NeoWCMediaRecognitionEnabledForGroup(NSString *sessionUserName) {
+#if 0
+    // 暂停开放：接口稳定后恢复这里及设置目录中的对应功能入口。
+    return (NeoWCEnhancementEnabled(NeoWCMusicOrderEnabledKey) &&
+            NeoWCMediaGroupEnabled(sessionUserName, NeoWCMusicOrderGroupsKey)) ||
+           (NeoWCEnhancementEnabled(NeoWCVideoParserEnabledKey) &&
+            NeoWCMediaGroupEnabled(sessionUserName, NeoWCVideoParserGroupsKey));
+#else
+    (void)sessionUserName;
+    return NO;
+#endif
+}
+
+static BOOL NeoWCMediaMessageIsFromCurrentUser(id wrap) {
+    NSString *currentUser = NeoWCCurrentUserWXID();
+    if (currentUser.length == 0) return NO;
+    NSString *fromUser = NeoWCMediaString(NeoWCTweakSafeValue(wrap, @"m_nsFromUsr"));
+    NSString *realUser = NeoWCMediaString(NeoWCTweakSafeValue(wrap, @"m_nsRealChatUsr"));
+    return [fromUser isEqualToString:currentUser] || [realUser isEqualToString:currentUser];
+}
+
+static BOOL NeoWCMediaMessageIsIncoming(id wrap) {
+    NSString *currentUser = NeoWCCurrentUserWXID();
+    if (currentUser.length == 0) return NO;
+    NSString *fromUser = NeoWCMediaString(NeoWCTweakSafeValue(wrap, @"m_nsFromUsr"));
+    NSString *realUser = NeoWCMediaString(NeoWCTweakSafeValue(wrap, @"m_nsRealChatUsr"));
+    if (fromUser.length == 0 && realUser.length == 0) return NO;
+    return !NeoWCMediaMessageIsFromCurrentUser(wrap);
+}
+
+static void NeoWCRecognizeIncomingMediaCommand(NSString *sessionUserName, id wrap) {
+    if (!NeoWCMediaRecognitionEnabledForGroup(sessionUserName) || !wrap ||
+        [objc_getAssociatedObject(wrap, &NeoWCMediaRecognitionHandledKey) boolValue]) return;
+    NSInteger messageType = [NeoWCTweakSafeValue(wrap, @"m_uiMessageType") integerValue];
+    if (messageType != 1) return;
+    if (!NeoWCMediaMessageIsIncoming(wrap)) return;
+    NSString *content = NeoWCMediaCommandText(wrap);
+    if (content.length == 0) return;
+
+    if (NeoWCEnhancementEnabled(NeoWCMusicOrderEnabledKey) &&
+        NeoWCMediaGroupEnabled(sessionUserName, NeoWCMusicOrderGroupsKey) &&
+        [content hasPrefix:@"点歌"]) {
+        NSString *keyword = [[content substringFromIndex:2] stringByTrimmingCharactersInSet:
+            [NSCharacterSet characterSetWithCharactersInString:@" \t\r\n:：,，"]];
+        if (keyword.length > 0) {
+            objc_setAssociatedObject(wrap, &NeoWCMediaRecognitionHandledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            NeoWCSearchAndSendMusicCommand(sessionUserName, keyword);
+            return;
+        }
+    }
+
+    if (NeoWCEnhancementEnabled(NeoWCVideoParserEnabledKey) &&
+        NeoWCMediaGroupEnabled(sessionUserName, NeoWCVideoParserGroupsKey)) {
+        NSString *URLString = NeoWCFirstHTTPURLString(content);
+        if (URLString.length > 0) {
+            objc_setAssociatedObject(wrap, &NeoWCMediaRecognitionHandledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            BaseMsgContentViewController *visible = NeoWCResolveVisibleChatController();
+            if (![NeoWCChatUserName(visible) isEqualToString:sessionUserName]) visible = nil;
+            NeoWCParseVideoText(visible, sessionUserName, content);
+        }
+    }
 }
 
 static void NeoWCPresentQuickReplyLibrary(BaseMsgContentViewController *controller) {
@@ -8173,6 +8565,62 @@ static NSString *NeoWCAdditionDurationValue(NSString *title, NSString *value) {
             approximate ? @"约 " : @"", (long)days];
 }
 
+static uint32_t NeoWCContactAddTime(id contact) {
+    if (!contact) return 0;
+    // WCRefine 2.1-2 reads the local value first and only falls back to the
+    // server-side add/create value when the local value is unavailable or 0.
+    for (NSString *name in @[@"m_uiLocalAddContactTime", @"m_uiAddCreateTime"]) {
+        SEL selector = NSSelectorFromString(name);
+        if (![contact respondsToSelector:selector]) continue;
+        @try {
+            uint32_t value = ((uint32_t (*)(id, SEL))objc_msgSend)(contact, selector);
+            if (value > 0) return value;
+        } @catch (__unused NSException *exception) {}
+    }
+    return 0;
+}
+
+static NSString *NeoWCContactAddTimeValue(id contact) {
+    uint32_t timestamp = NeoWCContactAddTime(contact);
+    NSTimeInterval now = NSDate.date.timeIntervalSince1970;
+    // The host getter is a 32-bit scalar. Only render values that are valid
+    // Unix seconds, so a future host format change degrades to an empty row.
+    if (timestamp < 946684800U || timestamp > now + 24.0 * 60.0 * 60.0) return nil;
+    NSDate *date = [NSDate dateWithTimeIntervalSince1970:timestamp];
+    NSDateFormatter *formatter = [NSDateFormatter new];
+    formatter.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"zh_CN"];
+    formatter.timeZone = NSTimeZone.localTimeZone;
+    formatter.dateFormat = @"yyyy年M月d日 HH:mm";
+    NSString *text = [formatter stringFromDate:date];
+    NSCalendar *calendar = NSCalendar.currentCalendar;
+    NSInteger days = [calendar components:NSCalendarUnitDay
+                                  fromDate:[calendar startOfDayForDate:date]
+                                    toDate:[calendar startOfDayForDate:NSDate.date]
+                                   options:0].day;
+    if (days < 0) return text;
+    return [NSString stringWithFormat:@"%@ · 已添加 %ld 天", text, (long)days];
+}
+
+static id NeoWCCallCompatibleObjectGetter(id object, NSString *selectorName) {
+    SEL selector = NSSelectorFromString(selectorName);
+    Method method = object ? class_getInstanceMethod(object_getClass(object), selector) : NULL;
+    if (!method || method_getNumberOfArguments(method) != 2 || !NeoWCMethodReturnsObject(method)) return nil;
+    @try {
+        return ((id (*)(id, SEL))objc_msgSend)(object, selector);
+    } @catch (__unused NSException *exception) {
+        return nil;
+    }
+}
+
+static NSArray *NeoWCOfficialRelatedGroups(id controller) {
+    id logic = NeoWCRawProfileValue(controller,
+                                    @[@"m_relatedGroupLogic", @"relatedGroupLogic"]);
+    id groups = NeoWCCallCompatibleObjectGetter(logic, @"getContactRelatedGroup");
+    if ([groups isKindOfClass:NSArray.class]) return groups;
+    if ([groups isKindOfClass:NSSet.class]) return [groups allObjects];
+    return nil;
+}
+
 static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCOfficialSocialInformationRows(id controller) {
     id tableInfo = NeoWCRawProfileValue(controller, @[@"m_tableViewInfo", @"tableViewInfo"]);
     NSUInteger sectionCount = NeoWCCallUnsignedSelector(tableInfo, @"getSectionCount");
@@ -8197,6 +8645,11 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCOfficialSocialInfor
             [rows addObject:@{ @"title": title,
                                @"value": NeoWCAdditionDurationValue(title, value) ?: value }];
         }
+    }
+    NSArray *relatedGroups = NeoWCOfficialRelatedGroups(controller);
+    if (relatedGroups.count > 0 && ![titles containsObject:@"共同群聊"]) {
+        [rows addObject:@{ @"title": @"共同群聊",
+                           @"value": [NSString stringWithFormat:@"%lu 个", (unsigned long)relatedGroups.count] }];
     }
     return rows;
 }
@@ -8480,6 +8933,7 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id 
         NeoWCAddInfoCardRow(rows, @"备注", NeoWCRawProfileValue(contact, @[@"m_nsRemark"]));
         NeoWCAddInfoCardRow(rows, @"昵称", NeoWCRawProfileValue(contact, @[@"m_nsNickName"]));
         NeoWCAddInfoCardRow(rows, @"微信号", NeoWCRawProfileValue(contact, @[@"m_nsAliasName", @"m_nsAlias"]));
+        NeoWCAddInfoCardRow(rows, @"添加时间", NeoWCContactAddTimeValue(contact));
     }
     return rows;
 }
@@ -10090,6 +10544,14 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook CMessageMgr
 
 - (void)AddMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap {
+    // AFN hooks CMessageMgr AddMsg/AsyncOnAddMsg, calls original first, then
+    // passes the received wrap to its recognizer. Keep outgoing confirmation
+    // isolated by only taking this branch for enabled groups and non-self wraps.
+    if (NeoWCMediaRecognitionEnabledForGroup(target) && NeoWCMediaMessageIsIncoming(wrap)) {
+        %orig(target, wrap);
+        NeoWCRecognizeIncomingMediaCommand(target, wrap);
+        return;
+    }
     if ([objc_getAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey) boolValue]) {
         objc_setAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey, nil,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -10143,8 +10605,11 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)AsyncOnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
     %orig;
-    if (NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap)) {
+    BOOL deleted = NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap);
+    if (deleted) {
         NeoWCCompatibilityMarkTriggered(@"message-block");
+    } else {
+        NeoWCRecognizeIncomingMediaCommand(sessionUserName, wrap);
     }
 }
 
@@ -11508,82 +11973,6 @@ static BOOL NeoWCPresentCallConfirmation(VoIPBubbleMessageCellView *cell, BOOL v
 
 %end
 
-typedef void (*NeoWCDocumentPickerOriginal)(id, SEL, id, id);
-
-static NSMutableDictionary<NSString *, NSValue *> *NeoWCDocumentPickerOriginals(BOOL multipleURLs) {
-    static NSMutableDictionary<NSString *, NSValue *> *multiOriginals;
-    static NSMutableDictionary<NSString *, NSValue *> *singleOriginals;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        multiOriginals = [NSMutableDictionary dictionary];
-        singleOriginals = [NSMutableDictionary dictionary];
-    });
-    return multipleURLs ? multiOriginals : singleOriginals;
-}
-
-static void NeoWCInvokeDocumentPickerOriginal(id delegate, SEL command, id picker, id value, BOOL multipleURLs) {
-    NSDictionary<NSString *, NSValue *> *originals = NeoWCDocumentPickerOriginals(multipleURLs);
-    NSValue *stored = nil;
-    for (Class candidate = [delegate class]; candidate && !stored; candidate = class_getSuperclass(candidate)) {
-        stored = originals[NSStringFromClass(candidate)];
-    }
-    NeoWCDocumentPickerOriginal original = (NeoWCDocumentPickerOriginal)stored.pointerValue;
-    if (original) original(delegate, command, picker, value);
-}
-
-static BOOL NeoWCHoldDocumentPickerCallback(id delegate,
-                                            SEL command,
-                                            UIDocumentPickerViewController *picker,
-                                            id value,
-                                            BOOL multipleURLs) {
-    NSString *lockedUserName = objc_getAssociatedObject(picker, &NeoWCSendConfirmationDocumentPickerUsernameKey);
-    BaseMsgContentViewController *controller = NeoWCVisibleChatController;
-    if (lockedUserName.length == 0 || !controller.view.window ||
-        ![NeoWCChatUserName(controller) isEqualToString:lockedUserName] ||
-        !NeoWCSendConfirmationIsProtectedConversation(lockedUserName)) return NO;
-    NSArray<NSURL *> *URLs = multipleURLs && [value isKindOfClass:NSArray.class]
-        ? value : ([value isKindOfClass:NSURL.class] ? @[value] : @[]);
-    NSString *summary = URLs.count == 1
-        ? [NSString stringWithFormat:@"文件：%@", URLs.firstObject.lastPathComponent ?: @"1 个文件"]
-        : [NSString stringWithFormat:@"文件：%lu 个", (unsigned long)URLs.count];
-    __weak BaseMsgContentViewController *weakController = controller;
-    id retainedDelegate = delegate;
-    id retainedPicker = picker;
-    id retainedValue = value;
-    dispatch_block_t presentConfirmation = ^{
-        BaseMsgContentViewController *strongController = weakController;
-        if (!strongController.view.window ||
-            ![NeoWCChatUserName(strongController) isEqualToString:lockedUserName]) return;
-        BOOL held = NeoWCPresentSendConfirmationIfNeeded(strongController,
-                                                          lockedUserName,
-                                                          summary,
-                                                          ^BOOL{
-            BaseMsgContentViewController *validatedController = weakController;
-            return validatedController.view.window &&
-                   [NeoWCChatUserName(validatedController) isEqualToString:lockedUserName];
-        }, ^{
-            NeoWCInvokeDocumentPickerOriginal(retainedDelegate, command, retainedPicker, retainedValue, multipleURLs);
-        });
-        if (!held) NeoWCInvokeDocumentPickerOriginal(retainedDelegate, command, retainedPicker, retainedValue, multipleURLs);
-    };
-    if (picker.presentingViewController) {
-        [picker dismissViewControllerAnimated:YES completion:presentConfirmation];
-    } else {
-        presentConfirmation();
-    }
-    return YES;
-}
-
-static void NeoWCDocumentPickerDidPickURLs(id self, SEL command, id picker, id URLs) {
-    if (NeoWCHoldDocumentPickerCallback(self, command, picker, URLs, YES)) return;
-    NeoWCInvokeDocumentPickerOriginal(self, command, picker, URLs, YES);
-}
-
-static void NeoWCDocumentPickerDidPickURL(id self, SEL command, id picker, id URL) {
-    if (NeoWCHoldDocumentPickerCallback(self, command, picker, URL, NO)) return;
-    NeoWCInvokeDocumentPickerOriginal(self, command, picker, URL, NO);
-}
-
 static id (*NeoWCOriginalRedEnvelopeInitWithData)(id, SEL, id) = NULL;
 static id (*NeoWCOriginalRedEnvelopeInitWithDataSceneType)(id, SEL, id, NSUInteger, NSUInteger) = NULL;
 static void (*NeoWCOriginalRedEnvelopeSetupWithData)(id, SEL, id) = NULL;
@@ -11814,52 +12203,6 @@ static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
         NeoWCOriginalRedEnvelopeViewDidLoad = (void (*)(id, SEL))original;
     }
 }
-
-static void NeoWCInstallDocumentPickerDelegateHook(id delegate,
-                                                    const char *selectorName,
-                                                    BOOL multipleURLs,
-                                                    IMP replacement) {
-    Class delegateClass = [delegate class];
-    NSString *className = NSStringFromClass(delegateClass);
-    NSMutableDictionary<NSString *, NSValue *> *originals = NeoWCDocumentPickerOriginals(multipleURLs);
-    if (!delegateClass || originals[className]) return;
-    SEL selector = sel_registerName(selectorName);
-    if (!NeoWCClassDirectlyImplementsSelector(delegateClass, selector)) {
-        for (Class superclass = class_getSuperclass(delegateClass); superclass; superclass = class_getSuperclass(superclass)) {
-            if (originals[NSStringFromClass(superclass)]) return;
-        }
-    }
-    Method method = class_getInstanceMethod(delegateClass, selector);
-    if (!method || !NeoWCMethodReturnsVoid(method) || method_getNumberOfArguments(method) != 4 ||
-        !NeoWCMethodArgumentIsObject(method, 2) || !NeoWCMethodArgumentIsObject(method, 3)) return;
-    IMP original = NULL;
-    MSHookMessageEx(delegateClass, selector, replacement, &original);
-    if (original) originals[className] = [NSValue valueWithPointer:(const void *)original];
-}
-
-%hook UIDocumentPickerViewController
-
-- (void)viewDidAppear:(BOOL)animated {
-    %orig(animated);
-    BaseMsgContentViewController *controller = NeoWCVisibleChatController;
-    NSString *username = [NeoWCChatUserName(controller) copy];
-    if (!controller.view.window || !NeoWCSendConfirmationIsProtectedConversation(username)) return;
-    objc_setAssociatedObject(self, &NeoWCSendConfirmationDocumentPickerUsernameKey,
-                             username, OBJC_ASSOCIATION_COPY_NONATOMIC);
-    id delegate = self.delegate;
-    if (!delegate) return;
-    NeoWCInstallDocumentPickerDelegateHook(delegate,
-                                           "documentPicker:didPickDocumentsAtURLs:",
-                                           YES,
-                                           (IMP)NeoWCDocumentPickerDidPickURLs);
-    NeoWCInstallDocumentPickerDelegateHook(delegate,
-                                           "documentPicker:didPickDocumentAtURL:",
-                                           NO,
-                                           (IMP)NeoWCDocumentPickerDidPickURL);
-}
-
-%end
-
 
 %hook MMAuthorizeUserInfoViewController
 

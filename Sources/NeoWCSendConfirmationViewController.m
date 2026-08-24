@@ -183,6 +183,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 @property (nonatomic, copy) NSString *pickerFooter;
 @property (nonatomic, copy) NeoWCConversationPickerSelectedBlock selectedBlock;
 @property (nonatomic, copy) NeoWCConversationPickerToggleBlock toggleBlock;
+@property (nonatomic, assign) BOOL groupsOnly;
 - (instancetype)initWithTitle:(NSString *)title
                        footer:(NSString *)footer
                      selected:(NeoWCConversationPickerSelectedBlock)selected
@@ -207,13 +208,13 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = self.pickerTitle.length > 0 ? self.pickerTitle : @"选择好友或群聊";
+    self.title = self.pickerTitle.length > 0 ? self.pickerTitle : (self.groupsOnly ? @"选择群聊" : @"选择好友或群聊");
     self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.tableView.rowHeight = 60.0;
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(done)];
     self.searchBar = [UISearchBar new];
     self.searchBar.delegate = self;
-    self.searchBar.placeholder = @"搜索好友、群聊或 username";
+    self.searchBar.placeholder = self.groupsOnly ? @"搜索群聊或 username" : @"搜索好友、群聊或 username";
     NeoWCInstallSearchBarInTableView(self.searchBar, self.tableView);
     [self loadConversations];
 }
@@ -227,9 +228,11 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
     if (friends.count == 0) friends = NeoWCSendConfirmationCollection(contactManager, @[@"getAllContactUserNameFromCache", @"getAllContactUserName"]);
     NSArray *groups = NeoWCSendConfirmationCollection(dataLogic, @[@"getChatRoomContacts"]);
     NSMutableDictionary<NSString *, NSDictionary *> *deduplicated = [NSMutableDictionary dictionary];
-    for (id candidate in friends) {
-        NSDictionary *item = NeoWCSendConfirmationConversation(candidate, contactManager, NO);
-        if (item) deduplicated[item[@"username"]] = item;
+    if (!self.groupsOnly) {
+        for (id candidate in friends) {
+            NSDictionary *item = NeoWCSendConfirmationConversation(candidate, contactManager, NO);
+            if (item) deduplicated[item[@"username"]] = item;
+        }
     }
     for (id candidate in groups) {
         NSDictionary *item = NeoWCSendConfirmationConversation(candidate, contactManager, YES);
@@ -260,13 +263,15 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 }
 
 - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText { (void)searchBar; [self applyQuery:searchText]; }
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 2; }
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return self.groupsOnly ? 1 : 2; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     (void)tableView;
+    if (self.groupsOnly) return self.visibleGroups.count;
     return section == 0 ? self.visibleFriends.count : self.visibleGroups.count;
 }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     if ([self tableView:tableView numberOfRowsInSection:section] == 0) return nil;
+    if (self.groupsOnly) return @"群聊";
     return section == 0 ? @"好友" : @"群聊";
 }
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
@@ -274,11 +279,13 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 }
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView;
-    if (section != 1) return nil;
-    return self.allItems.count > 0 ? (self.pickerFooter ?: @"点击选择或取消会话。") : @"微信尚未返回可用的好友或群聊列表。";
+    NSInteger footerSection = self.groupsOnly ? 0 : 1;
+    if (section != footerSection) return nil;
+    NSString *emptyText = self.groupsOnly ? @"微信尚未返回可用的群聊列表。" : @"微信尚未返回可用的好友或群聊列表。";
+    return self.allItems.count > 0 ? (self.pickerFooter ?: @"点击选择或取消会话。") : emptyText;
 }
 - (NSDictionary *)itemAtIndexPath:(NSIndexPath *)indexPath {
-    NSArray *items = indexPath.section == 0 ? self.visibleFriends : self.visibleGroups;
+    NSArray *items = self.groupsOnly ? self.visibleGroups : (indexPath.section == 0 ? self.visibleFriends : self.visibleGroups);
     return indexPath.row < (NSInteger)items.count ? items[indexPath.row] : nil;
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -307,6 +314,18 @@ UIViewController *NeoWCCreateConversationPicker(NSString *title,
                                                                    footer:footer
                                                                  selected:selected
                                                                    toggle:toggle];
+}
+
+UIViewController *NeoWCCreateGroupPicker(NSString *title,
+                                         NSString *footer,
+                                         NeoWCConversationPickerSelectedBlock selected,
+                                         NeoWCConversationPickerToggleBlock toggle) {
+    NeoWCSendConfirmationConversationPicker *picker = [[NeoWCSendConfirmationConversationPicker alloc] initWithTitle:title
+                                                                                                                 footer:footer
+                                                                                                               selected:selected
+                                                                                                                 toggle:toggle];
+    picker.groupsOnly = YES;
+    return picker;
 }
 
 @interface NeoWCSendConfirmationViewController ()

@@ -10,3 +10,7 @@ FOUNDATION_EXPORT UIViewController *NeoWCCreateConversationPicker(NSString *titl
                                                                   NSString *footer,
                                                                   NeoWCConversationPickerSelectedBlock selected,
                                                                   NeoWCConversationPickerToggleBlock toggle);
+FOUNDATION_EXPORT UIViewController *NeoWCCreateGroupPicker(NSString *title,
+                                                           NSString *footer,
+                                                           NeoWCConversationPickerSelectedBlock selected,
+                                                           NeoWCConversationPickerToggleBlock toggle);

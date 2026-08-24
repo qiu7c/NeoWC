@@ -69,6 +69,10 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionReplySwipeTriggerDistance,
     NeoWCSettingActionGlobalAvatarCornerPercent,
     NeoWCSettingActionQuickReplyLibrary,
+    NeoWCSettingActionVideoParserURL,
+    NeoWCSettingActionVideoParserSendMode,
+    NeoWCSettingActionVideoParserGroups,
+    NeoWCSettingActionMusicOrderGroups,
     NeoWCSettingActionSendConfirmationConversations,
     NeoWCSettingActionSendConfirmationPauseDuration,
 };

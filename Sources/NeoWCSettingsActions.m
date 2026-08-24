@@ -11,6 +11,7 @@
 #import "NeoWCLongPressMenuViewController.h"
 #import "NeoWCMeMenuViewController.h"
 #import "NeoWCMessageBlock.h"
+#import "NeoWCMediaGroupViewController.h"
 #import "NeoWCPluginManager.h"
 #import "NeoWCReleaseNotes.h"
 #import "NeoWCQuickReplyViewController.h"
@@ -623,6 +624,58 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
     [self presentSheet:sheet];
 }
 
+- (void)presentVideoParserURLEditor {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"视频解析接口"
+                                                                   message:@"接口需使用 HTTPS。NeoWC 会 POST wxid 与 url，并兼容 video_url、videoUrl、play_url、download_url 等返回字段。"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"https://example.com/parse";
+        field.keyboardType = UIKeyboardTypeURL;
+        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        field.autocorrectionType = UITextAutocorrectionTypeNo;
+        field.text = [NSUserDefaults.standardUserDefaults stringForKey:NeoWCVideoParserCustomURLKey] ?: @"";
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *value = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        NSURL *URL = value.length > 0 ? [NSURL URLWithString:value] : nil;
+        if (value.length > 0 && ![[URL.scheme lowercaseString] isEqualToString:@"https"]) {
+            UIAlertController *error = [UIAlertController alertControllerWithTitle:@"接口格式不正确"
+                                                                           message:@"请输入完整的 HTTPS 地址。"
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [error addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+            [weakSelf.viewController presentViewController:error animated:YES completion:nil];
+            return;
+        }
+        [NSUserDefaults.standardUserDefaults setObject:value ?: @"" forKey:NeoWCVideoParserCustomURLKey];
+        [weakSelf reload];
+    }]];
+    [self.viewController presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentVideoParserSendModePicker {
+    NSInteger current = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCVideoParserSendModeKey];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"视频解析发送方式"
+                                                                   message:@"原生视频先下载文件再交给微信发送；链接卡片点击后由微信内置浏览器打开解析地址。"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSDictionary *> *options = @[
+        @{@"title": @"原生视频", @"value": @0},
+        @{@"title": @"链接卡片", @"value": @1},
+    ];
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary *option in options) {
+        NSInteger value = [option[@"value"] integerValue];
+        NSString *title = value == current ? [@"✓  " stringByAppendingString:option[@"title"]] : option[@"title"];
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [NSUserDefaults.standardUserDefaults setInteger:value forKey:NeoWCVideoParserSendModeKey];
+            [weakSelf reload];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentSheet:sheet];
+}
+
 - (void)performActionForItem:(NeoWCSettingItem *)item {
     switch (item.action) {
         case NeoWCSettingActionConfigManager: [self push:[NeoWCConfigManagerViewController new]]; break;
@@ -671,6 +724,10 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         case NeoWCSettingActionReplySwipeTriggerDistance: [self presentNumberEditorWithTitle:item.title message:@"请输入 36 到 100 之间的触发距离；数值越小越容易触发" key:NeoWCReplySwipeTriggerDistanceKey minimum:36 maximum:100 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionGlobalAvatarCornerPercent: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 100 之间的百分比；0 为直角，100 为圆形" key:NeoWCGlobalAvatarCornerPercentKey minimum:0 maximum:100 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionQuickReplyLibrary: [self push:[[NeoWCQuickReplyViewController alloc] initWithSelectionHandler:nil]]; break;
+        case NeoWCSettingActionVideoParserURL: [self presentVideoParserURLEditor]; break;
+        case NeoWCSettingActionVideoParserSendMode: [self presentVideoParserSendModePicker]; break;
+        case NeoWCSettingActionVideoParserGroups: [self push:[[NeoWCMediaGroupViewController alloc] initWithTitle:@"视频解析群聊" defaultsKey:NeoWCVideoParserGroupsKey]]; break;
+        case NeoWCSettingActionMusicOrderGroups: [self push:[[NeoWCMediaGroupViewController alloc] initWithTitle:@"音乐点歌群聊" defaultsKey:NeoWCMusicOrderGroupsKey]]; break;
         case NeoWCSettingActionSendConfirmationConversations: [self push:[NeoWCSendConfirmationViewController new]]; break;
         case NeoWCSettingActionSendConfirmationPauseDuration: [self presentSendConfirmationPauseDurationEditor]; break;
         default: break;
