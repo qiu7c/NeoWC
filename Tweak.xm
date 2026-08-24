@@ -12189,17 +12189,6 @@ static BOOL NeoWCMethodArgumentIsInteger(Method method, unsigned int index) {
     return matches;
 }
 
-static BOOL NeoWCClassDirectlyImplementsSelector(Class targetClass, SEL selector) {
-    unsigned int count = 0;
-    Method *methods = class_copyMethodList(targetClass, &count);
-    BOOL found = NO;
-    for (unsigned int index = 0; index < count; index++) {
-        if (method_getName(methods[index]) == selector) { found = YES; break; }
-    }
-    if (methods) free(methods);
-    return found;
-}
-
 static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
     Class logicClass = NSClassFromString(@"WCRedEnvelopesSendControlLogic");
     if (logicClass) {
