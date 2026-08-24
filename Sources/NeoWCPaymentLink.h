@@ -7,6 +7,7 @@ FOUNDATION_EXPORT void NeoWCPaymentLinkLearnFromRequest(NSURLRequest *request, N
 FOUNDATION_EXPORT BOOL NeoWCPaymentLinkIsTriggerText(NSString *text);
 FOUNDATION_EXPORT NSString *NeoWCPaymentLinkSuggestedCardTitle(void);
 FOUNDATION_EXPORT NSString *NeoWCPaymentLinkDisplayNumber(void);
+FOUNDATION_EXPORT BOOL NeoWCPaymentLinkSetDisplayNumber(NSString *number);
 FOUNDATION_EXPORT BOOL NeoWCPaymentLinkSend(NSString *cardTitle,
                                             NSString *identityUsername,
                                             NSString *targetUsername,

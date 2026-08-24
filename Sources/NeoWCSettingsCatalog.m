@@ -312,7 +312,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
                     defaults,
                     collapsed);
     [interaction addObject:NeoWCItem(@"快捷收款链接",
-                                     @"发送 #fk 弹出标题编辑页，登记后发送原生收款卡片",
+                                     @"发送 #fk 修改标题和编号，登记后发送原生收款卡片",
                                      @"link.badge.plus",
                                      NeoWCSettingRowKindSwitch,
                                      NeoWCPaymentLinkEnabledKey,

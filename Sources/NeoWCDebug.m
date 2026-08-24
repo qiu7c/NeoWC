@@ -226,9 +226,16 @@ void NeoWCPaymentLinkDiagnosticsRecordResponse(NSURLRequest *request, NSData *da
     if (!NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) return;
     NSInteger statusCode = [response isKindOfClass:NSHTTPURLResponse.class] ?
         ((NSHTTPURLResponse *)response).statusCode : 0;
-    NeoWCLogAlways(@"[收款诊断] response status=%ld errorDomain=%@ errorCode=%ld data(%@)",
+    NSDictionary *JSON = nil;
+    if ([data isKindOfClass:NSData.class] && data.length > 0) {
+        id object = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+        if ([object isKindOfClass:NSDictionary.class]) JSON = object;
+    }
+    id resultCode = [JSON[@"errcode"] respondsToSelector:@selector(stringValue)]
+        ? [JSON[@"errcode"] stringValue] : @"-";
+    NeoWCLogAlways(@"[收款诊断] response status=%ld errorDomain=%@ errorCode=%ld resultCode=%@ data(%@)",
                    (long)statusCode, error.domain ?: @"-", (long)error.code,
-                   NeoWCDiagnosticBodyShape(data));
+                   resultCode, NeoWCDiagnosticBodyShape(data));
 }
 
 BOOL NeoWCPaymentLinkDiagnosticsCorrelationActive(void) {

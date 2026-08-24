@@ -6853,9 +6853,7 @@ static BOOL NeoWCHandlePaymentLinkText(id controller, id textObject) {
     if (objc_getAssociatedObject(presenter, &NeoWCPaymentEditorKey)) return YES;
 
     NSString *number = NeoWCPaymentLinkDisplayNumber();
-    NSString *message = number.length > 0
-        ? [NSString stringWithFormat:@"将先登记到小账本再发送，点开才是你的收款页 · %@", number]
-        : @"尚未取得收款编号，请先在微信收款小账本中打开一次收款链接";
+    NSString *message = @"修改卡片标题和收款编号；将先登记到小账本再发送";
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"发送收款链接"
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
@@ -6864,6 +6862,12 @@ static BOOL NeoWCHandlePaymentLinkText(id controller, id textObject) {
         textField.placeholder = @"卡片标题";
         textField.clearButtonMode = UITextFieldViewModeWhileEditing;
         textField.returnKeyType = UIReturnKeyDone;
+    }];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = number;
+        textField.placeholder = @"收款编号，例如 002 或 003";
+        textField.keyboardType = UIKeyboardTypeNumberPad;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
     }];
     __weak UIAlertController *weakAlert = alert;
     __weak BaseMsgContentViewController *weakPresenter = presenter;
@@ -6877,6 +6881,12 @@ static BOOL NeoWCHandlePaymentLinkText(id controller, id textObject) {
         BaseMsgContentViewController *strongPresenter = weakPresenter;
         id strongController = weakController;
         NSString *cardTitle = weakAlert.textFields.firstObject.text;
+        if (!NeoWCPaymentLinkSetDisplayNumber(weakAlert.textFields[1].text)) {
+            NeoWCShowTransientMessage(@"收款编号只能填写数字", NO);
+            if (strongPresenter) objc_setAssociatedObject(strongPresenter, &NeoWCPaymentEditorKey, nil,
+                                                            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            return;
+        }
         if (strongPresenter) objc_setAssociatedObject(strongPresenter, &NeoWCPaymentEditorKey, nil,
                                                         OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         NSString *currentTarget = NeoWCPaymentTargetForContext(strongController);
@@ -6903,13 +6913,13 @@ static BOOL NeoWCHandlePaymentLinkText(id controller, id textObject) {
                 NeoWCShowTransientMessage(@"微信收款消息接口已变化，未发送", NO);
                 return;
             }
-            NeoWCClearPaymentCommandIfUnchanged(command);
             NeoWCShowTransientMessage(@"收款链接已发送", YES);
         });
         if (started) NeoWCShowTransientMessage(@"正在登记小账本…", YES);
     }]];
     objc_setAssociatedObject(presenter, &NeoWCPaymentEditorKey, alert, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [presenter presentViewController:alert animated:YES completion:nil];
+    NeoWCClearPaymentCommandIfUnchanged(command);
     return YES;
 }
 

@@ -159,6 +159,16 @@ NSString *NeoWCPaymentLinkDisplayNumber(void) {
     return number;
 }
 
+BOOL NeoWCPaymentLinkSetDisplayNumber(NSString *number) {
+    NSString *normalized = NeoWCPaymentTrimmedString(number);
+    if (!normalized) return NO;
+    NSCharacterSet *invalid = NSCharacterSet.decimalDigitCharacterSet.invertedSet;
+    if ([normalized rangeOfCharacterFromSet:invalid].location != NSNotFound) return NO;
+    [NSUserDefaults.standardUserDefaults setObject:normalized
+                                            forKey:NeoWCPaymentCacheKey(@"link_number")];
+    return YES;
+}
+
 static NSError *NeoWCPaymentError(NSInteger code, NSString *message) {
     return [NSError errorWithDomain:NeoWCPaymentErrorDomain code:code
                            userInfo:@{NSLocalizedDescriptionKey: message ?: @"收款链接发送失败"}];
@@ -199,6 +209,13 @@ static void NeoWCPaymentPerform(NSURLRequest *request, void (^completion)(NSDict
             ? [JSON[@"errcode"] integerValue] : NSIntegerMin;
         if (error || HTTPResponse.statusCode != 200 || !JSON || errorCode != 0) {
             NSString *serverMessage = NeoWCPaymentTrimmedString(JSON[@"errmsg"]);
+            if (!serverMessage) serverMessage = NeoWCPaymentTrimmedString(JSON[@"msg"]);
+            NSString *serverHint = NeoWCPaymentTrimmedString(JSON[@"hint"]);
+            if (serverHint.length > 0 && ![serverHint isEqualToString:serverMessage]) {
+                serverMessage = serverMessage.length > 0
+                    ? [NSString stringWithFormat:@"%@（%@）", serverMessage, serverHint]
+                    : serverHint;
+            }
             NSString *message = serverMessage ?: @"小账本登记失败，请先打开微信收款小账本刷新链接";
             completion(nil, error ?: NeoWCPaymentError(5, message));
             return;
@@ -248,9 +265,15 @@ BOOL NeoWCPaymentLinkSend(NSString *cardTitle, NSString *identityUsername,
     NSString *operatorRole = configuration[@"operator_role"];
     NSString *number = NeoWCPaymentLinkDisplayNumber();
     if (sid.length == 0 || version.length == 0 || receiptID.length == 0 ||
-        accountType.length == 0 || operatorRole.length == 0 || number.length == 0) {
+        accountType.length == 0 || operatorRole.length == 0) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            finish(nil, NeoWCPaymentError(3, @"尚未取得小账本参数或收款编号，请先在微信收款小账本中打开一次收款链接"));
+            finish(nil, NeoWCPaymentError(3, @"尚未取得小账本请求参数，请先在微信收款小账本中打开一次收款链接"));
+        });
+        return YES;
+    }
+    if (number.length == 0) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            finish(nil, NeoWCPaymentError(7, @"尚未设置收款编号，请重新输入 #fk 后填写"));
         });
         return YES;
     }
