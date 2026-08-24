@@ -136,6 +136,7 @@ FOUNDATION_EXPORT NSString *const NeoWCImageEditQuickSendEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCInputSwipeActionsEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuickReplyEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuickReplyInstantSendEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCPaymentLinkEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCVideoParserEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCVideoParserCustomURLKey;
 FOUNDATION_EXPORT NSString *const NeoWCVideoParserSendModeKey;

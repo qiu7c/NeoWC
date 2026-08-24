@@ -30,6 +30,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCMessageBlock.h"
 #import "Sources/NeoWCAvatarQuickPanel.h"
 #import "Sources/NeoWCContactInfoCard.h"
+#import "Sources/NeoWCPaymentLink.h"
 
 @interface WCActionSheet : NSObject
 - (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
@@ -119,6 +120,8 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
 @interface BaseMsgContentLogicController : NSObject
 - (NSString *)getCurrentChatName;
+- (void)SendTextMessage:(id)text;
+- (void)SendTextMessage:(id)text replyingMessage:(id)replyingMessage isPasted:(BOOL)isPasted;
 - (void)SendImageMessageByMMAsset:(id)asset;
 @end
 
@@ -433,6 +436,7 @@ static BaseMsgContentViewController *NeoWCResolveVisibleChatController(void);
 static void NeoWCPresentQuickReplyLibrary(BaseMsgContentViewController *controller);
 static NSString *NeoWCChatUserName(id controller);
 static void NeoWCShowTransientMessage(NSString *message, BOOL success);
+static BOOL NeoWCHandlePaymentLinkText(id controller, id textObject);
 static BOOL NeoWCMethodReturnsVoid(Method method);
 static BOOL NeoWCMethodReturnsObject(Method method);
 static BOOL NeoWCMethodArgumentIsObject(Method method, unsigned int index);
@@ -6654,6 +6658,9 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
     }
     NeoWCPaymentLinkDiagnosticsRecordCommandText(commandText);
     %orig(textView);
+    if (NeoWCPaymentLinkIsTriggerText(commandText)) {
+        NeoWCHandlePaymentLinkText(NeoWCResolveVisibleChatController(), commandText);
+    }
 }
 
 - (void)didMoveToWindow {
@@ -6737,6 +6744,172 @@ static BOOL NeoWCInsertQuickReplyText(BaseMsgContentViewController *controller, 
         ((void (*)(id, SEL, id))objc_msgSend)(growTextView, changedSelector, textView);
     }
     [textView becomeFirstResponder];
+    return YES;
+}
+
+static NSString *NeoWCPaymentCurrentUsername(void) {
+    Class settingUtilClass = objc_getClass("SettingUtil");
+    SEL selector = sel_registerName("getLocalUsrName:");
+    NSString *username = nil;
+    if ([settingUtilClass respondsToSelector:selector]) {
+        id value = ((id (*)(id, SEL, BOOL))objc_msgSend)(settingUtilClass, selector, NO);
+        if ([value isKindOfClass:NSString.class]) {
+            username = [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        }
+    }
+    return username.length > 0 ? username : NeoWCCurrentUserWXID();
+}
+
+static NSString *NeoWCPaymentEscapedAppMessageTitle(NSString *title) {
+    NSString *escaped = [title stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
+    escaped = [escaped stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
+    return [escaped stringByReplacingOccurrencesOfString:@">" withString:@"&gt;"];
+}
+
+static BOOL NeoWCSendPaymentLinkAppMessage(NSString *target, NSString *title) {
+    if (target.length == 0 || title.length == 0) return NO;
+    Class wrapClass = objc_getClass("CMessageWrap");
+    Class extensionClass = objc_getClass("CExtendInfoOfAPP");
+    SEL initSelector = sel_registerName("initWithMsgType:");
+    id manager = NeoWCMessageManager();
+    SEL addSelector = sel_registerName("AddAppMsg:MsgWrap:Data:Scene:");
+    if (!wrapClass || !extensionClass || ![wrapClass instancesRespondToSelector:initSelector] ||
+        !manager || ![manager respondsToSelector:addSelector]) return NO;
+
+    id wrap = ((id (*)(id, SEL, NSUInteger))objc_msgSend)([wrapClass alloc], initSelector, 49);
+    id extension = [extensionClass new];
+    NSString *currentUser = NeoWCPaymentCurrentUsername() ?: @"";
+    if (!wrap || !extension || currentUser.length == 0) return NO;
+
+    unsigned int createTime = (unsigned int)NSDate.date.timeIntervalSince1970;
+    Class sessionManagerClass = objc_getClass("MMNewSessionMgr");
+    id sessionManager = sessionManagerClass ? NeoWCServiceForClass(sessionManagerClass) : nil;
+    SEL timeSelector = sel_registerName("GenSendMsgTime");
+    if ([sessionManager respondsToSelector:timeSelector]) {
+        createTime = ((unsigned int (*)(id, SEL))objc_msgSend)(sessionManager, timeSelector);
+    }
+
+    NeoWCTweakSetValue(extension, @"m_uiAppMsgInnerType", @1);
+    NeoWCTweakSetValue(extension, @"m_nsTitle", NeoWCPaymentEscapedAppMessageTitle(title));
+    NeoWCTweakSetValue(extension, @"m_nsDesc", @"");
+    NeoWCTweakSetValue(extension, @"m_nsAppID", @"");
+    NeoWCTweakSetValue(extension, @"m_nsAppName", @"");
+    NeoWCTweakSetValue(wrap, @"m_nsToUsr", target);
+    NeoWCTweakSetValue(wrap, @"m_nsFromUsr", currentUser);
+    NeoWCTweakSetValue(wrap, @"m_uiCreateTime", @(createTime));
+    NeoWCTweakSetValue(wrap, @"m_uiMessageType", @49);
+    NeoWCTweakSetValue(wrap, @"m_uiStatus", @1);
+    NeoWCTweakSetValue(wrap, @"m_uiMsgFlag", @0);
+    NeoWCTweakSetValue(wrap, @"m_bNew", @1);
+    NeoWCTweakSetValue(wrap, @"m_uiImgStatus", @1);
+    NeoWCTweakSetValue(wrap, @"m_bForward", @0);
+    NeoWCTweakSetValue(wrap, @"m_nsRealChatUsr", @"");
+    NeoWCTweakSetValue(wrap, @"m_uiIsSenderStatus", @0);
+    NeoWCTweakSetValue(wrap, @"m_extendInfoWithMsgType", extension);
+    NeoWCTweakSetValue(wrap, @"m_nsMsgSource",
+                       [NSString stringWithFormat:@"<msgsource><bizflag>0</bizflag><alnode><fr>2</fr></alnode><weappsourceUsername>%@,%@</weappsourceUsername></msgsource>",
+                        target, currentUser]);
+    ((void (*)(id, SEL, id, id, id, unsigned int))objc_msgSend)(manager, addSelector,
+                                                                 target, wrap, NSData.data, 3);
+    return YES;
+}
+
+static void NeoWCClearPaymentCommandIfUnchanged(NSString *command) {
+    BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
+    MMGrowTextView *growTextView = controller.view.window ? NeoWCFindGrowTextView(controller.view) : nil;
+    UITextView *textView = NeoWCInnerTextView(growTextView);
+    NSString *current = textView.text ?: NeoWCTweakSafeValue(growTextView, @"text");
+    if (![current isEqualToString:command]) return;
+    NeoWCTweakSetValue(growTextView, @"text", @"");
+    textView.text = @"";
+    textView.selectedRange = NSMakeRange(0, 0);
+    SEL changeSelector = sel_registerName("textViewDidChange:");
+    if ([growTextView respondsToSelector:changeSelector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(growTextView, changeSelector, textView);
+    }
+}
+
+static char NeoWCPaymentEditorKey;
+
+static NSString *NeoWCPaymentTargetForContext(id context) {
+    if ([context respondsToSelector:@selector(getCurrentChatName)]) {
+        id value = ((id (*)(id, SEL))objc_msgSend)(context, @selector(getCurrentChatName));
+        if ([value isKindOfClass:NSString.class]) return value;
+    }
+    return NeoWCChatUserName(context);
+}
+
+static BOOL NeoWCHandlePaymentLinkText(id controller, id textObject) {
+    if (![textObject isKindOfClass:NSString.class]) return NO;
+    NSString *command = [(NSString *)textObject copy];
+    if (!NeoWCEnhancementEnabled(NeoWCPaymentLinkEnabledKey) ||
+        !NeoWCPaymentLinkIsTriggerText(command)) return NO;
+    NSString *target = NeoWCPaymentTargetForContext(controller);
+    BaseMsgContentViewController *presenter = NeoWCResolveVisibleChatController();
+    if (target.length == 0 || !presenter.view.window) {
+        NeoWCShowTransientMessage(@"无法打开收款链接编辑页", NO);
+        return YES;
+    }
+    if (objc_getAssociatedObject(presenter, &NeoWCPaymentEditorKey)) return YES;
+
+    NSString *number = NeoWCPaymentLinkDisplayNumber();
+    NSString *message = number.length > 0
+        ? [NSString stringWithFormat:@"将先登记到小账本再发送，点开才是你的收款页 · %@", number]
+        : @"尚未取得收款编号，请先在微信收款小账本中打开一次收款链接";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"发送收款链接"
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = NeoWCPaymentLinkSuggestedCardTitle();
+        textField.placeholder = @"卡片标题";
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+        textField.returnKeyType = UIReturnKeyDone;
+    }];
+    __weak UIAlertController *weakAlert = alert;
+    __weak BaseMsgContentViewController *weakPresenter = presenter;
+    __weak id weakController = controller;
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction *action) {
+        BaseMsgContentViewController *strongPresenter = weakPresenter;
+        if (strongPresenter) objc_setAssociatedObject(strongPresenter, &NeoWCPaymentEditorKey, nil,
+                                                        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"发送" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        BaseMsgContentViewController *strongPresenter = weakPresenter;
+        id strongController = weakController;
+        NSString *cardTitle = weakAlert.textFields.firstObject.text;
+        if (strongPresenter) objc_setAssociatedObject(strongPresenter, &NeoWCPaymentEditorKey, nil,
+                                                        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NSString *currentTarget = NeoWCPaymentTargetForContext(strongController);
+        if (![currentTarget isEqualToString:target]) {
+            NeoWCShowTransientMessage(@"会话已切换，未发送收款链接", NO);
+            return;
+        }
+        NSString *identity = NeoWCPaymentCurrentUsername();
+        BOOL started = NeoWCPaymentLinkSend(cardTitle, identity, target, ^(NSString *title, NSError *error) {
+            if (error) {
+                NeoWCShowTransientMessage(error.localizedDescription ?: @"收款链接发送失败", NO);
+                return;
+            }
+            if (!NeoWCEnhancementEnabled(NeoWCPaymentLinkEnabledKey)) {
+                NeoWCShowTransientMessage(@"快捷收款链接已关闭，未发送", NO);
+                return;
+            }
+            NSString *latestTarget = NeoWCPaymentTargetForContext(strongController);
+            if (![latestTarget isEqualToString:target]) {
+                NeoWCShowTransientMessage(@"会话已切换，未发送收款链接", NO);
+                return;
+            }
+            if (!NeoWCSendPaymentLinkAppMessage(target, title)) {
+                NeoWCShowTransientMessage(@"微信收款消息接口已变化，未发送", NO);
+                return;
+            }
+            NeoWCClearPaymentCommandIfUnchanged(command);
+            NeoWCShowTransientMessage(@"收款链接已发送", YES);
+        });
+        if (started) NeoWCShowTransientMessage(@"正在登记小账本…", YES);
+    }]];
+    objc_setAssociatedObject(presenter, &NeoWCPaymentEditorKey, alert, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [presenter presentViewController:alert animated:YES completion:nil];
     return YES;
 }
 
@@ -10492,6 +10665,16 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 %hook BaseMsgContentLogicController
 
+- (void)SendTextMessage:(id)text {
+    if (NeoWCHandlePaymentLinkText(self, text)) return;
+    %orig(text);
+}
+
+- (void)SendTextMessage:(id)text replyingMessage:(id)replyingMessage isPasted:(BOOL)isPasted {
+    if (!replyingMessage && NeoWCHandlePaymentLinkText(self, text)) return;
+    %orig(text, replyingMessage, isPasted);
+}
+
 - (void)SendImageMessageByMMAsset:(id)asset {
     NSString *target = [self getCurrentChatName];
     if (NeoWCConsumeRepeatSendConfirmationBypass(target, 3, YES)) {
@@ -10552,6 +10735,9 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook NSURLSession
 
 - (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request {
+    if (NeoWCPaymentLinkMatchesRequest(request)) {
+        NeoWCPaymentLinkLearnFromRequest(request, nil);
+    }
     if (NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) {
         NeoWCPaymentLinkDiagnosticsRecordRequest(request, nil);
     }
@@ -10560,6 +10746,9 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request
                             completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
+    if (NeoWCPaymentLinkMatchesRequest(request)) {
+        NeoWCPaymentLinkLearnFromRequest(request, nil);
+    }
     if (!NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) {
         return %orig(request, completionHandler);
     }
@@ -10576,6 +10765,9 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (NSURLSessionUploadTask *)uploadTaskWithRequest:(NSURLRequest *)request
                                          fromData:(NSData *)bodyData
                                 completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
+    if (NeoWCPaymentLinkMatchesRequest(request)) {
+        NeoWCPaymentLinkLearnFromRequest(request, bodyData);
+    }
     if (!NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) {
         return %orig(request, bodyData, completionHandler);
     }

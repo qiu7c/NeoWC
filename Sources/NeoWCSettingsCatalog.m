@@ -183,6 +183,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCInputSwipeActionsEnabledKey: @NO,
         NeoWCQuickReplyEnabledKey: @NO,
         NeoWCQuickReplyInstantSendEnabledKey: @NO,
+        NeoWCPaymentLinkEnabledKey: @NO,
         NeoWCVideoParserEnabledKey: @NO,
         NeoWCVideoParserCustomURLKey: @"",
         NeoWCVideoParserSendModeKey: @0,
@@ -310,6 +311,13 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
                                 NeoWCCountText(NeoWCQuickReplyStore.sharedStore.items.count), NeoWCSettingActionQuickReplyLibrary)],
                     defaults,
                     collapsed);
+    [interaction addObject:NeoWCItem(@"快捷收款链接",
+                                     @"发送 #fk 弹出标题编辑页，登记后发送原生收款卡片",
+                                     @"link.badge.plus",
+                                     NeoWCSettingRowKindSwitch,
+                                     NeoWCPaymentLinkEnabledKey,
+                                     nil,
+                                     NeoWCSettingActionNone)];
     // 暂停开放：保留完整实现，等待稳定的视频解析和点歌接口后恢复。
 #if 0
     NSInteger videoSendMode = [defaults integerForKey:NeoWCVideoParserSendModeKey];
