@@ -238,6 +238,8 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
 @interface CMessageMgr : NSObject
 - (void)AddMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap;
+- (void)AddAppMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap Data:(NSData *)data Scene:(unsigned int)scene;
+- (void)AddAppMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap DataPath:(NSString *)path Scene:(unsigned int)scene;
 - (id)AddVideoMsg:(id)message ToUsr:(NSString *)target VideoInfo:(id)videoInfo;
 - (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap;
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap;
@@ -6645,6 +6647,15 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
 
 %hook MMGrowTextView
 
+- (void)textViewDidChange:(id)textView {
+    NSString *commandText = NeoWCTweakSafeValue(self, @"text");
+    if (![commandText isKindOfClass:NSString.class]) {
+        commandText = NeoWCTweakSafeValue(textView, @"text");
+    }
+    NeoWCPaymentLinkDiagnosticsRecordCommandText(commandText);
+    %orig(textView);
+}
+
 - (void)didMoveToWindow {
     %orig;
     NeoWCSynchronizeInputSwipeActions(self);
@@ -7307,16 +7318,13 @@ static BOOL NeoWCMediaGroupEnabled(NSString *sessionUserName, NSString *defaults
 }
 
 static BOOL NeoWCMediaRecognitionEnabledForGroup(NSString *sessionUserName) {
-#if 0
-    // 暂停开放：接口稳定后恢复这里及设置目录中的对应功能入口。
-    return (NeoWCEnhancementEnabled(NeoWCMusicOrderEnabledKey) &&
-            NeoWCMediaGroupEnabled(sessionUserName, NeoWCMusicOrderGroupsKey)) ||
-           (NeoWCEnhancementEnabled(NeoWCVideoParserEnabledKey) &&
-            NeoWCMediaGroupEnabled(sessionUserName, NeoWCVideoParserGroupsKey));
-#else
+    // 暂停开放：接口稳定后恢复下方逻辑及设置目录中的对应功能入口。
+    // return (NeoWCEnhancementEnabled(NeoWCMusicOrderEnabledKey) &&
+    //         NeoWCMediaGroupEnabled(sessionUserName, NeoWCMusicOrderGroupsKey)) ||
+    //        (NeoWCEnhancementEnabled(NeoWCVideoParserEnabledKey) &&
+    //         NeoWCMediaGroupEnabled(sessionUserName, NeoWCVideoParserGroupsKey));
     (void)sessionUserName;
     return NO;
-#endif
 }
 
 static BOOL NeoWCMediaMessageIsFromCurrentUser(id wrap) {
@@ -10541,7 +10549,59 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 %end
 
+%hook NSURLSession
+
+- (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request {
+    if (NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) {
+        NeoWCPaymentLinkDiagnosticsRecordRequest(request, nil);
+    }
+    return %orig(request);
+}
+
+- (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request
+                            completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
+    if (!NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) {
+        return %orig(request, completionHandler);
+    }
+    NeoWCPaymentLinkDiagnosticsRecordRequest(request, nil);
+    if (!completionHandler) return %orig(request, completionHandler);
+    NSURLRequest *retainedRequest = request;
+    void (^retainedCompletion)(NSData *, NSURLResponse *, NSError *) = [completionHandler copy];
+    return %orig(request, ^(NSData *data, NSURLResponse *response, NSError *error) {
+        NeoWCPaymentLinkDiagnosticsRecordResponse(retainedRequest, data, response, error);
+        if (retainedCompletion) retainedCompletion(data, response, error);
+    });
+}
+
+- (NSURLSessionUploadTask *)uploadTaskWithRequest:(NSURLRequest *)request
+                                         fromData:(NSData *)bodyData
+                                completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
+    if (!NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) {
+        return %orig(request, bodyData, completionHandler);
+    }
+    NeoWCPaymentLinkDiagnosticsRecordRequest(request, bodyData);
+    if (!completionHandler) return %orig(request, bodyData, completionHandler);
+    NSURLRequest *retainedRequest = request;
+    void (^retainedCompletion)(NSData *, NSURLResponse *, NSError *) = [completionHandler copy];
+    return %orig(request, bodyData, ^(NSData *data, NSURLResponse *response, NSError *error) {
+        NeoWCPaymentLinkDiagnosticsRecordResponse(retainedRequest, data, response, error);
+        if (retainedCompletion) retainedCompletion(data, response, error);
+    });
+}
+
+%end
+
 %hook CMessageMgr
+
+- (void)AddAppMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap Data:(NSData *)data Scene:(unsigned int)scene {
+    NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"Data", target, wrap, data, scene);
+    %orig(target, wrap, data, scene);
+}
+
+- (void)AddAppMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap DataPath:(NSString *)path Scene:(unsigned int)scene {
+    NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataPath", target, wrap, path, scene);
+    %orig(target, wrap, path, scene);
+}
 
 - (void)AddMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap {
     // AFN hooks CMessageMgr AddMsg/AsyncOnAddMsg, calls original first, then

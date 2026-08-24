@@ -205,6 +205,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCMultiSelectSaveImagesKey: @YES,
         NeoWCMultiSelectShareCardKey: @YES,
         NeoWCDebugLoggingEnabledKey: @YES,
+        NeoWCPaymentLinkDiagnosticsEnabledKey: @NO,
         NeoWCChatInputRoundingEnabledKey: @NO,
         NeoWCChatInputInnerRoundingKey: @YES,
         NeoWCChatInputOuterRoundingKey: @YES,
@@ -570,6 +571,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCDeveloperSections(NSUserDefaults *de
     NSMutableArray *items = [NSMutableArray arrayWithArray:@[
         NeoWCItem(@"调试悬浮按钮", @"仅由此开关控制，不监听全局手势", @"wrench.and.screwdriver", NeoWCSettingRowKindSwitch, NeoWCDebugFloatingEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"记录调试日志", @"关闭后停止新增运行日志", @"text.alignleft", NeoWCSettingRowKindSwitch, NeoWCDebugLoggingEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"收款链接诊断", @"仅脱敏记录官方收款接口与消息卡片结构", @"waveform.path.ecg", NeoWCSettingRowKindSwitch, NeoWCPaymentLinkDiagnosticsEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"调试中心", @"视图检查、Runtime 搜索与日志", @"ladybug", NeoWCSettingRowKindDetail, nil, @"打开", NeoWCSettingActionDebugCenter),
         NeoWCItem(@"功能兼容性", @"检查类、Selector 与触发状态", @"checklist", NeoWCSettingRowKindDetail, nil, @"检查", NeoWCSettingActionCompatibility),
     ]];

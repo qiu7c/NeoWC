@@ -3,9 +3,12 @@
 #import "NeoWCCardTableViewController.h"
 #import <objc/runtime.h>
 #import <mach-o/dyld.h>
+#import <stdint.h>
+#import <stdlib.h>
 
 NSString *const NeoWCDebugFloatingEnabledKey = @"com.qiu7c.neowc.debug.floating-enabled";
 NSString *const NeoWCDebugLoggingEnabledKey = @"com.qiu7c.neowc.debug.logging-enabled";
+NSString *const NeoWCPaymentLinkDiagnosticsEnabledKey = @"com.qiu7c.neowc.debug.payment-link-diagnostics-enabled";
 static NSString *const NeoWCDebugFloatingSideKey = @"com.qiu7c.neowc.debug.floating-side";
 static NSString *const NeoWCDebugFloatingVerticalPositionKey = @"com.qiu7c.neowc.debug.floating-vertical-position";
 
@@ -79,6 +82,210 @@ void NeoWCLogAlways(NSString *format, ...) {
     NSString *message = [[NSString alloc] initWithFormat:format arguments:arguments];
     va_end(arguments);
     [[NeoWCDebugLogStore sharedStore] appendMessage:message];
+}
+
+static NSTimeInterval NeoWCPaymentLinkDiagnosticsCorrelationDeadline = 0;
+
+static BOOL NeoWCPaymentLinkDiagnosticsEnabled(void) {
+    return [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCPaymentLinkDiagnosticsEnabledKey];
+}
+
+static NSString *NeoWCDiagnosticFingerprintForData(NSData *data) {
+    if (![data isKindOfClass:NSData.class]) return @"-";
+    static uint64_t processSalt;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        processSalt = ((uint64_t)arc4random() << 32) | arc4random();
+    });
+    const uint8_t *bytes = data.bytes;
+    uint64_t value = UINT64_C(1469598103934665603) ^ processSalt;
+    for (NSUInteger index = 0; index < data.length; index++) {
+        value ^= bytes[index];
+        value *= UINT64_C(1099511628211);
+    }
+    return [NSString stringWithFormat:@"%016llx", (unsigned long long)value];
+}
+
+static NSString *NeoWCDiagnosticFingerprintForString(NSString *string) {
+    if (![string isKindOfClass:NSString.class]) return @"-";
+    return NeoWCDiagnosticFingerprintForData([string dataUsingEncoding:NSUTF8StringEncoding]);
+}
+
+static NSString *NeoWCDiagnosticStringSummary(id value);
+
+static NSString *NeoWCDiagnosticJSONShape(id object, NSUInteger depth) {
+    if (!object || object == NSNull.null) return @"null";
+    if (depth >= 4) return @"…";
+    if ([object isKindOfClass:NSDictionary.class]) {
+        NSDictionary *dictionary = object;
+        NSArray *keys = [[dictionary allKeys] sortedArrayUsingComparator:^NSComparisonResult(id left, id right) {
+            return [[left description] compare:[right description]];
+        }];
+        NSMutableArray *parts = [NSMutableArray arrayWithCapacity:keys.count];
+        for (id key in keys) {
+            [parts addObject:[NSString stringWithFormat:@"%@:%@", [key description],
+                              NeoWCDiagnosticJSONShape(dictionary[key], depth + 1)]];
+        }
+        return [NSString stringWithFormat:@"{%@}", [parts componentsJoinedByString:@","]];
+    }
+    if ([object isKindOfClass:NSArray.class]) {
+        NSArray *array = object;
+        NSString *first = array.count ? NeoWCDiagnosticJSONShape(array.firstObject, depth + 1) : @"";
+        return [NSString stringWithFormat:@"array(%lu)[%@]", (unsigned long)array.count, first];
+    }
+    if ([object isKindOfClass:NSString.class]) {
+        NSString *string = object;
+        NSData *nestedData = [string dataUsingEncoding:NSUTF8StringEncoding];
+        id nested = nestedData.length ? [NSJSONSerialization JSONObjectWithData:nestedData options:0 error:nil] : nil;
+        if (nested) return [NSString stringWithFormat:@"json-string(%lu)%@", (unsigned long)string.length,
+                            NeoWCDiagnosticJSONShape(nested, depth + 1)];
+        return [NSString stringWithFormat:@"string(%lu,#%@)", (unsigned long)string.length,
+                NeoWCDiagnosticFingerprintForString(string)];
+    }
+    if ([object isKindOfClass:NSNumber.class]) {
+        return CFGetTypeID((__bridge CFTypeRef)object) == CFBooleanGetTypeID() ? @"bool" : @"number";
+    }
+    return NSStringFromClass([object class]) ?: @"object";
+}
+
+static NSString *NeoWCDiagnosticBodyShape(NSData *data) {
+    if (![data isKindOfClass:NSData.class] || data.length == 0) return @"none";
+    id object = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    NSString *shape = object ? NeoWCDiagnosticJSONShape(object, 0) : @"non-json";
+    return [NSString stringWithFormat:@"len=%lu hash=%@ shape=%@", (unsigned long)data.length,
+            NeoWCDiagnosticFingerprintForData(data), shape];
+}
+
+static id NeoWCDiagnosticSafeValue(id object, NSString *key) {
+    if (!object || !key.length) return nil;
+    @try {
+        return [object valueForKey:key];
+    } @catch (__unused NSException *exception) {
+        return nil;
+    }
+}
+
+BOOL NeoWCPaymentLinkDiagnosticsMatchesRequest(NSURLRequest *request) {
+    if (!NeoWCPaymentLinkDiagnosticsEnabled() || ![request isKindOfClass:NSURLRequest.class]) return NO;
+    NSURL *URL = request.URL;
+    return [[URL.host lowercaseString] isEqualToString:@"sjtmgr.wxpapp.weixin.qq.com"] &&
+           [URL.path hasPrefix:@"/sjt/linkqrcode/"];
+}
+
+void NeoWCPaymentLinkDiagnosticsRecordCommandText(NSString *text) {
+    if (!NeoWCPaymentLinkDiagnosticsEnabled() || ![text isKindOfClass:NSString.class]) return;
+    NSString *trimmed = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    NSString *delimiter = [trimmed hasPrefix:@"#付款:"] ? @":" :
+                          ([trimmed hasPrefix:@"#付款："] ? @"：" : nil);
+    if (!delimiter) return;
+    NSArray<NSString *> *parts = [trimmed componentsSeparatedByString:@"/"];
+    if (parts.count < 3) return;
+    NSRange delimiterRange = [parts.firstObject rangeOfString:delimiter];
+    if (delimiterRange.location == NSNotFound) return;
+    NSString *identity = [parts.firstObject substringFromIndex:NSMaxRange(delimiterRange)];
+    NSString *displayName = identity;
+    NSString *wechatID = nil;
+    NSRange opening = [identity rangeOfString:@"(" options:NSBackwardsSearch];
+    if (opening.location != NSNotFound && [identity hasSuffix:@")"] && opening.location + 1 < identity.length) {
+        displayName = [identity substringToIndex:opening.location];
+        wechatID = [identity substringWithRange:NSMakeRange(NSMaxRange(opening), identity.length - NSMaxRange(opening) - 1)];
+    }
+    NSString *fingerprint = NeoWCDiagnosticFingerprintForString(trimmed);
+    static NSString *lastFingerprint;
+    @synchronized (NSUserDefaults.class) {
+        if ([lastFingerprint isEqualToString:fingerprint]) return;
+        lastFingerprint = fingerprint;
+    }
+    NeoWCLogAlways(@"[收款诊断] command parts=%lu name(%@) wechatID(%@) title(%@) number(%@)",
+                   (unsigned long)parts.count, NeoWCDiagnosticStringSummary(displayName),
+                   NeoWCDiagnosticStringSummary(wechatID), NeoWCDiagnosticStringSummary(parts[1]),
+                   NeoWCDiagnosticStringSummary(parts[2]));
+}
+
+void NeoWCPaymentLinkDiagnosticsRecordRequest(NSURLRequest *request, NSData *uploadData) {
+    if (!NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) return;
+    NSURLComponents *components = [NSURLComponents componentsWithURL:request.URL resolvingAgainstBaseURL:NO];
+    NSMutableArray *queryNames = [NSMutableArray array];
+    for (NSURLQueryItem *item in components.queryItems ?: @[]) {
+        if (item.name.length) [queryNames addObject:item.name];
+    }
+    NSArray *headerNames = [[request.allHTTPHeaderFields allKeys] sortedArrayUsingSelector:@selector(compare:)];
+    NSData *body = uploadData ?: request.HTTPBody;
+    @synchronized (NSUserDefaults.class) {
+        NeoWCPaymentLinkDiagnosticsCorrelationDeadline = [NSDate timeIntervalSinceReferenceDate] + 60.0;
+    }
+    NeoWCLogAlways(@"[收款诊断] request method=%@ path=%@ queryKeys=%@ headerKeys=%@ body(%@)",
+                   request.HTTPMethod ?: @"-", request.URL.path ?: @"-", queryNames, headerNames,
+                   NeoWCDiagnosticBodyShape(body));
+}
+
+void NeoWCPaymentLinkDiagnosticsRecordResponse(NSURLRequest *request, NSData *data,
+                                                NSURLResponse *response, NSError *error) {
+    if (!NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) return;
+    NSInteger statusCode = [response isKindOfClass:NSHTTPURLResponse.class] ?
+        ((NSHTTPURLResponse *)response).statusCode : 0;
+    NeoWCLogAlways(@"[收款诊断] response status=%ld errorDomain=%@ errorCode=%ld data(%@)",
+                   (long)statusCode, error.domain ?: @"-", (long)error.code,
+                   NeoWCDiagnosticBodyShape(data));
+}
+
+BOOL NeoWCPaymentLinkDiagnosticsCorrelationActive(void) {
+    if (!NeoWCPaymentLinkDiagnosticsEnabled()) return NO;
+    @synchronized (NSUserDefaults.class) {
+        return NeoWCPaymentLinkDiagnosticsCorrelationDeadline > [NSDate timeIntervalSinceReferenceDate];
+    }
+}
+
+static NSString *NeoWCDiagnosticStringSummary(id value) {
+    if (![value isKindOfClass:NSString.class]) return @"-";
+    NSString *string = value;
+    return [NSString stringWithFormat:@"len=%lu,#%@", (unsigned long)string.length,
+            NeoWCDiagnosticFingerprintForString(string)];
+}
+
+static NSString *NeoWCDiagnosticXMLShape(NSString *XML) {
+    if (![XML isKindOfClass:NSString.class] || XML.length == 0) return @"[]";
+    NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:@"<\\s*([A-Za-z][A-Za-z0-9_]*)[^>]*>\\s*(?:<!\\[CDATA\\[)?([^<]*?)(?:\\]\\]>)?\\s*</\\s*\\1\\s*>" options:0 error:nil];
+    NSMutableArray *fields = [NSMutableArray array];
+    for (NSTextCheckingResult *match in [expression matchesInString:XML options:0 range:NSMakeRange(0, XML.length)]) {
+        if (match.numberOfRanges <= 2) continue;
+        NSString *tag = [XML substringWithRange:[match rangeAtIndex:1]];
+        NSString *value = [XML substringWithRange:[match rangeAtIndex:2]];
+        [fields addObject:[NSString stringWithFormat:@"%@(%@)", tag, NeoWCDiagnosticStringSummary(value)]];
+    }
+    return [fields description];
+}
+
+void NeoWCPaymentLinkDiagnosticsRecordAppMessage(NSString *entryPoint, id target, id wrap,
+                                                  id dataOrPath, unsigned int scene) {
+    if (!NeoWCPaymentLinkDiagnosticsCorrelationActive() || !wrap) return;
+    id messageType = NeoWCDiagnosticSafeValue(wrap, @"m_uiMessageType");
+    id innerType = NeoWCDiagnosticSafeValue(wrap, @"m_uiAppMsgInnerType");
+    NSString *content = NeoWCDiagnosticSafeValue(wrap, @"m_nsContent");
+    NSString *title = NeoWCDiagnosticSafeValue(wrap, @"m_nsTitle");
+    NSString *desc = NeoWCDiagnosticSafeValue(wrap, @"m_nsDesc");
+    NSString *appID = NeoWCDiagnosticSafeValue(wrap, @"m_nsAppID");
+    NSString *msgSource = NeoWCDiagnosticSafeValue(wrap, @"m_nsMsgSource");
+    id extension = NeoWCDiagnosticSafeValue(wrap, @"m_extendInfoWithMsgType");
+    NSDictionary *flags = @{
+        @"status": NeoWCDiagnosticSafeValue(wrap, @"m_uiStatus") ?: @"-",
+        @"msgFlag": NeoWCDiagnosticSafeValue(wrap, @"m_uiMsgFlag") ?: @"-",
+        @"new": NeoWCDiagnosticSafeValue(wrap, @"m_bNew") ?: @"-",
+        @"imgStatus": NeoWCDiagnosticSafeValue(wrap, @"m_uiImgStatus") ?: @"-",
+        @"forward": NeoWCDiagnosticSafeValue(wrap, @"m_bForward") ?: @"-",
+        @"senderStatus": NeoWCDiagnosticSafeValue(wrap, @"m_uiIsSenderStatus") ?: @"-",
+    };
+    NSString *targetString = [target isKindOfClass:NSString.class] ? target : [target description];
+    NSString *payloadClass = dataOrPath ? NSStringFromClass([dataOrPath class]) : @"nil";
+    NSUInteger payloadLength = [dataOrPath respondsToSelector:@selector(length)] ?
+        (NSUInteger)[dataOrPath length] : 0;
+    NeoWCLogAlways(@"[收款诊断] appmsg entry=%@ scene=%u msgType=%@ innerType=%@ flags=%@ target(%@) title(%@) desc(%@) appID(%@) source(%@) extension=%@ xml(%@ fields=%@) payload=%@/%lu",
+                   entryPoint ?: @"-", scene, messageType ?: @"-", innerType ?: @"-", flags,
+                   NeoWCDiagnosticStringSummary(targetString), NeoWCDiagnosticStringSummary(title),
+                   NeoWCDiagnosticStringSummary(desc), NeoWCDiagnosticStringSummary(appID),
+                   NeoWCDiagnosticStringSummary(msgSource), extension ? NSStringFromClass([extension class]) : @"nil",
+                   NeoWCDiagnosticStringSummary(content), NeoWCDiagnosticXMLShape(content), payloadClass,
+                   (unsigned long)payloadLength);
 }
 
 @interface NeoWCDebugWindow : UIWindow
