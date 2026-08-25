@@ -13,6 +13,6 @@ NeoWC_FILES = Tweak.xm $(wildcard Sources/*.m) $(wildcard Vendor/Silk/src/*.c)
 NeoWC_CFLAGS = -IVendor/Silk/interface -IVendor/Silk/src -ffunction-sections -fdata-sections
 NeoWC_OBJCFLAGS = -fobjc-arc
 NeoWC_LDFLAGS = -Wl,-dead_strip
-NeoWC_FRAMEWORKS = UIKit Foundation QuartzCore CoreImage Photos AVFoundation AVKit UniformTypeIdentifiers
+NeoWC_FRAMEWORKS = UIKit Foundation QuartzCore CoreImage Photos AVFoundation AVKit UniformTypeIdentifiers Metal MetalKit
 
 include $(THEOS_MAKE_PATH)/tweak.mk
