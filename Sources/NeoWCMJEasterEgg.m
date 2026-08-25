@@ -5,7 +5,11 @@
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 #import <QuartzCore/QuartzCore.h>
-#import <dlfcn.h>
+
+extern const unsigned char NeoWCMJDropStart[];
+extern const unsigned char NeoWCMJDropEnd[];
+extern const unsigned char NeoWCMJSwingStart[];
+extern const unsigned char NeoWCMJSwingEnd[];
 
 @interface NeoWCMatteVideoView : MTKView
 - (instancetype)initWithFrame:(CGRect)frame URL:(NSURL *)URL completion:(dispatch_block_t)completion;
@@ -203,25 +207,55 @@
 
 @end
 
-static NSArray<NSString *> *NeoWCMJEasterEggResourceDirectories(void) {
-    NSMutableArray<NSString *> *directories = [NSMutableArray array];
-    Dl_info info = {0};
-    if (dladdr((const void *)&NeoWCMJEasterEggResourceDirectories, &info) != 0 && info.dli_fname) {
-        NSString *dylibPath = [NSString stringWithUTF8String:info.dli_fname];
-        NSRange libraryRange = [dylibPath rangeOfString:@"/Library/"];
-        NSRange usrRange = [dylibPath rangeOfString:@"/usr/"];
-        NSString *rootPrefix = @"";
-        if (libraryRange.location != NSNotFound) {
-            rootPrefix = [dylibPath substringToIndex:libraryRange.location];
-        } else if (usrRange.location != NSNotFound) {
-            rootPrefix = [dylibPath substringToIndex:usrRange.location];
-        }
-        [directories addObject:[rootPrefix stringByAppendingString:@"/Library/Application Support/NeoWC/MJ"]];
-        NeoWCLogAlways(@"[MJ彩蛋] 插件路径：%@", dylibPath);
+static NSString *NeoWCMJEasterEggDataDirectory(void) {
+    NSURL *applicationSupport = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
+                                                                     inDomains:NSUserDomainMask].firstObject;
+    return applicationSupport ? [[[applicationSupport URLByAppendingPathComponent:@"NeoWC" isDirectory:YES]
+                                  URLByAppendingPathComponent:@"MJ" isDirectory:YES] path] : nil;
+}
+
+static BOOL NeoWCWriteEmbeddedMJAsset(NSString *path,
+                                      const unsigned char *start,
+                                      const unsigned char *end,
+                                      NSError **error) {
+    if (path.length == 0 || !start || !end || end <= start) return NO;
+    NSUInteger length = (NSUInteger)(end - start);
+    NSDictionary *attributes = [NSFileManager.defaultManager attributesOfItemAtPath:path error:nil];
+    if ([attributes[NSFileSize] unsignedIntegerValue] == length) return YES;
+    NSData *data = [NSData dataWithBytes:start length:length];
+    return [data writeToFile:path options:NSDataWritingAtomic error:error];
+}
+
+static NSArray<NSURL *> *NeoWCMJEasterEggMaterializeResources(void) {
+    NSString *directory = NeoWCMJEasterEggDataDirectory();
+    if (directory.length == 0) {
+        NeoWCLogAlways(@"[MJ彩蛋] 无法取得 NeoWC 数据目录");
+        return @[];
     }
-    [directories addObjectsFromArray:@[@"/var/jb/Library/Application Support/NeoWC/MJ",
-                                       @"/Library/Application Support/NeoWC/MJ"]];
-    return [[NSOrderedSet orderedSetWithArray:directories] array];
+    NSError *directoryError = nil;
+    if (![NSFileManager.defaultManager createDirectoryAtPath:directory
+                                 withIntermediateDirectories:YES
+                                                  attributes:nil
+                                                       error:&directoryError]) {
+        NeoWCLogAlways(@"[MJ彩蛋] 无法创建数据目录：%@", directoryError.localizedDescription ?: @"未知错误");
+        return @[];
+    }
+
+    NSArray<NSString *> *names = @[@"mj-drop.mp4", @"mj-swing.mp4"];
+    const unsigned char *starts[] = {NeoWCMJDropStart, NeoWCMJSwingStart};
+    const unsigned char *ends[] = {NeoWCMJDropEnd, NeoWCMJSwingEnd};
+    NSMutableArray<NSURL *> *URLs = [NSMutableArray arrayWithCapacity:names.count];
+    for (NSUInteger index = 0; index < names.count; index++) {
+        NSString *path = [directory stringByAppendingPathComponent:names[index]];
+        NSError *writeError = nil;
+        if (!NeoWCWriteEmbeddedMJAsset(path, starts[index], ends[index], &writeError)) {
+            NeoWCLogAlways(@"[MJ彩蛋] 无法释放 %@：%@", names[index], writeError.localizedDescription ?: @"未知错误");
+            return @[];
+        }
+        [URLs addObject:[NSURL fileURLWithPath:path]];
+    }
+    NeoWCLogAlways(@"[MJ彩蛋] 视频资源已就绪：%@", directory);
+    return URLs;
 }
 
 static UIWindow *NeoWCMJEasterEggWindow(void) {
@@ -310,28 +344,8 @@ static NeoWCMJEasterEggSession *NeoWCActiveMJEasterEggSession;
 void NeoWCPlayMJEasterEgg(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         [NeoWCActiveMJEasterEggSession stop];
-        NSArray<NSString *> *names = @[@"mj-drop.mp4", @"mj-swing.mp4"];
-        NSMutableArray<NSURL *> *URLs = [NSMutableArray array];
-        NSString *resolvedDirectory = nil;
-        for (NSString *directory in NeoWCMJEasterEggResourceDirectories()) {
-            NSMutableArray<NSURL *> *candidateURLs = [NSMutableArray array];
-            for (NSString *name in names) {
-                NSString *path = [directory stringByAppendingPathComponent:name];
-                if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
-                    [candidateURLs addObject:[NSURL fileURLWithPath:path]];
-                }
-            }
-            if (candidateURLs.count == names.count) {
-                resolvedDirectory = directory;
-                [URLs addObjectsFromArray:candidateURLs];
-                break;
-            }
-        }
-        if (URLs.count == 0) {
-            NeoWCLogAlways(@"[MJ彩蛋] 未找到视频资源，候选路径：%@", [NeoWCMJEasterEggResourceDirectories() componentsJoinedByString:@" | "]);
-            return;
-        }
-        NeoWCLogAlways(@"[MJ彩蛋] 已找到视频资源：%@", resolvedDirectory);
+        NSArray<NSURL *> *URLs = NeoWCMJEasterEggMaterializeResources();
+        if (URLs.count == 0) return;
         NeoWCMJEasterEggSession *session = [NeoWCMJEasterEggSession new];
         session.URLs = URLs;
         NeoWCActiveMJEasterEggSession = session;

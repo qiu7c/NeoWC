@@ -9,7 +9,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = NeoWC
 
-NeoWC_FILES = Tweak.xm $(wildcard Sources/*.m) $(wildcard Vendor/Silk/src/*.c)
+NeoWC_FILES = Tweak.xm $(wildcard Sources/*.m) $(wildcard Sources/*.S) $(wildcard Vendor/Silk/src/*.c)
 NeoWC_CFLAGS = -IVendor/Silk/interface -IVendor/Silk/src -ffunction-sections -fdata-sections
 NeoWC_OBJCFLAGS = -fobjc-arc
 NeoWC_LDFLAGS = -Wl,-dead_strip
