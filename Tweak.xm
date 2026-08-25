@@ -25,7 +25,6 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCInterfaceTweaks.h"
 #import "Sources/NeoWCMessageTime.h"
 #import "Sources/NeoWCGlassCapsuleView.h"
-#import "Sources/NeoWCMJEasterEgg.h"
 #import "Sources/NeoWCQuickReplyStore.h"
 #import "Sources/NeoWCQuickReplyViewController.h"
 #import "Sources/NeoWCSendConfirmation.h"
@@ -335,8 +334,6 @@ static char NeoWCInputSwipeLeftRecognizerKey;
 static char NeoWCInputSwipeRightRecognizerKey;
 static char NeoWCQuickReplyPlusRecognizerKey;
 static char NeoWCQuickReplyPlusDelegateKey;
-static char NeoWCMJEasterEggIncomingHandledKey;
-static char NeoWCMJEasterEggOutgoingTimestampKey;
 static char NeoWCWalletGestureRecognizerKey;
 static char NeoWCReplyPanRecognizerKey;
 static char NeoWCReplyPanDelegateKey;
@@ -7515,35 +7512,6 @@ static NSString *NeoWCMediaCommandText(id wrap) {
     return [content stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
 }
 
-static BOOL NeoWCMJEasterEggMatchesText(id textObject) {
-    NSString *text = nil;
-    if ([textObject isKindOfClass:NSString.class]) {
-        text = textObject;
-    } else {
-        id value = NeoWCTweakSafeValue(textObject, @"text");
-        if (![value isKindOfClass:NSString.class]) value = NeoWCTweakSafeValue(textObject, @"m_nsContent");
-        if ([value isKindOfClass:NSString.class]) text = value;
-    }
-    text = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    if (text.length < 2 || text.length % 2 != 0) return NO;
-    for (NSUInteger index = 0; index < text.length; index += 2) {
-        NSString *pair = [text substringWithRange:NSMakeRange(index, 2)];
-        if ([pair caseInsensitiveCompare:@"mj"] != NSOrderedSame) return NO;
-    }
-    return YES;
-}
-
-static void NeoWCPlayMJEasterEggForOutgoingText(id controller, id textObject) {
-    if (!controller || !NeoWCMJEasterEggMatchesText(textObject)) return;
-    CFTimeInterval now = CACurrentMediaTime();
-    NSNumber *previous = objc_getAssociatedObject(controller, &NeoWCMJEasterEggOutgoingTimestampKey);
-    if (previous && now - previous.doubleValue < 0.5) return;
-    objc_setAssociatedObject(controller, &NeoWCMJEasterEggOutgoingTimestampKey, @(now),
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCLogAlways(@"[MJ彩蛋] 已命中自己发送的文字");
-    NeoWCPlayMJEasterEgg();
-}
-
 static NSString *NeoWCFirstHTTPURLString(NSString *text) {
     if (text.length == 0) return nil;
     NSDataDetector *detector = [NSDataDetector dataDetectorWithTypes:NSTextCheckingTypeLink error:nil];
@@ -7583,17 +7551,6 @@ static BOOL NeoWCMediaMessageIsIncoming(id wrap) {
     NSString *realUser = NeoWCMediaString(NeoWCTweakSafeValue(wrap, @"m_nsRealChatUsr"));
     if (fromUser.length == 0 && realUser.length == 0) return NO;
     return !NeoWCMediaMessageIsFromCurrentUser(wrap);
-}
-
-static void NeoWCPlayMJEasterEggForIncomingWrap(id wrap) {
-    if (!wrap || [objc_getAssociatedObject(wrap, &NeoWCMJEasterEggIncomingHandledKey) boolValue]) return;
-    NSInteger messageType = [NeoWCTweakSafeValue(wrap, @"m_uiMessageType") integerValue];
-    if (messageType != 1 || !NeoWCMediaMessageIsIncoming(wrap) ||
-        !NeoWCMJEasterEggMatchesText(NeoWCMediaCommandText(wrap))) return;
-    objc_setAssociatedObject(wrap, &NeoWCMJEasterEggIncomingHandledKey, @YES,
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCLogAlways(@"[MJ彩蛋] 已命中收到的文字");
-    NeoWCPlayMJEasterEgg();
 }
 
 static void NeoWCRecognizeIncomingMediaCommand(NSString *sessionUserName, id wrap) {
@@ -10763,13 +10720,11 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)SendTextMessage:(id)text {
     if (NeoWCPaymentLinkFeatureAvailable() && NeoWCHandlePaymentLinkText(self, text)) return;
     %orig(text);
-    NeoWCPlayMJEasterEggForOutgoingText(self, text);
 }
 
 - (void)SendTextMessage:(id)text replyingMessage:(id)replyingMessage isPasted:(BOOL)isPasted {
     if (NeoWCPaymentLinkFeatureAvailable() && !replyingMessage && NeoWCHandlePaymentLinkText(self, text)) return;
     %orig(text, replyingMessage, isPasted);
-    NeoWCPlayMJEasterEggForOutgoingText(self, text);
 }
 
 - (void)SendImageMessageByMMAsset:(id)asset {
@@ -10920,7 +10875,6 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 - (void)AddMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap {
-    NeoWCPlayMJEasterEggForIncomingWrap(wrap);
     // AFN hooks CMessageMgr AddMsg/AsyncOnAddMsg, calls original first, then
     // passes the received wrap to its recognizer. Keep outgoing confirmation
     // isolated by only taking this branch for enabled groups and non-self wraps.
