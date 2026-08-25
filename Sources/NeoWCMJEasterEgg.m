@@ -1,4 +1,5 @@
 #import "NeoWCMJEasterEgg.h"
+#import "NeoWCDebug.h"
 #import <AVFoundation/AVFoundation.h>
 #import <CoreImage/CoreImage.h>
 #import <Metal/Metal.h>
@@ -35,13 +36,17 @@
 @property (nonatomic, strong) id endObserver;
 @property (nonatomic, strong) id failureObserver;
 @property (nonatomic, assign) BOOL completed;
+@property (nonatomic, assign) BOOL renderedFirstFrame;
 @end
 
 @implementation NeoWCMatteVideoView
 
 - (instancetype)initWithFrame:(CGRect)frame URL:(NSURL *)URL completion:(dispatch_block_t)completion {
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
-    if (!device || !URL) return nil;
+    if (!device || !URL) {
+        NeoWCLogAlways(@"[MJ彩蛋] 无法创建 Metal 播放视图：device=%@ URL=%@", device ? @"YES" : @"NO", URL.path ?: @"-");
+        return nil;
+    }
     self = [super initWithFrame:frame device:device];
     if (!self) return nil;
     self.opaque = NO;
@@ -80,6 +85,8 @@
                                                                          object:item
                                                                           queue:NSOperationQueue.mainQueue
                                                                      usingBlock:^(__unused NSNotification *note) {
+        NSError *error = weakSelf.player.currentItem.error;
+        NeoWCLogAlways(@"[MJ彩蛋] 视频播放失败：%@", error.localizedDescription ?: @"未知错误");
         [weakSelf finish];
     }];
     return self;
@@ -95,6 +102,13 @@
     }
     [self.displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
     [self.player play];
+    NeoWCLogAlways(@"[MJ彩蛋] 开始播放：%@", self.player.currentItem.asset);
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (weakSelf && !weakSelf.completed && !weakSelf.renderedFirstFrame) {
+            NeoWCLogAlways(@"[MJ彩蛋] 播放器已启动，但一秒内没有取得视频帧");
+        }
+    });
 }
 
 - (void)displayLinkFired:(CADisplayLink *)displayLink {
@@ -155,6 +169,10 @@
     CGColorSpaceRelease(colorSpace);
     [commandBuffer presentDrawable:drawable];
     [commandBuffer commit];
+    if (!self.renderedFirstFrame) {
+        self.renderedFirstFrame = YES;
+        NeoWCLogAlways(@"[MJ彩蛋] 已取得并提交首帧");
+    }
 }
 
 - (void)finish {
@@ -185,13 +203,25 @@
 
 @end
 
-static NSString *NeoWCMJEasterEggResourceDirectory(void) {
+static NSArray<NSString *> *NeoWCMJEasterEggResourceDirectories(void) {
+    NSMutableArray<NSString *> *directories = [NSMutableArray array];
     Dl_info info = {0};
-    if (dladdr((const void *)&NeoWCMJEasterEggResourceDirectory, &info) == 0 || !info.dli_fname) return nil;
-    NSString *dylibPath = [NSString stringWithUTF8String:info.dli_fname];
-    NSString *libraryPath = [[[dylibPath stringByDeletingLastPathComponent]
-        stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
-    return [libraryPath stringByAppendingPathComponent:@"Application Support/NeoWC/MJ"];
+    if (dladdr((const void *)&NeoWCMJEasterEggResourceDirectories, &info) != 0 && info.dli_fname) {
+        NSString *dylibPath = [NSString stringWithUTF8String:info.dli_fname];
+        NSRange libraryRange = [dylibPath rangeOfString:@"/Library/"];
+        NSRange usrRange = [dylibPath rangeOfString:@"/usr/"];
+        NSString *rootPrefix = @"";
+        if (libraryRange.location != NSNotFound) {
+            rootPrefix = [dylibPath substringToIndex:libraryRange.location];
+        } else if (usrRange.location != NSNotFound) {
+            rootPrefix = [dylibPath substringToIndex:usrRange.location];
+        }
+        [directories addObject:[rootPrefix stringByAppendingString:@"/Library/Application Support/NeoWC/MJ"]];
+        NeoWCLogAlways(@"[MJ彩蛋] 插件路径：%@", dylibPath);
+    }
+    [directories addObjectsFromArray:@[@"/var/jb/Library/Application Support/NeoWC/MJ",
+                                       @"/Library/Application Support/NeoWC/MJ"]];
+    return [[NSOrderedSet orderedSetWithArray:directories] array];
 }
 
 static UIWindow *NeoWCMJEasterEggWindow(void) {
@@ -201,9 +231,10 @@ static UIWindow *NeoWCMJEasterEggWindow(void) {
         UIWindowScene *scene = (UIWindowScene *)candidate;
         if (scene.activationState != UISceneActivationStateForegroundActive) continue;
         for (UIWindow *window in scene.windows) {
-            if (window.hidden || window.alpha <= 0.01) continue;
+            if (window.hidden || window.alpha <= 0.01 || window.windowLevel != UIWindowLevelNormal ||
+                !window.rootViewController) continue;
             if (window.isKeyWindow) return window;
-            if (!fallback && window.windowLevel == UIWindowLevelNormal) fallback = window;
+            if (!fallback) fallback = window;
         }
     }
     return fallback;
@@ -225,7 +256,11 @@ static NeoWCMJEasterEggSession *NeoWCActiveMJEasterEggSession;
 
 - (void)start {
     UIWindow *window = NeoWCMJEasterEggWindow();
-    if (!window || self.URLs.count == 0) return;
+    if (!window || self.URLs.count == 0) {
+        NeoWCLogAlways(@"[MJ彩蛋] 无法开始：window=%@ clips=%lu", window ? @"YES" : @"NO", (unsigned long)self.URLs.count);
+        return;
+    }
+    NeoWCLogAlways(@"[MJ彩蛋] 覆盖微信窗口：%@ frame=%@", NSStringFromClass(window.class), NSStringFromCGRect(window.bounds));
     self.overlay = [[NeoWCPassthroughOverlayView alloc] initWithFrame:window.bounds];
     self.overlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.overlay.backgroundColor = UIColor.clearColor;
@@ -275,16 +310,28 @@ static NeoWCMJEasterEggSession *NeoWCActiveMJEasterEggSession;
 void NeoWCPlayMJEasterEgg(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         [NeoWCActiveMJEasterEggSession stop];
-        NSString *directory = NeoWCMJEasterEggResourceDirectory();
         NSArray<NSString *> *names = @[@"mj-drop.mp4", @"mj-swing.mp4"];
         NSMutableArray<NSURL *> *URLs = [NSMutableArray array];
-        for (NSString *name in names) {
-            NSString *path = [directory stringByAppendingPathComponent:name];
-            if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
-                [URLs addObject:[NSURL fileURLWithPath:path]];
+        NSString *resolvedDirectory = nil;
+        for (NSString *directory in NeoWCMJEasterEggResourceDirectories()) {
+            NSMutableArray<NSURL *> *candidateURLs = [NSMutableArray array];
+            for (NSString *name in names) {
+                NSString *path = [directory stringByAppendingPathComponent:name];
+                if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
+                    [candidateURLs addObject:[NSURL fileURLWithPath:path]];
+                }
+            }
+            if (candidateURLs.count == names.count) {
+                resolvedDirectory = directory;
+                [URLs addObjectsFromArray:candidateURLs];
+                break;
             }
         }
-        if (URLs.count == 0) return;
+        if (URLs.count == 0) {
+            NeoWCLogAlways(@"[MJ彩蛋] 未找到视频资源，候选路径：%@", [NeoWCMJEasterEggResourceDirectories() componentsJoinedByString:@" | "]);
+            return;
+        }
+        NeoWCLogAlways(@"[MJ彩蛋] 已找到视频资源：%@", resolvedDirectory);
         NeoWCMJEasterEggSession *session = [NeoWCMJEasterEggSession new];
         session.URLs = URLs;
         NeoWCActiveMJEasterEggSession = session;

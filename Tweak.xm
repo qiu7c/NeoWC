@@ -7540,6 +7540,7 @@ static void NeoWCPlayMJEasterEggForOutgoingText(id controller, id textObject) {
     if (previous && now - previous.doubleValue < 0.5) return;
     objc_setAssociatedObject(controller, &NeoWCMJEasterEggOutgoingTimestampKey, @(now),
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NeoWCLogAlways(@"[MJ彩蛋] 已命中自己发送的文字");
     NeoWCPlayMJEasterEgg();
 }
 
@@ -7591,6 +7592,7 @@ static void NeoWCPlayMJEasterEggForIncomingWrap(id wrap) {
         !NeoWCMJEasterEggMatchesText(NeoWCMediaCommandText(wrap))) return;
     objc_setAssociatedObject(wrap, &NeoWCMJEasterEggIncomingHandledKey, @YES,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NeoWCLogAlways(@"[MJ彩蛋] 已命中收到的文字");
     NeoWCPlayMJEasterEgg();
 }
 
