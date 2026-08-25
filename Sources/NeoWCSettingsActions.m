@@ -190,8 +190,7 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
 }
 
 - (void)presentTemplateWithTitle:(NSString *)title key:(NSString *)key defaultValue:(NSString *)defaultValue {
-    NSString *colorKey = [key isEqualToString:NeoWCAntiRevokeLocalTemplateKey] ? NeoWCAntiRevokeLocalTextColorKey : nil;
-    [self push:[[NeoWCAntiRevokeTemplateEditorViewController alloc] initWithTitle:title defaultsKey:key defaultValue:defaultValue colorKey:colorKey]];
+    [self push:[[NeoWCAntiRevokeTemplateEditorViewController alloc] initWithTitle:title defaultsKey:key defaultValue:defaultValue colorKey:nil]];
 }
 
 - (void)presentNumberEditorWithTitle:(NSString *)title message:(NSString *)message key:(NSString *)key minimum:(CGFloat)minimum maximum:(CGFloat)maximum notifyChange:(BOOL)notifyChange applyScale:(BOOL)applyScale {
@@ -350,12 +349,12 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
     [self presentSheet:sheet];
 }
 
-- (void)presentMessageTimeColorPicker {
-    self.activeColorDefaultsKey = NeoWCChatMessageTimeColorKey;
+- (void)presentMessageTimeColorPickerForKey:(NSString *)defaultsKey title:(NSString *)title {
+    self.activeColorDefaultsKey = defaultsKey;
     UIColorPickerViewController *picker = [UIColorPickerViewController new];
-    picker.title = @"消息时间颜色";
+    picker.title = title;
     picker.supportsAlpha = YES;
-    picker.selectedColor = NeoWCColorForDefaultsKey(NeoWCChatMessageTimeColorKey, UIColor.secondaryLabelColor);
+    picker.selectedColor = NeoWCColorForDefaultsKey(defaultsKey, UIColor.secondaryLabelColor);
     picker.delegate = self;
     [self.viewController presentViewController:picker animated:YES completion:nil];
 }
@@ -403,18 +402,20 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     BOOL supportsLiquid = NeoWCSystemSupportsNativeLiquidGlass();
     NSInteger stored = [defaults integerForKey:NeoWCChatTopBarEffectStyleKey];
-    NSInteger current = supportsLiquid && stored == NeoWCChatTopBarEffectStyleLiquid
-        ? NeoWCChatTopBarEffectStyleLiquid
-        : NeoWCChatTopBarEffectStyleMaterial;
+    NSInteger current = stored == NeoWCChatTopBarEffectStyleFauxLiquid
+        ? NeoWCChatTopBarEffectStyleFauxLiquid
+        : (supportsLiquid && stored == NeoWCChatTopBarEffectStyleLiquid
+            ? NeoWCChatTopBarEffectStyleLiquid : NeoWCChatTopBarEffectStyleMaterial);
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"模糊效果"
                                                                     message:supportsLiquid
-                                                                        ? @"液态玻璃使用 iOS 26 原生 UIGlassEffect。"
-                                                                        : @"当前系统低于 iOS 26，仅支持超薄玻璃。"
+                                                                        ? @"伪液态玻璃使用低开销高光与轮廓层；原生液态玻璃使用 iOS 26 UIGlassEffect。"
+                                                                        : @"伪液态玻璃使用低开销高光与轮廓层，支持当前系统。"
                                                              preferredStyle:UIAlertControllerStyleActionSheet];
     NSMutableArray *options = [NSMutableArray arrayWithObject:
         @{@"title": @"超薄玻璃", @"value": @(NeoWCChatTopBarEffectStyleMaterial)}];
+    [options addObject:@{@"title": @"伪液态玻璃", @"value": @(NeoWCChatTopBarEffectStyleFauxLiquid)}];
     if (supportsLiquid) {
-        [options addObject:@{@"title": @"液态玻璃", @"value": @(NeoWCChatTopBarEffectStyleLiquid)}];
+        [options addObject:@{@"title": @"原生液态玻璃", @"value": @(NeoWCChatTopBarEffectStyleLiquid)}];
     }
     __weak typeof(self) weakSelf = self;
     for (NSDictionary *option in options) {
@@ -702,7 +703,7 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         case NeoWCSettingActionMessageTimeFormat: [self presentMessageTimeFormatEditor]; break;
         case NeoWCSettingActionMessageTimeFontSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 8 到 18 之间的字号" key:NeoWCChatMessageTimeFontSizeKey minimum:8 maximum:18 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionMessageTimeMode: [self presentMessageTimeModePicker]; break;
-        case NeoWCSettingActionMessageTimeColor: [self presentMessageTimeColorPicker]; break;
+        case NeoWCSettingActionMessageTimeColor: [self presentMessageTimeColorPickerForKey:item.defaultsKey title:item.title]; break;
         case NeoWCSettingActionMessageTimePosition: [self presentMessageTimePositionPicker]; break;
         case NeoWCSettingActionMessageTimeAvatarSpacing: [self presentNumberEditorWithTitle:item.title message:@"请输入 -6 到 8 之间的数值；负值向上，正值向下" key:NeoWCChatMessageTimeAvatarSpacingKey minimum:-6 maximum:8 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionPluginManager: [self push:[WCPluginsViewController new]]; break;
@@ -719,6 +720,7 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         case NeoWCSettingActionChatTopEffectStyle: [self presentChatTopEffectStylePicker]; break;
         case NeoWCSettingActionChatGlassBlurIntensity: [self presentNumberEditorWithTitle:item.title message:@"请输入 20 到 100 之间的百分比" key:NeoWCChatGlassBlurIntensityKey minimum:20 maximum:100 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatGlassTintOpacity: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 30 之间的百分比；0 表示不额外染色" key:NeoWCChatGlassTintOpacityKey minimum:0 maximum:30 notifyChange:YES applyScale:NO]; break;
+        case NeoWCSettingActionChatGlassWhiteStrength: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 50 之间的百分比；数值越高白玻璃越明显" key:NeoWCChatGlassWhiteStrengthKey minimum:0 maximum:50 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionMessageGestureAction: [self presentMessageGestureActionPickerForItem:item]; break;
         case NeoWCSettingActionAvatarQuickMenuGesture: [self presentAvatarQuickMenuGesturePicker]; break;
         case NeoWCSettingActionReplySwipeTriggerDistance: [self presentNumberEditorWithTitle:item.title message:@"请输入 36 到 100 之间的触发距离；数值越小越容易触发" key:NeoWCReplySwipeTriggerDistanceKey minimum:36 maximum:100 notifyChange:YES applyScale:NO]; break;

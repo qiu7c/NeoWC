@@ -34,6 +34,8 @@ NSString *const NeoWCChatMessageTimeBubbleSideKey = @"com.qiu7c.neowc.chat.messa
 NSString *const NeoWCChatMessageTimeFormatKey = @"com.qiu7c.neowc.chat.message-time.format";
 NSString *const NeoWCChatMessageTimeFontSizeKey = @"com.qiu7c.neowc.chat.message-time.font-size";
 NSString *const NeoWCChatMessageTimeColorKey = @"com.qiu7c.neowc.chat.message-time.color";
+NSString *const NeoWCChatMessageTimeLightColorKey = @"com.qiu7c.neowc.chat.message-time.color.light";
+NSString *const NeoWCChatMessageTimeDarkColorKey = @"com.qiu7c.neowc.chat.message-time.color.dark";
 NSString *const NeoWCChatMessageTimeBubbleVerticalPositionKey = @"com.qiu7c.neowc.chat.message-time.bubble-vertical-position";
 NSString *const NeoWCChatMessageTimeAvatarSpacingKey = @"com.qiu7c.neowc.chat.message-time.avatar-spacing";
 NSString *const NeoWCChatMessageTimeBoldKey = @"com.qiu7c.neowc.chat.message-time.bold";
@@ -45,6 +47,8 @@ NSString *const NeoWCChatTopBarEffectStyleKey = @"com.qiu7c.neowc.chat.top-bar-c
 NSString *const NeoWCChatTopBarShadowEnabledKey = @"com.qiu7c.neowc.chat.top-bar-capsule.shadow";
 NSString *const NeoWCChatGlassBlurIntensityKey = @"com.qiu7c.neowc.chat.capsule-glass.blur-intensity";
 NSString *const NeoWCChatGlassTintOpacityKey = @"com.qiu7c.neowc.chat.capsule-glass.tint-opacity";
+NSString *const NeoWCChatGlassTintColorKey = @"com.qiu7c.neowc.chat.capsule-glass.tint-color";
+NSString *const NeoWCChatGlassWhiteStrengthKey = @"com.qiu7c.neowc.chat.capsule-glass.white-strength";
 NSString *const NeoWCChatTopBarAvatarSizeKey = @"com.qiu7c.neowc.chat.top-bar-capsule.avatar-size";
 NSString *const NeoWCChatTopBarNicknameSizeKey = @"com.qiu7c.neowc.chat.top-bar-capsule.nickname-size";
 NSString *const NeoWCMessageBlockEnabledKey = @"com.qiu7c.neowc.message.block";
@@ -107,6 +111,10 @@ NSString *const NeoWCAntiRevokeSideOffsetXKey = @"com.qiu7c.neowc.message.anti-r
 NSString *const NeoWCAntiRevokeSideOffsetYKey = @"com.qiu7c.neowc.message.anti-revoke.side-offset-y";
 NSString *const NeoWCAntiRevokeLocalTextColorKey = @"com.qiu7c.neowc.message.anti-revoke.local-text-color";
 NSString *const NeoWCAntiRevokeSideTextColorKey = @"com.qiu7c.neowc.message.anti-revoke.side-text-color";
+NSString *const NeoWCAntiRevokeLocalLightTextColorKey = @"com.qiu7c.neowc.message.anti-revoke.local-text-color.light";
+NSString *const NeoWCAntiRevokeLocalDarkTextColorKey = @"com.qiu7c.neowc.message.anti-revoke.local-text-color.dark";
+NSString *const NeoWCAntiRevokeSideLightTextColorKey = @"com.qiu7c.neowc.message.anti-revoke.side-text-color.light";
+NSString *const NeoWCAntiRevokeSideDarkTextColorKey = @"com.qiu7c.neowc.message.anti-revoke.side-text-color.dark";
 NSString *const NeoWCAntiRevokePersistRecordsKey = @"com.qiu7c.neowc.message.anti-revoke.persist-records";
 NSString *const NeoWCImageEditQuickSendEnabledKey = @"com.qiu7c.neowc.enhance.image-edit-quick-send";
 NSString *const NeoWCInputSwipeActionsEnabledKey = @"com.qiu7c.neowc.chat.input-swipe-actions";
@@ -207,6 +215,23 @@ BOOL NeoWCEnhancementEnabled(NSString *key) {
     id featureValue = [defaults objectForKey:key];
     BOOL featureEnabled = featureValue ? [featureValue boolValue] : [key isEqualToString:NeoWCAntiRevokeKey];
     return masterEnabled && featureEnabled;
+}
+
+UIColor *NeoWCDynamicColorForDefaultsKeys(NSString *lightKey,
+                                          NSString *darkKey,
+                                          NSString *legacyKey,
+                                          UIColor *lightFallbackColor,
+                                          UIColor *darkFallbackColor) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSString *legacyHex = legacyKey.length > 0 ? [defaults stringForKey:legacyKey] : nil;
+    UIColor *legacyFallback = legacyHex.length > 0
+        ? NeoWCColorForDefaultsKey(legacyKey, lightFallbackColor)
+        : nil;
+    UIColor *lightColor = NeoWCColorForDefaultsKey(lightKey, legacyFallback ?: lightFallbackColor);
+    UIColor *darkColor = NeoWCColorForDefaultsKey(darkKey, legacyFallback ?: darkFallbackColor);
+    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+        return traits.userInterfaceStyle == UIUserInterfaceStyleDark ? darkColor : lightColor;
+    }];
 }
 
 BOOL NeoWCSystemSupportsNativeLiquidGlass(void) {

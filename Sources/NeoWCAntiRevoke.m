@@ -448,7 +448,11 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
 
     UILabel *prompt = [UILabel new];
     prompt.font = [UIFont systemFontOfSize:10.0];
-    prompt.textColor = NeoWCColorForDefaultsKey(NeoWCAntiRevokeSideTextColorKey, UIColor.secondaryLabelColor);
+    prompt.textColor = NeoWCDynamicColorForDefaultsKeys(NeoWCAntiRevokeSideLightTextColorKey,
+                                                        NeoWCAntiRevokeSideDarkTextColorKey,
+                                                        NeoWCAntiRevokeSideTextColorKey,
+                                                        UIColor.secondaryLabelColor,
+                                                        UIColor.secondaryLabelColor);
     prompt.userInteractionEnabled = YES;
     prompt.text = [[NSUserDefaults standardUserDefaults] stringForKey:NeoWCAntiRevokeSideTextKey] ?: @"已拦截撤回";
     [prompt addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(promptPanned:)]];
@@ -596,7 +600,9 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
 - (void)applySelectedPromptColor:(UIColor *)color {
     self.promptLabel.textColor = color;
     [self.colorButton setImage:[[UIImage systemImageNamed:@"circle.fill"] imageWithTintColor:color renderingMode:UIImageRenderingModeAlwaysOriginal] forState:UIControlStateNormal];
-    [NSUserDefaults.standardUserDefaults setObject:NeoWCHexStringFromColor(color) forKey:NeoWCAntiRevokeSideTextColorKey];
+    NSString *key = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark
+        ? NeoWCAntiRevokeSideDarkTextColorKey : NeoWCAntiRevokeSideLightTextColorKey;
+    [NSUserDefaults.standardUserDefaults setObject:NeoWCHexStringFromColor(color) forKey:key];
 }
 
 - (void)colorPickerViewController:(__unused UIColorPickerViewController *)viewController didSelectColor:(UIColor *)color continuously:(__unused BOOL)continuously API_AVAILABLE(ios(15.0)) {

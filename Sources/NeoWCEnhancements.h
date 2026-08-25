@@ -33,6 +33,8 @@ FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeBubbleSideKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeFormatKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeFontSizeKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeColorKey;
+FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeLightColorKey;
+FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeDarkColorKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeBubbleVerticalPositionKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeAvatarSpacingKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatMessageTimeBoldKey;
@@ -44,6 +46,8 @@ FOUNDATION_EXPORT NSString *const NeoWCChatTopBarEffectStyleKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarShadowEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatGlassBlurIntensityKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatGlassTintOpacityKey;
+FOUNDATION_EXPORT NSString *const NeoWCChatGlassTintColorKey;
+FOUNDATION_EXPORT NSString *const NeoWCChatGlassWhiteStrengthKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarAvatarSizeKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarNicknameSizeKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageBlockEnabledKey;
@@ -115,6 +119,7 @@ typedef NS_ENUM(NSInteger, NeoWCAvatarQuickMenuGesture) {
 typedef NS_ENUM(NSInteger, NeoWCChatTopBarEffectStyle) {
     NeoWCChatTopBarEffectStyleMaterial = 0,
     NeoWCChatTopBarEffectStyleLiquid = 1,
+    NeoWCChatTopBarEffectStyleFauxLiquid = 2,
 };
 FOUNDATION_EXPORT NSString *const NeoWCPageScaleEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCPageScaleGlobalPercentKey;
@@ -131,6 +136,10 @@ FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideOffsetXKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideOffsetYKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeLocalTextColorKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideTextColorKey;
+FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeLocalLightTextColorKey;
+FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeLocalDarkTextColorKey;
+FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideLightTextColorKey;
+FOUNDATION_EXPORT NSString *const NeoWCAntiRevokeSideDarkTextColorKey;
 FOUNDATION_EXPORT NSString *const NeoWCAntiRevokePersistRecordsKey;
 FOUNDATION_EXPORT NSString *const NeoWCImageEditQuickSendEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCInputSwipeActionsEnabledKey;
@@ -157,4 +166,9 @@ FOUNDATION_EXPORT BOOL NeoWCSystemSupportsNativeLiquidGlass(void);
 FOUNDATION_EXPORT CGFloat NeoWCScalePercentForDefaultsKey(NSString *key, CGFloat defaultValue);
 FOUNDATION_EXPORT NSString *NeoWCNormalizedMomentsDateFormat(NSString *format);
 FOUNDATION_EXPORT UIColor *NeoWCColorForDefaultsKey(NSString *key, UIColor *fallbackColor);
+FOUNDATION_EXPORT UIColor *NeoWCDynamicColorForDefaultsKeys(NSString *lightKey,
+                                                            NSString *darkKey,
+                                                            NSString *legacyKey,
+                                                            UIColor *lightFallbackColor,
+                                                            UIColor *darkFallbackColor);
 FOUNDATION_EXPORT NSString *NeoWCHexStringFromColor(UIColor *color);

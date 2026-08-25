@@ -24,6 +24,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCRuntimeFeatures.h"
 #import "Sources/NeoWCInterfaceTweaks.h"
 #import "Sources/NeoWCMessageTime.h"
+#import "Sources/NeoWCGlassCapsuleView.h"
 #import "Sources/NeoWCQuickReplyStore.h"
 #import "Sources/NeoWCQuickReplyViewController.h"
 #import "Sources/NeoWCSendConfirmation.h"
@@ -346,12 +347,12 @@ static char NeoWCAvatarNativeDoubleTapActionKey;
 static char NeoWCAvatarNativeDoubleTapOwnedKey;
 static char NeoWCOfficialInfoCardBoxKey;
 static char NeoWCOfficialInfoBaseRowsKey;
-static char NeoWCInfoCardOfficialControllerKey;
 static char NeoWCExclusiveRedEnvelopeContactKey;
 static char NeoWCExclusiveRedEnvelopeViewContactKey;
 static char NeoWCExclusiveRedEnvelopeViewDataKey;
 static BOOL NeoWCUpdatingAvatarNativeDoubleTap = NO;
 static BOOL NeoWCPerformingNativeAvatarLongPress = NO;
+static BOOL NeoWCPaymentLinkFeatureAvailable(void) { return NO; }
 static id NeoWCPendingExclusiveRedEnvelopeContact;
 static NSString *NeoWCPendingExclusiveRedEnvelopeGroupID;
 static CFTimeInterval NeoWCPendingExclusiveRedEnvelopeDeadline;
@@ -2717,6 +2718,32 @@ static void NeoWCOpenAvatarTransfer(id chatController, NSString *targetUserName,
         SEL selector = NSSelectorFromString(entry[@"selector"]);
         if ([data respondsToSelector:selector]) ((void (*)(id, SEL, id))objc_msgSend)(data, selector, value);
     }
+    Class recorderClass = NSClassFromString(@"WeChat.WCPaySessionInfoRecorder");
+    SEL chatTypeSelector = NSSelectorFromString(@"chatTypeValueFromTalker:");
+    SEL sendTypeSelector = NSSelectorFromString(@"commonSendTypeValue");
+    SEL setChatTypeSelector = NSSelectorFromString(@"setSessionChatType:");
+    SEL setSendTypeSelector = NSSelectorFromString(@"setSessionSendType:");
+    if (recorderClass && [recorderClass respondsToSelector:chatTypeSelector] &&
+        [data respondsToSelector:setChatTypeSelector]) {
+        NSInteger chatType = ((NSInteger (*)(id, SEL, id))objc_msgSend)(recorderClass,
+                                                                         chatTypeSelector,
+                                                                         chatUserName ?: targetUserName);
+        ((void (*)(id, SEL, NSInteger))objc_msgSend)(data, setChatTypeSelector, chatType);
+    }
+    if (recorderClass && [recorderClass respondsToSelector:sendTypeSelector] &&
+        [data respondsToSelector:setSendTypeSelector]) {
+        NSInteger sendType = ((NSInteger (*)(id, SEL))objc_msgSend)(recorderClass, sendTypeSelector);
+        ((void (*)(id, SEL, NSInteger))objc_msgSend)(data, setSendTypeSelector, sendType);
+    }
+    SEL contactTypeSelector = NSSelectorFromString(@"m_uiType");
+    SEL setTypeSelector = NSSelectorFromString(@"setM_uiType:");
+    if (targetContact && [targetContact respondsToSelector:contactTypeSelector] &&
+        [targetContact respondsToSelector:setTypeSelector]) {
+        NSUInteger contactType = ((NSUInteger (*)(id, SEL))objc_msgSend)(targetContact, contactTypeSelector);
+        if ((contactType & 1U) == 0) {
+            ((void (*)(id, SEL, NSUInteger))objc_msgSend)(targetContact, setTypeSelector, contactType | 1U);
+        }
+    }
     ((void (*)(id, SEL, id, id))objc_msgSend)(manager, startSelector, chatController, data);
 }
 
@@ -2727,6 +2754,16 @@ static void NeoWCOpenAvatarInfoCard(UIViewController *chatController,
                                     NSString *targetUserName,
                                     NSString *chatUserName) {
     if (!chatController || targetUserName.length == 0) return;
+    UIViewController *officialController = contact ? NeoWCCreateOfficialSocialInformation(contact) : nil;
+    if (officialController) {
+        if (chatController.navigationController) {
+            [chatController.navigationController pushViewController:officialController animated:YES];
+        } else {
+            [chatController presentViewController:[[UINavigationController alloc] initWithRootViewController:officialController]
+                                          animated:YES completion:nil];
+        }
+        return;
+    }
     NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows =
         [NeoWCProfileInfoRows(contact, NO) mutableCopy] ?: [NSMutableArray array];
     if ([chatUserName hasSuffix:@"@chatroom"]) {
@@ -2735,25 +2772,13 @@ static void NeoWCOpenAvatarInfoCard(UIViewController *chatController,
         [rows addObjectsFromArray:NeoWCGroupMemberInfoRows(contact, groupContact, targetUserName)];
     }
     NSArray *baseRows = [rows copy];
-    UIViewController *officialController = contact ? NeoWCCreateOfficialSocialInformation(contact) : nil;
-    NSArray *displayRows = NeoWCMergeInfoCardRows(baseRows,
-        officialController ? NeoWCOfficialSocialInformationRows(officialController) : @[]);
+    NSArray *displayRows = baseRows;
     UIViewController *card = [[NeoWCContactInfoCardViewController alloc]
         initWithTitle:[chatUserName hasSuffix:@"@chatroom"] ? @"群成员详细信息" : @"详细信息"
                avatar:avatar
                  name:displayName ?: targetUserName
              userName:targetUserName
                  rows:displayRows];
-    if (officialController) {
-        NeoWCWeakObjectBox *box = [NeoWCWeakObjectBox new];
-        box.object = card;
-        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoCardBoxKey,
-                                 box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoBaseRowsKey,
-                                 baseRows, OBJC_ASSOCIATION_COPY_NONATOMIC);
-        objc_setAssociatedObject(card, &NeoWCInfoCardOfficialControllerKey,
-                                 officialController, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
     if (chatController.navigationController) {
         [chatController.navigationController pushViewController:card animated:YES];
     } else {
@@ -5800,6 +5825,8 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
                             [changedKey isEqualToString:NeoWCChatTopBarShadowEnabledKey] ||
                             [changedKey isEqualToString:NeoWCChatGlassBlurIntensityKey] ||
                             [changedKey isEqualToString:NeoWCChatGlassTintOpacityKey] ||
+                            [changedKey isEqualToString:NeoWCChatGlassTintColorKey] ||
+                            [changedKey isEqualToString:NeoWCChatGlassWhiteStrengthKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarAvatarSizeKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarNicknameSizeKey];
                         BaseMsgContentViewController *visibleChat = NeoWCResolveVisibleChatController();
@@ -6656,9 +6683,8 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
     if (![commandText isKindOfClass:NSString.class]) {
         commandText = NeoWCTweakSafeValue(textView, @"text");
     }
-    NeoWCPaymentLinkDiagnosticsRecordCommandText(commandText);
     %orig(textView);
-    if (NeoWCPaymentLinkIsTriggerText(commandText)) {
+    if (NeoWCPaymentLinkFeatureAvailable() && NeoWCPaymentLinkIsTriggerText(commandText)) {
         NeoWCHandlePaymentLinkText(NeoWCResolveVisibleChatController(), commandText);
     }
 }
@@ -7695,9 +7721,11 @@ static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibili
 
 static NeoWCChatTopBarEffectStyle NeoWCChatTopEffectStyle(void) {
     NSInteger value = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCChatTopBarEffectStyleKey];
-    return value == NeoWCChatTopBarEffectStyleLiquid && NeoWCSystemSupportsNativeLiquidGlass()
-        ? NeoWCChatTopBarEffectStyleLiquid
-        : NeoWCChatTopBarEffectStyleMaterial;
+    if (value == NeoWCChatTopBarEffectStyleFauxLiquid) return NeoWCChatTopBarEffectStyleFauxLiquid;
+    if (value == NeoWCChatTopBarEffectStyleLiquid && NeoWCSystemSupportsNativeLiquidGlass()) {
+        return NeoWCChatTopBarEffectStyleLiquid;
+    }
+    return NeoWCChatTopBarEffectStyleMaterial;
 }
 
 static UIVisualEffect *NeoWCChatTopVisualEffect(void) {
@@ -7715,6 +7743,9 @@ static UIVisualEffect *NeoWCChatTopVisualEffect(void) {
             if (effect) return effect;
         }
         return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
+    }
+    if (NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleFauxLiquid) {
+        return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
     }
     return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
 }
@@ -7746,37 +7777,29 @@ static void NeoWCConfigureChatTopGlassLayer(UIVisualEffectView *effectView) {
                                  animator, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 
-    CGFloat tintOpacity = NeoWCChatGlassPercent(NeoWCChatGlassTintOpacityKey,
-                                                 8.0, 0.0, 30.0) / 100.0;
-    if (tintOpacity > 0.001) {
-        UIView *tintView = [[UIView alloc] initWithFrame:effectView.contentView.bounds];
-        tintView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        tintView.userInteractionEnabled = NO;
-        tintView.backgroundColor = [UIColor.systemBackgroundColor colorWithAlphaComponent:tintOpacity];
-        [effectView.contentView insertSubview:tintView atIndex:0];
-    }
     effectView.layer.borderWidth = 0.0;
     effectView.layer.borderColor = UIColor.clearColor.CGColor;
 }
 
 static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectView **effectViewOut) {
-    UIView *container = [UIView new];
-    container.translatesAutoresizingMaskIntoConstraints = NO;
-    container.backgroundColor = UIColor.clearColor;
+    NeoWCGlassCapsuleView *container = [NeoWCGlassCapsuleView new];
+    container.capsuleCornerRadius = cornerRadius;
     BOOL shadowEnabled = [NSUserDefaults.standardUserDefaults boolForKey:NeoWCChatTopBarShadowEnabledKey];
-    container.layer.shadowColor = UIColor.blackColor.CGColor;
-    container.layer.shadowOpacity = shadowEnabled ? 0.10 : 0.0;
-    container.layer.shadowRadius = shadowEnabled ? 5.0 : 0.0;
-    container.layer.shadowOffset = shadowEnabled ? CGSizeMake(0.0, 1.5) : CGSizeZero;
+    [container configureShadowEnabled:shadowEnabled];
     objc_setAssociatedObject(container, &NeoWCChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
-    UIVisualEffectView *effectView = [[UIVisualEffectView alloc] initWithEffect:nil];
-    effectView.translatesAutoresizingMaskIntoConstraints = NO;
-    effectView.clipsToBounds = YES;
-    effectView.layer.cornerRadius = cornerRadius;
-    effectView.layer.cornerCurve = kCACornerCurveContinuous;
+    UIVisualEffectView *effectView = container.effectView;
     NeoWCConfigureChatTopGlassLayer(effectView);
+    UIColor *tintColor = NeoWCColorForDefaultsKey(NeoWCChatGlassTintColorKey, UIColor.whiteColor);
+    CGFloat tintOpacity = NeoWCChatGlassPercent(NeoWCChatGlassTintOpacityKey,
+                                                8.0, 0.0, 30.0) / 100.0;
+    CGFloat whiteStrength = NeoWCChatGlassPercent(NeoWCChatGlassWhiteStrengthKey,
+                                                  18.0, 0.0, 50.0) / 100.0;
+    [container configureFauxLiquidEnabled:NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleFauxLiquid
+                                tintColor:tintColor
+                              tintOpacity:tintOpacity
+                             whiteStrength:whiteStrength];
     if (NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleMaterial) {
         UIColor *outlineColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
             return traits.userInterfaceStyle == UIUserInterfaceStyleDark
@@ -7788,13 +7811,6 @@ static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectVi
     }
     objc_setAssociatedObject(effectView, &NeoWCChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    [container addSubview:effectView];
-    [NSLayoutConstraint activateConstraints:@[
-        [effectView.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
-        [effectView.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
-        [effectView.topAnchor constraintEqualToAnchor:container.topAnchor],
-        [effectView.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
-    ]];
     if (effectViewOut) *effectViewOut = effectView;
     return container;
 }
@@ -9138,6 +9154,10 @@ static UIViewController *NeoWCCreateOfficialSocialInformation(id contact) {
         return nil;
     }
     ((void (*)(id, SEL, id))objc_msgSend)(controller, setter, contact);
+    NSString *rawID = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+    objc_setAssociatedObject(controller, &NeoWCProfileContactKey, contact, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &NeoWCProfileIsGroupKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &NeoWCRawContactIDKey, rawID, OBJC_ASSOCIATION_COPY_NONATOMIC);
     (void)controller.view;
     SEL reloadSelector = NSSelectorFromString(@"reloadTableView");
     if ([controller respondsToSelector:reloadSelector]) {
@@ -9173,6 +9193,14 @@ static void NeoWCOpenProfileInfoCard(id controller) {
     NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
     if (userName.length == 0) userName = objc_getAssociatedObject(controller, &NeoWCRawContactIDKey);
     if (userName.length == 0) return;
+    UIViewController *owner = NeoWCProfileOwnerViewController(controller);
+    UIViewController *officialController = !group ? NeoWCCreateOfficialSocialInformation(contact) : nil;
+    if (officialController) {
+        if (owner.navigationController) [owner.navigationController pushViewController:officialController animated:YES];
+        else if (owner) [owner presentViewController:[[UINavigationController alloc] initWithRootViewController:officialController]
+                                             animated:YES completion:nil];
+        return;
+    }
     NSString *name = NeoWCRawProfileValue(contact, @[@"getContactDisplayName", @"m_nsRemark", @"m_nsNickName"]);
     id imageValue = NeoWCRawProfileValue(contact, @[@"getContactHeadImage"]);
     UIImage *avatar = [imageValue isKindOfClass:UIImage.class] ? imageValue : nil;
@@ -9184,26 +9212,13 @@ static void NeoWCOpenProfileInfoCard(id controller) {
             NeoWCContactForUserName(chatRoomUserName), userName)];
     }
     NSArray *baseRows = [rows copy];
-    UIViewController *officialController = !group ? NeoWCCreateOfficialSocialInformation(contact) : nil;
-    NSArray *displayRows = NeoWCMergeInfoCardRows(baseRows,
-        officialController ? NeoWCOfficialSocialInformationRows(officialController) : @[]);
+    NSArray *displayRows = baseRows;
     UIViewController *card = [[NeoWCContactInfoCardViewController alloc]
         initWithTitle:(!group && [chatRoomUserName hasSuffix:@"@chatroom"]) ? @"群成员详细信息" : @"详细信息"
                avatar:avatar
                  name:name ?: userName
              userName:userName
                  rows:displayRows];
-    if (officialController) {
-        NeoWCWeakObjectBox *box = [NeoWCWeakObjectBox new];
-        box.object = card;
-        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoCardBoxKey,
-                                 box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoBaseRowsKey,
-                                 baseRows, OBJC_ASSOCIATION_COPY_NONATOMIC);
-        objc_setAssociatedObject(card, &NeoWCInfoCardOfficialControllerKey,
-                                 officialController, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    UIViewController *owner = NeoWCProfileOwnerViewController(controller);
     if (owner.navigationController) [owner.navigationController pushViewController:card animated:YES];
     else if (owner) [owner presentViewController:[[UINavigationController alloc] initWithRootViewController:card]
                                          animated:YES completion:nil];
@@ -9671,13 +9686,17 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)initData {
     %orig;
     NeoWCInjectRawIDCell(self, NO);
-    NeoWCInjectProfileConversationSwitches(self, NO);
+    if (!NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey)) {
+        NeoWCInjectProfileConversationSwitches(self, NO);
+    }
 }
 
 - (void)reloadTableView {
     %orig;
     NeoWCInjectRawIDCell(self, NO);
-    NeoWCInjectProfileConversationSwitches(self, NO);
+    if (!NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey)) {
+        NeoWCInjectProfileConversationSwitches(self, NO);
+    }
 }
 
 %new
@@ -9718,14 +9737,37 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)onCRGDataUpdated {
     %orig;
+    if (NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey)) {
+        NeoWCInjectProfileConversationSwitches(self, NO);
+    }
     NeoWCRefreshInfoCardFromOfficialController(self);
 }
 
 - (void)reloadTableView {
     %orig;
+    if (NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey)) {
+        NeoWCInjectProfileConversationSwitches(self, NO);
+    }
     if (objc_getAssociatedObject(self, &NeoWCOfficialInfoCardBoxKey)) {
         NeoWCRefreshInfoCardFromOfficialController(self);
     }
+}
+
+%new
+- (void)neowc_toggleProfileMessageBlock:(UISwitch *)sender {
+    NeoWCSetProfileMessageBlocked(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
+}
+
+%new
+- (void)neowc_openProfileMessageBlockTypes {
+    NSString *username = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
+    UIViewController *controller = NeoWCMessageBlockTypeController(username);
+    if (controller) [self.navigationController pushViewController:controller animated:YES];
+}
+
+%new
+- (void)neowc_toggleProfileSendConfirmation:(UISwitch *)sender {
+    NeoWCSendConfirmationSetProtected(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
 }
 
 %end
@@ -10676,12 +10718,12 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook BaseMsgContentLogicController
 
 - (void)SendTextMessage:(id)text {
-    if (NeoWCHandlePaymentLinkText(self, text)) return;
+    if (NeoWCPaymentLinkFeatureAvailable() && NeoWCHandlePaymentLinkText(self, text)) return;
     %orig(text);
 }
 
 - (void)SendTextMessage:(id)text replyingMessage:(id)replyingMessage isPasted:(BOOL)isPasted {
-    if (!replyingMessage && NeoWCHandlePaymentLinkText(self, text)) return;
+    if (NeoWCPaymentLinkFeatureAvailable() && !replyingMessage && NeoWCHandlePaymentLinkText(self, text)) return;
     %orig(text, replyingMessage, isPasted);
 }
 
@@ -10745,17 +10787,17 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook WAJSEventHandler
 
 - (void)handleJSEvent:(id)event {
-    NeoWCPaymentLinkLearnFromWAJSEvent(event);
+    if (NeoWCPaymentLinkFeatureAvailable()) NeoWCPaymentLinkLearnFromWAJSEvent(event);
     %orig(event);
 }
 
 - (void)innerHandleJSEvent:(id)event isForceCellularNetwork:(BOOL)forceCellular {
-    NeoWCPaymentLinkLearnFromWAJSEvent(event);
+    if (NeoWCPaymentLinkFeatureAvailable()) NeoWCPaymentLinkLearnFromWAJSEvent(event);
     %orig(event, forceCellular);
 }
 
 - (void)operateWXData:(id)data {
-    NeoWCPaymentLinkLearnFromWAJSEvent(data);
+    if (NeoWCPaymentLinkFeatureAvailable()) NeoWCPaymentLinkLearnFromWAJSEvent(data);
     %orig(data);
 }
 
@@ -10764,10 +10806,10 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook NSURLSession
 
 - (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request {
-    if (NeoWCPaymentLinkMatchesRequest(request)) {
+    if (NeoWCPaymentLinkFeatureAvailable() && NeoWCPaymentLinkMatchesRequest(request)) {
         NeoWCPaymentLinkLearnFromRequest(request, nil);
     }
-    if (NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) {
+    if (NeoWCPaymentLinkFeatureAvailable() && NeoWCPaymentLinkDiagnosticsMatchesRequest(request)) {
         NeoWCPaymentLinkDiagnosticsRecordRequest(request, nil);
     }
     return %orig(request);
@@ -10775,8 +10817,8 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request
                             completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
-    BOOL paymentRequest = NeoWCPaymentLinkMatchesRequest(request);
-    BOOL diagnosticsRequest = NeoWCPaymentLinkDiagnosticsMatchesRequest(request);
+    BOOL paymentRequest = NeoWCPaymentLinkFeatureAvailable() && NeoWCPaymentLinkMatchesRequest(request);
+    BOOL diagnosticsRequest = NeoWCPaymentLinkFeatureAvailable() && NeoWCPaymentLinkDiagnosticsMatchesRequest(request);
     if (paymentRequest) {
         NeoWCPaymentLinkLearnFromRequest(request, nil);
     }
@@ -10797,8 +10839,8 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (NSURLSessionUploadTask *)uploadTaskWithRequest:(NSURLRequest *)request
                                          fromData:(NSData *)bodyData
                                 completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
-    BOOL paymentRequest = NeoWCPaymentLinkMatchesRequest(request);
-    BOOL diagnosticsRequest = NeoWCPaymentLinkDiagnosticsMatchesRequest(request);
+    BOOL paymentRequest = NeoWCPaymentLinkFeatureAvailable() && NeoWCPaymentLinkMatchesRequest(request);
+    BOOL diagnosticsRequest = NeoWCPaymentLinkFeatureAvailable() && NeoWCPaymentLinkDiagnosticsMatchesRequest(request);
     if (paymentRequest) {
         NeoWCPaymentLinkLearnFromRequest(request, bodyData);
     }
@@ -10821,15 +10863,15 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook CMessageMgr
 
 - (void)AddAppMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap Data:(NSData *)data Scene:(unsigned int)scene {
-    NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataBefore", target, wrap, data, scene);
+    if (NeoWCPaymentLinkFeatureAvailable()) NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataBefore", target, wrap, data, scene);
     %orig(target, wrap, data, scene);
-    NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataAfter", target, wrap, data, scene);
+    if (NeoWCPaymentLinkFeatureAvailable()) NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataAfter", target, wrap, data, scene);
 }
 
 - (void)AddAppMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap DataPath:(NSString *)path Scene:(unsigned int)scene {
-    NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataPathBefore", target, wrap, path, scene);
+    if (NeoWCPaymentLinkFeatureAvailable()) NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataPathBefore", target, wrap, path, scene);
     %orig(target, wrap, path, scene);
-    NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataPathAfter", target, wrap, path, scene);
+    if (NeoWCPaymentLinkFeatureAvailable()) NeoWCPaymentLinkDiagnosticsRecordAppMessage(@"DataPathAfter", target, wrap, path, scene);
 }
 
 - (void)AddMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap {
@@ -11354,7 +11396,11 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     if (label.hidden) label.hidden = NO;
     if (label.alpha != 1.0) label.alpha = 1.0;
     if (![label.text isEqualToString:prompt]) label.text = prompt;
-    UIColor *promptColor = NeoWCColorForDefaultsKey(NeoWCAntiRevokeSideTextColorKey, UIColor.tertiaryLabelColor);
+    UIColor *promptColor = NeoWCDynamicColorForDefaultsKeys(NeoWCAntiRevokeSideLightTextColorKey,
+                                                            NeoWCAntiRevokeSideDarkTextColorKey,
+                                                            NeoWCAntiRevokeSideTextColorKey,
+                                                            UIColor.tertiaryLabelColor,
+                                                            UIColor.tertiaryLabelColor);
     if (![label.textColor isEqual:promptColor]) label.textColor = promptColor;
 
     UIView *bubbleView = NeoWCMessageSideAnchorView(self);
@@ -11415,7 +11461,11 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     }
     BOOL shouldApply = NeoWCEnhancementEnabled(NeoWCAntiRevokeKey) && NeoWCAntiRevokeIsLocalPromptMessage(message);
     UIColor *color = shouldApply
-        ? NeoWCColorForDefaultsKey(NeoWCAntiRevokeLocalTextColorKey, UIColor.secondaryLabelColor)
+        ? NeoWCDynamicColorForDefaultsKeys(NeoWCAntiRevokeLocalLightTextColorKey,
+                                           NeoWCAntiRevokeLocalDarkTextColorKey,
+                                           NeoWCAntiRevokeLocalTextColorKey,
+                                           UIColor.secondaryLabelColor,
+                                           UIColor.secondaryLabelColor)
         : originalColor;
     if (color) {
         UIColor *currentColor = NeoWCTweakSafeValue(richTextView, @"textColor");

@@ -139,6 +139,8 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCChatTopBarShadowEnabledKey: @YES,
         NeoWCChatGlassBlurIntensityKey: @100.0,
         NeoWCChatGlassTintOpacityKey: @8.0,
+        NeoWCChatGlassTintColorKey: @"#FFFFFFFF",
+        NeoWCChatGlassWhiteStrengthKey: @18.0,
         NeoWCChatTopBarAvatarSizeKey: @30.0,
         NeoWCChatTopBarNicknameSizeKey: @15.0,
         NeoWCMessageBlockEnabledKey: @NO,
@@ -256,8 +258,27 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"防撤回提示方案", @"选择提示显示在消息下方或气泡旁", @"text.bubble", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(promptStyle), NeoWCSettingActionRevokePromptStyle),
         promptStyleValue == 1
             ? NeoWCItem(@"提示外观预览", @"调整文字、颜色和 X / Y 位置", @"cursorarrow.motionlines", NeoWCSettingRowKindDetail, nil, @"编辑", NeoWCSettingActionRevokeAppearance)
-            : NeoWCItem(@"本地提示模板", @"编辑完整提示内容与文字颜色", @"text.quote", NeoWCSettingRowKindDetail, nil, @"编辑", NeoWCSettingActionRevokeLocalTemplate),
+            : NeoWCItem(@"本地提示模板", @"编辑完整提示内容；浅色和深色颜色分别设置", @"text.quote", NeoWCSettingRowKindDetail, nil, @"编辑", NeoWCSettingActionRevokeLocalTemplate),
         nil];
+    if (promptStyleValue == 1) {
+        NSString *light = [defaults stringForKey:NeoWCAntiRevokeSideLightTextColorKey] ?: @"#8E8E93FF";
+        NSString *dark = [defaults stringForKey:NeoWCAntiRevokeSideDarkTextColorKey] ?: @"#98989DFF";
+        [revokeChildren addObject:NeoWCItem(@"浅色模式提示颜色", @"气泡旁提示在浅色模式下使用", @"sun.max",
+                                              NeoWCSettingRowKindDetail, NeoWCAntiRevokeSideLightTextColorKey,
+                                              light.uppercaseString, NeoWCSettingActionMessageTimeColor)];
+        [revokeChildren addObject:NeoWCItem(@"深色模式提示颜色", @"气泡旁提示在深色模式下使用", @"moon",
+                                              NeoWCSettingRowKindDetail, NeoWCAntiRevokeSideDarkTextColorKey,
+                                              dark.uppercaseString, NeoWCSettingActionMessageTimeColor)];
+    } else {
+        NSString *light = [defaults stringForKey:NeoWCAntiRevokeLocalLightTextColorKey] ?: @"#8E8E93FF";
+        NSString *dark = [defaults stringForKey:NeoWCAntiRevokeLocalDarkTextColorKey] ?: @"#98989DFF";
+        [revokeChildren addObject:NeoWCItem(@"浅色模式提示颜色", @"消息下方提示在浅色模式下使用", @"sun.max",
+                                              NeoWCSettingRowKindDetail, NeoWCAntiRevokeLocalLightTextColorKey,
+                                              light.uppercaseString, NeoWCSettingActionMessageTimeColor)];
+        [revokeChildren addObject:NeoWCItem(@"深色模式提示颜色", @"消息下方提示在深色模式下使用", @"moon",
+                                              NeoWCSettingRowKindDetail, NeoWCAntiRevokeLocalDarkTextColorKey,
+                                              dark.uppercaseString, NeoWCSettingActionMessageTimeColor)];
+    }
     NeoWCSettingItem *notify = NeoWCItem(@"回复撤回者", @"自动发送提示，默认关闭", @"paperplane", NeoWCSettingRowKindSwitch, NeoWCAntiRevokeNotifySenderKey, nil, NeoWCSettingActionNone);
     NSArray *notifyChildren = @[
         NeoWCItem(@"回复时间限制", @"避免响应很久以前的撤回事件", @"timer", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(filterValue), NeoWCSettingActionRevokeFilter),
@@ -311,13 +332,12 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
                                 NeoWCCountText(NeoWCQuickReplyStore.sharedStore.items.count), NeoWCSettingActionQuickReplyLibrary)],
                     defaults,
                     collapsed);
-    [interaction addObject:NeoWCItem(@"快捷收款链接",
-                                     @"发送 #fk 修改标题和编号，登记后发送原生收款卡片",
-                                     @"link.badge.plus",
-                                     NeoWCSettingRowKindSwitch,
-                                     NeoWCPaymentLinkEnabledKey,
-                                     nil,
-                                     NeoWCSettingActionNone)];
+    // 暂停开放：保留收款小账本实现，待官方字段链稳定后恢复入口。
+#if 0
+    [interaction addObject:NeoWCItem(@"快捷收款链接", @"发送 #fk 修改标题和编号，登记后发送原生收款卡片",
+                                     @"link.badge.plus", NeoWCSettingRowKindSwitch,
+                                     NeoWCPaymentLinkEnabledKey, nil, NeoWCSettingActionNone)];
+#endif
     // 暂停开放：保留完整实现，等待稳定的视频解析和点歌接口后恢复。
 #if 0
     NSInteger videoSendMode = [defaults integerForKey:NeoWCVideoParserSendModeKey];
@@ -360,7 +380,8 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     BOOL messageTimeBubbleMode = [defaults boolForKey:NeoWCChatMessageTimeBubbleSideKey];
     NSInteger messageTimePosition = MIN(2, MAX(0, [defaults integerForKey:NeoWCChatMessageTimeBubbleVerticalPositionKey]));
     NSArray<NSString *> *messageTimePositionNames = @[@"顶部", @"中间", @"底部"];
-    NSString *messageTimeColor = [defaults stringForKey:NeoWCChatMessageTimeColorKey] ?: @"#8E8E93FF";
+    NSString *messageTimeLightColor = [defaults stringForKey:NeoWCChatMessageTimeLightColorKey] ?: @"#8E8E93FF";
+    NSString *messageTimeDarkColor = [defaults stringForKey:NeoWCChatMessageTimeDarkColorKey] ?: @"#98989DFF";
     NSString *messageTimeModeName = messageTimeBubbleMode ? @"消息右侧" : @"头像下方";
     NSMutableArray<NeoWCSettingItem *> *messageTimeChildren = [NSMutableArray arrayWithObject:
         NeoWCItem(@"时间显示位置", @"头像下方与消息右侧严格二选一", @"rectangle.2.swap", NeoWCSettingRowKindDetail, nil, messageTimeModeName, NeoWCSettingActionMessageTimeMode)];
@@ -373,7 +394,8 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"时间格式", @"支持 yyyy、MM、dd、E、HH、mm、ss", @"textformat", NeoWCSettingRowKindDetail, nil, messageTimeFormat, NeoWCSettingActionMessageTimeFormat),
         NeoWCItem(@"时间字号", @"限制在 8 到 18 点", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatMessageTimeFontSizeKey]], NeoWCSettingActionMessageTimeFontSize),
         NeoWCItem(@"时间文字加粗", @"头像下方与消息右侧共同生效", @"bold", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeBoldKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"时间颜色", @"支持透明度并适配不同聊天背景", @"paintpalette", NeoWCSettingRowKindDetail, nil, messageTimeColor.uppercaseString, NeoWCSettingActionMessageTimeColor),
+        NeoWCItem(@"浅色模式时间颜色", @"仅在浅色模式下使用", @"sun.max", NeoWCSettingRowKindDetail, NeoWCChatMessageTimeLightColorKey, messageTimeLightColor.uppercaseString, NeoWCSettingActionMessageTimeColor),
+        NeoWCItem(@"深色模式时间颜色", @"仅在深色模式下使用", @"moon", NeoWCSettingRowKindDetail, NeoWCChatMessageTimeDarkColorKey, messageTimeDarkColor.uppercaseString, NeoWCSettingActionMessageTimeColor),
     ]];
     NeoWCAddFeature(interaction, NeoWCItem(@"消息时间显示", [NSString stringWithFormat:@"当前：%@", messageTimeModeName], @"clock", NeoWCSettingRowKindSwitch, NeoWCChatMessageTimeEnabledKey, nil, NeoWCSettingActionNone), messageTimeChildren, defaults, collapsed);
     NSInteger selfSwipeAction = [defaults integerForKey:NeoWCReplySwipeSelfActionKey];
@@ -539,16 +561,21 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
     ]];
     NSMutableArray *chatCapsules = [NSMutableArray array];
     BOOL supportsLiquidGlass = NeoWCSystemSupportsNativeLiquidGlass();
-    BOOL usesLiquidGlass = supportsLiquidGlass &&
-        [defaults integerForKey:NeoWCChatTopBarEffectStyleKey] == NeoWCChatTopBarEffectStyleLiquid;
+    NSInteger glassStyle = [defaults integerForKey:NeoWCChatTopBarEffectStyleKey];
+    NSString *glassStyleName = glassStyle == NeoWCChatTopBarEffectStyleFauxLiquid
+        ? @"伪液态玻璃"
+        : (supportsLiquidGlass && glassStyle == NeoWCChatTopBarEffectStyleLiquid ? @"原生液态玻璃" : @"超薄玻璃");
+    NSString *glassTintColor = [defaults stringForKey:NeoWCChatGlassTintColorKey] ?: @"#FFFFFFFF";
     NeoWCAddFeature(chatCapsules,
                     NeoWCItem(@"胶囊顶栏", @"隐藏整条顶栏背景，左右使用玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatTopBarCapsuleEnabledKey, nil, NeoWCSettingActionNone),
                     @[
         NeoWCItem(@"头像大小", @"限制在 24 到 34 之间", @"person.crop.circle", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarAvatarSizeKey]], NeoWCSettingActionChatTopAvatarSize),
         NeoWCItem(@"昵称字号", @"限制在 12 到 18 之间", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarNicknameSizeKey]], NeoWCSettingActionChatTopNicknameSize),
-        NeoWCItem(@"玻璃类型", supportsLiquidGlass ? @"用于左右胶囊和置顶消息" : @"iOS 26 以下仅支持超薄玻璃", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(usesLiquidGlass ? @"液态玻璃" : @"超薄玻璃"), NeoWCSettingActionChatTopEffectStyle),
+        NeoWCItem(@"玻璃类型", supportsLiquidGlass ? @"超薄、伪液态或 iOS 原生液态玻璃" : @"超薄与伪液态玻璃均支持当前系统", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(glassStyleName), NeoWCSettingActionChatTopEffectStyle),
         NeoWCItem(@"模糊强度", @"限制在 20% 到 100%", @"drop.halffull", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassBlurIntensityKey]], NeoWCSettingActionChatGlassBlurIntensity),
+        NeoWCItem(@"染色颜色", @"选择玻璃覆盖色，染色强度为 0 时不显示", @"paintpalette.fill", NeoWCSettingRowKindDetail, NeoWCChatGlassTintColorKey, glassTintColor.uppercaseString, NeoWCSettingActionMessageTimeColor),
         NeoWCItem(@"染色强度", @"限制在 0% 到 30%；0% 不额外染色", @"paintpalette", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassTintOpacityKey]], NeoWCSettingActionChatGlassTintOpacity),
+        NeoWCItem(@"白玻璃强度", @"增加乳白透光感，范围 0% 到 50%", @"circle.fill", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassWhiteStrengthKey]], NeoWCSettingActionChatGlassWhiteStrength),
         NeoWCItem(@"胶囊阴影", @"左右胶囊使用轻微环境阴影", @"circle.dotted", NeoWCSettingRowKindSwitch, NeoWCChatTopBarShadowEnabledKey, nil, NeoWCSettingActionNone),
     ], defaults, collapsed);
     NSMutableArray *input = [NSMutableArray array];
@@ -579,7 +606,9 @@ static NSArray<NeoWCSettingSection *> *NeoWCDeveloperSections(NSUserDefaults *de
     NSMutableArray *items = [NSMutableArray arrayWithArray:@[
         NeoWCItem(@"调试悬浮按钮", @"仅由此开关控制，不监听全局手势", @"wrench.and.screwdriver", NeoWCSettingRowKindSwitch, NeoWCDebugFloatingEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"记录调试日志", @"关闭后停止新增运行日志", @"text.alignleft", NeoWCSettingRowKindSwitch, NeoWCDebugLoggingEnabledKey, nil, NeoWCSettingActionNone),
+#if 0
         NeoWCItem(@"收款链接诊断", @"仅脱敏记录官方收款接口与消息卡片结构", @"waveform.path.ecg", NeoWCSettingRowKindSwitch, NeoWCPaymentLinkDiagnosticsEnabledKey, nil, NeoWCSettingActionNone),
+#endif
         NeoWCItem(@"调试中心", @"视图检查、Runtime 搜索与日志", @"ladybug", NeoWCSettingRowKindDetail, nil, @"打开", NeoWCSettingActionDebugCenter),
         NeoWCItem(@"功能兼容性", @"检查类、Selector 与触发状态", @"checklist", NeoWCSettingRowKindDetail, nil, @"检查", NeoWCSettingActionCompatibility),
     ]];
