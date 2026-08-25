@@ -30,6 +30,19 @@ extern const unsigned char NeoWCMJSwingEnd[];
 
 @end
 
+@interface NeoWCPassthroughWindow : UIWindow
+@end
+
+@implementation NeoWCPassthroughWindow
+
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    (void)point;
+    (void)event;
+    return nil;
+}
+
+@end
+
 @interface NeoWCMatteVideoView ()
 @property (nonatomic, strong) AVPlayer *player;
 @property (nonatomic, strong) AVPlayerItemVideoOutput *videoOutput;
@@ -41,6 +54,7 @@ extern const unsigned char NeoWCMJSwingEnd[];
 @property (nonatomic, strong) id failureObserver;
 @property (nonatomic, assign) BOOL completed;
 @property (nonatomic, assign) BOOL renderedFirstFrame;
+@property (nonatomic, assign) CVPixelBufferRef lastPixelBuffer;
 @end
 
 @implementation NeoWCMatteVideoView
@@ -118,11 +132,14 @@ extern const unsigned char NeoWCMJSwingEnd[];
 - (void)displayLinkFired:(CADisplayLink *)displayLink {
     CFTimeInterval hostTime = displayLink.targetTimestamp > 0.0 ? displayLink.targetTimestamp : displayLink.timestamp;
     CMTime itemTime = [self.videoOutput itemTimeForHostTime:hostTime];
-    if (![self.videoOutput hasNewPixelBufferForItemTime:itemTime]) return;
-    CVPixelBufferRef pixelBuffer = [self.videoOutput copyPixelBufferForItemTime:itemTime itemTimeForDisplay:nil];
-    if (!pixelBuffer) return;
-    [self renderPixelBuffer:pixelBuffer];
-    CVPixelBufferRelease(pixelBuffer);
+    if ([self.videoOutput hasNewPixelBufferForItemTime:itemTime]) {
+        CVPixelBufferRef pixelBuffer = [self.videoOutput copyPixelBufferForItemTime:itemTime itemTimeForDisplay:nil];
+        if (pixelBuffer) {
+            if (self.lastPixelBuffer) CVPixelBufferRelease(self.lastPixelBuffer);
+            self.lastPixelBuffer = pixelBuffer;
+        }
+    }
+    if (self.lastPixelBuffer) [self renderPixelBuffer:self.lastPixelBuffer];
 }
 
 - (void)renderPixelBuffer:(CVPixelBufferRef)pixelBuffer {
@@ -191,6 +208,10 @@ extern const unsigned char NeoWCMJSwingEnd[];
     [self.player pause];
     [self.displayLink invalidate];
     self.displayLink = nil;
+    if (self.lastPixelBuffer) {
+        CVPixelBufferRelease(self.lastPixelBuffer);
+        self.lastPixelBuffer = NULL;
+    }
     if (self.endObserver) {
         [NSNotificationCenter.defaultCenter removeObserver:self.endObserver];
         self.endObserver = nil;
@@ -275,12 +296,15 @@ static UIWindow *NeoWCMJEasterEggWindow(void) {
 }
 
 @interface NeoWCMJEasterEggSession : NSObject
+@property (nonatomic, strong) NeoWCPassthroughWindow *overlayWindow;
 @property (nonatomic, strong) UIView *overlay;
-@property (nonatomic, strong) NeoWCMatteVideoView *videoView;
+@property (nonatomic, strong) NSMutableArray<NeoWCMatteVideoView *> *videoViews;
 @property (nonatomic, copy) NSArray<NSURL *> *URLs;
-@property (nonatomic, assign) NSUInteger index;
+@property (nonatomic, assign) NSUInteger finishedCount;
+@property (nonatomic, assign) BOOL stopping;
 - (void)start;
-- (void)playNext;
+- (void)playAll;
+- (void)videoDidFinish:(NeoWCMatteVideoView *)videoView;
 - (void)stop;
 @end
 
@@ -289,53 +313,91 @@ static NeoWCMJEasterEggSession *NeoWCActiveMJEasterEggSession;
 @implementation NeoWCMJEasterEggSession
 
 - (void)start {
-    UIWindow *window = NeoWCMJEasterEggWindow();
-    if (!window || self.URLs.count == 0) {
-        NeoWCLogAlways(@"[MJ彩蛋] 无法开始：window=%@ clips=%lu", window ? @"YES" : @"NO", (unsigned long)self.URLs.count);
+    UIWindow *hostWindow = NeoWCMJEasterEggWindow();
+    if (!hostWindow || self.URLs.count == 0) {
+        NeoWCLogAlways(@"[MJ彩蛋] 无法开始：window=%@ clips=%lu", hostWindow ? @"YES" : @"NO", (unsigned long)self.URLs.count);
         return;
     }
-    NeoWCLogAlways(@"[MJ彩蛋] 覆盖微信窗口：%@ frame=%@", NSStringFromClass(window.class), NSStringFromCGRect(window.bounds));
-    self.overlay = [[NeoWCPassthroughOverlayView alloc] initWithFrame:window.bounds];
+    UIWindowScene *scene = hostWindow.windowScene;
+    if (!scene) {
+        NeoWCLogAlways(@"[MJ彩蛋] 微信窗口没有可用的 UIWindowScene");
+        return;
+    }
+    self.overlayWindow = [[NeoWCPassthroughWindow alloc] initWithWindowScene:scene];
+    self.overlayWindow.frame = scene.screen.bounds;
+    self.overlayWindow.windowLevel = UIWindowLevelAlert + 1.0;
+    self.overlayWindow.backgroundColor = UIColor.clearColor;
+    self.overlayWindow.opaque = NO;
+    self.overlayWindow.userInteractionEnabled = NO;
+    UIViewController *rootController = [UIViewController new];
+    rootController.view.backgroundColor = UIColor.clearColor;
+    self.overlayWindow.rootViewController = rootController;
+    self.overlayWindow.hidden = NO;
+    NeoWCLogAlways(@"[MJ彩蛋] 创建独立动画窗口：%@ frame=%@ level=%.0f", NSStringFromClass(self.overlayWindow.class),
+                   NSStringFromCGRect(self.overlayWindow.bounds), self.overlayWindow.windowLevel);
+    self.overlay = [[NeoWCPassthroughOverlayView alloc] initWithFrame:self.overlayWindow.bounds];
     self.overlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.overlay.backgroundColor = UIColor.clearColor;
     self.overlay.userInteractionEnabled = NO;
     self.overlay.alpha = 0.0;
-    [window addSubview:self.overlay];
+    self.videoViews = [NSMutableArray arrayWithCapacity:self.URLs.count];
+    [self.overlayWindow addSubview:self.overlay];
     [UIView animateWithDuration:0.12 animations:^{ self.overlay.alpha = 1.0; }];
-    [self playNext];
+    [self playAll];
 }
 
-- (void)playNext {
-    if (self.index >= self.URLs.count) {
-        [UIView animateWithDuration:0.18 animations:^{ self.overlay.alpha = 0.0; } completion:^(__unused BOOL finished) {
-            [self stop];
+- (void)playAll {
+    if (self.stopping) return;
+    for (NSURL *URL in self.URLs) {
+        __weak typeof(self) weakSelf = self;
+        __block __weak NeoWCMatteVideoView *weakView = nil;
+        NeoWCMatteVideoView *view = [[NeoWCMatteVideoView alloc] initWithFrame:self.overlay.bounds
+                                                                           URL:URL
+                                                                    completion:^{
+            [weakSelf videoDidFinish:weakView];
         }];
+        weakView = view;
+        if (!view) {
+            self.finishedCount += 1;
+            continue;
+        }
+        [self.videoViews addObject:view];
+        [self.overlay addSubview:view];
+    }
+    if (self.videoViews.count == 0 || self.finishedCount >= self.URLs.count) {
+        [self stop];
         return;
     }
-    NSURL *URL = self.URLs[self.index++];
-    __weak typeof(self) weakSelf = self;
-    NeoWCMatteVideoView *view = [[NeoWCMatteVideoView alloc] initWithFrame:self.overlay.bounds
-                                                                       URL:URL
-                                                                completion:^{
-        [weakSelf.videoView removeFromSuperview];
-        weakSelf.videoView = nil;
-        [weakSelf playNext];
+    // Add all views before starting any player so both clips begin in the same run-loop turn.
+    for (NeoWCMatteVideoView *view in self.videoViews) [view start];
+}
+
+- (void)videoDidFinish:(NeoWCMatteVideoView *)videoView {
+    if (self.stopping || !videoView) return;
+    if ([self.videoViews containsObject:videoView]) {
+        [self.videoViews removeObject:videoView];
+        [videoView removeFromSuperview];
+        self.finishedCount += 1;
+    }
+    if (self.finishedCount < self.URLs.count) return;
+    self.stopping = YES;
+    [UIView animateWithDuration:0.18 animations:^{ self.overlay.alpha = 0.0; } completion:^(__unused BOOL finished) {
+        [self stop];
     }];
-    if (!view) {
-        [self playNext];
-        return;
-    }
-    self.videoView = view;
-    [self.overlay addSubview:view];
-    [view start];
 }
 
 - (void)stop {
-    [self.videoView stop];
-    [self.videoView removeFromSuperview];
-    self.videoView = nil;
+    self.stopping = YES;
+    for (NeoWCMatteVideoView *view in self.videoViews) {
+        [view stop];
+        [view removeFromSuperview];
+    }
+    [self.videoViews removeAllObjects];
     [self.overlay removeFromSuperview];
     self.overlay = nil;
+    self.overlayWindow.hidden = YES;
+    self.overlayWindow.rootViewController = nil;
+    self.overlayWindow = nil;
     if (NeoWCActiveMJEasterEggSession == self) NeoWCActiveMJEasterEggSession = nil;
 }
 
@@ -343,6 +405,10 @@ static NeoWCMJEasterEggSession *NeoWCActiveMJEasterEggSession;
 
 void NeoWCPlayMJEasterEgg(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (NeoWCActiveMJEasterEggSession && !NeoWCActiveMJEasterEggSession.stopping) {
+            NeoWCLogAlways(@"[MJ彩蛋] 已有动画播放中，忽略重复触发");
+            return;
+        }
         [NeoWCActiveMJEasterEggSession stop];
         NSArray<NSURL *> *URLs = NeoWCMJEasterEggMaterializeResources();
         if (URLs.count == 0) return;
