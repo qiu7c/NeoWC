@@ -119,14 +119,19 @@
            (self.sendConfirmationSwitchTitle.length > 0 ? 1 : 0);
 }
 
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    (void)tableView;
+    return [self numberOfConfiguredSwitches] > 0 ? 2 : 1;
+}
+
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    (void)tableView; (void)section;
-    return self.rows.count + [self numberOfConfiguredSwitches];
+    (void)tableView;
+    return section == 0 ? self.rows.count : [self numberOfConfiguredSwitches];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    NSInteger switchIndex = indexPath.row - self.rows.count;
-    if (switchIndex >= 0 && switchIndex < [self numberOfConfiguredSwitches]) {
+    if (indexPath.section == 1) {
+        NSInteger switchIndex = indexPath.row;
         static NSString *switchIdentifier = @"NeoWCContactInfoCardSwitchCell";
         UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:switchIdentifier];
         if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:switchIdentifier];
@@ -170,7 +175,7 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (indexPath.row >= self.rows.count) return;
+    if (indexPath.section != 0 || indexPath.row >= self.rows.count) return;
     NSString *title = self.rows[indexPath.row][@"title"];
     NeoWCContactInfoCardRowSelectionHandler handler = self.rowSelectionHandlers[title];
     if (handler) {

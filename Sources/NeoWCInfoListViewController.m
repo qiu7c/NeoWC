@@ -3,6 +3,8 @@
 @interface NeoWCInfoListViewController ()
 @property (nonatomic, copy) NSString *listTitle;
 @property (nonatomic, copy) NSArray<NSDictionary<NSString *, id> *> *rows;
+@property (nonatomic, copy, nullable) NeoWCInfoListSelectionHandler selectionHandler;
+- (void)copyRowAtLongPress:(UILongPressGestureRecognizer *)recognizer;
 @end
 
 @implementation NeoWCInfoListViewController
@@ -17,12 +19,21 @@
     return self;
 }
 
+- (void)configureSelectionHandler:(NeoWCInfoListSelectionHandler _Nullable)handler {
+    self.selectionHandler = [handler copy];
+    if (self.isViewLoaded) [self.tableView reloadData];
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = self.listTitle;
     self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.tableView.rowHeight = 58.0;
     self.tableView.separatorInset = UIEdgeInsetsMake(0.0, 20.0, 0.0, 20.0);
+    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc]
+        initWithTarget:self action:@selector(copyRowAtLongPress:)];
+    longPress.minimumPressDuration = 0.45;
+    [self.tableView addGestureRecognizer:longPress];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -42,14 +53,27 @@
     cell.imageView.image = avatar;
     cell.imageView.layer.cornerRadius = 20.0;
     cell.imageView.layer.masksToBounds = YES;
+    cell.accessoryType = self.selectionHandler ? UITableViewCellAccessoryDisclosureIndicator
+                                               : UITableViewCellAccessoryNone;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     return cell;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    NSDictionary<NSString *, id> *row = self.rows[indexPath.row];
+    if (self.selectionHandler) self.selectionHandler(self, row);
+}
+
+- (void)copyRowAtLongPress:(UILongPressGestureRecognizer *)recognizer {
+    if (recognizer.state != UIGestureRecognizerStateBegan) return;
+    NSIndexPath *indexPath = [self.tableView indexPathForRowAtPoint:[recognizer locationInView:self.tableView]];
+    if (!indexPath || indexPath.row >= self.rows.count) return;
     NSString *value = self.rows[indexPath.row][@"value"];
-    if (value.length > 0) UIPasteboard.generalPasteboard.string = value;
+    if (![value isKindOfClass:NSString.class] || value.length == 0) return;
+    UIPasteboard.generalPasteboard.string = value;
+    UINotificationFeedbackGenerator *feedback = [UINotificationFeedbackGenerator new];
+    [feedback notificationOccurred:UINotificationFeedbackTypeSuccess];
 }
 
 @end

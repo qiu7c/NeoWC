@@ -9241,6 +9241,13 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCOfficialSocialInfor
 
 static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCMergeInfoCardRows(NSArray *baseRows,
                                                                                 NSArray *officialRows) {
+    BOOL friendCard = NO;
+    BOOL allowsCommonGroups = NO;
+    for (NSDictionary *row in baseRows ?: @[]) {
+        NSString *title = row[@"title"];
+        if ([title isEqualToString:@"原始号码"]) friendCard = YES;
+        if ([title isEqualToString:@"共同群聊"]) allowsCommonGroups = YES;
+    }
     NSMutableArray *rows = [NSMutableArray array];
     NSMutableSet *titles = [NSMutableSet set];
     // Official social-information values arrive asynchronously and must win
@@ -9252,6 +9259,22 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCMergeInfoCardRows(N
         if (title.length == 0 || value.length == 0 || [titles containsObject:title]) continue;
         [titles addObject:title];
         [rows addObject:@{ @"title": title, @"value": value }];
+    }
+    if (friendCard) {
+        NSArray<NSString *> *order = @[@"昵称", @"备注", @"微信号", @"原始号码",
+                                       @"添加时间", @"添加天数", @"共同群聊"];
+        NSMutableDictionary<NSString *, NSDictionary *> *rowsByTitle = [NSMutableDictionary dictionary];
+        for (NSDictionary *row in rows) {
+            NSString *title = row[@"title"];
+            if ([order containsObject:title] && !rowsByTitle[title]) rowsByTitle[title] = row;
+        }
+        NSMutableArray *orderedRows = [NSMutableArray arrayWithCapacity:order.count];
+        for (NSString *title in order) {
+            if ([title isEqualToString:@"共同群聊"] && !allowsCommonGroups) continue;
+            NSDictionary *row = rowsByTitle[title];
+            if (row) [orderedRows addObject:row];
+        }
+        return orderedRows;
     }
     return rows;
 }
@@ -9730,6 +9753,12 @@ static void NeoWCConfigureInfoCardDetailActions(NeoWCContactInfoCardViewControll
         [card configureRowActionWithTitle:@"群内好友" handler:^(UIViewController *presenter) {
             NeoWCInfoListViewController *list = [[NeoWCInfoListViewController alloc]
                 initWithTitle:@"群内好友" rows:friendRows];
+            [list configureSelectionHandler:^(UIViewController *listPresenter, NSDictionary<NSString *,id> *row) {
+                NSString *memberUserName = row[@"value"];
+                id memberContact = NeoWCContactForUserName(memberUserName);
+                if (memberContact) NeoWCOpenAvatarProfile(listPresenter, nil, memberContact);
+                else NeoWCShowTransientMessage(@"未获取到好友资料", NO);
+            }];
             [presenter.navigationController pushViewController:list animated:YES];
         }];
     }
@@ -9743,6 +9772,11 @@ static void NeoWCConfigureInfoCardDetailActions(NeoWCContactInfoCardViewControll
         [card configureRowActionWithTitle:@"共同群聊" handler:^(UIViewController *presenter) {
             NeoWCInfoListViewController *list = [[NeoWCInfoListViewController alloc]
                 initWithTitle:@"共同群聊" rows:groupRows];
+            [list configureSelectionHandler:^(__unused UIViewController *listPresenter,
+                                               NSDictionary<NSString *,id> *row) {
+                NSString *groupUserName = row[@"value"];
+                if ([groupUserName hasSuffix:@"@chatroom"]) NeoWCOpenChatForUserName(groupUserName);
+            }];
             [presenter.navigationController pushViewController:list animated:YES];
         }];
     }
@@ -9770,16 +9804,24 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id 
         NeoWCAddInfoCardRow(rows, @"群简介", NeoWCRawProfileValue(contact, @[@"groupSummary"]));
         NeoWCAddInfoCardRow(rows, @"群链接", NeoWCRawProfileValue(contact, @[@"groupURL"]));
     } else {
-        NeoWCAddInfoCardRow(rows, @"备注", NeoWCRawProfileValue(contact, @[@"m_nsRemark"]));
         NeoWCAddInfoCardRow(rows, @"昵称", NeoWCRawProfileValue(contact, @[@"m_nsNickName"]));
+        NeoWCAddInfoCardRow(rows, @"备注", NeoWCRawProfileValue(contact, @[@"m_nsRemark"]));
         NeoWCAddInfoCardRow(rows, @"微信号", NeoWCRawProfileValue(contact, @[@"m_nsAliasName", @"m_nsAlias"]));
         NeoWCAddInfoCardRow(rows, @"添加时间", NeoWCContactAddTimeValue(contact));
         NeoWCAddInfoCardRow(rows, @"添加天数", NeoWCContactAddDaysValue(contact));
         NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
-        NSInteger commonCount = NeoWCCommonGroupCount(userName);
-        NeoWCAddInfoCardRow(rows, @"共同群聊", commonCount >= 0
-            ? [NSString stringWithFormat:@"%ld 个", (long)commonCount]
-            : @"正在加载");
+        Class contactManagerClass = objc_getClass("CContactMgr");
+        id contactManager = contactManagerClass ? NeoWCServiceForClass(contactManagerClass) : nil;
+        SEL membershipSelector = NSSelectorFromString(@"isInContactList:");
+        BOOL membershipAvailable = NO;
+        BOOL friend = NeoWCIsUsernameInContactList(contactManager, membershipSelector,
+                                                   userName, &membershipAvailable);
+        if (membershipAvailable && friend) {
+            NSInteger commonCount = NeoWCCommonGroupCount(userName);
+            NeoWCAddInfoCardRow(rows, @"共同群聊", commonCount >= 0
+                ? [NSString stringWithFormat:@"%ld 个", (long)commonCount]
+                : @"正在加载");
+        }
     }
     return rows;
 }
@@ -10746,6 +10788,18 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
         NeoWCCompatibilityMarkTriggered(@"long-press-menu");
     }
     return NeoWCManagedLongPressMenuItems(filteredItems);
+}
+
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+    if (action == @selector(neowc_convertMusicToVoice:)) {
+        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindMusic) &&
+               NeoWCMessageIsMusicCard(NeoWCMessageWrapForCell(self));
+    }
+    if (action == @selector(neowc_convertAudioFileToVoice:)) {
+        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindAudioFile) &&
+               NeoWCMessageIsConvertibleAudioFile(NeoWCMessageWrapForCell(self));
+    }
+    return %orig;
 }
 
 %new
