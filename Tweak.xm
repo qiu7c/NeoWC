@@ -9814,9 +9814,9 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id 
         id contactManager = contactManagerClass ? NeoWCServiceForClass(contactManagerClass) : nil;
         SEL membershipSelector = NSSelectorFromString(@"isInContactList:");
         BOOL membershipAvailable = NO;
-        BOOL friend = NeoWCIsUsernameInContactList(contactManager, membershipSelector,
-                                                   userName, &membershipAvailable);
-        if (membershipAvailable && friend) {
+        BOOL isFriend = NeoWCIsUsernameInContactList(contactManager, membershipSelector,
+                                                     userName, &membershipAvailable);
+        if (membershipAvailable && isFriend) {
             NSInteger commonCount = NeoWCCommonGroupCount(userName);
             NeoWCAddInfoCardRow(rows, @"共同群聊", commonCount >= 0
                 ? [NSString stringWithFormat:@"%ld 个", (long)commonCount]
