@@ -2776,7 +2776,7 @@ static void NeoWCOpenAvatarInfoCard(UIViewController *chatController,
     NSArray *baseRows = [rows copy];
     NSArray *displayRows = NeoWCMergeInfoCardRows(baseRows,
         officialController ? NeoWCOfficialSocialInformationRows(officialController) : @[]);
-    UIViewController *card = [[NeoWCContactInfoCardViewController alloc]
+    NeoWCContactInfoCardViewController *card = [[NeoWCContactInfoCardViewController alloc]
         initWithTitle:[chatUserName hasSuffix:@"@chatroom"] ? @"群成员详细信息" : @"详细信息"
                avatar:avatar
                  name:displayName ?: targetUserName
@@ -9370,7 +9370,7 @@ static void NeoWCOpenProfileInfoCard(id controller) {
     NSArray *baseRows = [rows copy];
     NSArray *displayRows = NeoWCMergeInfoCardRows(baseRows,
         officialController ? NeoWCOfficialSocialInformationRows(officialController) : @[]);
-    UIViewController *card = [[NeoWCContactInfoCardViewController alloc]
+    NeoWCContactInfoCardViewController *card = [[NeoWCContactInfoCardViewController alloc]
         initWithTitle:(!group && [chatRoomUserName hasSuffix:@"@chatroom"]) ? @"群成员详细信息" : @"详细信息"
                avatar:avatar
                  name:name ?: userName
