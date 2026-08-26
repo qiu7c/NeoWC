@@ -106,7 +106,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCAntiRevokeSideOffsetYKey: @10.0,
         NeoWCAntiRevokePersistRecordsKey: @NO,
         NeoWCImageEditQuickSendEnabledKey: @NO,
-        NeoWCMediaToVoiceEnabledKey: @NO,
+        NeoWCMediaToVoiceEnabledKey: @YES,
         NeoWCAudioFileToVoiceEnabledKey: @YES,
         NeoWCVideoToVoiceEnabledKey: @YES,
         NeoWCMusicToVoiceEnabledKey: @YES,

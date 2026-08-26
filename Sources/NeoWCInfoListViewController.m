@@ -2,13 +2,13 @@
 
 @interface NeoWCInfoListViewController ()
 @property (nonatomic, copy) NSString *listTitle;
-@property (nonatomic, copy) NSArray<NSDictionary<NSString *, NSString *> *> *rows;
+@property (nonatomic, copy) NSArray<NSDictionary<NSString *, id> *> *rows;
 @end
 
 @implementation NeoWCInfoListViewController
 
 - (instancetype)initWithTitle:(NSString *)title
-                         rows:(NSArray<NSDictionary<NSString *,NSString *> *> *)rows {
+                         rows:(NSArray<NSDictionary<NSString *, id> *> *)rows {
     self = [super initWithStyle:UITableViewStyleInsetGrouped];
     if (self) {
         _listTitle = [title copy] ?: @"详细名单";
@@ -34,10 +34,14 @@
     static NSString *identifier = @"NeoWCInfoListCell";
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
     if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:identifier];
-    NSDictionary<NSString *, NSString *> *row = self.rows[indexPath.row];
+    NSDictionary<NSString *, id> *row = self.rows[indexPath.row];
     cell.textLabel.text = row[@"title"] ?: @"未知联系人";
     cell.detailTextLabel.text = row[@"value"] ?: @"";
     cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    UIImage *avatar = [row[@"image"] isKindOfClass:UIImage.class] ? row[@"image"] : nil;
+    cell.imageView.image = avatar;
+    cell.imageView.layer.cornerRadius = 20.0;
+    cell.imageView.layer.masksToBounds = YES;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     return cell;
 }
@@ -46,11 +50,6 @@
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NSString *value = self.rows[indexPath.row][@"value"];
     if (value.length > 0) UIPasteboard.generalPasteboard.string = value;
-}
-
-- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    (void)tableView; (void)section;
-    return [NSString stringWithFormat:@"共 %lu 项；点击可复制原始号码。", (unsigned long)self.rows.count];
 }
 
 @end

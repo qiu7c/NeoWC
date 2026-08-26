@@ -5348,14 +5348,23 @@ static NSSet<NSString *> *NeoWCAudioFileExtensions(void) {
 }
 
 static BOOL NeoWCMessageIsConvertibleAudioFile(id message) {
-    if (!message || !NeoWCMessageIsFileAttachment(message)) return NO;
+    if (!message) return NO;
+    id extension = NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType");
     NSString *fileName = NeoWCTweakSafeValue(message, @"m_nsAppFileName");
-    return [NeoWCAudioFileExtensions() containsObject:fileName.pathExtension.lowercaseString ?: @""];
+    if (fileName.length == 0) fileName = NeoWCTweakSafeValue(extension, @"m_nsAppFileName");
+    BOOL supportedExtension = [NeoWCAudioFileExtensions() containsObject:fileName.pathExtension.lowercaseString ?: @""];
+    NSInteger messageType = [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue];
+    return supportedExtension && (NeoWCMessageIsFileAttachment(message) || messageType == 49);
 }
 
 static BOOL NeoWCMessageIsMusicCard(id message) {
     if (!message || [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue] != 49) return NO;
-    return [NeoWCTweakSafeValue(message, @"m_uiAppMsgInnerType") integerValue] == 3;
+    NSInteger innerType = [NeoWCTweakSafeValue(message, @"m_uiAppMsgInnerType") integerValue];
+    if (innerType == 0) {
+        innerType = [NeoWCTweakSafeValue(NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType"),
+                                         @"m_uiAppMsgInnerType") integerValue];
+    }
+    return innerType == 3;
 }
 
 static NSString *NeoWCMusicCardPlayableURLString(id message) {
@@ -9483,6 +9492,26 @@ static NSArray<NSString *> *NeoWCProfileStringList(id value) {
 static void NeoWCAddProfileMemberNamesFromValue(id value, NSMutableSet<NSString *> *names) {
     if (!value || !names) return;
     if ([value isKindOfClass:NSString.class]) {
+        NSString *string = value;
+        if ([string rangeOfString:@"<member" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+            NSArray<NSString *> *patterns = @[
+                @"(?is)<userId>\\s*(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?\\s*</userId>",
+                @"(?is)<username>\\s*(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?\\s*</username>",
+                @"(?is)<UserName>\\s*(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?\\s*</UserName>",
+                @"(?is)<member[^>]+(?:userId|username)=[\"']([^\"']+)[\"']"
+            ];
+            for (NSString *pattern in patterns) {
+                NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:nil];
+                for (NSTextCheckingResult *match in [expression matchesInString:string options:0
+                                                                          range:NSMakeRange(0, string.length)]) {
+                    if (match.numberOfRanges < 2) continue;
+                    NSString *name = [[string substringWithRange:[match rangeAtIndex:1]]
+                        stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+                    if (name.length > 0) [names addObject:name];
+                }
+            }
+            return;
+        }
         for (NSString *part in [(NSString *)value componentsSeparatedByCharactersInSet:
                                 [NSCharacterSet characterSetWithCharactersInString:@";,|"]]) {
             NSString *name = [part stringByTrimmingCharactersInSet:
@@ -9503,11 +9532,13 @@ static void NeoWCAddProfileMemberNamesFromValue(id value, NSMutableSet<NSString 
 }
 
 static NSSet<NSString *> *NeoWCGroupMemberUserNames(id groupContact) {
-    id value = NeoWCRawProfileValue(groupContact, @[@"m_nsChatRoomMemList"]);
-    if (!value) return nil;
     NSMutableSet<NSString *> *names = [NSMutableSet set];
-    NeoWCAddProfileMemberNamesFromValue(value, names);
-    return names;
+    id directValue = NeoWCRawProfileValue(groupContact, @[@"m_nsChatRoomMemList"]);
+    NeoWCAddProfileMemberNamesFromValue(directValue, names);
+    id roomData = NeoWCRawProfileValue(groupContact, @[@"m_ChatRoomData"]);
+    id nestedValue = NeoWCRawProfileValue(roomData, @[@"m_nsChatRoomMemList"]);
+    NeoWCAddProfileMemberNamesFromValue(nestedValue, names);
+    return (directValue || nestedValue) ? names : nil;
 }
 
 static NSArray *NeoWCProfileObjectCollection(id target, NSArray<NSString *> *selectorNames) {
@@ -9614,15 +9645,19 @@ static NSArray *NeoWCGroupFriendContacts(id groupContact) {
     return contacts;
 }
 
-static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCInfoListRowsForContacts(NSArray *contacts) {
-    NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows = [NSMutableArray array];
+static NSArray<NSDictionary<NSString *, id> *> *NeoWCInfoListRowsForContacts(NSArray *contacts) {
+    NSMutableArray<NSDictionary<NSString *, id> *> *rows = [NSMutableArray array];
     NSMutableSet<NSString *> *identifiers = [NSMutableSet set];
     for (id contact in contacts) {
         NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
         if (userName.length == 0 || [identifiers containsObject:userName]) continue;
         [identifiers addObject:userName];
         NSString *name = NeoWCAvatarDisplayName(contact, userName);
-        [rows addObject:@{ @"title": name.length > 0 ? name : userName, @"value": userName }];
+        NSMutableDictionary<NSString *, id> *row = [@{ @"title": name.length > 0 ? name : userName,
+                                                        @"value": userName } mutableCopy];
+        id imageValue = NeoWCRawProfileValue(contact, @[@"getContactHeadImage"]);
+        if ([imageValue isKindOfClass:UIImage.class]) row[@"image"] = imageValue;
+        [rows addObject:row];
     }
     [rows sortUsingComparator:^NSComparisonResult(NSDictionary *left, NSDictionary *right) {
         return [left[@"title"] localizedCaseInsensitiveCompare:right[@"title"]];
@@ -9728,6 +9763,21 @@ static UIViewController *NeoWCCreateOfficialSocialInformation(id contact) {
     SEL reloadSelector = NSSelectorFromString(@"reloadTableView");
     if ([controller respondsToSelector:reloadSelector]) {
         ((void (*)(id, SEL))objc_msgSend)(controller, reloadSelector);
+    }
+    id relatedGroupLogic = NeoWCRawProfileValue(controller,
+        @[@"m_relatedGroupLogic", @"relatedGroupLogic"]);
+    // AFN registers this exact no-argument selector on ContactRelatedGroupLogic
+    // and its replacement preserves the original call before processing results.
+    SEL searchSelector = NSSelectorFromString(@"trySearchRelatedGroup");
+    Class logicClass = objc_getClass("ContactRelatedGroupLogic");
+    Method searchMethod = logicClass ? class_getInstanceMethod(logicClass, searchSelector) : NULL;
+    char returnType[8] = {0};
+    if (searchMethod) method_getReturnType(searchMethod, returnType, sizeof(returnType));
+    if (relatedGroupLogic && searchMethod && method_getNumberOfArguments(searchMethod) == 2 &&
+        returnType[0] == 'v' && [relatedGroupLogic respondsToSelector:searchSelector]) {
+        @try {
+            ((void (*)(id, SEL))objc_msgSend)(relatedGroupLogic, searchSelector);
+        } @catch (__unused NSException *exception) {}
     }
     return controller;
 }
@@ -10622,10 +10672,28 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (NSArray *)filteredMenuItems:(NSArray *)items {
     NSArray *filteredItems = %orig(items);
+    id message = NeoWCMessageWrapForCell(self);
+    if (NeoWCMessageIsMusicCard(message)) {
+        filteredItems = NeoWCOperationMenuItemsWithMediaToVoice(self, filteredItems, NeoWCMediaToVoiceKindMusic);
+    } else if (NeoWCMessageIsConvertibleAudioFile(message)) {
+        filteredItems = NeoWCOperationMenuItemsWithMediaToVoice(self, filteredItems, NeoWCMediaToVoiceKindAudioFile);
+    }
     if (NeoWCEnhancementEnabled(NeoWCLongPressMenuEnabledKey)) {
         NeoWCCompatibilityMarkTriggered(@"long-press-menu");
     }
     return NeoWCManagedLongPressMenuItems(filteredItems);
+}
+
+%new
+- (void)neowc_convertMusicToVoice:(id)sender {
+    (void)sender;
+    NeoWCPresentMediaToVoiceConfirmation(self, NeoWCMediaToVoiceKindMusic);
+}
+
+%new
+- (void)neowc_convertAudioFileToVoice:(id)sender {
+    (void)sender;
+    NeoWCPresentMediaToVoiceConfirmation(self, NeoWCMediaToVoiceKindAudioFile);
 }
 
 %end

@@ -465,6 +465,9 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 @property (nonatomic, copy, nullable) NSString *currentFolderIdentifier;
 @property (nonatomic, copy, nullable) NSString *currentFolderName;
 @property (nonatomic, strong, nullable) NSURL *pendingExportURL;
+- (void)sortTapped;
+- (void)exportAllTapped;
+- (void)cleanupMediaTapped;
 @end
 
 @implementation NeoWCQuickReplyViewController
@@ -497,24 +500,14 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     UIBarButtonItem *add = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd
                                                                          target:self
                                                                          action:@selector(addTapped)];
-    UIBarButtonItem *sort = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"arrow.up.arrow.down"]
+    UIBarButtonItem *more = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"ellipsis.circle"]
                                                              style:UIBarButtonItemStylePlain
                                                             target:self
-                                                            action:@selector(sortTapped)];
-    sort.accessibilityLabel = @"排序";
-    UIBarButtonItem *exportAll = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"square.and.arrow.up"]
-                                                                  style:UIBarButtonItemStylePlain
-                                                                 target:self
-                                                                 action:@selector(exportAllTapped)];
-    exportAll.accessibilityLabel = @"全部导出";
-    self.navigationItem.rightBarButtonItems = @[add, sort, exportAll];
+                                                            action:@selector(moreTapped)];
+    more.accessibilityLabel = @"更多";
+    self.navigationItem.rightBarButtonItems = @[add, more];
     if (!self.selectionHandler) {
         self.navigationItem.leftBarButtonItem = self.editButtonItem;
-        if (!self.currentFolderIdentifier.length) {
-            UIBarButtonItem *cleanup = [[UIBarButtonItem alloc] initWithTitle:@"清理" style:UIBarButtonItemStylePlain
-                                                                       target:self action:@selector(cleanupMediaTapped)];
-            self.navigationItem.rightBarButtonItems = @[add, sort, exportAll, cleanup];
-        }
     }
     self.searchBar = [UISearchBar new];
     self.searchBar.delegate = self;
@@ -578,6 +571,28 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (void)close {
     [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)moreTapped {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil
+                                                                   message:nil
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    [sheet addAction:[UIAlertAction actionWithTitle:@"排序" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [weakSelf sortTapped];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"全部导出" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [weakSelf exportAllTapped];
+    }]];
+    if (!self.selectionHandler && !self.currentFolderIdentifier.length) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"清理媒体" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+            [weakSelf cleanupMediaTapped];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) popover.barButtonItem = self.navigationItem.rightBarButtonItems.lastObject;
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)exportAllTapped {
@@ -938,11 +953,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView; (void)section;
-    if (!NeoWCQuickReplyStore.sharedStore.isAvailable) return @"共享消息库暂时无法读写。";
-    NSByteCountFormatter *formatter = [NSByteCountFormatter new];
-    formatter.countStyle = NSByteCountFormatterCountStyleFile;
-    NSString *size = [formatter stringFromByteCount:(long long)NeoWCQuickReplyStore.sharedStore.managedMediaSize];
-    return [NSString stringWithFormat:@"全部账号共享，共 %lu 项，媒体占用 %@。数据长期保存在微信沙盒 Documents，按实际文件和独立记录自动恢复。", (unsigned long)self.allItems.count, size];
+    return nil;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {

@@ -19,18 +19,27 @@ NSString *const NeoWCGlobalAvatarCornerPercentKey = @"com.qiu7c.neowc.interface.
 
 static void NeoWCClearSearchBarChrome(UIView *view, UITextField *textField) {
     for (UIView *subview in view.subviews) {
-        BOOL belongsToTextField = subview == textField || [subview isDescendantOfView:textField];
-        if (!belongsToTextField) {
+        NSString *className = NSStringFromClass(subview.class);
+        if ([className containsString:@"UISearchBarBackground"] ||
+            [className isEqualToString:@"_UISearchBarBackground"]) {
+            subview.hidden = YES;
             subview.backgroundColor = UIColor.clearColor;
-            subview.layer.backgroundColor = UIColor.clearColor.CGColor;
-            NSString *className = NSStringFromClass(subview.class);
-            if ([className containsString:@"UISearchBarBackground"] ||
-                [className isEqualToString:@"_UISearchBarBackground"]) {
-                subview.hidden = YES;
-            }
+        }
+        if (subview != textField && ![subview isDescendantOfView:textField]) {
             NeoWCClearSearchBarChrome(subview, textField);
         }
     }
+}
+
+static UIImage *NeoWCTransparentSearchBackgroundImage(void) {
+    static UIImage *image;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        UIGraphicsBeginImageContextWithOptions(CGSizeMake(1.0, 1.0), NO, 0.0);
+        image = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+    });
+    return image;
 }
 
 @interface NeoWCSearchTableHeaderView : UIView
@@ -55,7 +64,11 @@ static void NeoWCClearSearchBarChrome(UIView *view, UITextField *textField) {
 void NeoWCStyleSearchBar(UISearchBar *searchBar) {
     if (!searchBar) return;
     searchBar.searchBarStyle = UISearchBarStyleMinimal;
-    searchBar.backgroundImage = [UIImage new];
+    UIImage *transparentImage = NeoWCTransparentSearchBackgroundImage();
+    searchBar.backgroundImage = transparentImage;
+    searchBar.scopeBarBackgroundImage = transparentImage;
+    [searchBar setSearchFieldBackgroundImage:transparentImage forState:UIControlStateNormal];
+    [searchBar setSearchFieldBackgroundImage:transparentImage forState:UIControlStateHighlighted];
     searchBar.backgroundColor = UIColor.clearColor;
     searchBar.barTintColor = UIColor.clearColor;
     searchBar.translucent = YES;
@@ -63,7 +76,8 @@ void NeoWCStyleSearchBar(UISearchBar *searchBar) {
     searchBar.layer.backgroundColor = UIColor.clearColor.CGColor;
     UITextField *textField = searchBar.searchTextField;
     NeoWCClearSearchBarChrome(searchBar, textField);
-    textField.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
+    textField.backgroundColor = UIColor.secondarySystemFillColor;
+    textField.layer.backgroundColor = UIColor.secondarySystemFillColor.CGColor;
     textField.borderStyle = UITextBorderStyleNone;
     textField.layer.cornerRadius = 14.0;
     textField.layer.cornerCurve = kCACornerCurveContinuous;

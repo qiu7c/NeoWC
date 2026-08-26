@@ -184,9 +184,7 @@
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView; (void)section;
-    return [self numberOfConfiguredSwitches] > 0
-        ? @"带箭头的资料项可展开名单，其余资料项可复制；开关可直接调整当前联系人设置。"
-        : @"带箭头的资料项可展开名单，其余资料项可复制。资料仅在当前页面实时读取。";
+    return nil;
 }
 
 @end
