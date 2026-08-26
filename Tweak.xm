@@ -347,6 +347,7 @@ static char NeoWCAvatarNativeDoubleTapActionKey;
 static char NeoWCAvatarNativeDoubleTapOwnedKey;
 static char NeoWCOfficialInfoCardBoxKey;
 static char NeoWCOfficialInfoBaseRowsKey;
+static char NeoWCInfoCardOfficialControllerKey;
 static char NeoWCExclusiveRedEnvelopeContactKey;
 static char NeoWCExclusiveRedEnvelopeViewContactKey;
 static char NeoWCExclusiveRedEnvelopeViewDataKey;
@@ -467,10 +468,17 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id 
 static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCGroupMemberInfoRows(id contact,
                                                                                    id groupContact,
                                                                                    NSString *userName);
+static void NeoWCAddInfoCardRow(NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows,
+                                NSString *title,
+                                id value);
 static UIViewController *NeoWCCreateOfficialSocialInformation(id contact);
 static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCOfficialSocialInformationRows(id controller);
 static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCMergeInfoCardRows(NSArray *baseRows,
                                                                                 NSArray *officialRows);
+static void NeoWCRefreshInfoCardFromOfficialController(id officialController);
+static void NeoWCConfigureInfoCardSwitches(NeoWCContactInfoCardViewController *card,
+                                           NSString *username,
+                                           BOOL group);
 static UIViewController *NeoWCSendConfirmationPresenterForTarget(NSString *target);
 static BOOL NeoWCSendConfirmationValidateTarget(NSString *target);
 static BOOL NeoWCSendConfirmationMessageIsAppEmoticon(id wrap);
@@ -2755,30 +2763,37 @@ static void NeoWCOpenAvatarInfoCard(UIViewController *chatController,
                                     NSString *chatUserName) {
     if (!chatController || targetUserName.length == 0) return;
     UIViewController *officialController = contact ? NeoWCCreateOfficialSocialInformation(contact) : nil;
-    if (officialController) {
-        if (chatController.navigationController) {
-            [chatController.navigationController pushViewController:officialController animated:YES];
-        } else {
-            [chatController presentViewController:[[UINavigationController alloc] initWithRootViewController:officialController]
-                                          animated:YES completion:nil];
-        }
-        return;
-    }
     NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows =
         [NeoWCProfileInfoRows(contact, NO) mutableCopy] ?: [NSMutableArray array];
+    if (contact == nil) {
+        NeoWCAddInfoCardRow(rows, @"原始号码", targetUserName);
+    }
     if ([chatUserName hasSuffix:@"@chatroom"]) {
         id groupContact = NeoWCContactForUserName(chatUserName);
         [rows addObject:@{ @"title": @"所在群聊", @"value": chatUserName }];
         [rows addObjectsFromArray:NeoWCGroupMemberInfoRows(contact, groupContact, targetUserName)];
     }
     NSArray *baseRows = [rows copy];
-    NSArray *displayRows = baseRows;
+    NSArray *displayRows = NeoWCMergeInfoCardRows(baseRows,
+        officialController ? NeoWCOfficialSocialInformationRows(officialController) : @[]);
     UIViewController *card = [[NeoWCContactInfoCardViewController alloc]
         initWithTitle:[chatUserName hasSuffix:@"@chatroom"] ? @"群成员详细信息" : @"详细信息"
                avatar:avatar
                  name:displayName ?: targetUserName
              userName:targetUserName
-                 rows:displayRows];
+             rows:displayRows];
+    if (officialController) {
+        NeoWCWeakObjectBox *box = [NeoWCWeakObjectBox new];
+        box.object = card;
+        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoCardBoxKey,
+                                 box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoBaseRowsKey,
+                                 baseRows, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        objc_setAssociatedObject(card, &NeoWCInfoCardOfficialControllerKey,
+                                 officialController, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NeoWCRefreshInfoCardFromOfficialController(officialController);
+    }
+    NeoWCConfigureInfoCardSwitches(card, targetUserName, [chatUserName hasSuffix:@"@chatroom"]);
     if (chatController.navigationController) {
         [chatController.navigationController pushViewController:card animated:YES];
     } else {
@@ -8738,10 +8753,16 @@ static NSString *NeoWCTableCellRightText(id cell, NSString *title) {
 }
 
 static NSString *NeoWCAdditionDurationValue(NSString *title, NSString *value) {
-    if (![title containsString:@"添加时间"] || value.length == 0) return value;
+    if (![title containsString:@"添加时间"] || value.length == 0 || [value containsString:@"已添加"]) return value;
     NSArray<NSDictionary *> *formats = @[
+        @{ @"format": @"yyyy年M月d日 HH:mm:ss", @"approximate": @NO },
+        @{ @"format": @"yyyy年M月d日 HH:mm", @"approximate": @NO },
         @{ @"format": @"yyyy年M月d日", @"approximate": @NO },
+        @{ @"format": @"yyyy-MM-dd HH:mm:ss", @"approximate": @NO },
+        @{ @"format": @"yyyy-MM-dd HH:mm", @"approximate": @NO },
         @{ @"format": @"yyyy-MM-dd", @"approximate": @NO },
+        @{ @"format": @"yyyy/MM/dd HH:mm:ss", @"approximate": @NO },
+        @{ @"format": @"yyyy/MM/dd HH:mm", @"approximate": @NO },
         @{ @"format": @"yyyy/MM/dd", @"approximate": @NO },
         @{ @"format": @"yyyy年M月", @"approximate": @YES },
         @{ @"format": @"yyyy-MM", @"approximate": @YES },
@@ -9072,6 +9093,34 @@ static void NeoWCSetProfileMessageBlocked(NSString *username, BOOL blocked) {
     NeoWCMessageBlockSetTypesForConversation(username, blocked ? @[@"all"] : @[]);
 }
 
+static void NeoWCConfigureInfoCardSwitches(NeoWCContactInfoCardViewController *card,
+                                           NSString *username,
+                                           BOOL group) {
+    if (!card || username.length == 0) return;
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    BOOL showBlock = NeoWCEnhancementEnabled(NeoWCMessageBlockEnabledKey) &&
+                     [defaults boolForKey:NeoWCMessageBlockProfileSwitchEnabledKey];
+    BOOL showConfirm = NeoWCEnhancementEnabled(NeoWCSendConfirmationEnabledKey) &&
+                       [defaults boolForKey:NeoWCSendConfirmationProfileSwitchEnabledKey];
+    NSString *capturedUserName = [username copy];
+    if (showBlock) {
+        BOOL blocked = NeoWCMessageBlockTypesForConversation(capturedUserName).count > 0;
+        [card configureMessageBlockSwitchWithTitle:(group ? @"屏蔽本群消息" : @"屏蔽此人消息")
+                                            enabled:blocked
+                                            handler:^(BOOL enabled) {
+            NeoWCSetProfileMessageBlocked(capturedUserName, enabled);
+        }];
+    }
+    if (showConfirm) {
+        BOOL protectedConversation = NeoWCSendConfirmationIsProtectedConversation(capturedUserName);
+        [card configureSendConfirmationSwitchWithTitle:(group ? @"本群发送确认" : @"对其发送确认")
+                                                  enabled:protectedConversation
+                                                  handler:^(BOOL enabled) {
+            NeoWCSendConfirmationSetProtected(capturedUserName, enabled);
+        }];
+    }
+}
+
 static UIViewController *NeoWCProfileOwnerViewController(id controller) {
     if ([controller isKindOfClass:UIViewController.class]) return controller;
     id candidate = NeoWCRawProfileValue(controller,
@@ -9114,6 +9163,113 @@ static NSArray<NSString *> *NeoWCProfileStringList(id value) {
     return @[];
 }
 
+static void NeoWCAddProfileMemberNamesFromValue(id value, NSMutableSet<NSString *> *names) {
+    if (!value || !names) return;
+    if ([value isKindOfClass:NSString.class]) {
+        for (NSString *part in [(NSString *)value componentsSeparatedByCharactersInSet:
+                                [NSCharacterSet characterSetWithCharactersInString:@";,|"]]) {
+            NSString *name = [part stringByTrimmingCharactersInSet:
+                               NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            if (name.length > 0) [names addObject:name];
+        }
+        return;
+    }
+    if (![value conformsToProtocol:@protocol(NSFastEnumeration)]) return;
+    @try {
+        for (id item in value) {
+            NSString *name = [item isKindOfClass:NSString.class]
+                ? [item stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
+                : NeoWCRawProfileValue(item, @[@"m_nsUsrName", @"m_nsUserName", @"userName", @"username", @"wxid"]);
+            if (name.length > 0) [names addObject:name];
+        }
+    } @catch (__unused NSException *exception) {}
+}
+
+static NSSet<NSString *> *NeoWCGroupMemberUserNames(id groupContact) {
+    id value = NeoWCRawProfileValue(groupContact, @[@"m_nsChatRoomMemList"]);
+    if (!value) return nil;
+    NSMutableSet<NSString *> *names = [NSMutableSet set];
+    NeoWCAddProfileMemberNamesFromValue(value, names);
+    return names;
+}
+
+static NSArray *NeoWCProfileObjectCollection(id target, NSArray<NSString *> *selectorNames) {
+    for (NSString *selectorName in selectorNames) {
+        id value = NeoWCCallCompatibleObjectGetter(target, selectorName);
+        if (!value || [value isKindOfClass:NSString.class] ||
+            ![value conformsToProtocol:@protocol(NSFastEnumeration)]) continue;
+        NSMutableArray *items = [NSMutableArray array];
+        @try {
+            for (id item in value) if (item) [items addObject:item];
+        } @catch (__unused NSException *exception) {
+            continue;
+        }
+        return items;
+    }
+    return nil;
+}
+
+static NSArray *NeoWCAllChatRoomContacts(void) {
+    Class dataLogicClass = objc_getClass("ContactsDataLogic");
+    id dataLogic = dataLogicClass ? NeoWCServiceForClass(dataLogicClass) : nil;
+    return NeoWCProfileObjectCollection(dataLogic, @[@"getChatRoomContacts"]);
+}
+
+static BOOL NeoWCContactListMethodIsCompatible(id manager, SEL selector) {
+    Method method = manager ? class_getInstanceMethod([manager class], selector) : NULL;
+    if (!method || method_getNumberOfArguments(method) != 3) return NO;
+    char returnType[8] = {0};
+    char argumentType[8] = {0};
+    method_getReturnType(method, returnType, sizeof(returnType));
+    method_getArgumentType(method, 2, argumentType, sizeof(argumentType));
+    return (returnType[0] == 'B' || returnType[0] == 'c') && argumentType[0] == '@';
+}
+
+static BOOL NeoWCIsUsernameInContactList(id manager, SEL selector, NSString *userName, BOOL *available) {
+    if (available) *available = NO;
+    if (!manager || userName.length == 0 || !NeoWCContactListMethodIsCompatible(manager, selector)) return NO;
+    if (available) *available = YES;
+    @try {
+        return ((BOOL (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
+    } @catch (__unused NSException *exception) {
+        if (available) *available = NO;
+        return NO;
+    }
+}
+
+static NSInteger NeoWCGroupFriendCount(id groupContact) {
+    NSSet<NSString *> *memberNames = NeoWCGroupMemberUserNames(groupContact);
+    if (memberNames.count == 0) return -1;
+    Class contactManagerClass = objc_getClass("CContactMgr");
+    id contactManager = contactManagerClass ? NeoWCServiceForClass(contactManagerClass) : nil;
+    SEL membershipSelector = NSSelectorFromString(@"isInContactList:");
+    if (!NeoWCContactListMethodIsCompatible(contactManager, membershipSelector)) return -1;
+
+    NSString *currentUserName = NeoWCCurrentUserWXID();
+    NSInteger friendCount = 0;
+    BOOL available = YES;
+    for (NSString *memberName in memberNames) {
+        if (currentUserName.length > 0 && [memberName isEqualToString:currentUserName]) continue;
+        BOOL isFriend = NeoWCIsUsernameInContactList(contactManager, membershipSelector,
+                                                     memberName, &available);
+        if (!available) return -1;
+        if (isFriend) friendCount++;
+    }
+    return friendCount;
+}
+
+static NSInteger NeoWCCommonGroupCount(NSString *userName) {
+    if (userName.length == 0 || [userName hasSuffix:@"@chatroom"]) return -1;
+    NSArray *groups = NeoWCAllChatRoomContacts();
+    if (!groups) return -1;
+    NSInteger commonCount = 0;
+    for (id groupContact in groups) {
+        NSSet<NSString *> *memberNames = NeoWCGroupMemberUserNames(groupContact);
+        if ([memberNames containsObject:userName]) commonCount++;
+    }
+    return commonCount;
+}
+
 static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id contact, BOOL group) {
     NSMutableArray *rows = [NSMutableArray array];
     NeoWCAddInfoCardRow(rows, group ? @"原始群号码" : @"原始号码",
@@ -9121,14 +9277,13 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id 
     if (group) {
         NeoWCAddInfoCardRow(rows, @"群聊名称",
                            NeoWCRawProfileValue(contact, @[@"getContactDisplayName", @"m_nsNickName"]));
-        NSString *members = NeoWCRawProfileValue(contact, @[@"m_nsChatRoomMemList"]);
-        if ([members isKindOfClass:NSString.class] && members.length > 0) {
-            NSUInteger count = 0;
-            for (NSString *member in [members componentsSeparatedByString:@";"]) {
-                if ([member stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length > 0) count++;
-            }
-            if (count > 0) NeoWCAddInfoCardRow(rows, @"群成员", [NSString stringWithFormat:@"%lu 人", (unsigned long)count]);
-        }
+        NSSet<NSString *> *memberNames = NeoWCGroupMemberUserNames(contact);
+        if (memberNames.count > 0) NeoWCAddInfoCardRow(rows, @"群成员",
+                                                        [NSString stringWithFormat:@"%lu 人",
+                                                         (unsigned long)memberNames.count]);
+        NSInteger friendCount = NeoWCGroupFriendCount(contact);
+        if (friendCount >= 0) NeoWCAddInfoCardRow(rows, @"群内好友",
+                                                   [NSString stringWithFormat:@"%ld 人", (long)friendCount]);
         NeoWCAddInfoCardRow(rows, @"群主", NeoWCRawProfileValue(contact,
             @[@"m_nsChatRoomOwner", @"m_nsOwner", @"ownerUserName", @"owner"]));
         NSArray *admins = NeoWCProfileStringList(NeoWCRawProfileValue(contact,
@@ -9141,6 +9296,10 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id 
         NeoWCAddInfoCardRow(rows, @"昵称", NeoWCRawProfileValue(contact, @[@"m_nsNickName"]));
         NeoWCAddInfoCardRow(rows, @"微信号", NeoWCRawProfileValue(contact, @[@"m_nsAliasName", @"m_nsAlias"]));
         NeoWCAddInfoCardRow(rows, @"添加时间", NeoWCContactAddTimeValue(contact));
+        NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+        NSInteger commonCount = NeoWCCommonGroupCount(userName);
+        if (commonCount > 0) NeoWCAddInfoCardRow(rows, @"共同群聊",
+                                                  [NSString stringWithFormat:@"%ld 个", (long)commonCount]);
     }
     return rows;
 }
@@ -9184,6 +9343,9 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCGroupMemberInfoRows
     NSString *role = [owner isEqualToString:userName] ? @"群主"
         : ([admins containsObject:userName] ? @"管理员" : @"群成员");
     NeoWCAddInfoCardRow(rows, @"群身份", role);
+    NSInteger friendCount = NeoWCGroupFriendCount(groupContact);
+    if (friendCount >= 0) NeoWCAddInfoCardRow(rows, @"群内好友",
+                                               [NSString stringWithFormat:@"%ld 人", (long)friendCount]);
     return rows;
 }
 
@@ -9195,12 +9357,6 @@ static void NeoWCOpenProfileInfoCard(id controller) {
     if (userName.length == 0) return;
     UIViewController *owner = NeoWCProfileOwnerViewController(controller);
     UIViewController *officialController = !group ? NeoWCCreateOfficialSocialInformation(contact) : nil;
-    if (officialController) {
-        if (owner.navigationController) [owner.navigationController pushViewController:officialController animated:YES];
-        else if (owner) [owner presentViewController:[[UINavigationController alloc] initWithRootViewController:officialController]
-                                             animated:YES completion:nil];
-        return;
-    }
     NSString *name = NeoWCRawProfileValue(contact, @[@"getContactDisplayName", @"m_nsRemark", @"m_nsNickName"]);
     id imageValue = NeoWCRawProfileValue(contact, @[@"getContactHeadImage"]);
     UIImage *avatar = [imageValue isKindOfClass:UIImage.class] ? imageValue : nil;
@@ -9212,13 +9368,26 @@ static void NeoWCOpenProfileInfoCard(id controller) {
             NeoWCContactForUserName(chatRoomUserName), userName)];
     }
     NSArray *baseRows = [rows copy];
-    NSArray *displayRows = baseRows;
+    NSArray *displayRows = NeoWCMergeInfoCardRows(baseRows,
+        officialController ? NeoWCOfficialSocialInformationRows(officialController) : @[]);
     UIViewController *card = [[NeoWCContactInfoCardViewController alloc]
         initWithTitle:(!group && [chatRoomUserName hasSuffix:@"@chatroom"]) ? @"群成员详细信息" : @"详细信息"
                avatar:avatar
                  name:name ?: userName
              userName:userName
-                 rows:displayRows];
+             rows:displayRows];
+    if (officialController) {
+        NeoWCWeakObjectBox *box = [NeoWCWeakObjectBox new];
+        box.object = card;
+        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoCardBoxKey,
+                                 box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoBaseRowsKey,
+                                 baseRows, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        objc_setAssociatedObject(card, &NeoWCInfoCardOfficialControllerKey,
+                                 officialController, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NeoWCRefreshInfoCardFromOfficialController(officialController);
+    }
+    NeoWCConfigureInfoCardSwitches(card, userName, group);
     if (owner.navigationController) [owner.navigationController pushViewController:card animated:YES];
     else if (owner) [owner presentViewController:[[UINavigationController alloc] initWithRootViewController:card]
                                          animated:YES completion:nil];

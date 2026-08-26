@@ -7,6 +7,14 @@
 @property (nonatomic, copy) NSString *displayName;
 @property (nonatomic, copy) NSString *userName;
 @property (nonatomic, copy) NSArray<NSDictionary<NSString *, NSString *> *> *rows;
+@property (nonatomic, copy, nullable) NSString *messageBlockSwitchTitle;
+@property (nonatomic, assign) BOOL messageBlockSwitchEnabled;
+@property (nonatomic, copy, nullable) NeoWCContactInfoCardSwitchHandler messageBlockSwitchHandler;
+@property (nonatomic, copy, nullable) NSString *sendConfirmationSwitchTitle;
+@property (nonatomic, assign) BOOL sendConfirmationSwitchEnabled;
+@property (nonatomic, copy, nullable) NeoWCContactInfoCardSwitchHandler sendConfirmationSwitchHandler;
+- (NSInteger)numberOfConfiguredSwitches;
+- (void)infoCardSwitchValueChanged:(UISwitch *)sender;
 @end
 
 @implementation NeoWCContactInfoCardViewController
@@ -76,12 +84,54 @@
     if (self.isViewLoaded) [self.tableView reloadData];
 }
 
+- (void)configureMessageBlockSwitchWithTitle:(NSString *)title
+                                      enabled:(BOOL)enabled
+                                      handler:(NeoWCContactInfoCardSwitchHandler)handler {
+    self.messageBlockSwitchTitle = title.length > 0 ? [title copy] : nil;
+    self.messageBlockSwitchEnabled = enabled;
+    self.messageBlockSwitchHandler = [handler copy];
+    if (self.isViewLoaded) [self.tableView reloadData];
+}
+
+- (void)configureSendConfirmationSwitchWithTitle:(NSString *)title
+                                          enabled:(BOOL)enabled
+                                          handler:(NeoWCContactInfoCardSwitchHandler)handler {
+    self.sendConfirmationSwitchTitle = title.length > 0 ? [title copy] : nil;
+    self.sendConfirmationSwitchEnabled = enabled;
+    self.sendConfirmationSwitchHandler = [handler copy];
+    if (self.isViewLoaded) [self.tableView reloadData];
+}
+
+- (NSInteger)numberOfConfiguredSwitches {
+    return (self.messageBlockSwitchTitle.length > 0 ? 1 : 0) +
+           (self.sendConfirmationSwitchTitle.length > 0 ? 1 : 0);
+}
+
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     (void)tableView; (void)section;
-    return self.rows.count;
+    return self.rows.count + [self numberOfConfiguredSwitches];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    NSInteger switchIndex = indexPath.row - self.rows.count;
+    if (switchIndex >= 0 && switchIndex < [self numberOfConfiguredSwitches]) {
+        static NSString *switchIdentifier = @"NeoWCContactInfoCardSwitchCell";
+        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:switchIdentifier];
+        if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:switchIdentifier];
+        UISwitch *toggle = [cell.accessoryView isKindOfClass:UISwitch.class]
+            ? (UISwitch *)cell.accessoryView : [UISwitch new];
+        [toggle removeTarget:self action:@selector(infoCardSwitchValueChanged:) forControlEvents:UIControlEventValueChanged];
+        [toggle addTarget:self action:@selector(infoCardSwitchValueChanged:) forControlEvents:UIControlEventValueChanged];
+        cell.accessoryView = toggle;
+        BOOL messageBlock = self.messageBlockSwitchTitle.length > 0 &&
+                            (switchIndex == 0 || self.sendConfirmationSwitchTitle.length == 0);
+        toggle.tag = messageBlock ? 1 : 2;
+        toggle.on = messageBlock ? self.messageBlockSwitchEnabled : self.sendConfirmationSwitchEnabled;
+        cell.textLabel.text = messageBlock ? self.messageBlockSwitchTitle : self.sendConfirmationSwitchTitle;
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        return cell;
+    }
+
     static NSString *identifier = @"NeoWCContactInfoCardCell";
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
     if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:identifier];
@@ -94,8 +144,19 @@
     return cell;
 }
 
+- (void)infoCardSwitchValueChanged:(UISwitch *)sender {
+    if (sender.tag == 1) {
+        self.messageBlockSwitchEnabled = sender.isOn;
+        if (self.messageBlockSwitchHandler) self.messageBlockSwitchHandler(sender.isOn);
+    } else if (sender.tag == 2) {
+        self.sendConfirmationSwitchEnabled = sender.isOn;
+        if (self.sendConfirmationSwitchHandler) self.sendConfirmationSwitchHandler(sender.isOn);
+    }
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (indexPath.row >= self.rows.count) return;
     NSString *value = self.rows[indexPath.row][@"value"];
     if (value.length == 0 || [value isEqualToString:@"暂无"]) return;
     UIPasteboard.generalPasteboard.string = value;
@@ -103,7 +164,9 @@
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView; (void)section;
-    return @"点击任意一项可复制。资料仅在当前页面实时读取，不会另行上传。";
+    return [self numberOfConfiguredSwitches] > 0
+        ? @"点击资料项可复制；开关可直接调整当前联系人设置。资料仅在当前页面实时读取，不会另行上传。"
+        : @"点击任意一项可复制。资料仅在当前页面实时读取，不会另行上传。";
 }
 
 @end
