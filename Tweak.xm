@@ -351,6 +351,7 @@ static char NeoWCAvatarNativeDoubleTapOwnedKey;
 static char NeoWCOfficialInfoCardBoxKey;
 static char NeoWCOfficialInfoBaseRowsKey;
 static char NeoWCInfoCardOfficialControllerKey;
+static char NeoWCOfficialRelatedGroupLogicKey;
 static char NeoWCExclusiveRedEnvelopeContactKey;
 static char NeoWCExclusiveRedEnvelopeViewContactKey;
 static char NeoWCExclusiveRedEnvelopeViewDataKey;
@@ -462,6 +463,7 @@ static void NeoWCRestoreReplyTransforms(NSArray<NeoWCReplyTransformSnapshot *> *
 static id NeoWCTweakSafeValue(id object, NSString *key);
 static void NeoWCTweakSetValue(id object, NSString *key, id value);
 static id NeoWCMessageWrapForCell(id cell);
+static id NeoWCImageJokerMessageForObject(id object);
 static id NeoWCContactForUserName(NSString *userName);
 static void NeoWCOpenHomeRemark(id owner, id contact, BOOL group);
 static void NeoWCOpenHomeMoments(id owner, id contact);
@@ -1701,6 +1703,8 @@ static BOOL NeoWCResponderIsInsideControllerClass(UIResponder *responder, NSStri
 }
 
 static id NeoWCMessageWrapForCell(id cell) {
+    id directMessage = NeoWCImageJokerMessageForObject(cell);
+    if (directMessage) return directMessage;
     id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel", @"m_viewModel"]);
     id message = NeoWCTweakValueForSelectorNames(viewModel, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
     if (message) return message;
@@ -1709,7 +1713,6 @@ static id NeoWCMessageWrapForCell(id cell) {
 }
 
 static NSString *NeoWCImageJokerKeyForMessage(id message);
-static id NeoWCImageJokerMessageForObject(id object);
 
 static void NeoWCRecordMeMenuTitle(NSString *title) {
     if (title.length == 0 || [title isEqualToString:@"插件"]) return;
@@ -5364,7 +5367,16 @@ static BOOL NeoWCMessageIsMusicCard(id message) {
         innerType = [NeoWCTweakSafeValue(NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType"),
                                          @"m_uiAppMsgInnerType") integerValue];
     }
-    return innerType == 3;
+    if (innerType == 3) return YES;
+    // AFN identifies music app messages from the serialized app-message body as
+    // well as the parsed inner-type field. Some WeChat builds populate the XML
+    // before exposing m_uiAppMsgInnerType to AppMessageCellView.
+    NSString *content = NeoWCTweakSafeValue(message, @"m_nsContent");
+    if (![content isKindOfClass:NSString.class]) return NO;
+    return [content rangeOfString:@"<appmsg type=\"3\"" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+           [content rangeOfString:@"<appmsg type='3'" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+           [content rangeOfString:@"<type>3</type>" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+           [content rangeOfString:@"<mediatagname>music" options:NSCaseInsensitiveSearch].location != NSNotFound;
 }
 
 static NSString *NeoWCMusicCardPlayableURLString(id message) {
@@ -5381,6 +5393,24 @@ static NSString *NeoWCMusicCardPlayableURLString(id message) {
             NSString *scheme = URL.scheme.lowercaseString;
             if (([scheme isEqualToString:@"https"] || [scheme isEqualToString:@"http"]) && URL.host.length > 0) {
                 return trimmed;
+            }
+        }
+    }
+    NSString *content = NeoWCTweakSafeValue(message, @"m_nsContent");
+    if ([content isKindOfClass:NSString.class]) {
+        NSRegularExpression *expression = [NSRegularExpression
+            regularExpressionWithPattern:@"(?is)<(?:dataurl|lowdataurl|musicurl|musichighbandurl|musiclowbandurl)>\\s*(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?\\s*</(?:dataurl|lowdataurl|musicurl|musichighbandurl|musiclowbandurl)>"
+                                 options:0 error:nil];
+        for (NSTextCheckingResult *match in [expression matchesInString:content options:0
+                                                                        range:NSMakeRange(0, content.length)]) {
+            if (match.numberOfRanges < 2) continue;
+            NSString *value = [[content substringWithRange:[match rangeAtIndex:1]]
+                stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            value = [value stringByReplacingOccurrencesOfString:@"&amp;" withString:@"&"];
+            NSURL *URL = [NSURL URLWithString:value];
+            NSString *scheme = URL.scheme.lowercaseString;
+            if (([scheme isEqualToString:@"https"] || [scheme isEqualToString:@"http"]) && URL.host.length > 0) {
+                return value;
             }
         }
     }
@@ -5600,7 +5630,10 @@ static NSArray *NeoWCOperationMenuItemsWithMediaToVoice(id target,
                                                          NeoWCMediaToVoiceKind kind) {
     if (![originalItems isKindOfClass:NSArray.class] || !NeoWCMediaToVoiceKindEnabled(kind)) return originalItems;
     id message = NeoWCMessageWrapForCell(target);
-    BOOL eligible = kind == NeoWCMediaToVoiceKindAudioFile ? NeoWCMessageIsConvertibleAudioFile(message) :
+    // WeChatX adds the AppFileMessageCellViewV2 action before inspecting the
+    // attachment extension; the conversion action remains responsible for
+    // validating that a complete supported audio file exists.
+    BOOL eligible = kind == NeoWCMediaToVoiceKindAudioFile ? YES :
         (kind == NeoWCMediaToVoiceKindMusic ? NeoWCMessageIsMusicCard(message) : message != nil);
     if (!eligible) return originalItems;
     for (id item in originalItems) {
@@ -5618,7 +5651,7 @@ static NSArray *NeoWCOperationMenuItemsWithMediaToVoice(id target,
     MMMenuItem *item = [[itemClass alloc] initWithTitle:@"转语音" icon:icon target:target action:action];
     if (!item) return originalItems;
     NSMutableArray *items = [originalItems mutableCopy];
-    [items insertObject:item atIndex:0];
+    [items addObject:item];
     return items;
 }
 
@@ -9158,9 +9191,14 @@ static id NeoWCCallCompatibleObjectGetter(id object, NSString *selectorName) {
 static NSArray *NeoWCOfficialRelatedGroups(id controller) {
     id logic = NeoWCRawProfileValue(controller,
                                     @[@"m_relatedGroupLogic", @"relatedGroupLogic"]);
-    id groups = NeoWCCallCompatibleObjectGetter(logic, @"getContactRelatedGroup");
+    if (!logic) logic = objc_getAssociatedObject(controller, &NeoWCOfficialRelatedGroupLogicKey);
+    // WCRefine's confirmed chain reads/writes ContactRelatedGroupLogic's
+    // _arrRelatedGroup and marks _bSearchDone; it does not establish an ABI for
+    // the similarly named getContactRelatedGroup string.
+    id groups = NeoWCRawProfileValue(logic, @[@"_arrRelatedGroup"]);
     if ([groups isKindOfClass:NSArray.class]) return groups;
     if ([groups isKindOfClass:NSSet.class]) return [groups allObjects];
+    if ([NeoWCRawProfileValue(logic, @[@"_bSearchDone"]) boolValue]) return @[];
     return nil;
 }
 
@@ -9766,6 +9804,23 @@ static UIViewController *NeoWCCreateOfficialSocialInformation(id contact) {
     }
     id relatedGroupLogic = NeoWCRawProfileValue(controller,
         @[@"m_relatedGroupLogic", @"relatedGroupLogic"]);
+    if (!relatedGroupLogic) {
+        Class logicClass = objc_getClass("ContactRelatedGroupLogic");
+        SEL initializer = NSSelectorFromString(@"initWithContact:");
+        Method initializerMethod = logicClass ? class_getInstanceMethod(logicClass, initializer) : NULL;
+        if (initializerMethod && method_getNumberOfArguments(initializerMethod) == 3 &&
+            NeoWCMethodReturnsObject(initializerMethod)) {
+            @try {
+                relatedGroupLogic = ((id (*)(id, SEL, id))objc_msgSend)([logicClass alloc], initializer, contact);
+            } @catch (__unused NSException *exception) {
+                relatedGroupLogic = nil;
+            }
+        }
+        if (relatedGroupLogic) {
+            objc_setAssociatedObject(controller, &NeoWCOfficialRelatedGroupLogicKey,
+                                     relatedGroupLogic, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    }
     // AFN registers this exact no-argument selector on ContactRelatedGroupLogic
     // and its replacement preserves the original call before processing results.
     SEL searchSelector = NSSelectorFromString(@"trySearchRelatedGroup");
@@ -9778,6 +9833,15 @@ static UIViewController *NeoWCCreateOfficialSocialInformation(id contact) {
         @try {
             ((void (*)(id, SEL))objc_msgSend)(relatedGroupLogic, searchSelector);
         } @catch (__unused NSException *exception) {}
+        for (NSNumber *delay in @[@0.25, @0.75, @1.5, @3.0, @6.0, @10.0]) {
+            __weak UIViewController *weakController = controller;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                         (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                UIViewController *strongController = weakController;
+                if (strongController) NeoWCRefreshInfoCardFromOfficialController(strongController);
+            });
+        }
     }
     return controller;
 }
@@ -11118,8 +11182,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
     if (action == @selector(neowc_addToQuickReply:)) return NeoWCMessageCanAddToQuickReply(NeoWCMessageWrapForCell(self));
     if (action == @selector(neowc_convertAudioFileToVoice:)) {
-        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindAudioFile) &&
-               NeoWCMessageIsConvertibleAudioFile(NeoWCMessageWrapForCell(self));
+        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindAudioFile);
     }
     return %orig;
 }

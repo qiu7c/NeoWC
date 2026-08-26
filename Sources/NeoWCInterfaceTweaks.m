@@ -17,16 +17,29 @@ NSString *const NeoWCHideChatMuteIconKey = @"com.qiu7c.neowc.interface.hide-chat
 NSString *const NeoWCGlobalAvatarRoundingEnabledKey = @"com.qiu7c.neowc.interface.global-avatar-rounding";
 NSString *const NeoWCGlobalAvatarCornerPercentKey = @"com.qiu7c.neowc.interface.global-avatar-corner-percent";
 
-static void NeoWCClearSearchBarChrome(UIView *view, UITextField *textField) {
+static UIColor *NeoWCEffectiveBackgroundColorForView(UIView *view) {
+    for (UIView *candidate = view; candidate; candidate = candidate.superview) {
+        UIColor *color = candidate.backgroundColor;
+        if (color && CGColorGetAlpha(color.CGColor) > 0.01) return color;
+    }
+    return UIColor.systemGroupedBackgroundColor;
+}
+
+static void NeoWCMatchSearchBarChrome(UIView *view, UITextField *textField, UIColor *backgroundColor) {
     for (UIView *subview in view.subviews) {
         NSString *className = NSStringFromClass(subview.class);
         if ([className containsString:@"UISearchBarBackground"] ||
             [className isEqualToString:@"_UISearchBarBackground"]) {
-            subview.hidden = YES;
-            subview.backgroundColor = UIColor.clearColor;
+            subview.hidden = NO;
+            subview.alpha = 1.0;
+            subview.backgroundColor = backgroundColor;
+            subview.layer.backgroundColor = backgroundColor.CGColor;
+            if ([subview isKindOfClass:UIImageView.class]) {
+                ((UIImageView *)subview).image = nil;
+            }
         }
         if (subview != textField && ![subview isDescendantOfView:textField]) {
-            NeoWCClearSearchBarChrome(subview, textField);
+            NeoWCMatchSearchBarChrome(subview, textField, backgroundColor);
         }
     }
 }
@@ -50,13 +63,14 @@ static UIImage *NeoWCTransparentSearchBackgroundImage(void) {
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    self.backgroundColor = UIColor.clearColor;
-    self.layer.backgroundColor = UIColor.clearColor.CGColor;
     UISearchBar *searchBar = self.searchBar;
     if (!searchBar) return;
     searchBar.frame = CGRectMake(0.0, 4.0, CGRectGetWidth(self.bounds),
                                  MAX(0.0, CGRectGetHeight(self.bounds) - 8.0));
-    NeoWCClearSearchBarChrome(searchBar, searchBar.searchTextField);
+    UIColor *backgroundColor = NeoWCEffectiveBackgroundColorForView(self);
+    searchBar.backgroundColor = backgroundColor;
+    searchBar.layer.backgroundColor = backgroundColor.CGColor;
+    NeoWCMatchSearchBarChrome(searchBar, searchBar.searchTextField, backgroundColor);
 }
 
 @end
@@ -67,15 +81,14 @@ void NeoWCStyleSearchBar(UISearchBar *searchBar) {
     UIImage *transparentImage = NeoWCTransparentSearchBackgroundImage();
     searchBar.backgroundImage = transparentImage;
     searchBar.scopeBarBackgroundImage = transparentImage;
-    [searchBar setSearchFieldBackgroundImage:transparentImage forState:UIControlStateNormal];
-    [searchBar setSearchFieldBackgroundImage:transparentImage forState:UIControlStateHighlighted];
-    searchBar.backgroundColor = UIColor.clearColor;
-    searchBar.barTintColor = UIColor.clearColor;
-    searchBar.translucent = YES;
+    UIColor *backgroundColor = NeoWCEffectiveBackgroundColorForView(searchBar.superview);
+    searchBar.backgroundColor = backgroundColor;
+    searchBar.barTintColor = backgroundColor;
+    searchBar.translucent = NO;
     searchBar.opaque = NO;
-    searchBar.layer.backgroundColor = UIColor.clearColor.CGColor;
+    searchBar.layer.backgroundColor = backgroundColor.CGColor;
     UITextField *textField = searchBar.searchTextField;
-    NeoWCClearSearchBarChrome(searchBar, textField);
+    NeoWCMatchSearchBarChrome(searchBar, textField, backgroundColor);
     textField.backgroundColor = UIColor.secondarySystemFillColor;
     textField.layer.backgroundColor = UIColor.secondarySystemFillColor.CGColor;
     textField.borderStyle = UITextBorderStyleNone;
@@ -89,9 +102,10 @@ void NeoWCInstallSearchBarInTableView(UISearchBar *searchBar, UITableView *table
     CGFloat width = CGRectGetWidth(tableView.bounds);
     NeoWCSearchTableHeaderView *header = [[NeoWCSearchTableHeaderView alloc]
         initWithFrame:CGRectMake(0.0, 0.0, width, 60.0)];
-    header.backgroundColor = UIColor.clearColor;
-    header.layer.backgroundColor = UIColor.clearColor.CGColor;
-    header.opaque = NO;
+    UIColor *backgroundColor = NeoWCEffectiveBackgroundColorForView(tableView);
+    header.backgroundColor = backgroundColor;
+    header.layer.backgroundColor = backgroundColor.CGColor;
+    header.opaque = YES;
     header.searchBar = searchBar;
     searchBar.frame = CGRectMake(0.0, 4.0, width, 52.0);
     searchBar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
