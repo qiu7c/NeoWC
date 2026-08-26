@@ -106,6 +106,10 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCAntiRevokeSideOffsetYKey: @10.0,
         NeoWCAntiRevokePersistRecordsKey: @NO,
         NeoWCImageEditQuickSendEnabledKey: @NO,
+        NeoWCMediaToVoiceEnabledKey: @NO,
+        NeoWCAudioFileToVoiceEnabledKey: @YES,
+        NeoWCVideoToVoiceEnabledKey: @YES,
+        NeoWCMusicToVoiceEnabledKey: @YES,
         NeoWCChatJokerEnabledKey: @NO,
         NeoWCChatMessageTimeEnabledKey: @NO,
         NeoWCChatMessageTimeBelowAvatarKey: @YES,
@@ -325,6 +329,15 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"表情存入自拍", @"在表情菜单中存入自拍表情", @"camera", NeoWCSettingRowKindSwitch, NeoWCEmoticonToSelfieEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"语音转发", @"在语音长按菜单中显示转发", @"waveform.badge.plus", NeoWCSettingRowKindSwitch, NeoWCVoiceForwardEnabledKey, nil, NeoWCSettingActionNone),
     ]];
+    NeoWCAddFeature(interaction,
+                    NeoWCItem(@"媒体转语音", @"把音频文件、聊天视频和音乐卡片转成真正的微信语音", @"waveform", NeoWCSettingRowKindSwitch, NeoWCMediaToVoiceEnabledKey, nil, NeoWCSettingActionNone),
+                    @[
+                        NeoWCItem(@"音频文件转语音", @"音频文件下载完成后，长按转为语音发送", @"doc", NeoWCSettingRowKindSwitch, NeoWCAudioFileToVoiceEnabledKey, nil, NeoWCSettingActionNone),
+                        NeoWCItem(@"视频转语音", @"视频下载完成后，长按提取音轨并发送", @"video", NeoWCSettingRowKindSwitch, NeoWCVideoToVoiceEnabledKey, nil, NeoWCSettingActionNone),
+                        NeoWCItem(@"音乐转语音", @"长按音乐卡片，下载播放音频后转为语音发送", @"music.note", NeoWCSettingRowKindSwitch, NeoWCMusicToVoiceEnabledKey, nil, NeoWCSettingActionNone),
+                    ],
+                    defaults,
+                    collapsed);
     NeoWCAddFeature(interaction,
                     NeoWCItem(@"快捷回复", @"长按聊天“+”使用文字、图片、视频和语音消息", @"tray.full", NeoWCSettingRowKindSwitch, NeoWCQuickReplyEnabledKey, nil, NeoWCSettingActionNone),
                     @[NeoWCItem(@"点击秒发送", @"开启后点击直接发送，长按进入编辑或预览", @"bolt.fill", NeoWCSettingRowKindSwitch, NeoWCQuickReplyInstantSendEnabledKey, nil, NeoWCSettingActionNone),

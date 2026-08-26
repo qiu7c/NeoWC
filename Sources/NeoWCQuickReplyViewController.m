@@ -454,7 +454,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 @end
 
-@interface NeoWCQuickReplyViewController () <UISearchBarDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@interface NeoWCQuickReplyViewController () <UISearchBarDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIDocumentPickerDelegate>
 @property (nonatomic, copy, nullable) NeoWCQuickReplySelectionHandler selectionHandler;
 @property (nonatomic, copy, nullable) NeoWCQuickReplyDirectSendHandler directSendHandler;
 @property (nonatomic, copy) NSArray<NeoWCQuickReplyItem *> *allItems;
@@ -464,6 +464,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 @property (nonatomic, strong) UISearchBar *searchBar;
 @property (nonatomic, copy, nullable) NSString *currentFolderIdentifier;
 @property (nonatomic, copy, nullable) NSString *currentFolderName;
+@property (nonatomic, strong, nullable) NSURL *pendingExportURL;
 @end
 
 @implementation NeoWCQuickReplyViewController
@@ -501,13 +502,18 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
                                                             target:self
                                                             action:@selector(sortTapped)];
     sort.accessibilityLabel = @"排序";
-    self.navigationItem.rightBarButtonItems = @[add, sort];
+    UIBarButtonItem *exportAll = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"square.and.arrow.up"]
+                                                                  style:UIBarButtonItemStylePlain
+                                                                 target:self
+                                                                 action:@selector(exportAllTapped)];
+    exportAll.accessibilityLabel = @"全部导出";
+    self.navigationItem.rightBarButtonItems = @[add, sort, exportAll];
     if (!self.selectionHandler) {
         self.navigationItem.leftBarButtonItem = self.editButtonItem;
         if (!self.currentFolderIdentifier.length) {
             UIBarButtonItem *cleanup = [[UIBarButtonItem alloc] initWithTitle:@"清理" style:UIBarButtonItemStylePlain
                                                                        target:self action:@selector(cleanupMediaTapped)];
-            self.navigationItem.rightBarButtonItems = @[add, sort, cleanup];
+            self.navigationItem.rightBarButtonItems = @[add, sort, exportAll, cleanup];
         }
     }
     self.searchBar = [UISearchBar new];
@@ -520,9 +526,10 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
         [self.tableView addGestureRecognizer:longPress];
     }
     if (self.selectionHandler && self.navigationController.presentingViewController) {
-        self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose
-                                                                                              target:self
-                                                                                              action:@selector(close)];
+        self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"返回"
+                                                                                 style:UIBarButtonItemStylePlain
+                                                                                target:self
+                                                                                action:@selector(close)];
     }
     [self reloadItems];
 }
@@ -571,6 +578,36 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (void)close {
     [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)exportAllTapped {
+    NSError *error = nil;
+    NSURL *packageURL = [NeoWCQuickReplyStore.sharedStore createExportPackageWithError:&error];
+    if (!packageURL) {
+        [self showError:error ?: [NSError errorWithDomain:@"NeoWC" code:3 userInfo:@{NSLocalizedDescriptionKey: @"无法创建快捷回复导出包。"}]];
+        return;
+    }
+    self.pendingExportURL = packageURL;
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForExportingURLs:@[packageURL] asCopy:YES];
+    picker.delegate = self;
+    picker.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)finishPendingExport {
+    NSURL *URL = self.pendingExportURL;
+    self.pendingExportURL = nil;
+    if (URL) [NSFileManager.defaultManager removeItemAtURL:URL error:nil];
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
+    (void)controller;
+    [self finishPendingExport];
+}
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)URLs {
+    (void)controller; (void)URLs;
+    [self finishPendingExport];
 }
 
 - (void)reloadItems {
@@ -905,7 +942,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     NSByteCountFormatter *formatter = [NSByteCountFormatter new];
     formatter.countStyle = NSByteCountFormatterCountStyleFile;
     NSString *size = [formatter stringFromByteCount:(long long)NeoWCQuickReplyStore.sharedStore.managedMediaSize];
-    return [NSString stringWithFormat:@"全部账号共享，共 %lu 项，媒体占用 %@。消息索引和媒体均保留独立恢复副本，不依赖聊天缓存。", (unsigned long)self.allItems.count, size];
+    return [NSString stringWithFormat:@"全部账号共享，共 %lu 项，媒体占用 %@。数据长期保存在微信沙盒 Documents，按实际文件和独立记录自动恢复。", (unsigned long)self.allItems.count, size];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -1069,7 +1106,6 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView;
-    if (self.selectionHandler) return nil;
     NeoWCQuickReplyFolder *folder = [self folderAtIndexPath:indexPath];
     if (folder) {
         __weak typeof(self) weakSelf = self;

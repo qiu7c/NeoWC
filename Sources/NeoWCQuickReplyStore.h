@@ -69,6 +69,7 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
 - (nullable NSString *)absoluteMediaPathForItem:(NeoWCQuickReplyItem *)item;
 - (nullable NSString *)absoluteThumbnailPathForItem:(NeoWCQuickReplyItem *)item;
 - (unsigned long long)managedMediaSize;
+- (nullable NSURL *)createExportPackageWithError:(NSError **)error;
 
 @end
 

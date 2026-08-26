@@ -7,6 +7,7 @@
 @property (nonatomic, copy) NSString *displayName;
 @property (nonatomic, copy) NSString *userName;
 @property (nonatomic, copy) NSArray<NSDictionary<NSString *, NSString *> *> *rows;
+@property (nonatomic, copy) NSDictionary<NSString *, id> *rowSelectionHandlers;
 @property (nonatomic, copy, nullable) NSString *messageBlockSwitchTitle;
 @property (nonatomic, assign) BOOL messageBlockSwitchEnabled;
 @property (nonatomic, copy, nullable) NeoWCContactInfoCardSwitchHandler messageBlockSwitchHandler;
@@ -31,8 +32,19 @@
         _displayName = [name copy] ?: @"";
         _userName = [userName copy] ?: @"";
         _rows = [rows copy] ?: @[];
+        _rowSelectionHandlers = @{};
     }
     return self;
+}
+
+- (void)configureRowActionWithTitle:(NSString *)title
+                            handler:(NeoWCContactInfoCardRowSelectionHandler)handler {
+    if (title.length == 0) return;
+    NSMutableDictionary *handlers = [self.rowSelectionHandlers mutableCopy] ?: [NSMutableDictionary dictionary];
+    if (handler) handlers[title] = [handler copy];
+    else [handlers removeObjectForKey:title];
+    self.rowSelectionHandlers = handlers;
+    if (self.isViewLoaded) [self.tableView reloadData];
 }
 
 - (void)viewDidLoad {
@@ -140,6 +152,8 @@
     cell.detailTextLabel.text = row[@"value"] ?: @"";
     cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
     cell.detailTextLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
+    BOOL actionable = self.rowSelectionHandlers[row[@"title"]] != nil;
+    cell.accessoryType = actionable ? UITableViewCellAccessoryDisclosureIndicator : UITableViewCellAccessoryNone;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     return cell;
 }
@@ -157,6 +171,12 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.row >= self.rows.count) return;
+    NSString *title = self.rows[indexPath.row][@"title"];
+    NeoWCContactInfoCardRowSelectionHandler handler = self.rowSelectionHandlers[title];
+    if (handler) {
+        handler(self);
+        return;
+    }
     NSString *value = self.rows[indexPath.row][@"value"];
     if (value.length == 0 || [value isEqualToString:@"暂无"]) return;
     UIPasteboard.generalPasteboard.string = value;
@@ -165,8 +185,8 @@
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView; (void)section;
     return [self numberOfConfiguredSwitches] > 0
-        ? @"点击资料项可复制；开关可直接调整当前联系人设置。资料仅在当前页面实时读取，不会另行上传。"
-        : @"点击任意一项可复制。资料仅在当前页面实时读取，不会另行上传。";
+        ? @"带箭头的资料项可展开名单，其余资料项可复制；开关可直接调整当前联系人设置。"
+        : @"带箭头的资料项可展开名单，其余资料项可复制。资料仅在当前页面实时读取。";
 }
 
 @end

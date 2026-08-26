@@ -31,7 +31,9 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCMessageBlock.h"
 #import "Sources/NeoWCAvatarQuickPanel.h"
 #import "Sources/NeoWCContactInfoCard.h"
+#import "Sources/NeoWCInfoListViewController.h"
 #import "Sources/NeoWCPaymentLink.h"
+#import "Sources/NeoWCSilkEncoder.h"
 
 @interface WCActionSheet : NSObject
 - (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
@@ -311,6 +313,7 @@ static char NeoWCMomentsFloatSnapshotKey;
 static char NeoWCMomentsForwardTaskKey;
 static char NeoWCMomentsSaveTaskKey;
 static char NeoWCMomentsDataItemSaveTaskKey;
+static char NeoWCMediaToVoiceInProgressKey;
 static char NeoWCMomentsHighQualityMenuKey;
 static char NeoWCImageJokerPickerDelegateKey;
 static char NeoWCEmoticonPreviewLongPressKey;
@@ -479,6 +482,11 @@ static void NeoWCRefreshInfoCardFromOfficialController(id officialController);
 static void NeoWCConfigureInfoCardSwitches(NeoWCContactInfoCardViewController *card,
                                            NSString *username,
                                            BOOL group);
+static void NeoWCConfigureInfoCardDetailActions(NeoWCContactInfoCardViewController *card,
+                                                id contact,
+                                                id groupContact,
+                                                NSString *username,
+                                                id officialController);
 static UIViewController *NeoWCSendConfirmationPresenterForTarget(NSString *target);
 static BOOL NeoWCSendConfirmationValidateTarget(NSString *target);
 static BOOL NeoWCSendConfirmationMessageIsAppEmoticon(id wrap);
@@ -2765,11 +2773,12 @@ static void NeoWCOpenAvatarInfoCard(UIViewController *chatController,
     UIViewController *officialController = contact ? NeoWCCreateOfficialSocialInformation(contact) : nil;
     NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows =
         [NeoWCProfileInfoRows(contact, NO) mutableCopy] ?: [NSMutableArray array];
+    id groupContact = nil;
     if (contact == nil) {
         NeoWCAddInfoCardRow(rows, @"原始号码", targetUserName);
     }
     if ([chatUserName hasSuffix:@"@chatroom"]) {
-        id groupContact = NeoWCContactForUserName(chatUserName);
+        groupContact = NeoWCContactForUserName(chatUserName);
         [rows addObject:@{ @"title": @"所在群聊", @"value": chatUserName }];
         [rows addObjectsFromArray:NeoWCGroupMemberInfoRows(contact, groupContact, targetUserName)];
     }
@@ -2794,6 +2803,8 @@ static void NeoWCOpenAvatarInfoCard(UIViewController *chatController,
         NeoWCRefreshInfoCardFromOfficialController(officialController);
     }
     NeoWCConfigureInfoCardSwitches(card, targetUserName, [chatUserName hasSuffix:@"@chatroom"]);
+    NeoWCConfigureInfoCardDetailActions(card, contact, groupContact,
+                                        targetUserName, officialController);
     if (chatController.navigationController) {
         [chatController.navigationController pushViewController:card animated:YES];
     } else {
@@ -5311,6 +5322,295 @@ static NSDictionary *NeoWCQuickReplyVoiceMetadata(id message) {
     if ([voiceTime respondsToSelector:@selector(unsignedIntegerValue)] && voiceTime.unsignedIntegerValue > 0) metadata[@"voiceTime"] = voiceTime;
     if ([voiceFormat respondsToSelector:@selector(unsignedIntegerValue)]) metadata[@"voiceFormat"] = voiceFormat;
     return metadata;
+}
+
+typedef NS_ENUM(NSUInteger, NeoWCMediaToVoiceKind) {
+    NeoWCMediaToVoiceKindAudioFile = 1,
+    NeoWCMediaToVoiceKindVideo,
+    NeoWCMediaToVoiceKindMusic,
+};
+
+static BOOL NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKind kind) {
+    if (!NeoWCEnhancementEnabled(NeoWCMediaToVoiceEnabledKey)) return NO;
+    NSString *key = kind == NeoWCMediaToVoiceKindAudioFile ? NeoWCAudioFileToVoiceEnabledKey :
+        (kind == NeoWCMediaToVoiceKindVideo ? NeoWCVideoToVoiceEnabledKey : NeoWCMusicToVoiceEnabledKey);
+    return NeoWCEnhancementEnabled(key);
+}
+
+static NSSet<NSString *> *NeoWCAudioFileExtensions(void) {
+    static NSSet<NSString *> *extensions;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        // Matches the exact extension allow-list in WeChatX(14).
+        extensions = [NSSet setWithArray:@[@"mp3", @"m4a", @"wav", @"flac"]];
+    });
+    return extensions;
+}
+
+static BOOL NeoWCMessageIsConvertibleAudioFile(id message) {
+    if (!message || !NeoWCMessageIsFileAttachment(message)) return NO;
+    NSString *fileName = NeoWCTweakSafeValue(message, @"m_nsAppFileName");
+    return [NeoWCAudioFileExtensions() containsObject:fileName.pathExtension.lowercaseString ?: @""];
+}
+
+static BOOL NeoWCMessageIsMusicCard(id message) {
+    if (!message || [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue] != 49) return NO;
+    return [NeoWCTweakSafeValue(message, @"m_uiAppMsgInnerType") integerValue] == 3;
+}
+
+static NSString *NeoWCMusicCardPlayableURLString(id message) {
+    id extension = NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType");
+    NSArray<NSString *> *keys = @[@"m_nsAppMediaDataUrl", @"m_nsAppMediaLowBandDataUrl",
+                                  @"m_nsAppMediaUrl", @"m_nsAppMediaLowUrl"];
+    for (id owner in @[message ?: NSNull.null, extension ?: NSNull.null]) {
+        if (owner == NSNull.null) continue;
+        for (NSString *key in keys) {
+            NSString *value = NeoWCTweakSafeValue(owner, key);
+            if (![value isKindOfClass:NSString.class]) continue;
+            NSString *trimmed = [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            NSURL *URL = [NSURL URLWithString:trimmed];
+            NSString *scheme = URL.scheme.lowercaseString;
+            if (([scheme isEqualToString:@"https"] || [scheme isEqualToString:@"http"]) && URL.host.length > 0) {
+                return trimmed;
+            }
+        }
+    }
+    return nil;
+}
+
+static NSString *NeoWCExistingVideoMessagePath(id message) {
+    if (!message) return nil;
+    NSFileManager *fileManager = NSFileManager.defaultManager;
+    Class wrapClass = objc_getClass("CMessageWrap");
+    for (NSString *selectorName in @[@"GetPathOfMesVideoWithMessageWrap:",
+                                     @"GetPathOfRawVideoWithMessageWrap:",
+                                     @"GetPathOfRawOrCompressVideo:"]) {
+        SEL selector = NSSelectorFromString(selectorName);
+        if (![wrapClass respondsToSelector:selector]) continue;
+        id value = ((id (*)(id, SEL, id))objc_msgSend)(wrapClass, selector, message);
+        NSString *path = [value isKindOfClass:NSURL.class] ? [value path] :
+            ([value isKindOfClass:NSString.class] ? value : nil);
+        NSNumber *size = path.length > 0 ? [[fileManager attributesOfItemAtPath:path error:nil] objectForKey:NSFileSize] : nil;
+        if (size.unsignedLongLongValue > 0) return path;
+    }
+    for (NSString *selectorName in @[@"GetCdnDownloadPathOfVideo",
+                                     @"GetLivePhotoVideoPath",
+                                     @"GetLivePhotoHDVideoPath"]) {
+        SEL selector = NSSelectorFromString(selectorName);
+        if (![message respondsToSelector:selector]) continue;
+        id value = ((id (*)(id, SEL))objc_msgSend)(message, selector);
+        NSString *path = [value isKindOfClass:NSURL.class] ? [value path] :
+            ([value isKindOfClass:NSString.class] ? value : nil);
+        NSNumber *size = path.length > 0 ? [[fileManager attributesOfItemAtPath:path error:nil] objectForKey:NSFileSize] : nil;
+        if (size.unsignedLongLongValue > 0) return path;
+    }
+    return nil;
+}
+
+static NSString *NeoWCExistingAudioFileMessagePath(id message) {
+    if (!message) return nil;
+    NSFileManager *fileManager = NSFileManager.defaultManager;
+    for (NSString *selectorName in @[@"GetAppAttachmentPath", @"getAppAttachmentPath",
+                                     @"appAttachmentPath", @"getFilePath", @"filePath",
+                                     @"localPath", @"path", @"m_nsFilePath", @"m_nsAppFilePath"]) {
+        id value = NeoWCTweakValueForSelectorNames(message, @[selectorName]);
+        NSString *path = [value isKindOfClass:NSURL.class] ? [value path] :
+            ([value isKindOfClass:NSString.class] ? value : nil);
+        NSNumber *size = path.length > 0 ? [[fileManager attributesOfItemAtPath:path error:nil] objectForKey:NSFileSize] : nil;
+        if (size.unsignedLongLongValue > 0) return path;
+    }
+    return nil;
+}
+
+static NSString *NeoWCMediaToVoiceLocalPath(id message, NeoWCMediaToVoiceKind kind) {
+    if (kind == NeoWCMediaToVoiceKindAudioFile) return NeoWCExistingAudioFileMessagePath(message);
+    if (kind == NeoWCMediaToVoiceKindVideo) return NeoWCExistingVideoMessagePath(message);
+    return nil;
+}
+
+static NSString *NeoWCMediaToVoiceTemporaryPath(NSString *extension) {
+    NSString *name = [NSString stringWithFormat:@"NeoWC-media-to-voice-%@.%@",
+                      NSUUID.UUID.UUIDString, extension.length > 0 ? extension : @"tmp"];
+    return [NSTemporaryDirectory() stringByAppendingPathComponent:name];
+}
+
+static BOOL NeoWCSendConvertedSilkVoice(NSString *silkPath,
+                                        NSUInteger durationMilliseconds,
+                                        NSString *session) {
+    Class wrapClass = objc_getClass("CMessageWrap");
+    SEL initializer = sel_registerName("initWithMsgType:");
+    if (!wrapClass || ![wrapClass instancesRespondToSelector:initializer]) return NO;
+    id voice = ((id (*)(id, SEL, NSUInteger))objc_msgSend)([wrapClass alloc], initializer, 34);
+    if (!voice) return NO;
+    NeoWCTweakSetValue(voice, @"m_uiMessageType", @34);
+    id extension = NeoWCTweakSafeValue(voice, @"m_extendInfoWithMsgType");
+    NeoWCTweakSetValue(voice, @"m_uiVoiceTime", @(MAX((NSUInteger)1, durationMilliseconds)));
+    NeoWCTweakSetValue(voice, @"m_uiVoiceFormat", @4);
+    NeoWCTweakSetValue(voice, @"m_uiVoiceForwardFlag", @1);
+    NeoWCTweakSetValue(extension, @"m_uiVoiceTime", @(MAX((NSUInteger)1, durationMilliseconds)));
+    NeoWCTweakSetValue(extension, @"m_uiVoiceFormat", @4);
+    NeoWCTweakSetValue(extension, @"m_uiVoiceForwardFlag", @1);
+    return NeoWCSendVoiceMessage(voice, silkPath, session);
+}
+
+static void NeoWCFinishMediaToVoiceConversion(NSString *sourcePath,
+                                               NSString *downloadedPath,
+                                               NSString *session,
+                                               id message) {
+    NSString *silkPath = NeoWCMediaToVoiceTemporaryPath(@"silk");
+    NSError *conversionError = nil;
+    NSUInteger durationMilliseconds = 0;
+    BOOL converted = NeoWCEncodeAudioFileToSilk(sourcePath, silkPath, &durationMilliseconds, &conversionError);
+    if (downloadedPath.length > 0) [NSFileManager.defaultManager removeItemAtPath:downloadedPath error:nil];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        BOOL queued = converted && NeoWCSendConvertedSilkVoice(silkPath, durationMilliseconds, session);
+        [NSFileManager.defaultManager removeItemAtPath:silkPath error:nil];
+        objc_setAssociatedObject(message, &NeoWCMediaToVoiceInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (!converted) {
+            NeoWCShowTransientMessage(conversionError.localizedDescription ?: @"媒体转语音失败", NO);
+        } else if (!queued) {
+            NeoWCShowTransientMessage(@"微信语音发送接口已变化，未发送", NO);
+        } else {
+            NeoWCShowTransientMessage(@"已提交微信语音发送", YES);
+        }
+    });
+}
+
+static void NeoWCConvertMusicURLToVoice(NSString *URLString, NSString *session, id message) {
+    NSURL *URL = [NSURL URLWithString:URLString];
+    if (!URL) {
+        objc_setAssociatedObject(message, &NeoWCMediaToVoiceInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NeoWCShowTransientMessage(@"音乐卡片没有有效播放地址", NO);
+        return;
+    }
+    NSURLSessionDownloadTask *task = [NSURLSession.sharedSession downloadTaskWithURL:URL
+        completionHandler:^(NSURL *location, NSURLResponse *response, NSError *downloadError) {
+        NSInteger statusCode = [response isKindOfClass:NSHTTPURLResponse.class]
+            ? [(NSHTTPURLResponse *)response statusCode] : 200;
+        if (downloadError || !location || statusCode < 200 || statusCode >= 300) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                objc_setAssociatedObject(message, &NeoWCMediaToVoiceInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                NeoWCShowTransientMessage(downloadError.localizedDescription ?: @"音乐音频下载失败", NO);
+            });
+            return;
+        }
+        NSString *downloadExtension = response.suggestedFilename.pathExtension.lowercaseString;
+        if (downloadExtension.length == 0) downloadExtension = URL.pathExtension.lowercaseString;
+        if (downloadExtension.length == 0) {
+            NSString *MIMEType = response.MIMEType.lowercaseString;
+            if ([MIMEType containsString:@"mpeg"]) downloadExtension = @"mp3";
+            else if ([MIMEType containsString:@"wav"]) downloadExtension = @"wav";
+            else if ([MIMEType containsString:@"flac"]) downloadExtension = @"flac";
+            else if ([MIMEType containsString:@"mp4"] || [MIMEType containsString:@"aac"]) downloadExtension = @"m4a";
+        }
+        NSString *downloadedPath = NeoWCMediaToVoiceTemporaryPath(downloadExtension.length > 0 ? downloadExtension : @"m4a");
+        NSError *moveError = nil;
+        if (![NSFileManager.defaultManager moveItemAtURL:location
+                                                   toURL:[NSURL fileURLWithPath:downloadedPath]
+                                                   error:&moveError]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                objc_setAssociatedObject(message, &NeoWCMediaToVoiceInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                NeoWCShowTransientMessage(moveError.localizedDescription ?: @"无法保存音乐音频", NO);
+            });
+            return;
+        }
+        NeoWCFinishMediaToVoiceConversion(downloadedPath, downloadedPath, session, message);
+    }];
+    [task resume];
+}
+
+static NSString *NeoWCMediaToVoiceDisplayName(id message, NeoWCMediaToVoiceKind kind) {
+    NSString *title = kind == NeoWCMediaToVoiceKindAudioFile
+        ? NeoWCTweakSafeValue(message, @"m_nsAppFileName")
+        : NeoWCTweakSafeValue(message, @"m_nsTitle");
+    if ([title isKindOfClass:NSString.class] && title.length > 0) return title;
+    return kind == NeoWCMediaToVoiceKindVideo ? @"聊天视频" :
+        (kind == NeoWCMediaToVoiceKindMusic ? @"音乐卡片" : @"音频文件");
+}
+
+static void NeoWCPresentMediaToVoiceConfirmation(id cell, NeoWCMediaToVoiceKind kind) {
+    if (!NeoWCMediaToVoiceKindEnabled(kind)) return;
+    id message = NeoWCMessageWrapForCell(cell);
+    NSString *session = [NeoWCSessionForMessage(message) copy];
+    UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
+    if (!message || session.length == 0 || !presenter.view.window) return;
+    if ([objc_getAssociatedObject(message, &NeoWCMediaToVoiceInProgressKey) boolValue]) {
+        NeoWCShowTransientMessage(@"该媒体正在转换，请稍候", NO);
+        return;
+    }
+
+    NSString *localPath = NeoWCMediaToVoiceLocalPath(message, kind);
+    NSString *musicURL = kind == NeoWCMediaToVoiceKindMusic ? NeoWCMusicCardPlayableURLString(message) : nil;
+    if (kind != NeoWCMediaToVoiceKindMusic && localPath.length == 0) {
+        NeoWCShowTransientMessage(kind == NeoWCMediaToVoiceKindVideo
+            ? @"未找到完整视频文件，请先播放或下载完视频"
+            : @"未找到完整音频文件，请先下载完成", NO);
+        return;
+    }
+    if (kind == NeoWCMediaToVoiceKindMusic && musicURL.length == 0) {
+        NeoWCShowTransientMessage(@"音乐卡片没有可下载的播放地址", NO);
+        return;
+    }
+
+    NSString *name = NeoWCMediaToVoiceDisplayName(message, kind);
+    NSString *detail = [NSString stringWithFormat:@"发送到：%@\n来源：%@", session, name];
+    if (localPath.length > 0) {
+        AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:localPath] options:nil];
+        if ([asset tracksWithMediaType:AVMediaTypeAudio].count == 0) {
+            NeoWCShowTransientMessage(@"该媒体不包含可用音轨", NO);
+            return;
+        }
+        NSTimeInterval seconds = CMTimeGetSeconds(asset.duration);
+        if (isfinite(seconds) && seconds > 0.0) {
+            NSInteger totalSeconds = MAX((NSInteger)1, (NSInteger)llround(seconds));
+            detail = [detail stringByAppendingFormat:@"\n时长：%ld:%02ld",
+                      (long)(totalSeconds / 60), (long)(totalSeconds % 60)];
+        }
+    }
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"转为语音发送？"
+                                                                   message:detail
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"转换并发送" style:UIAlertActionStyleDefault
+                                           handler:^(__unused UIAlertAction *action) {
+        objc_setAssociatedObject(message, &NeoWCMediaToVoiceInProgressKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NeoWCShowTransientMessage(kind == NeoWCMediaToVoiceKindMusic ? @"正在下载并转换音乐" : @"正在转换媒体音轨", YES);
+        if (kind == NeoWCMediaToVoiceKindMusic) {
+            NeoWCConvertMusicURLToVoice(musicURL, session, message);
+        } else {
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+                NeoWCFinishMediaToVoiceConversion(localPath, nil, session, message);
+            });
+        }
+    }]];
+    [presenter presentViewController:alert animated:YES completion:nil];
+}
+
+static NSArray *NeoWCOperationMenuItemsWithMediaToVoice(id target,
+                                                         NSArray *originalItems,
+                                                         NeoWCMediaToVoiceKind kind) {
+    if (![originalItems isKindOfClass:NSArray.class] || !NeoWCMediaToVoiceKindEnabled(kind)) return originalItems;
+    id message = NeoWCMessageWrapForCell(target);
+    BOOL eligible = kind == NeoWCMediaToVoiceKindAudioFile ? NeoWCMessageIsConvertibleAudioFile(message) :
+        (kind == NeoWCMediaToVoiceKindMusic ? NeoWCMessageIsMusicCard(message) : message != nil);
+    if (!eligible) return originalItems;
+    for (id item in originalItems) {
+        if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"转语音"]) return originalItems;
+    }
+    Class itemClass = objc_getClass("MMMenuItem");
+    if (!itemClass || ![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) return originalItems;
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:18.0
+                                                                                                  weight:UIImageSymbolWeightRegular];
+    UIImage *icon = [[UIImage systemImageNamed:@"waveform" withConfiguration:configuration]
+        imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
+    SEL action = kind == NeoWCMediaToVoiceKindAudioFile ? @selector(neowc_convertAudioFileToVoice:) :
+        (kind == NeoWCMediaToVoiceKindVideo ? @selector(neowc_convertVideoToVoice:) :
+                                             @selector(neowc_convertMusicToVoice:));
+    MMMenuItem *item = [[itemClass alloc] initWithTitle:@"转语音" icon:icon target:target action:action];
+    if (!item) return originalItems;
+    NSMutableArray *items = [originalItems mutableCopy];
+    [items insertObject:item atIndex:0];
+    return items;
 }
 
 static void NeoWCCommitMessageToQuickReply(id message, NeoWCQuickReplyType type, NSString *session,
@@ -8752,8 +9052,8 @@ static NSString *NeoWCTableCellRightText(id cell, NSString *title) {
     return nil;
 }
 
-static NSString *NeoWCAdditionDurationValue(NSString *title, NSString *value) {
-    if (![title containsString:@"添加时间"] || value.length == 0 || [value containsString:@"已添加"]) return value;
+static NSString *NeoWCAdditionDaysValue(NSString *title, NSString *value) {
+    if (![title containsString:@"添加时间"] || value.length == 0) return nil;
     NSArray<NSDictionary *> *formats = @[
         @{ @"format": @"yyyy年M月d日 HH:mm:ss", @"approximate": @NO },
         @{ @"format": @"yyyy年M月d日 HH:mm", @"approximate": @NO },
@@ -8782,15 +9082,14 @@ static NSString *NeoWCAdditionDurationValue(NSString *title, NSString *value) {
             break;
         }
     }
-    if (!date) return value;
+    if (!date) return nil;
     NSCalendar *calendar = NSCalendar.currentCalendar;
     if (approximate) date = [calendar dateByAddingUnit:NSCalendarUnitDay value:14 toDate:date options:0] ?: date;
     NSDate *start = [calendar startOfDayForDate:date];
     NSDate *today = [calendar startOfDayForDate:NSDate.date];
     NSInteger days = [calendar components:NSCalendarUnitDay fromDate:start toDate:today options:0].day;
-    if (days < 0) return value;
-    return [NSString stringWithFormat:@"%@ · 已添加%@%ld 天", value,
-            approximate ? @"约 " : @"", (long)days];
+    if (days < 0) return nil;
+    return [NSString stringWithFormat:@"%@%ld 天", approximate ? @"约 " : @"", (long)days];
 }
 
 static uint32_t NeoWCContactAddTime(id contact) {
@@ -8820,18 +9119,25 @@ static NSString *NeoWCContactAddTimeValue(id contact) {
     formatter.timeZone = NSTimeZone.localTimeZone;
     formatter.dateFormat = @"yyyy年M月d日 HH:mm";
     NSString *text = [formatter stringFromDate:date];
+    return text;
+}
+
+static NSString *NeoWCContactAddDaysValue(id contact) {
+    uint32_t timestamp = NeoWCContactAddTime(contact);
+    NSTimeInterval now = NSDate.date.timeIntervalSince1970;
+    if (timestamp < 946684800U || timestamp > now + 24.0 * 60.0 * 60.0) return nil;
     NSCalendar *calendar = NSCalendar.currentCalendar;
+    NSDate *date = [NSDate dateWithTimeIntervalSince1970:timestamp];
     NSInteger days = [calendar components:NSCalendarUnitDay
                                   fromDate:[calendar startOfDayForDate:date]
                                     toDate:[calendar startOfDayForDate:NSDate.date]
                                    options:0].day;
-    if (days < 0) return text;
-    return [NSString stringWithFormat:@"%@ · 已添加 %ld 天", text, (long)days];
+    return days >= 0 ? [NSString stringWithFormat:@"%ld 天", (long)days] : nil;
 }
 
 static id NeoWCCallCompatibleObjectGetter(id object, NSString *selectorName) {
     SEL selector = NSSelectorFromString(selectorName);
-    Method method = object ? class_getInstanceMethod(object_getClass(object), selector) : NULL;
+    Method method = object ? class_getInstanceMethod([object class], selector) : NULL;
     if (!method || method_getNumberOfArguments(method) != 2 || !NeoWCMethodReturnsObject(method)) return nil;
     @try {
         return ((id (*)(id, SEL))objc_msgSend)(object, selector);
@@ -8870,12 +9176,16 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCOfficialSocialInfor
                 stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
             if (title.length == 0 || value.length == 0 || [titles containsObject:title]) continue;
             [titles addObject:title];
-            [rows addObject:@{ @"title": title,
-                               @"value": NeoWCAdditionDurationValue(title, value) ?: value }];
+            [rows addObject:@{ @"title": title, @"value": value }];
+            NSString *days = NeoWCAdditionDaysValue(title, value);
+            if (days.length > 0 && ![titles containsObject:@"添加天数"]) {
+                [titles addObject:@"添加天数"];
+                [rows addObject:@{ @"title": @"添加天数", @"value": days }];
+            }
         }
     }
     NSArray *relatedGroups = NeoWCOfficialRelatedGroups(controller);
-    if (relatedGroups.count > 0 && ![titles containsObject:@"共同群聊"]) {
+    if (relatedGroups != nil && ![titles containsObject:@"共同群聊"]) {
         [rows addObject:@{ @"title": @"共同群聊",
                            @"value": [NSString stringWithFormat:@"%lu 个", (unsigned long)relatedGroups.count] }];
     }
@@ -8886,7 +9196,9 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCMergeInfoCardRows(N
                                                                                 NSArray *officialRows) {
     NSMutableArray *rows = [NSMutableArray array];
     NSMutableSet *titles = [NSMutableSet set];
-    NSArray *combined = [(baseRows ?: @[]) arrayByAddingObjectsFromArray:officialRows ?: @[]];
+    // Official social-information values arrive asynchronously and must win
+    // over locally computed placeholders with the same title.
+    NSArray *combined = [(officialRows ?: @[]) arrayByAddingObjectsFromArray:baseRows ?: @[]];
     for (NSDictionary *row in combined) {
         NSString *title = row[@"title"];
         NSString *value = row[@"value"];
@@ -8906,8 +9218,13 @@ static void NeoWCRefreshInfoCardFromOfficialController(id officialController) {
     NeoWCContactInfoCardViewController *card = [box.object isKindOfClass:NeoWCContactInfoCardViewController.class]
         ? box.object : nil;
     NSArray *baseRows = objc_getAssociatedObject(officialController, &NeoWCOfficialInfoBaseRowsKey) ?: @[];
-    if (card) [card updateRows:NeoWCMergeInfoCardRows(baseRows,
-        NeoWCOfficialSocialInformationRows(officialController))];
+    if (card) {
+        [card updateRows:NeoWCMergeInfoCardRows(baseRows,
+            NeoWCOfficialSocialInformationRows(officialController))];
+        id contact = objc_getAssociatedObject(officialController, &NeoWCProfileContactKey);
+        NSString *username = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+        NeoWCConfigureInfoCardDetailActions(card, contact, nil, username, officialController);
+    }
 }
 
 static BOOL NeoWCSectionContainsRawIDCell(id section, NSString *title) {
@@ -9258,16 +9575,104 @@ static NSInteger NeoWCGroupFriendCount(id groupContact) {
     return friendCount;
 }
 
-static NSInteger NeoWCCommonGroupCount(NSString *userName) {
-    if (userName.length == 0 || [userName hasSuffix:@"@chatroom"]) return -1;
+static NSArray *NeoWCCommonGroupContacts(NSString *userName) {
+    if (userName.length == 0 || [userName hasSuffix:@"@chatroom"]) return nil;
     NSArray *groups = NeoWCAllChatRoomContacts();
-    if (!groups) return -1;
-    NSInteger commonCount = 0;
+    if (!groups) return nil;
+    NSMutableArray *matches = [NSMutableArray array];
     for (id groupContact in groups) {
         NSSet<NSString *> *memberNames = NeoWCGroupMemberUserNames(groupContact);
-        if ([memberNames containsObject:userName]) commonCount++;
+        if ([memberNames containsObject:userName]) [matches addObject:groupContact];
     }
-    return commonCount;
+    return matches;
+}
+
+static NSInteger NeoWCCommonGroupCount(NSString *userName) {
+    NSArray *groups = NeoWCCommonGroupContacts(userName);
+    return groups ? (NSInteger)groups.count : -1;
+}
+
+static NSArray *NeoWCGroupFriendContacts(id groupContact) {
+    NSSet<NSString *> *memberNames = NeoWCGroupMemberUserNames(groupContact);
+    if (memberNames.count == 0) return nil;
+    Class contactManagerClass = objc_getClass("CContactMgr");
+    id contactManager = contactManagerClass ? NeoWCServiceForClass(contactManagerClass) : nil;
+    SEL membershipSelector = NSSelectorFromString(@"isInContactList:");
+    if (!NeoWCContactListMethodIsCompatible(contactManager, membershipSelector)) return nil;
+    NSString *currentUserName = NeoWCCurrentUserWXID();
+    NSMutableArray *contacts = [NSMutableArray array];
+    for (NSString *memberName in memberNames) {
+        if ([memberName isEqualToString:currentUserName]) continue;
+        BOOL available = NO;
+        if (!NeoWCIsUsernameInContactList(contactManager, membershipSelector, memberName, &available)) {
+            if (!available) return nil;
+            continue;
+        }
+        id contact = NeoWCContactForUserName(memberName);
+        if (contact) [contacts addObject:contact];
+    }
+    return contacts;
+}
+
+static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCInfoListRowsForContacts(NSArray *contacts) {
+    NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows = [NSMutableArray array];
+    NSMutableSet<NSString *> *identifiers = [NSMutableSet set];
+    for (id contact in contacts) {
+        NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+        if (userName.length == 0 || [identifiers containsObject:userName]) continue;
+        [identifiers addObject:userName];
+        NSString *name = NeoWCAvatarDisplayName(contact, userName);
+        [rows addObject:@{ @"title": name.length > 0 ? name : userName, @"value": userName }];
+    }
+    [rows sortUsingComparator:^NSComparisonResult(NSDictionary *left, NSDictionary *right) {
+        return [left[@"title"] localizedCaseInsensitiveCompare:right[@"title"]];
+    }];
+    return rows;
+}
+
+static NSArray *NeoWCMergedContactCollections(NSArray *primary, NSArray *secondary) {
+    NSMutableArray *merged = [NSMutableArray array];
+    NSMutableSet<NSString *> *identifiers = [NSMutableSet set];
+    for (id contact in [(primary ?: @[]) arrayByAddingObjectsFromArray:secondary ?: @[]]) {
+        NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+        if (userName.length == 0 || [identifiers containsObject:userName]) continue;
+        [identifiers addObject:userName];
+        [merged addObject:contact];
+    }
+    return merged;
+}
+
+static void NeoWCConfigureInfoCardDetailActions(NeoWCContactInfoCardViewController *card,
+                                                id contact,
+                                                id groupContact,
+                                                NSString *username,
+                                                id officialController) {
+    if (!card) return;
+    id resolvedGroupContact = groupContact;
+    NSString *contactUserName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+    if (!resolvedGroupContact && [contactUserName hasSuffix:@"@chatroom"]) resolvedGroupContact = contact;
+    NSArray *friends = NeoWCGroupFriendContacts(resolvedGroupContact);
+    NSArray *friendRows = NeoWCInfoListRowsForContacts(friends);
+    if (friendRows.count > 0) {
+        [card configureRowActionWithTitle:@"群内好友" handler:^(UIViewController *presenter) {
+            NeoWCInfoListViewController *list = [[NeoWCInfoListViewController alloc]
+                initWithTitle:@"群内好友" rows:friendRows];
+            [presenter.navigationController pushViewController:list animated:YES];
+        }];
+    }
+
+    if (username.length == 0 || [username hasSuffix:@"@chatroom"]) return;
+    NSArray *localGroups = NeoWCCommonGroupContacts(username);
+    NSArray *officialGroups = officialController ? NeoWCOfficialRelatedGroups(officialController) : nil;
+    NSArray *groups = NeoWCMergedContactCollections(localGroups, officialGroups);
+    NSArray *groupRows = NeoWCInfoListRowsForContacts(groups);
+    if (groupRows.count > 0) {
+        [card configureRowActionWithTitle:@"共同群聊" handler:^(UIViewController *presenter) {
+            NeoWCInfoListViewController *list = [[NeoWCInfoListViewController alloc]
+                initWithTitle:@"共同群聊" rows:groupRows];
+            [presenter.navigationController pushViewController:list animated:YES];
+        }];
+    }
 }
 
 static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id contact, BOOL group) {
@@ -9296,10 +9701,12 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id 
         NeoWCAddInfoCardRow(rows, @"昵称", NeoWCRawProfileValue(contact, @[@"m_nsNickName"]));
         NeoWCAddInfoCardRow(rows, @"微信号", NeoWCRawProfileValue(contact, @[@"m_nsAliasName", @"m_nsAlias"]));
         NeoWCAddInfoCardRow(rows, @"添加时间", NeoWCContactAddTimeValue(contact));
+        NeoWCAddInfoCardRow(rows, @"添加天数", NeoWCContactAddDaysValue(contact));
         NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
         NSInteger commonCount = NeoWCCommonGroupCount(userName);
-        if (commonCount > 0) NeoWCAddInfoCardRow(rows, @"共同群聊",
-                                                  [NSString stringWithFormat:@"%ld 个", (long)commonCount]);
+        NeoWCAddInfoCardRow(rows, @"共同群聊", commonCount >= 0
+            ? [NSString stringWithFormat:@"%ld 个", (long)commonCount]
+            : @"正在加载");
     }
     return rows;
 }
@@ -9388,6 +9795,10 @@ static void NeoWCOpenProfileInfoCard(id controller) {
         NeoWCRefreshInfoCardFromOfficialController(officialController);
     }
     NeoWCConfigureInfoCardSwitches(card, userName, group);
+    id detailGroupContact = group ? contact : ([chatRoomUserName hasSuffix:@"@chatroom"]
+        ? NeoWCContactForUserName(chatRoomUserName) : nil);
+    NeoWCConfigureInfoCardDetailActions(card, contact, detailGroupContact,
+                                        userName, officialController);
     if (owner.navigationController) [owner.navigationController pushViewController:card animated:YES];
     else if (owner) [owner presentViewController:[[UINavigationController alloc] initWithRootViewController:card]
                                          animated:YES completion:nil];
@@ -10570,6 +10981,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
     items = NeoWCOperationMenuItemsWithJoker(self, items, NO);
+    items = NeoWCOperationMenuItemsWithMediaToVoice(self, items, NeoWCMediaToVoiceKindMusic);
     return NeoWCOperationMenuItemsWithQuickReply(self, items);
 }
 
@@ -10578,6 +10990,10 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
         return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageCanJokerEdit(NeoWCMessageWrapForCell(self));
     }
     if (action == @selector(neowc_addToQuickReply:)) return NeoWCMessageCanAddToQuickReply(NeoWCMessageWrapForCell(self));
+    if (action == @selector(neowc_convertMusicToVoice:)) {
+        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindMusic) &&
+               NeoWCMessageIsMusicCard(NeoWCMessageWrapForCell(self));
+    }
     return %orig;
 }
 
@@ -10593,17 +11009,49 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
     NeoWCAddMessageToQuickReply(self);
 }
 
+%new
+- (void)neowc_convertMusicToVoice:(id)sender {
+    (void)sender;
+    NeoWCPresentMediaToVoiceConfirmation(self, NeoWCMediaToVoiceKindMusic);
+}
+
+%end
+
+%hook VideoMessageCellView
+
+- (NSArray *)operationMenuItems {
+    return NeoWCOperationMenuItemsWithMediaToVoice(self, %orig, NeoWCMediaToVoiceKindVideo);
+}
+
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+    if (action == @selector(neowc_convertVideoToVoice:)) {
+        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindVideo) && NeoWCMessageWrapForCell(self) != nil;
+    }
+    return %orig;
+}
+
+%new
+- (void)neowc_convertVideoToVoice:(id)sender {
+    (void)sender;
+    NeoWCPresentMediaToVoiceConfirmation(self, NeoWCMediaToVoiceKindVideo);
+}
+
 %end
 
 %hook AppFileMessageCellViewV2
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
+    items = NeoWCOperationMenuItemsWithMediaToVoice(self, items, NeoWCMediaToVoiceKindAudioFile);
     return NeoWCOperationMenuItemsWithQuickReply(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
     if (action == @selector(neowc_addToQuickReply:)) return NeoWCMessageCanAddToQuickReply(NeoWCMessageWrapForCell(self));
+    if (action == @selector(neowc_convertAudioFileToVoice:)) {
+        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindAudioFile) &&
+               NeoWCMessageIsConvertibleAudioFile(NeoWCMessageWrapForCell(self));
+    }
     return %orig;
 }
 
@@ -10611,6 +11059,12 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)neowc_addToQuickReply:(id)sender {
     (void)sender;
     NeoWCAddMessageToQuickReply(self);
+}
+
+%new
+- (void)neowc_convertAudioFileToVoice:(id)sender {
+    (void)sender;
+    NeoWCPresentMediaToVoiceConfirmation(self, NeoWCMediaToVoiceKindAudioFile);
 }
 
 %end

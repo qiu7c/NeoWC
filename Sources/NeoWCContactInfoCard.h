@@ -3,6 +3,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 typedef void (^NeoWCContactInfoCardSwitchHandler)(BOOL enabled);
+typedef void (^NeoWCContactInfoCardRowSelectionHandler)(UIViewController *presenter);
 
 @interface NeoWCContactInfoCardViewController : NeoWCCardTableViewController
 - (instancetype)initWithTitle:(NSString *)title
@@ -11,6 +12,8 @@ typedef void (^NeoWCContactInfoCardSwitchHandler)(BOOL enabled);
                      userName:(NSString *)userName
                          rows:(NSArray<NSDictionary<NSString *, NSString *> *> *)rows;
 - (void)updateRows:(NSArray<NSDictionary<NSString *, NSString *> *> *)rows;
+- (void)configureRowActionWithTitle:(NSString *)title
+                            handler:(nullable NeoWCContactInfoCardRowSelectionHandler)handler;
 - (void)configureMessageBlockSwitchWithTitle:(NSString *)title
                                       enabled:(BOOL)enabled
                                       handler:(nullable NeoWCContactInfoCardSwitchHandler)handler;

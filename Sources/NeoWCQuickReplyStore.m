@@ -2,6 +2,8 @@
 #import "NeoWCAccount.h"
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
+#include <stdio.h>
+#include <string.h>
 
 static NSString *const NeoWCQuickReplyErrorDomain = @"com.qiu7c.neowc.quick-reply";
 
@@ -16,6 +18,7 @@ static NSString *const NeoWCQuickReplyItemsBackupName = @"index.backup.json";
 static NSString *const NeoWCQuickReplyFoldersIndexName = @"folders.json";
 static NSString *const NeoWCQuickReplyFoldersBackupName = @"folders.backup.json";
 static NSString *const NeoWCQuickReplyRecoveryDirectoryName = @"QuickReplyRecovery";
+static NSString *const NeoWCQuickReplyRecordsDirectoryName = @"records";
 
 static NSError *NeoWCQuickReplyError(NeoWCQuickReplyErrorCode code, NSString *description) {
     return [NSError errorWithDomain:NeoWCQuickReplyErrorDomain
@@ -33,6 +36,42 @@ static void NeoWCQuickReplySetIndexReadError(NSError **error) {
 static NSString *NeoWCQuickReplyTrimmedString(id value) {
     if (![value isKindOfClass:NSString.class]) return @"";
     return [(NSString *)value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+}
+
+static void NeoWCQuickReplyTarWriteOctal(char *field, size_t length, unsigned long long value) {
+    memset(field, '0', length);
+    if (length == 0) return;
+    field[length - 1] = '\0';
+    char buffer[32] = {0};
+    snprintf(buffer, sizeof(buffer), "%llo", value);
+    size_t valueLength = strlen(buffer);
+    size_t available = length - 1;
+    size_t copyLength = MIN(valueLength, available);
+    memcpy(field + available - copyLength, buffer + valueLength - copyLength, copyLength);
+}
+
+static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long long size, NSDate *modificationDate) {
+    NSData *nameData = [relativePath dataUsingEncoding:NSUTF8StringEncoding];
+    if (nameData.length == 0 || nameData.length >= 100) return nil;
+    unsigned char header[512] = {0};
+    memcpy(header, nameData.bytes, nameData.length);
+    NeoWCQuickReplyTarWriteOctal((char *)header + 100, 8, 0644);
+    NeoWCQuickReplyTarWriteOctal((char *)header + 108, 8, 0);
+    NeoWCQuickReplyTarWriteOctal((char *)header + 116, 8, 0);
+    NeoWCQuickReplyTarWriteOctal((char *)header + 124, 12, size);
+    NeoWCQuickReplyTarWriteOctal((char *)header + 136, 12, (unsigned long long)MAX(0.0, modificationDate.timeIntervalSince1970));
+    memset(header + 148, ' ', 8);
+    header[156] = '0';
+    memcpy(header + 257, "ustar", 5);
+    header[262] = '\0';
+    header[263] = '0';
+    header[264] = '0';
+    unsigned int checksum = 0;
+    for (NSUInteger index = 0; index < sizeof(header); index++) checksum += header[index];
+    snprintf((char *)header + 148, 7, "%06o", checksum);
+    header[154] = '\0';
+    header[155] = ' ';
+    return [NSData dataWithBytes:header length:sizeof(header)];
 }
 
 @implementation NeoWCQuickReplyItem
@@ -94,21 +133,19 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
 }
 
 - (NSURL *)quickRepliesRootURL {
-    NSURL *applicationSupport = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
-                                                                     inDomains:NSUserDomainMask].firstObject;
-    return applicationSupport ? [[applicationSupport URLByAppendingPathComponent:@"NeoWC" isDirectory:YES]
-                                 URLByAppendingPathComponent:@"QuickReplies" isDirectory:YES] : nil;
+    NSURL *documents = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory
+                                                            inDomains:NSUserDomainMask].firstObject;
+    return documents ? [[documents URLByAppendingPathComponent:@"NeoWC" isDirectory:YES]
+                        URLByAppendingPathComponent:@"QuickReplies" isDirectory:YES] : nil;
 }
 
 - (NSURL *)recoveryDirectoryCreatingIfNeeded:(BOOL)create error:(NSError **)error {
-    NSURL *documents = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory
-                                                            inDomains:NSUserDomainMask].firstObject;
-    if (!documents) {
+    NSURL *root = [self quickRepliesRootURL];
+    if (!root) {
         if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorStorageUnavailable, @"无法访问快捷回复恢复目录");
         return nil;
     }
-    NSURL *directory = [[documents URLByAppendingPathComponent:@"NeoWC" isDirectory:YES]
-                        URLByAppendingPathComponent:NeoWCQuickReplyRecoveryDirectoryName isDirectory:YES];
+    NSURL *directory = [root URLByAppendingPathComponent:@"Recovery" isDirectory:YES];
     if (!create) return directory;
     NSError *directoryError = nil;
     if (![NSFileManager.defaultManager createDirectoryAtURL:directory
@@ -119,7 +156,7 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
                                                                     @"无法创建快捷回复恢复目录");
         return nil;
     }
-    for (NSString *component in @[@"media", @"thumbnails"]) {
+    for (NSString *component in @[@"media", @"thumbnails", NeoWCQuickReplyRecordsDirectoryName]) {
         NSURL *child = [directory URLByAppendingPathComponent:component isDirectory:YES];
         if (![NSFileManager.defaultManager createDirectoryAtURL:child
                                     withIntermediateDirectories:YES
@@ -129,20 +166,65 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
             return nil;
         }
     }
-    [directory setResourceValue:@YES forKey:NSURLIsExcludedFromBackupKey error:nil];
     return directory;
+}
+
+- (NSURL *)legacyQuickRepliesRootURL {
+    NSURL *applicationSupport = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
+                                                                     inDomains:NSUserDomainMask].firstObject;
+    return applicationSupport ? [[applicationSupport URLByAppendingPathComponent:@"NeoWC" isDirectory:YES]
+                                 URLByAppendingPathComponent:@"QuickReplies" isDirectory:YES] : nil;
+}
+
+- (void)copyMissingContentsFromDirectory:(NSURL *)sourceDirectory toDirectory:(NSURL *)destinationDirectory {
+    NSFileManager *manager = NSFileManager.defaultManager;
+    BOOL sourceIsDirectory = NO;
+    if (![manager fileExistsAtPath:sourceDirectory.path isDirectory:&sourceIsDirectory] || !sourceIsDirectory) return;
+    [manager createDirectoryAtURL:destinationDirectory withIntermediateDirectories:YES attributes:nil error:nil];
+    NSDirectoryEnumerator<NSURL *> *enumerator = [manager enumeratorAtURL:sourceDirectory
+                                                includingPropertiesForKeys:@[NSURLIsDirectoryKey]
+                                                                   options:NSDirectoryEnumerationSkipsHiddenFiles
+                                                              errorHandler:nil];
+    for (NSURL *sourceURL in enumerator) {
+        NSString *relativePath = [sourceURL.path substringFromIndex:sourceDirectory.path.length];
+        while ([relativePath hasPrefix:@"/"]) relativePath = [relativePath substringFromIndex:1];
+        if (!relativePath.length) continue;
+        NSURL *destinationURL = [destinationDirectory URLByAppendingPathComponent:relativePath];
+        NSNumber *isDirectory = nil;
+        [sourceURL getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
+        if (isDirectory.boolValue) {
+            [manager createDirectoryAtURL:destinationURL withIntermediateDirectories:YES attributes:nil error:nil];
+        } else if (![manager fileExistsAtPath:destinationURL.path]) {
+            [manager createDirectoryAtURL:[destinationURL URLByDeletingLastPathComponent]
+              withIntermediateDirectories:YES attributes:nil error:nil];
+            [manager copyItemAtURL:sourceURL toURL:destinationURL error:nil];
+        }
+    }
+}
+
+- (void)migratePreviousPersistentLibrariesIntoDirectory:(NSURL *)sharedDirectory recoveryDirectory:(NSURL *)recoveryDirectory {
+    NSURL *legacyRoot = [self legacyQuickRepliesRootURL];
+    if (legacyRoot) [self copyMissingContentsFromDirectory:[legacyRoot URLByAppendingPathComponent:@"Shared" isDirectory:YES]
+                                               toDirectory:sharedDirectory];
+    NSURL *documents = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
+    NSURL *legacyRecovery = documents ? [[documents URLByAppendingPathComponent:@"NeoWC" isDirectory:YES]
+                                         URLByAppendingPathComponent:NeoWCQuickReplyRecoveryDirectoryName isDirectory:YES] : nil;
+    if (legacyRecovery) {
+        [self copyMissingContentsFromDirectory:legacyRecovery toDirectory:sharedDirectory];
+        [self copyMissingContentsFromDirectory:legacyRecovery toDirectory:recoveryDirectory];
+    }
 }
 
 - (NSURL *)sharedDirectoryCreatingIfNeeded:(BOOL)create error:(NSError **)error {
     NSURL *root = [self quickRepliesRootURL];
     if (!root) {
-        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorStorageUnavailable, @"无法访问应用支持目录");
+        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorStorageUnavailable, @"无法访问微信沙盒 Documents 目录");
         return nil;
     }
     NSURL *directory = [root URLByAppendingPathComponent:@"Shared" isDirectory:YES];
     if (!create) return directory;
     NSFileManager *manager = NSFileManager.defaultManager;
-    for (NSString *component in @[@"media", @"thumbnails"]) {
+    for (NSString *component in @[@"media", @"thumbnails", NeoWCQuickReplyRecordsDirectoryName]) {
         NSURL *child = [directory URLByAppendingPathComponent:component isDirectory:YES];
         NSError *directoryError = nil;
         if (![manager createDirectoryAtURL:child withIntermediateDirectories:YES attributes:nil error:&directoryError]) {
@@ -150,7 +232,10 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
             return nil;
         }
     }
-    [self migrateLegacyLibrariesIntoDirectory:directory root:root];
+    NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:YES error:nil];
+    [self migratePreviousPersistentLibrariesIntoDirectory:directory recoveryDirectory:recoveryDirectory];
+    NSURL *legacyRoot = [self legacyQuickRepliesRootURL];
+    if (legacyRoot) [self migrateLegacyLibrariesIntoDirectory:directory root:legacyRoot];
     return directory;
 }
 
@@ -378,6 +463,83 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
     return dictionary;
 }
 
+- (NSArray<NSDictionary *> *)recordDictionariesInDirectory:(NSURL *)directory {
+    NSURL *recordsDirectory = [directory URLByAppendingPathComponent:NeoWCQuickReplyRecordsDirectoryName isDirectory:YES];
+    NSArray<NSURL *> *URLs = [NSFileManager.defaultManager contentsOfDirectoryAtURL:recordsDirectory
+                                                        includingPropertiesForKeys:nil
+                                                                           options:NSDirectoryEnumerationSkipsHiddenFiles
+                                                                             error:nil];
+    NSMutableArray<NSDictionary *> *records = [NSMutableArray array];
+    for (NSURL *URL in URLs) {
+        if (![URL.pathExtension.lowercaseString isEqualToString:@"json"]) continue;
+        NSData *data = [NSData dataWithContentsOfURL:URL options:0 error:nil];
+        id object = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        if ([object isKindOfClass:NSDictionary.class]) [records addObject:object];
+    }
+    return records;
+}
+
+- (BOOL)writeItemRecordsLocked:(NSArray<NeoWCQuickReplyItem *> *)items
+               sharedDirectory:(NSURL *)sharedDirectory
+             recoveryDirectory:(NSURL *)recoveryDirectory
+                         error:(NSError **)error {
+    for (NeoWCQuickReplyItem *item in items) {
+        NSString *fileName = [item.identifier stringByAppendingPathExtension:@"json"];
+        if (!fileName.length) continue;
+        NSData *data = [NSJSONSerialization dataWithJSONObject:[self dictionaryForItem:item] options:0 error:error];
+        if (!data) return NO;
+        for (NSURL *baseDirectory in @[sharedDirectory, recoveryDirectory]) {
+            NSURL *URL = [[baseDirectory URLByAppendingPathComponent:NeoWCQuickReplyRecordsDirectoryName isDirectory:YES]
+                          URLByAppendingPathComponent:fileName];
+            if (![data writeToURL:URL options:NSDataWritingAtomic error:error]) return NO;
+        }
+    }
+    return YES;
+}
+
+- (NeoWCQuickReplyType)recoveredTypeForMediaURL:(NSURL *)URL {
+    NSString *extension = URL.pathExtension.lowercaseString;
+    if ([@[@"jpg", @"jpeg", @"png", @"gif", @"webp", @"heic", @"heif", @"bmp"] containsObject:extension]) {
+        return NeoWCQuickReplyTypeImage;
+    }
+    if ([@[@"mp4", @"mov", @"m4v", @"3gp"] containsObject:extension]) return NeoWCQuickReplyTypeVideo;
+    return NeoWCQuickReplyTypeVoice;
+}
+
+- (void)appendOrphanedMediaFromDirectory:(NSURL *)sourceDirectory
+                         sharedDirectory:(NSURL *)sharedDirectory
+                       recoveryDirectory:(NSURL *)recoveryDirectory
+                         knownIdentifiers:(NSMutableSet<NSString *> *)knownIdentifiers
+                                   items:(NSMutableArray<NeoWCQuickReplyItem *> *)items {
+    NSURL *mediaDirectory = [sourceDirectory URLByAppendingPathComponent:@"media" isDirectory:YES];
+    NSArray<NSURL *> *URLs = [NSFileManager.defaultManager contentsOfDirectoryAtURL:mediaDirectory
+                                                        includingPropertiesForKeys:@[NSURLContentModificationDateKey]
+                                                                           options:NSDirectoryEnumerationSkipsHiddenFiles
+                                                                             error:nil];
+    for (NSURL *URL in URLs) {
+        NSNumber *isDirectory = nil;
+        [URL getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
+        if (isDirectory.boolValue) continue;
+        NSString *identifier = URL.URLByDeletingPathExtension.lastPathComponent.lowercaseString;
+        if (!identifier.length || [knownIdentifiers containsObject:identifier]) continue;
+        NSString *relativePath = [@"media" stringByAppendingPathComponent:URL.lastPathComponent];
+        [self synchronizeRecoveryFileForRelativePath:relativePath sharedDirectory:sharedDirectory recoveryDirectory:recoveryDirectory];
+        NeoWCQuickReplyItem *item = [NeoWCQuickReplyItem new];
+        item.identifier = identifier;
+        item.type = [self recoveredTypeForMediaURL:URL];
+        item.title = [NSString stringWithFormat:@"恢复的文件 · %@", URL.lastPathComponent];
+        item.text = @"";
+        item.mediaRelativePath = relativePath;
+        item.sortIndex = items.count;
+        NSDate *date = nil;
+        [URL getResourceValue:&date forKey:NSURLContentModificationDateKey error:nil];
+        item.createdAt = date ?: NSDate.date;
+        item.metadata = @{ @"recoveredFromSandbox": @YES };
+        [items addObject:item];
+        [knownIdentifiers addObject:identifier];
+    }
+}
+
 - (NSArray<NSDictionary *> *)loadJSONArrayAtURL:(NSURL *)primaryURL
                                        backupURL:(NSURL *)backupURL
                                      recoveryURL:(NSURL *)recoveryURL
@@ -475,6 +637,7 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
                                          error:nil];
     if (!object) return nil;
     NSMutableArray *items = [NSMutableArray array];
+    NSMutableSet<NSString *> *knownIdentifiers = [NSMutableSet set];
     for (NSDictionary *dictionary in object) {
         NeoWCQuickReplyItem *item = [self itemFromDictionary:dictionary];
         if (!item) return nil;
@@ -485,7 +648,37 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
                                      sharedDirectory:directory
                                    recoveryDirectory:recoveryDirectory];
         [items addObject:item];
+        [knownIdentifiers addObject:item.identifier.lowercaseString];
     }
+    for (NSURL *recordDirectory in @[directory, recoveryDirectory]) {
+        for (NSDictionary *dictionary in [self recordDictionariesInDirectory:recordDirectory]) {
+            NeoWCQuickReplyItem *item = [self itemFromDictionary:dictionary];
+            if (!item || [knownIdentifiers containsObject:item.identifier.lowercaseString]) continue;
+            [self synchronizeRecoveryFileForRelativePath:item.mediaRelativePath
+                                         sharedDirectory:directory
+                                       recoveryDirectory:recoveryDirectory];
+            [self synchronizeRecoveryFileForRelativePath:item.thumbnailRelativePath
+                                         sharedDirectory:directory
+                                       recoveryDirectory:recoveryDirectory];
+            [items addObject:item];
+            [knownIdentifiers addObject:item.identifier.lowercaseString];
+        }
+    }
+    [self appendOrphanedMediaFromDirectory:directory sharedDirectory:directory recoveryDirectory:recoveryDirectory
+                          knownIdentifiers:knownIdentifiers items:items];
+    [self appendOrphanedMediaFromDirectory:recoveryDirectory sharedDirectory:directory recoveryDirectory:recoveryDirectory
+                          knownIdentifiers:knownIdentifiers items:items];
+    if (items.count != object.count) {
+        NSMutableArray *repaired = [NSMutableArray arrayWithCapacity:items.count];
+        for (NeoWCQuickReplyItem *item in items) [repaired addObject:[self dictionaryForItem:item]];
+        NSData *data = [NSJSONSerialization dataWithJSONObject:repaired options:0 error:nil];
+        if (data) [self writeJSONArrayData:data
+                               primaryURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
+                                backupURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsBackupName]
+                              recoveryURL:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
+                                    error:nil];
+    }
+    [self writeItemRecordsLocked:items sharedDirectory:directory recoveryDirectory:recoveryDirectory error:nil];
     return items;
 }
 
@@ -501,6 +694,7 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
         if (error) *error = serializationError;
         return NO;
     }
+    if (![self writeItemRecordsLocked:items sharedDirectory:directory recoveryDirectory:recoveryDirectory error:error]) return NO;
     NSError *writeError = nil;
     BOOL written = [self writeJSONArrayData:data
                                  primaryURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
@@ -941,6 +1135,13 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
         [items removeObjectAtIndex:index];
         if (![self saveItemsLocked:items error:error]) return NO;
         NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:NO error:nil];
+        NSURL *sharedDirectory = [self sharedDirectoryCreatingIfNeeded:NO error:nil];
+        NSString *recordName = [identifier stringByAppendingPathExtension:@"json"];
+        for (NSURL *baseDirectory in @[sharedDirectory, recoveryDirectory]) {
+            NSURL *recordURL = [[baseDirectory URLByAppendingPathComponent:NeoWCQuickReplyRecordsDirectoryName isDirectory:YES]
+                                URLByAppendingPathComponent:recordName];
+            [NSFileManager.defaultManager removeItemAtURL:recordURL error:nil];
+        }
         for (NSString *relativePath in @[item.mediaRelativePath ?: @"", item.thumbnailRelativePath ?: @""]) {
             if (![self isManagedRelativePath:relativePath]) continue;
             NSString *primaryPath = [self safeAbsolutePathForRelativePath:relativePath];
@@ -963,6 +1164,77 @@ static NSString *NeoWCQuickReplyTrimmedString(id value) {
             }
         }
         return total;
+    }
+}
+
+- (NSURL *)createExportPackageWithError:(NSError **)error {
+    @synchronized (self) {
+        NSArray *items = [self loadItemsLocked];
+        NSArray *folders = [self loadFoldersLocked];
+        if (!items || !folders) {
+            NeoWCQuickReplySetIndexReadError(error);
+            return nil;
+        }
+        if (![self saveItemsLocked:items error:error] || ![self saveFoldersLocked:folders error:error]) return nil;
+        NSURL *sharedDirectory = [self sharedDirectoryCreatingIfNeeded:NO error:error];
+        if (!sharedDirectory) return nil;
+        NSDateFormatter *formatter = [NSDateFormatter new];
+        formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+        formatter.dateFormat = @"yyyyMMdd-HHmmss";
+        NSString *name = [NSString stringWithFormat:@"NeoWC快捷回复-%@.tar", [formatter stringFromDate:NSDate.date]];
+        NSURL *exportsDirectory = [[NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES]
+                                   URLByAppendingPathComponent:@"NeoWCQuickReplyExports" isDirectory:YES];
+        NSURL *packageURL = [exportsDirectory URLByAppendingPathComponent:name isDirectory:NO];
+        NSFileManager *manager = NSFileManager.defaultManager;
+        if (![manager createDirectoryAtURL:exportsDirectory withIntermediateDirectories:YES attributes:nil error:error]) return nil;
+        if ([manager fileExistsAtPath:packageURL.path] && ![manager removeItemAtURL:packageURL error:error]) return nil;
+        if (![manager createFileAtPath:packageURL.path contents:nil attributes:nil]) {
+            if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorStorageUnavailable, @"无法创建快捷回复导出文件");
+            return nil;
+        }
+        NSFileHandle *output = [NSFileHandle fileHandleForWritingToURL:packageURL error:error];
+        if (!output) return nil;
+        NSDirectoryEnumerator<NSURL *> *enumerator = [manager enumeratorAtURL:sharedDirectory
+                                                   includingPropertiesForKeys:@[NSURLIsDirectoryKey, NSURLFileSizeKey, NSURLContentModificationDateKey]
+                                                                      options:NSDirectoryEnumerationSkipsHiddenFiles
+                                                                 errorHandler:nil];
+        BOOL succeeded = YES;
+        for (NSURL *sourceURL in enumerator) {
+            NSNumber *isDirectory = nil;
+            [sourceURL getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
+            if (isDirectory.boolValue) continue;
+            NSString *relativePath = [sourceURL.path substringFromIndex:sharedDirectory.path.length];
+            while ([relativePath hasPrefix:@"/"]) relativePath = [relativePath substringFromIndex:1];
+            NSDictionary *attributes = [manager attributesOfItemAtPath:sourceURL.path error:error];
+            unsigned long long fileSize = [attributes[NSFileSize] unsignedLongLongValue];
+            NSData *header = NeoWCQuickReplyTarHeader(relativePath, fileSize, attributes[NSFileModificationDate] ?: NSDate.date);
+            if (!attributes || !header) { succeeded = NO; break; }
+            [output writeData:header];
+            NSFileHandle *input = [NSFileHandle fileHandleForReadingFromURL:sourceURL error:error];
+            if (!input) { succeeded = NO; break; }
+            unsigned long long written = 0;
+            while (written < fileSize) {
+                @autoreleasepool {
+                    NSData *chunk = [input readDataOfLength:(NSUInteger)MIN(1024ULL * 1024ULL, fileSize - written)];
+                    if (!chunk.length) { succeeded = NO; break; }
+                    [output writeData:chunk];
+                    written += chunk.length;
+                }
+            }
+            [input closeFile];
+            if (!succeeded) break;
+            NSUInteger paddingLength = (NSUInteger)((512ULL - (fileSize % 512ULL)) % 512ULL);
+            if (paddingLength) [output writeData:[NSMutableData dataWithLength:paddingLength]];
+        }
+        if (succeeded) [output writeData:[NSMutableData dataWithLength:1024]];
+        [output synchronizeFile];
+        [output closeFile];
+        if (!succeeded) {
+            [manager removeItemAtURL:packageURL error:nil];
+            if (error && !*error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorStorageUnavailable, @"读取快捷回复文件时导出中断");
+            return nil;
+        }
+        return packageURL;
     }
 }
 
