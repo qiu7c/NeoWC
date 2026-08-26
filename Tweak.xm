@@ -11020,7 +11020,8 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook VideoMessageCellView
 
 - (NSArray *)operationMenuItems {
-    return NeoWCOperationMenuItemsWithMediaToVoice(self, %orig, NeoWCMediaToVoiceKindVideo);
+    NSArray *items = %orig;
+    return NeoWCOperationMenuItemsWithMediaToVoice(self, items, NeoWCMediaToVoiceKindVideo);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
