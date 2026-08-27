@@ -144,66 +144,11 @@ static NSString *NeoWCDiagnosticOneLine(id value) {
     return [NSString stringWithFormat:@"%@<%p>", NSStringFromClass([value class]), (__bridge void *)value];
 }
 
-static NSString *NeoWCPrimitiveIvarValue(id object, Ivar ivar) {
-    const char *type = NeoWCSkipTypeQualifiers(ivar_getTypeEncoding(ivar));
-    if (!type[0]) return @"<unknown>";
-    uint8_t *bytes = (__bridge void *)object;
-    bytes += ivar_getOffset(ivar);
-    switch (type[0]) {
-        case 'B': { BOOL value; memcpy(&value, bytes, sizeof(value)); return value ? @"YES" : @"NO"; }
-        case 'c': { char value; memcpy(&value, bytes, sizeof(value)); return [NSString stringWithFormat:@"%d", value]; }
-        case 'C': { unsigned char value; memcpy(&value, bytes, sizeof(value)); return [NSString stringWithFormat:@"%u", value]; }
-        case 's': { short value; memcpy(&value, bytes, sizeof(value)); return [NSString stringWithFormat:@"%d", value]; }
-        case 'S': { unsigned short value; memcpy(&value, bytes, sizeof(value)); return [NSString stringWithFormat:@"%u", value]; }
-        case 'i': { int value; memcpy(&value, bytes, sizeof(value)); return [NSString stringWithFormat:@"%d", value]; }
-        case 'I': { unsigned int value; memcpy(&value, bytes, sizeof(value)); return [NSString stringWithFormat:@"%u", value]; }
-        case 'l': { long value; memcpy(&value, bytes, sizeof(value)); return [NSString stringWithFormat:@"%ld", value]; }
-        case 'L': { unsigned long value; memcpy(&value, bytes, sizeof(value)); return [NSString stringWithFormat:@"%lu", value]; }
-        case 'q': { long long value; memcpy(&value, bytes, sizeof(value)); return [NSString stringWithFormat:@"%lld", value]; }
-        case 'Q': { unsigned long long value; memcpy(&value, bytes, sizeof(value)); return [NSString stringWithFormat:@"%llu", value]; }
-        case 'f': { float value; memcpy(&value, bytes, sizeof(value)); return [NSString stringWithFormat:@"%g", value]; }
-        case 'd': { double value; memcpy(&value, bytes, sizeof(value)); return [NSString stringWithFormat:@"%g", value]; }
-        case ':': { SEL value; memcpy(&value, bytes, sizeof(value)); return value ? NSStringFromSelector(value) : @"nil"; }
-        case '#': { Class value; memcpy(&value, bytes, sizeof(value)); return value ? NSStringFromClass(value) : @"nil"; }
-        default: return [NSString stringWithFormat:@"<type %s>", type];
-    }
-}
-
-static void NeoWCAppendObjectReport(NSMutableString *report, NSString *title, id object) {
-    [report appendFormat:@"\nOBJECT %@\n%@\n", title, NeoWCDiagnosticOneLine(object)];
-    if (!object) return;
-    NSUInteger totalIvars = 0;
-    for (Class cls = [object class]; cls && totalIvars < 300; cls = class_getSuperclass(cls)) {
-        [report appendFormat:@"\n[%@]\n", NSStringFromClass(cls)];
-        unsigned int count = 0;
-        Ivar *ivars = class_copyIvarList(cls, &count);
-        for (unsigned int index = 0; index < count && totalIvars < 300; index++, totalIvars++) {
-            Ivar ivar = ivars[index];
-            const char *name = ivar_getName(ivar) ?: "?";
-            const char *type = NeoWCSkipTypeQualifiers(ivar_getTypeEncoding(ivar));
-            NSString *value = nil;
-            @try {
-                value = type[0] == '@' ? NeoWCDiagnosticOneLine(object_getIvar(object, ivar))
-                                      : NeoWCPrimitiveIvarValue(object, ivar);
-            } @catch (NSException *exception) {
-                value = [NSString stringWithFormat:@"<exception %@>", exception.name];
-            }
-            [report appendFormat:@"%s %s = %@\n", type, name, value ?: @"nil"];
-        }
-        free(ivars);
-    }
-}
-
-static void NeoWCAppendCollectionObjectReports(NSMutableString *report, NSString *title, id collection) {
-    [report appendFormat:@"\nCOLLECTION %@\n%@\n", title, NeoWCDiagnosticOneLine(collection)];
-    if (![collection conformsToProtocol:@protocol(NSFastEnumeration)]) return;
-    NSUInteger index = 0;
-    for (id object in collection) {
-        NeoWCAppendObjectReport(report, [NSString stringWithFormat:@"%@[%lu]", title, (unsigned long)index], object);
-        if (++index >= 12) {
-            [report appendString:@"\n<remaining collection objects omitted>\n"];
-            break;
-        }
+static void NeoWCAppendCapturedObjectSummaries(NSMutableString *report, NSString *title, NSArray *objects) {
+    [report appendFormat:@"\n%@ (%lu)\n", title, (unsigned long)objects.count];
+    NSUInteger limit = MIN((NSUInteger)24, objects.count);
+    for (NSUInteger index = 0; index < limit; index++) {
+        [report appendFormat:@"%02lu %@\n", (unsigned long)index, NeoWCDiagnosticOneLine(objects[index])];
     }
 }
 
@@ -525,13 +470,14 @@ static void NeoWCHookCommentViewDidAppear(id self, SEL _cmd, BOOL animated) {
         capturedManager = self.capturedNotificationManager;
         capturedMessages = [self.capturedMessages copy];
     }
-    NeoWCAppendObjectReport(report, @"WCNotificationCenterMgr captured from Hook", capturedManager);
+    [report appendFormat:@"\n\nCAPTURED OBJECTS\nWCNotificationCenterMgr: %@\n",
+                         NeoWCDiagnosticOneLine(capturedManager)];
     [report appendString:@"\n\nGETTER SNAPSHOT\n保存阶段不会主动调用微信私有 getter；返回值与调用顺序请查看 TRACE EVENTS。\n"];
-    NeoWCAppendCollectionObjectReports(report, @"messages captured from Hook", capturedMessages);
+    NeoWCAppendCapturedObjectSummaries(report, @"messages captured from Hook", capturedMessages);
 
     id timeline = NeoWCLastTimelineController;
-    NeoWCAppendObjectReport(report, @"last WCTimeLineViewController", timeline);
-    NeoWCAppendObjectReport(report, @"last WCNewCommentListViewController", NeoWCLastCommentListController);
+    [report appendFormat:@"last WCTimeLineViewController: %@\n", NeoWCDiagnosticOneLine(timeline)];
+    [report appendFormat:@"last WCNewCommentListViewController: %@\n", NeoWCDiagnosticOneLine(NeoWCLastCommentListController)];
 
     [report appendString:@"\n\nTRACE EVENTS\n"];
     NSArray<NSString *> *eventSnapshot = nil;
