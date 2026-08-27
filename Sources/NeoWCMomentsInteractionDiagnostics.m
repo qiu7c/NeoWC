@@ -249,55 +249,6 @@ static void NeoWCAppendClassReport(NSMutableString *report, NSString *className)
     free(methods);
 }
 
-static id NeoWCMomentsNotificationManager(void) {
-    Class contextClass = NSClassFromString(@"MMContext");
-    Class managerClass = NSClassFromString(@"WCNotificationCenterMgr");
-    SEL activeSelector = NSSelectorFromString(@"activeUserContext");
-    SEL serviceSelector = NSSelectorFromString(@"getService:");
-    if (!contextClass || !managerClass || ![contextClass respondsToSelector:activeSelector]) return nil;
-    id context = ((id (*)(id, SEL))objc_msgSend)(contextClass, activeSelector);
-    if (!context || ![context respondsToSelector:serviceSelector]) return nil;
-    return ((id (*)(id, SEL, Class))objc_msgSend)(context, serviceSelector, managerClass);
-}
-
-static NSString *NeoWCInvokeNoArgumentSelector(id target, NSString *selectorName, id __strong *objectResult) {
-    if (objectResult) *objectResult = nil;
-    SEL selector = NSSelectorFromString(selectorName);
-    NSMethodSignature *signature = target ? [target methodSignatureForSelector:selector] : nil;
-    if (!signature || signature.numberOfArguments != 2) return @"UNAVAILABLE";
-    NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
-    invocation.target = target;
-    invocation.selector = selector;
-    @try { [invocation invoke]; }
-    @catch (NSException *exception) { return [NSString stringWithFormat:@"EXCEPTION %@: %@", exception.name, exception.reason ?: @""]; }
-
-    const char *type = NeoWCSkipTypeQualifiers(signature.methodReturnType);
-    if (type[0] == 'v') return @"void";
-    if (type[0] == '@') {
-        __unsafe_unretained id value = nil;
-        [invocation getReturnValue:&value];
-        if (objectResult) *objectResult = value;
-        return NeoWCDiagnosticOneLine(value);
-    }
-    NSUInteger length = signature.methodReturnLength;
-    void *buffer = calloc(1, MAX((NSUInteger)1, length));
-    [invocation getReturnValue:buffer];
-    NSString *result = nil;
-    if (NeoWCTypeIsInteger(type)) {
-        unsigned long long value = 0;
-        memcpy(&value, buffer, MIN(sizeof(value), length));
-        result = [NSString stringWithFormat:@"%llu (type %s)", value, type];
-    } else if (type[0] == 'f') {
-        float value = 0; memcpy(&value, buffer, MIN(sizeof(value), length)); result = [NSString stringWithFormat:@"%g", value];
-    } else if (type[0] == 'd') {
-        double value = 0; memcpy(&value, buffer, MIN(sizeof(value), length)); result = [NSString stringWithFormat:@"%g", value];
-    } else {
-        result = [NSString stringWithFormat:@"<type %s length %lu>", type, (unsigned long)length];
-    }
-    free(buffer);
-    return result;
-}
-
 static void NeoWCRecordMomentEvent(NSString *event, id object) {
     [[NeoWCMomentsInteractionDiagnosticManager sharedManager] recordEvent:event object:object];
 }
@@ -568,32 +519,14 @@ static void NeoWCHookCommentViewDidAppear(id self, SEL _cmd, BOOL animated) {
                                          @"FindFriendEntryViewController"];
     for (NSString *className in classNames) NeoWCAppendClassReport(report, className);
 
-    id serviceManager = NeoWCMomentsNotificationManager();
     id capturedManager = nil;
     NSArray *capturedMessages = nil;
     @synchronized (self) {
         capturedManager = self.capturedNotificationManager;
         capturedMessages = [self.capturedMessages copy];
     }
-    id manager = capturedManager ?: serviceManager;
     NeoWCAppendObjectReport(report, @"WCNotificationCenterMgr captured from Hook", capturedManager);
-    if (serviceManager != capturedManager) NeoWCAppendObjectReport(report, @"WCNotificationCenterMgr service lookup", serviceManager);
-    [report appendString:@"\n\nKNOWN GETTERS\n"];
-    id lastUnread = nil;
-    id latestRead = nil;
-    id unreadMessages = nil;
-    for (NSString *selectorName in @[@"getUnReadMessageCount", @"getUnReadMessageCountReleatedToMe",
-                                      @"getLastUnReadMessage", @"getLatestReadMessage", @"getUnReadMessages"]) {
-        id object = nil;
-        NSString *value = NeoWCInvokeNoArgumentSelector(manager, selectorName, &object);
-        [report appendFormat:@"%@ => %@\n", selectorName, value];
-        if ([selectorName isEqualToString:@"getLastUnReadMessage"]) lastUnread = object;
-        if ([selectorName isEqualToString:@"getLatestReadMessage"]) latestRead = object;
-        if ([selectorName isEqualToString:@"getUnReadMessages"]) unreadMessages = object;
-    }
-    NeoWCAppendObjectReport(report, @"getLastUnReadMessage", lastUnread);
-    if (latestRead != lastUnread) NeoWCAppendObjectReport(report, @"getLatestReadMessage", latestRead);
-    NeoWCAppendCollectionObjectReports(report, @"getUnReadMessages", unreadMessages);
+    [report appendString:@"\n\nGETTER SNAPSHOT\n保存阶段不会主动调用微信私有 getter；返回值与调用顺序请查看 TRACE EVENTS。\n"];
     NeoWCAppendCollectionObjectReports(report, @"messages captured from Hook", capturedMessages);
 
     id timeline = NeoWCLastTimelineController;
