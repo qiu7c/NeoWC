@@ -50,6 +50,18 @@ static NSString *NeoWCMomentsInteractionMessageKey(id message) {
     return [NSString stringWithFormat:@"pointer:%p", (__bridge void *)message];
 }
 
+static long long NeoWCMomentsInteractionMessageType(id message) {
+    SEL selector = sel_registerName("msgTypeFromClientId");
+    Method method = message ? class_getInstanceMethod([message class], selector) : NULL;
+    if (!method || method_getNumberOfArguments(method) != 2) return 0;
+    char *returnType = method_copyReturnType(method);
+    BOOL matches = NeoWCMomentsInteractionSkipQualifiers(returnType)[0] == 'q';
+    free(returnType);
+    if (!matches) return 0;
+    @try { return ((long long (*)(id, SEL))objc_msgSend)(message, selector); }
+    @catch (__unused NSException *exception) { return 0; }
+}
+
 static void NeoWCMomentsInteractionShowForegroundToast(NSString *message) {
     dispatch_async(dispatch_get_main_queue(), ^{
         UIWindow *window = nil;
@@ -92,16 +104,17 @@ static void NeoWCMomentsInteractionShowForegroundToast(NSString *message) {
     });
 }
 
-static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey) {
+static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey, long long messageType) {
+    NSString *typeName = messageType == 1 ? @"点赞" : (messageType == 2 ? @"评论" : @"互动");
     NSString *body = count > 1
-        ? [NSString stringWithFormat:@"收到 %lu 条新的朋友圈点赞或评论", (unsigned long)count]
-        : @"收到新的朋友圈点赞或评论";
+        ? [NSString stringWithFormat:@"收到 %lu 条新的朋友圈互动，最新一条是%@", (unsigned long)count, typeName]
+        : [NSString stringWithFormat:@"收到新的朋友圈%@", typeName];
     if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
         NeoWCMomentsInteractionShowForegroundToast(body);
         return;
     }
     UNMutableNotificationContent *content = [UNMutableNotificationContent new];
-    content.title = @"朋友圈互动提醒";
+    content.title = [NSString stringWithFormat:@"朋友圈%@提醒", typeName];
     content.body = body;
     content.sound = UNNotificationSound.defaultSound;
     content.userInfo = @{ @"neowc": @"moments-interaction" };
@@ -222,9 +235,10 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     NSUInteger increase = self.pendingIncrease;
     self.pendingIncrease = 0;
     BOOL duplicate = [self.lastMessageKey isEqualToString:messageKey];
+    long long messageType = NeoWCMomentsInteractionMessageType(message);
     self.lastMessageKey = messageKey;
     [self saveState];
-    if (!duplicate) NeoWCMomentsInteractionNotify(increase, messageKey);
+    if (!duplicate) NeoWCMomentsInteractionNotify(increase, messageKey, messageType);
 }
 
 - (void)tick {
