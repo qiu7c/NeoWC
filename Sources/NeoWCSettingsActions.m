@@ -16,6 +16,7 @@
 #import "NeoWCReleaseNotes.h"
 #import "NeoWCQuickReplyViewController.h"
 #import "NeoWCSendConfirmationViewController.h"
+#import "NeoWCMomentsReminder.h"
 #import <math.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -210,6 +211,7 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         CGFloat value = MIN(maximum, MAX(minimum, raw.length > 0 ? raw.doubleValue : fallback));
         [NSUserDefaults.standardUserDefaults setDouble:value forKey:key];
         if (notifyChange) [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:key];
+        if ([key isEqualToString:NeoWCMomentsReminderIntervalKey]) NeoWCMomentsReminderSettingsDidChange();
         if (weakSelf.reloadHandler) weakSelf.reloadHandler(applyScale);
     }]];
     [self.viewController presentViewController:alert animated:YES completion:nil];
@@ -732,6 +734,28 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         case NeoWCSettingActionMusicOrderGroups: [self push:[[NeoWCMediaGroupViewController alloc] initWithTitle:@"音乐点歌群聊" defaultsKey:NeoWCMusicOrderGroupsKey]]; break;
         case NeoWCSettingActionSendConfirmationConversations: [self push:[NeoWCSendConfirmationViewController new]]; break;
         case NeoWCSettingActionSendConfirmationPauseDuration: [self presentSendConfirmationPauseDurationEditor]; break;
+        case NeoWCSettingActionMomentsReminderUsers: {
+            UIViewController *picker = NeoWCCreateFriendPicker(@"特别关注好友",
+                                                               @"勾选后会建立当前朋友圈基线，只提醒后续检测到的新内容。",
+                                                               ^BOOL(NSString *username) {
+                return [NeoWCMomentsReminderUsers() containsObject:username];
+            }, ^(NSString *username) {
+                BOOL selected = [NeoWCMomentsReminderUsers() containsObject:username];
+                NeoWCMomentsReminderSetUserSelected(username, !selected);
+                NeoWCMomentsReminderSettingsDidChange();
+            });
+            [self push:picker];
+            break;
+        }
+        case NeoWCSettingActionMomentsReminderInterval:
+            [self presentNumberEditorWithTitle:item.title
+                                       message:@"请输入 30 到 3600 秒；后台检测频率仍会受 iOS 调度影响"
+                                           key:NeoWCMomentsReminderIntervalKey
+                                       minimum:30
+                                       maximum:3600
+                                   notifyChange:YES
+                                    applyScale:NO];
+            break;
         default: break;
     }
 }

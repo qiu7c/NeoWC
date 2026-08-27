@@ -6,6 +6,8 @@
 #import "NeoWCQuickReplyStore.h"
 #import "NeoWCMessageBlock.h"
 #import "NeoWCSendConfirmation.h"
+#import "NeoWCBackgroundKeeper.h"
+#import "NeoWCMomentsReminder.h"
 #import <stdlib.h>
 
 NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
@@ -91,6 +93,14 @@ void NeoWCSettingsHandleSwitchChange(NSString *key, BOOL enabled) {
     }
     if ([key isEqualToString:NeoWCAntiRevokeKey]) {
         [NSNotificationCenter.defaultCenter postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
+    }
+    if ([key isEqualToString:NeoWCBackgroundKeepAliveEnabledKey]) {
+        NeoWCBackgroundKeeperSettingsDidChange();
+    }
+    if ([key isEqualToString:NeoWCMomentsReminderEnabledKey] ||
+        [key isEqualToString:NeoWCMomentsReminderUsersKey] ||
+        [key isEqualToString:NeoWCMomentsReminderIntervalKey]) {
+        NeoWCMomentsReminderSettingsDidChange();
     }
 }
 
@@ -204,6 +214,10 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCMomentsQuickPermissionsKey: @NO,
         NeoWCMomentsPreciseTimeKey: @NO,
         NeoWCMomentsPreciseTimeFormatKey: NeoWCMomentsPreciseTimeDefaultFormat,
+        NeoWCBackgroundKeepAliveEnabledKey: @NO,
+        NeoWCMomentsReminderEnabledKey: @NO,
+        NeoWCMomentsReminderUsersKey: @[],
+        NeoWCMomentsReminderIntervalKey: @60,
         NeoWCPageScaleEnabledKey: @NO,
         NeoWCPageScaleGlobalPercentKey: @100.0,
         NeoWCSettingsPageScalePercentKey: @100.0,
@@ -480,12 +494,28 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
 
 static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *defaults, NSSet<NSString *> *collapsed) {
     NSMutableArray *automation = [NSMutableArray arrayWithArray:@[
+        NeoWCItem(@"保持后台运行", @"尽量维持微信后台活跃，供朋友圈提醒等周期功能使用", @"moon.zzz", NeoWCSettingRowKindSwitch, NeoWCBackgroundKeepAliveEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"设备扫码自动登录", @"自动确认电脑、平板等设备登录", @"desktopcomputer", NeoWCSettingRowKindSwitch, NeoWCAutoDeviceLoginKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"游戏授权自动允许", @"自动确认游戏扫码授权", @"gamecontroller", NeoWCSettingRowKindSwitch, NeoWCAutoGameAuthorizeKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"伪装扫码来源", @"将相册识别结果按相机扫码处理", @"qrcode.viewfinder", NeoWCSettingRowKindSwitch, NeoWCQRCodeCameraSourceEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"主页右滑扩展", @"增加备注、朋友圈、折叠群聊、勿扰与置顶操作", @"rectangle.and.hand.point.up.left", NeoWCSettingRowKindSwitch, NeoWCHomeSwipeActionsEnabledKey, nil, NeoWCSettingActionNone),
     ]];
     NSMutableArray *moments = [NSMutableArray array];
+    NSUInteger reminderUserCount = [[defaults arrayForKey:NeoWCMomentsReminderUsersKey] count];
+    NSInteger reminderInterval = MAX(30, MIN(3600, [defaults integerForKey:NeoWCMomentsReminderIntervalKey]));
+    BOOL backgroundEnabled = [defaults boolForKey:NeoWCBackgroundKeepAliveEnabledKey];
+    NSString *reminderSubtitle = backgroundEnabled
+        ? @"周期检测特别关注好友的新朋友圈"
+        : @"建议开启“保持后台运行”，否则可能只在前台检测";
+    NeoWCAddFeature(moments,
+                    NeoWCItem(@"朋友圈提醒", reminderSubtitle, @"bell.badge", NeoWCSettingRowKindSwitch, NeoWCMomentsReminderEnabledKey, nil, NeoWCSettingActionNone),
+                    @[
+        NeoWCItem(@"特别关注好友", @"选择需要检测朋友圈更新的好友", @"person.crop.circle.badge.checkmark", NeoWCSettingRowKindDetail, nil,
+                  reminderUserCount > 0 ? [NSString stringWithFormat:@"%lu 位", (unsigned long)reminderUserCount] : @"未选择",
+                  NeoWCSettingActionMomentsReminderUsers),
+        NeoWCItem(@"检测间隔", @"支持 30–3600 秒；间隔越短耗电越高", @"timer", NeoWCSettingRowKindDetail, nil,
+                  [NSString stringWithFormat:@"%ld 秒", (long)reminderInterval], NeoWCSettingActionMomentsReminderInterval),
+    ], defaults, collapsed);
     CGFloat intensity = [defaults doubleForKey:NeoWCMomentsLikeHapticIntensityKey];
     NSString *intensityText = intensity < 0.34 ? @"轻" : (intensity < 0.75 ? @"中" : @"强");
     NeoWCSettingItem *haptic = NeoWCItem(@"点赞震动", @"点赞成功时提供触感反馈", @"waveform", NeoWCSettingRowKindSwitch, NeoWCMomentsLikeHapticEnabledKey, nil, NeoWCSettingActionNone);
@@ -545,7 +575,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     ], defaults, collapsed);
     [local addObject:NeoWCItem(@"广告精简", @"精简朋友圈、视频号、广告推送与小程序启动广告", @"rectangle.badge.xmark", NeoWCSettingRowKindSwitch, NeoWCAdBlockerKey, nil, NeoWCSettingActionNone)];
     return @[
-        [NeoWCSettingSection sectionWithIdentifier:@"automation" title:@"自动化" footer:@"自动登录和授权会跳过手动确认，请只在可信环境开启。" items:automation],
+        [NeoWCSettingSection sectionWithIdentifier:@"automation" title:@"自动化" footer:@"保持后台运行可能增加耗电；自动登录和授权会跳过手动确认，请只在可信环境开启。" items:automation],
         [NeoWCSettingSection sectionWithIdentifier:@"moments" title:@"朋友圈" footer:nil items:moments],
         [NeoWCSettingSection sectionWithIdentifier:@"local-display" title:@"运动与本地显示" footer:@"钱包余额和好友数量只修改本机显示。" items:local],
     ];

@@ -14,6 +14,8 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
 #import "Sources/NeoWCSettingsViewController.h"
 #import "Sources/NeoWCSettingsCatalog.h"
+#import "Sources/NeoWCBackgroundKeeper.h"
+#import "Sources/NeoWCMomentsReminder.h"
 #import "Sources/NeoWCAccount.h"
 #import "Sources/NeoWCAntiRevoke.h"
 #import "Sources/NeoWCChatExport.h"
@@ -6462,6 +6464,26 @@ didReceiveNotificationResponse:(id)response
 %end
 
 %hook MicroMessengerAppDelegate
+
+- (void)applicationDidEnterBackground:(UIApplication *)application {
+    %orig(application);
+    NeoWCBackgroundKeeperEnterBackground();
+}
+
+- (void)applicationWillEnterForeground:(UIApplication *)application {
+    %orig(application);
+    NeoWCBackgroundKeeperWillEnterForeground();
+}
+
+- (void)applicationDidBecomeActive:(UIApplication *)application {
+    %orig(application);
+    NeoWCMomentsReminderTick();
+}
+
+- (void)careEnoughForTheLiving {
+    %orig;
+    NeoWCMomentsReminderTick();
+}
 
 - (void)userNotificationCenter:(id)center
 didReceiveNotificationResponse:(id)response

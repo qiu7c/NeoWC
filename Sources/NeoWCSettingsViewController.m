@@ -210,6 +210,20 @@
         [self saveCollapsedFeatureKeys];
     }
     NeoWCSettingsHandleSwitchChange(item.defaultsKey, enabled);
+    if (enabled && [item.defaultsKey isEqualToString:NeoWCMomentsReminderEnabledKey] &&
+        ![defaults boolForKey:NeoWCBackgroundKeepAliveEnabledKey]) {
+        UIAlertController *recommendation = [UIAlertController alertControllerWithTitle:@"建议开启保持后台运行"
+                                                                                 message:@"未开启时，朋友圈提醒可能只有在微信前台活跃期间才能检测。两个功能仍保持独立，可暂不启用后台保持。"
+                                                                          preferredStyle:UIAlertControllerStyleAlert];
+        [recommendation addAction:[UIAlertAction actionWithTitle:@"暂不开启" style:UIAlertActionStyleCancel handler:nil]];
+        __weak typeof(self) weakSelf = self;
+        [recommendation addAction:[UIAlertAction actionWithTitle:@"开启后台保持" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [defaults setBool:YES forKey:NeoWCBackgroundKeepAliveEnabledKey];
+            NeoWCSettingsHandleSwitchChange(NeoWCBackgroundKeepAliveEnabledKey, YES);
+            [weakSelf reloadSettingsPreservingPositionApplyScale:NO];
+        }]];
+        [self presentViewController:recommendation animated:YES completion:nil];
+    }
     BOOL applyScale = [item.defaultsKey isEqualToString:NeoWCPageScaleEnabledKey];
     if (item.hasChildren || [item.defaultsKey isEqualToString:NeoWCEnabledKey] || applyScale) {
         [self reloadSettingsPreservingPositionApplyScale:applyScale];

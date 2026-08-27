@@ -184,6 +184,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 @property (nonatomic, copy) NeoWCConversationPickerSelectedBlock selectedBlock;
 @property (nonatomic, copy) NeoWCConversationPickerToggleBlock toggleBlock;
 @property (nonatomic, assign) BOOL groupsOnly;
+@property (nonatomic, assign) BOOL friendsOnly;
 - (instancetype)initWithTitle:(NSString *)title
                        footer:(NSString *)footer
                      selected:(NeoWCConversationPickerSelectedBlock)selected
@@ -208,13 +209,15 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = self.pickerTitle.length > 0 ? self.pickerTitle : (self.groupsOnly ? @"选择群聊" : @"选择好友或群聊");
+    self.title = self.pickerTitle.length > 0 ? self.pickerTitle :
+        (self.groupsOnly ? @"选择群聊" : (self.friendsOnly ? @"选择好友" : @"选择好友或群聊"));
     self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.tableView.rowHeight = 60.0;
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(done)];
     self.searchBar = [UISearchBar new];
     self.searchBar.delegate = self;
-    self.searchBar.placeholder = self.groupsOnly ? @"搜索群聊或 username" : @"搜索好友、群聊或 username";
+    self.searchBar.placeholder = self.groupsOnly ? @"搜索群聊或 username" :
+        (self.friendsOnly ? @"搜索好友或 username" : @"搜索好友、群聊或 username");
     NeoWCInstallSearchBarInTableView(self.searchBar, self.tableView);
     [self loadConversations];
 }
@@ -234,9 +237,11 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
             if (item) deduplicated[item[@"username"]] = item;
         }
     }
-    for (id candidate in groups) {
-        NSDictionary *item = NeoWCSendConfirmationConversation(candidate, contactManager, YES);
-        if (item) deduplicated[item[@"username"]] = item;
+    if (!self.friendsOnly) {
+        for (id candidate in groups) {
+            NSDictionary *item = NeoWCSendConfirmationConversation(candidate, contactManager, YES);
+            if (item) deduplicated[item[@"username"]] = item;
+        }
     }
     self.allItems = [deduplicated.allValues sortedArrayUsingComparator:^NSComparisonResult(NSDictionary *left, NSDictionary *right) {
         BOOL leftGroup = [left[@"group"] boolValue], rightGroup = [right[@"group"] boolValue];
@@ -263,15 +268,17 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 }
 
 - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText { (void)searchBar; [self applyQuery:searchText]; }
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return self.groupsOnly ? 1 : 2; }
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return (self.groupsOnly || self.friendsOnly) ? 1 : 2; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     (void)tableView;
     if (self.groupsOnly) return self.visibleGroups.count;
+    if (self.friendsOnly) return self.visibleFriends.count;
     return section == 0 ? self.visibleFriends.count : self.visibleGroups.count;
 }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     if ([self tableView:tableView numberOfRowsInSection:section] == 0) return nil;
     if (self.groupsOnly) return @"群聊";
+    if (self.friendsOnly) return @"好友";
     return section == 0 ? @"好友" : @"群聊";
 }
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
@@ -279,13 +286,15 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 }
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView;
-    NSInteger footerSection = self.groupsOnly ? 0 : 1;
+    NSInteger footerSection = (self.groupsOnly || self.friendsOnly) ? 0 : 1;
     if (section != footerSection) return nil;
-    NSString *emptyText = self.groupsOnly ? @"微信尚未返回可用的群聊列表。" : @"微信尚未返回可用的好友或群聊列表。";
+    NSString *emptyText = self.groupsOnly ? @"微信尚未返回可用的群聊列表。" :
+        (self.friendsOnly ? @"微信尚未返回可用的好友列表。" : @"微信尚未返回可用的好友或群聊列表。");
     return self.allItems.count > 0 ? (self.pickerFooter ?: @"点击选择或取消会话。") : emptyText;
 }
 - (NSDictionary *)itemAtIndexPath:(NSIndexPath *)indexPath {
-    NSArray *items = self.groupsOnly ? self.visibleGroups : (indexPath.section == 0 ? self.visibleFriends : self.visibleGroups);
+    NSArray *items = self.groupsOnly ? self.visibleGroups :
+        (self.friendsOnly ? self.visibleFriends : (indexPath.section == 0 ? self.visibleFriends : self.visibleGroups));
     return indexPath.row < (NSInteger)items.count ? items[indexPath.row] : nil;
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -325,6 +334,18 @@ UIViewController *NeoWCCreateGroupPicker(NSString *title,
                                                                                                                selected:selected
                                                                                                                  toggle:toggle];
     picker.groupsOnly = YES;
+    return picker;
+}
+
+UIViewController *NeoWCCreateFriendPicker(NSString *title,
+                                          NSString *footer,
+                                          NeoWCConversationPickerSelectedBlock selected,
+                                          NeoWCConversationPickerToggleBlock toggle) {
+    NeoWCSendConfirmationConversationPicker *picker = [[NeoWCSendConfirmationConversationPicker alloc] initWithTitle:title
+                                                                                                                 footer:footer
+                                                                                                               selected:selected
+                                                                                                                 toggle:toggle];
+    picker.friendsOnly = YES;
     return picker;
 }
 
