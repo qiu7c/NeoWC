@@ -25,6 +25,28 @@ static BOOL NeoWCMomentsInteractionMethodMatches(id object, SEL selector, char r
     return matches;
 }
 
+static BOOL NeoWCMomentsInteractionMethodHasEncoding(id object, SEL selector, const char *encoding) {
+    Method method = object ? class_getInstanceMethod([object class], selector) : NULL;
+    const char *actual = method ? method_getTypeEncoding(method) : NULL;
+    return actual && encoding && strcmp(actual, encoding) == 0;
+}
+
+static id NeoWCMomentsInteractionObjectGetter(id object, const char *selectorName) {
+    if (!object || !selectorName) return nil;
+    SEL selector = sel_registerName(selectorName);
+    if (!NeoWCMomentsInteractionMethodHasEncoding(object, selector, "@16@0:8")) return nil;
+    @try { return ((id (*)(id, SEL))objc_msgSend)(object, selector); }
+    @catch (__unused NSException *exception) { return nil; }
+}
+
+static unsigned int NeoWCMomentsInteractionUnsignedGetter(id object, const char *selectorName) {
+    if (!object || !selectorName) return 0;
+    SEL selector = sel_registerName(selectorName);
+    if (!NeoWCMomentsInteractionMethodHasEncoding(object, selector, "I16@0:8")) return 0;
+    @try { return ((unsigned int (*)(id, SEL))objc_msgSend)(object, selector); }
+    @catch (__unused NSException *exception) { return 0; }
+}
+
 static NSString *NeoWCMomentsInteractionStringGetter(id object, const char *selectorName) {
     SEL selector = sel_registerName(selectorName);
     if (!NeoWCMomentsInteractionMethodMatches(object, selector, '@')) return nil;
@@ -60,6 +82,23 @@ static long long NeoWCMomentsInteractionMessageType(id message) {
     if (!matches) return 0;
     @try { return ((long long (*)(id, SEL))objc_msgSend)(message, selector); }
     @catch (__unused NSException *exception) { return 0; }
+}
+
+static id NeoWCMomentsInteractionCandidateFromMessages(id messages, NSString *lastMessageKey) {
+    if (![messages conformsToProtocol:@protocol(NSFastEnumeration)]) return nil;
+    id candidate = nil;
+    unsigned int candidateTime = 0;
+    for (id message in messages) {
+        NSString *key = NeoWCMomentsInteractionMessageKey(message);
+        if (key.length == 0 || [key isEqualToString:lastMessageKey]) continue;
+        id comment = NeoWCMomentsInteractionObjectGetter(message, "comment");
+        unsigned int createTime = NeoWCMomentsInteractionUnsignedGetter(comment, "createTime");
+        if (!candidate || createTime > candidateTime) {
+            candidate = message;
+            candidateTime = createTime;
+        }
+    }
+    return candidate;
 }
 
 static void NeoWCMomentsInteractionShowForegroundToast(NSString *message) {
@@ -113,11 +152,30 @@ static void NeoWCMomentsInteractionShowForegroundToast(NSString *message) {
     });
 }
 
-static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey, long long messageType) {
+static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey,
+                                           long long messageType, id message) {
     NSString *typeName = messageType == 1 ? @"点赞" : (messageType == 2 ? @"评论" : @"互动");
+    id comment = NeoWCMomentsInteractionObjectGetter(message, "comment");
+    NSString *username = NeoWCMomentsInteractionStringGetter(comment, "username");
+    NSString *nickname = NeoWCMomentsInteractionStringGetter(comment, "nickname");
+    NSString *author = nickname.length > 0 ? nickname : username;
+    NSString *commentContent = NeoWCMomentsInteractionStringGetter(comment, "content");
+    if (commentContent.length > 100) {
+        commentContent = [[commentContent substringToIndex:97] stringByAppendingString:@"…"];
+    }
+    NSString *detail = nil;
+    if (messageType == 1 && author.length > 0) {
+        detail = [NSString stringWithFormat:@"%@ 点赞了你的朋友圈", author];
+    } else if (messageType == 2 && author.length > 0 && commentContent.length > 0) {
+        detail = [NSString stringWithFormat:@"%@ 评论：%@", author, commentContent];
+    } else if (messageType == 2 && author.length > 0) {
+        detail = [NSString stringWithFormat:@"%@ 评论了你的朋友圈", author];
+    } else {
+        detail = [NSString stringWithFormat:@"收到新的朋友圈%@", typeName];
+    }
     NSString *body = count > 1
-        ? [NSString stringWithFormat:@"收到 %lu 条新的朋友圈互动，最新一条是%@", (unsigned long)count, typeName]
-        : [NSString stringWithFormat:@"收到新的朋友圈%@", typeName];
+        ? [NSString stringWithFormat:@"收到 %lu 条新互动，%@", (unsigned long)count, detail]
+        : detail;
     if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
         NeoWCMomentsInteractionShowForegroundToast(body);
         return;
@@ -144,6 +202,7 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
 @property (nonatomic, assign) NSUInteger pendingIncrease;
 @property (nonatomic, assign) BOOL baselineReady;
 @property (nonatomic, assign) BOOL lastMessageReadScheduled;
+@property (nonatomic, assign) NSUInteger resolutionAttempt;
 + (instancetype)sharedManager;
 - (void)observeManager:(id)manager unreadCount:(unsigned int)count;
 - (void)observeManager:(id)manager lastUnreadMessage:(id)message;
@@ -179,14 +238,17 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     self.baselineReady = state != nil;
     self.lastUnreadCount = [state[@"count"] unsignedIntValue];
     self.lastMessageKey = [state[@"messageKey"] isKindOfClass:NSString.class] ? state[@"messageKey"] : nil;
-    self.pendingIncrease = 0;
+    self.pendingIncrease = [state[@"pending"] unsignedIntegerValue];
     self.lastMessageReadScheduled = NO;
+    self.resolutionAttempt = 0;
 }
 
 - (void)saveState {
     if (self.account.length == 0) return;
     NSMutableDictionary *root = [self stateRoot];
-    root[self.account] = @{ @"count": @(self.lastUnreadCount), @"messageKey": self.lastMessageKey ?: @"" };
+    root[self.account] = @{ @"count": @(self.lastUnreadCount),
+                            @"messageKey": self.lastMessageKey ?: @"",
+                            @"pending": @(self.pendingIncrease) };
     [NSUserDefaults.standardUserDefaults setObject:root forKey:NeoWCMomentsInteractionStateKey];
 }
 
@@ -196,13 +258,57 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
         typeof(self) strongSelf = weakSelf;
-        strongSelf.lastMessageReadScheduled = NO;
         if (!strongSelf || strongSelf.pendingIncrease == 0 ||
-            !NeoWCEnhancementEnabled(NeoWCMomentsInteractionReminderEnabledKey)) return;
-        SEL selector = sel_registerName("getLastUnReadMessage");
-        if (!NeoWCMomentsInteractionMethodMatches(manager, selector, '@')) return;
-        @try { ((id (*)(id, SEL))objc_msgSend)(manager, selector); }
-        @catch (NSException *exception) { NeoWCLog(@"读取朋友圈最后未读互动失败：%@", exception.reason ?: @"未知异常"); }
+            !NeoWCEnhancementEnabled(NeoWCMomentsInteractionReminderEnabledKey)) {
+            strongSelf.lastMessageReadScheduled = NO;
+            return;
+        }
+
+        id message = nil;
+        SEL lastSelector = sel_registerName("getLastUnReadMessage");
+        if (NeoWCMomentsInteractionMethodHasEncoding(manager, lastSelector, "@16@0:8")) {
+            @try { message = ((id (*)(id, SEL))objc_msgSend)(manager, lastSelector); }
+            @catch (NSException *exception) {
+                NeoWCLog(@"读取朋友圈最后未读互动失败：%@", exception.reason ?: @"未知异常");
+            }
+        }
+        if (strongSelf.pendingIncrease > 0 && message) {
+            [strongSelf observeManager:manager lastUnreadMessage:message];
+        }
+
+        if (strongSelf.pendingIncrease > 0) {
+            SEL listSelector = sel_registerName("getUnReadMessages");
+            if (NeoWCMomentsInteractionMethodHasEncoding(manager, listSelector, "@16@0:8")) {
+                @try {
+                    id messages = ((id (*)(id, SEL))objc_msgSend)(manager, listSelector);
+                    id candidate = NeoWCMomentsInteractionCandidateFromMessages(messages, strongSelf.lastMessageKey);
+                    if (candidate) [strongSelf observeManager:manager lastUnreadMessage:candidate];
+                } @catch (NSException *exception) {
+                    NeoWCLog(@"读取朋友圈未读互动列表失败：%@", exception.reason ?: @"未知异常");
+                }
+            }
+        }
+
+        if (strongSelf.pendingIncrease == 0) {
+            strongSelf.lastMessageReadScheduled = NO;
+            strongSelf.resolutionAttempt = 0;
+            return;
+        }
+        static const NSTimeInterval retryDelays[] = { 1.0, 2.0, 4.0, 8.0, 15.0, 30.0 };
+        NSUInteger retryCount = sizeof(retryDelays) / sizeof(retryDelays[0]);
+        if (strongSelf.resolutionAttempt >= retryCount) {
+            strongSelf.lastMessageReadScheduled = NO;
+            return;
+        }
+        NSTimeInterval delay = retryDelays[strongSelf.resolutionAttempt++];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            typeof(self) retrySelf = weakSelf;
+            retrySelf.lastMessageReadScheduled = NO;
+            if (retrySelf.pendingIncrease > 0) {
+                [retrySelf scheduleLastMessageReadFromManager:retrySelf.notificationManager ?: manager];
+            }
+        });
     });
 }
 
@@ -221,12 +327,18 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
         return;
     }
     if (count > self.lastUnreadCount) {
+        if (self.pendingIncrease == 0) self.resolutionAttempt = 0;
         self.pendingIncrease += count - self.lastUnreadCount;
         self.lastUnreadCount = count;
+        [self saveState];
+        [self scheduleLastMessageReadFromManager:manager ?: self.notificationManager];
+    } else if (count == self.lastUnreadCount && self.pendingIncrease > 0 && !self.lastMessageReadScheduled) {
+        self.resolutionAttempt = 0;
         [self scheduleLastMessageReadFromManager:manager ?: self.notificationManager];
     } else if (count < self.lastUnreadCount) {
         self.lastUnreadCount = count;
         self.pendingIncrease = 0;
+        self.resolutionAttempt = 0;
         [self saveState];
     }
 }
@@ -243,11 +355,12 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     if (messageKey.length == 0) return;
     NSUInteger increase = self.pendingIncrease;
     self.pendingIncrease = 0;
+    self.resolutionAttempt = 0;
     BOOL duplicate = [self.lastMessageKey isEqualToString:messageKey];
     long long messageType = NeoWCMomentsInteractionMessageType(message);
     self.lastMessageKey = messageKey;
     [self saveState];
-    if (!duplicate) NeoWCMomentsInteractionNotify(increase, messageKey, messageType);
+    if (!duplicate) NeoWCMomentsInteractionNotify(increase, messageKey, messageType, message);
 }
 
 - (void)tick {
@@ -257,17 +370,26 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     }
     if (!NeoWCEnhancementEnabled(NeoWCMomentsInteractionReminderEnabledKey)) return;
     id manager = self.notificationManager;
+    if (!manager) {
+        Class managerClass = objc_getClass("WCNotificationCenterMgr");
+        manager = managerClass ? NeoWCServiceForClass(managerClass) : nil;
+        if (manager) self.notificationManager = manager;
+    }
     SEL selector = sel_registerName("getUnReadMessageCount");
-    if (!NeoWCMomentsInteractionMethodMatches(manager, selector, 'I')) return;
+    if (!NeoWCMomentsInteractionMethodHasEncoding(manager, selector, "I16@0:8")) return;
     @try { ((unsigned int (*)(id, SEL))objc_msgSend)(manager, selector); }
     @catch (NSException *exception) { NeoWCLog(@"读取朋友圈互动未读数失败：%@", exception.reason ?: @"未知异常"); }
 }
 
 - (void)settingsDidChange {
+    if (self.account.length > 0) {
+        self.pendingIncrease = 0;
+        [self saveState];
+    }
     self.account = nil;
     self.baselineReady = NO;
-    self.pendingIncrease = 0;
     self.lastMessageReadScheduled = NO;
+    self.resolutionAttempt = 0;
     if (NeoWCEnhancementEnabled(NeoWCMomentsInteractionReminderEnabledKey)) [self tick];
 }
 

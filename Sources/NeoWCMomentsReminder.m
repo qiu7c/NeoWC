@@ -7,6 +7,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <string.h>
 
 static NSString *const NeoWCMomentsReminderSeenItemsKey = @"com.qiu7c.neowc.moments.reminder.seen-items";
 
@@ -445,9 +446,14 @@ static void NeoWCMomentsReminderNotify(NSString *username, NSString *nickname, N
     if (success) *success = NO;
     id controller = [self controllerForUsername:username];
     SEL initDataSelector = sel_registerName("initData:");
-    if (!controller || ![controller respondsToSelector:initDataSelector]) return @[];
+    Method initDataMethod = controller ? class_getInstanceMethod([controller class], initDataSelector) : NULL;
+    const char *initDataEncoding = initDataMethod ? method_getTypeEncoding(initDataMethod) : NULL;
+    if (!initDataEncoding || strcmp(initDataEncoding, "v20@0:8B16") != 0) {
+        NeoWCLog(@"读取 %@ 的朋友圈数据失败：initData: ABI 不匹配", username);
+        return @[];
+    }
     @try {
-        ((void (*)(id, SEL, unsigned int))objc_msgSend)(controller, initDataSelector, 1);
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, initDataSelector, YES);
         id value = [controller valueForKey:@"m_arrPhotoDatas"];
         if (![value isKindOfClass:NSArray.class]) return @[];
         if (success) *success = YES;

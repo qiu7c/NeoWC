@@ -26,8 +26,8 @@ static void (*NeoWCOriginalCommentClearLists)(id, SEL);
 static __weak id NeoWCLastTimelineController;
 static void (*NeoWCOriginalCommentViewDidAppear)(id, SEL, BOOL);
 static __weak id NeoWCLastCommentListController;
-static void (*NeoWCOriginalMomentsListInitData)(id, SEL, unsigned int);
-static void (*NeoWCOriginalMomentsListHomepageUpdate)(id, SEL, id, unsigned int, id, id, id, id, id);
+static void (*NeoWCOriginalMomentsListInitData)(id, SEL, BOOL);
+static void (*NeoWCOriginalMomentsListHomepageUpdate)(id, SEL, id, long long, long long, id, id, id, id);
 static __weak id NeoWCLastMomentsListController;
 
 typedef NS_ENUM(NSUInteger, NeoWCDiagnosticSignature) {
@@ -38,7 +38,6 @@ typedef NS_ENUM(NSUInteger, NeoWCDiagnosticSignature) {
     NeoWCDiagnosticSignatureVoidOneObject,
     NeoWCDiagnosticSignatureVoidOneBool,
     NeoWCDiagnosticSignatureBoolObjectBool,
-    NeoWCDiagnosticSignatureVoidOneUnsignedInteger,
     NeoWCDiagnosticSignatureVoidHomepageUpdate,
 };
 
@@ -79,8 +78,7 @@ static BOOL NeoWCMethodMatchesSignature(Method method, NeoWCDiagnosticSignature 
     else if (signature == NeoWCDiagnosticSignatureVoidHomepageUpdate) expectedArguments = 9;
     else if (signature == NeoWCDiagnosticSignatureObjectOneObject ||
              signature == NeoWCDiagnosticSignatureVoidOneObject ||
-             signature == NeoWCDiagnosticSignatureVoidOneBool ||
-             signature == NeoWCDiagnosticSignatureVoidOneUnsignedInteger) expectedArguments = 3;
+             signature == NeoWCDiagnosticSignatureVoidOneBool) expectedArguments = 3;
     if (method_getNumberOfArguments(method) != expectedArguments) return NO;
 
     char *returnType = method_copyReturnType(method);
@@ -90,7 +88,6 @@ static BOOL NeoWCMethodMatchesSignature(Method method, NeoWCDiagnosticSignature 
         case NeoWCDiagnosticSignatureVoidNoArguments:
         case NeoWCDiagnosticSignatureVoidOneObject:
         case NeoWCDiagnosticSignatureVoidOneBool:
-        case NeoWCDiagnosticSignatureVoidOneUnsignedInteger:
         case NeoWCDiagnosticSignatureVoidHomepageUpdate:
             validReturn = normalizedReturn[0] == 'v';
             break;
@@ -113,8 +110,6 @@ static BOOL NeoWCMethodMatchesSignature(Method method, NeoWCDiagnosticSignature 
     BOOL validArgument = NO;
     if (signature == NeoWCDiagnosticSignatureVoidOneBool) {
         validArgument = argumentCode == 'B' || argumentCode == 'c';
-    } else if (signature == NeoWCDiagnosticSignatureVoidOneUnsignedInteger) {
-        validArgument = argumentCode == 'I';
     } else {
         validArgument = argumentCode == '@';
     }
@@ -127,9 +122,12 @@ static BOOL NeoWCMethodMatchesSignature(Method method, NeoWCDiagnosticSignature 
     }
     if (validArgument && signature == NeoWCDiagnosticSignatureVoidHomepageUpdate) {
         argumentType = method_copyArgumentType(method, 3);
-        validArgument = NeoWCSkipTypeQualifiers(argumentType)[0] == 'I';
+        validArgument = NeoWCSkipTypeQualifiers(argumentType)[0] == 'q';
         free(argumentType);
-        for (unsigned int index = 4; validArgument && index < 9; index++) {
+        argumentType = method_copyArgumentType(method, 4);
+        validArgument = validArgument && NeoWCSkipTypeQualifiers(argumentType)[0] == 'q';
+        free(argumentType);
+        for (unsigned int index = 5; validArgument && index < 9; index++) {
             argumentType = method_copyArgumentType(method, index);
             validArgument = NeoWCSkipTypeQualifiers(argumentType)[0] == '@';
             free(argumentType);
@@ -343,7 +341,8 @@ static void NeoWCRecordDiagnosticMessageSnapshot(NSString *source, id message) {
         NeoWCDiagnosticOneLine(messageID), NeoWCDiagnosticOneLine(objectID),
         NeoWCDiagnosticOneLine(parentObjectID), NeoWCDiagnosticOneLine(clientID)];
     NeoWCRecordMomentEvent(event, message);
-    if ([source isEqualToString:@"getLastUnReadMessage"]) {
+    if ([source isEqualToString:@"getLastUnReadMessage"] ||
+        [source isEqualToString:@"getUnReadMessages"]) {
         NeoWCRecordDiagnosticUserCommentSnapshot(source, @"comment", comment);
         NeoWCRecordDiagnosticUserCommentSnapshot(source, @"refComment", referenceComment);
     }
@@ -376,11 +375,11 @@ static void NeoWCRecordMomentsListSnapshot(NSString *source, id controller) {
     NeoWCRecordMomentEvent(event, controller);
 }
 
-static void NeoWCHookMomentsListInitData(id self, SEL _cmd, unsigned int type) {
+static void NeoWCHookMomentsListInitData(id self, SEL _cmd, BOOL type) {
     NeoWCLastMomentsListController = self;
-    NeoWCRecordMomentsListSnapshot([NSString stringWithFormat:@"initData:%u BEFORE", type], self);
+    NeoWCRecordMomentsListSnapshot([NSString stringWithFormat:@"initData:%@ BEFORE", type ? @"YES" : @"NO"], self);
     if (NeoWCOriginalMomentsListInitData) NeoWCOriginalMomentsListInitData(self, _cmd, type);
-    NeoWCRecordMomentsListSnapshot([NSString stringWithFormat:@"initData:%u AFTER", type], self);
+    NeoWCRecordMomentsListSnapshot([NSString stringWithFormat:@"initData:%@ AFTER", type ? @"YES" : @"NO"], self);
     __weak id weakController = self;
     NSArray<NSNumber *> *delays = @[@0.25, @1.0, @3.0];
     for (NSNumber *delay in delays) {
@@ -389,20 +388,20 @@ static void NeoWCHookMomentsListInitData(id self, SEL _cmd, unsigned int type) {
             id controller = weakController;
             if (controller) {
                 NeoWCRecordMomentsListSnapshot(
-                    [NSString stringWithFormat:@"initData:%u DELAY %.2fs", type, delay.doubleValue],
+                    [NSString stringWithFormat:@"initData:%@ DELAY %.2fs", type ? @"YES" : @"NO", delay.doubleValue],
                     controller);
             }
         });
     }
 }
 
-static void NeoWCHookMomentsListHomepageUpdate(id self, SEL _cmd, id homepage, unsigned int type,
-                                                id result, id addedData, id changedData,
+static void NeoWCHookMomentsListHomepageUpdate(id self, SEL _cmd, id homepage, long long type,
+                                                long long result, id addedData, id changedData,
                                                 id deletedData, id tips) {
     NeoWCLastMomentsListController = self;
     NeoWCRecordMomentEvent([NSString stringWithFormat:
-        @"WCListViewController onHomepage CALLBACK BEFORE type=%u homepage=%@ result=%@ added=%@ changed=%@ deleted=%@ tips=%@",
-        type, NeoWCDiagnosticOneLine(homepage), NeoWCDiagnosticOneLine(result),
+        @"WCListViewController onHomepage CALLBACK BEFORE type=%lld homepage=%@ result=%lld added=%@ changed=%@ deleted=%@ tips=%@",
+        type, NeoWCDiagnosticOneLine(homepage), result,
         NeoWCDiagnosticCollectionCount(addedData), NeoWCDiagnosticCollectionCount(changedData),
         NeoWCDiagnosticCollectionCount(deletedData), NeoWCDiagnosticOneLine(tips)], self);
     NeoWCRecordMomentsListSnapshot(@"onHomepage BEFORE ORIGINAL", self);
@@ -461,7 +460,10 @@ static id NeoWCHookNotificationUnreadMessages(id self, SEL _cmd) {
     id value = NeoWCOriginalNotificationUnreadMessages ? NeoWCOriginalNotificationUnreadMessages(self, _cmd) : nil;
     NeoWCCaptureNotificationObjects(self, nil);
     if ([value conformsToProtocol:@protocol(NSFastEnumeration)]) {
-        for (id message in value) NeoWCCaptureNotificationObjects(self, message);
+        for (id message in value) {
+            NeoWCCaptureNotificationObjects(self, message);
+            NeoWCRecordDiagnosticMessageSnapshot(@"getUnReadMessages", message);
+        }
     }
     NeoWCRecordMomentEvent(@"WCNotificationCenterMgr getUnReadMessages RETURN", value);
     return value;
@@ -625,7 +627,7 @@ static void NeoWCHookCommentViewDidAppear(id self, SEL _cmd, BOOL animated) {
                         signature:NeoWCDiagnosticSignatureVoidOneBool
                       replacement:(IMP)NeoWCHookCommentViewDidAppear original:(IMP *)&NeoWCOriginalCommentViewDidAppear];
         [self installHookForClass:@"WCListViewController" selector:@"initData:"
-                        signature:NeoWCDiagnosticSignatureVoidOneUnsignedInteger
+                        signature:NeoWCDiagnosticSignatureVoidOneBool
                       replacement:(IMP)NeoWCHookMomentsListInitData original:(IMP *)&NeoWCOriginalMomentsListInitData];
         [self installHookForClass:@"WCListViewController"
                          selector:@"onHomepage:type:updateWithResult:withAddedData:changedData:deletedData:tips:"
