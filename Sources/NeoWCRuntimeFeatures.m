@@ -2,11 +2,13 @@
 #import "NeoWCMessageBlock.h"
 
 #import "NeoWCAccount.h"
+#import "NeoWCCompatibility.h"
 #import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
 
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <string.h>
 
 static char NeoWCMenuOriginalTitleKey;
 
@@ -410,12 +412,81 @@ void NeoWCOpenChatForUserName(NSString *userName) {
                                                     YES);
 }
 
+static UIViewController *NeoWCFindControllerOfClass(UIViewController *controller, Class targetClass) {
+    if (!controller || !targetClass) return nil;
+    if ([controller isKindOfClass:targetClass]) return controller;
+    UIViewController *found = NeoWCFindControllerOfClass(controller.presentedViewController, targetClass);
+    if (found) return found;
+    for (UIViewController *child in controller.childViewControllers) {
+        found = NeoWCFindControllerOfClass(child, targetClass);
+        if (found) return found;
+    }
+    return nil;
+}
+
+static void NeoWCOpenMomentsTimelineAttempt(NSUInteger remainingAttempts) {
+    Class entryClass = objc_getClass("FindFriendEntryViewController");
+    SEL openSelector = sel_registerName("openAlbum");
+    Method method = entryClass ? class_getInstanceMethod(entryClass, openSelector) : NULL;
+    const char *typeEncoding = method ? method_getTypeEncoding(method) : NULL;
+    if (!typeEncoding || strcmp(typeEncoding, "v16@0:8") != 0) {
+        NeoWCLog(@"打开朋友圈失败：当前版本入口 ABI 不匹配");
+        return;
+    }
+
+    UIWindow *window = nil;
+    for (UIWindow *candidate in UIApplication.sharedApplication.windows.reverseObjectEnumerator) {
+        if (!candidate.hidden && candidate.alpha > 0.0 && candidate.windowLevel == UIWindowLevelNormal) {
+            window = candidate;
+            if (candidate.isKeyWindow) break;
+        }
+    }
+    UIViewController *entry = NeoWCFindControllerOfClass(window.rootViewController, entryClass);
+    if (!entry) {
+        if (remainingAttempts > 0) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.50 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                NeoWCOpenMomentsTimelineAttempt(remainingAttempts - 1);
+            });
+        } else {
+            NeoWCLog(@"打开朋友圈失败：未找到发现页控制器");
+        }
+        return;
+    }
+    UITabBarController *tabBarController = entry.tabBarController;
+    UIViewController *tabRoot = entry.navigationController ?: entry;
+    if (tabBarController && tabBarController.selectedViewController != tabRoot) {
+        tabBarController.selectedViewController = tabRoot;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        @try { ((void (*)(id, SEL))objc_msgSend)(entry, openSelector); }
+        @catch (NSException *exception) {
+            NeoWCLog(@"打开朋友圈失败：%@", exception.reason ?: @"未知异常");
+        }
+    });
+}
+
+void NeoWCOpenMomentsTimeline(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{ NeoWCOpenMomentsTimelineAttempt(8); });
+}
+
 BOOL NeoWCHandleNotificationResponse(id response, void (^completionHandler)(void)) {
-    if (!NeoWCEnhancementEnabled(NeoWCNotificationDirectChatEnabledKey)) return NO;
     id notification = NeoWCRuntimeSafeValue(response, @"notification");
     id request = NeoWCRuntimeSafeValue(notification, @"request");
     id content = NeoWCRuntimeSafeValue(request, @"content");
     NSDictionary *userInfo = NeoWCRuntimeSafeValue(content, @"userInfo");
+    id rawNeoWCType = [userInfo isKindOfClass:[NSDictionary class]] ? userInfo[@"neowc"] : nil;
+    NSString *neoWCType = [rawNeoWCType isKindOfClass:[NSString class]] ? rawNeoWCType : nil;
+    if ([neoWCType isEqualToString:@"moments-reminder"] ||
+        [neoWCType isEqualToString:@"moments-interaction"]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{ NeoWCOpenMomentsTimeline(); });
+        if (completionHandler) completionHandler();
+        return YES;
+    }
+
+    if (!NeoWCEnhancementEnabled(NeoWCNotificationDirectChatEnabledKey)) return NO;
     id rawUserName = [userInfo isKindOfClass:[NSDictionary class]] ? userInfo[@"u"] : nil;
     NSString *userName = [rawUserName isKindOfClass:[NSString class]]
         ? [rawUserName stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
@@ -426,6 +497,7 @@ BOOL NeoWCHandleNotificationResponse(id response, void (^completionHandler)(void
                    dispatch_get_main_queue(), ^{
         NeoWCOpenChatForUserName(userName);
     });
+    NeoWCCompatibilityMarkTriggered(@"notification-direct-chat");
     if (completionHandler) completionHandler();
     return YES;
 }

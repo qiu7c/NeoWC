@@ -6456,7 +6456,6 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 didReceiveNotificationResponse:(id)response
          withCompletionHandler:(void (^)(void))completionHandler {
     if (NeoWCHandleNotificationResponse(response, completionHandler)) {
-        NeoWCCompatibilityMarkTriggered(@"notification-direct-chat");
         return;
     }
     %orig;
@@ -6492,7 +6491,6 @@ didReceiveNotificationResponse:(id)response
 didReceiveNotificationResponse:(id)response
          withCompletionHandler:(void (^)(void))completionHandler {
     if (NeoWCHandleNotificationResponse(response, completionHandler)) {
-        NeoWCCompatibilityMarkTriggered(@"notification-direct-chat");
         return;
     }
     %orig;

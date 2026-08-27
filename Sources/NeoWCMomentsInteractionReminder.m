@@ -74,25 +74,34 @@ static void NeoWCMomentsInteractionShowForegroundToast(NSString *message) {
         if (!window || message.length == 0) return;
         const NSInteger toastTag = 0x4E574D49;
         [[window viewWithTag:toastTag] removeFromSuperview];
-        UILabel *toast = [UILabel new];
+        UIView *toast = [UIView new];
         toast.tag = toastTag;
-        toast.text = message;
-        toast.textColor = UIColor.whiteColor;
         toast.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.9];
-        toast.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
-        toast.numberOfLines = 2;
-        toast.textAlignment = NSTextAlignmentCenter;
         toast.layer.cornerRadius = 13.0;
         toast.layer.cornerCurve = kCACornerCurveContinuous;
         toast.layer.masksToBounds = YES;
         toast.translatesAutoresizingMaskIntoConstraints = NO;
+        UILabel *label = [UILabel new];
+        label.text = message;
+        label.textColor = UIColor.whiteColor;
+        label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+        label.adjustsFontForContentSizeCategory = YES;
+        label.numberOfLines = 3;
+        label.textAlignment = NSTextAlignmentCenter;
+        label.translatesAutoresizingMaskIntoConstraints = NO;
+        [toast addSubview:label];
         [window addSubview:toast];
         [NSLayoutConstraint activateConstraints:@[
             [toast.centerXAnchor constraintEqualToAnchor:window.centerXAnchor],
-            [toast.topAnchor constraintEqualToAnchor:window.safeAreaLayoutGuide.topAnchor constant:12.0],
-            [toast.leadingAnchor constraintGreaterThanOrEqualToAnchor:window.leadingAnchor constant:28.0],
-            [toast.trailingAnchor constraintLessThanOrEqualToAnchor:window.trailingAnchor constant:-28.0],
-            [toast.heightAnchor constraintGreaterThanOrEqualToConstant:42.0],
+            [toast.bottomAnchor constraintEqualToAnchor:window.safeAreaLayoutGuide.bottomAnchor constant:-46.0],
+            [toast.widthAnchor constraintGreaterThanOrEqualToConstant:240.0],
+            [toast.leadingAnchor constraintGreaterThanOrEqualToAnchor:window.leadingAnchor constant:18.0],
+            [toast.trailingAnchor constraintLessThanOrEqualToAnchor:window.trailingAnchor constant:-18.0],
+            [toast.heightAnchor constraintGreaterThanOrEqualToConstant:48.0],
+            [label.leadingAnchor constraintEqualToAnchor:toast.leadingAnchor constant:18.0],
+            [label.trailingAnchor constraintEqualToAnchor:toast.trailingAnchor constant:-18.0],
+            [label.topAnchor constraintEqualToAnchor:toast.topAnchor constant:12.0],
+            [label.bottomAnchor constraintEqualToAnchor:toast.bottomAnchor constant:-12.0],
         ]];
         toast.alpha = 0.0;
         [UIView animateWithDuration:0.2 animations:^{ toast.alpha = 1.0; } completion:^(__unused BOOL finished) {

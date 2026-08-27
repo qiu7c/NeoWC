@@ -423,9 +423,10 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 @interface NeoWCLogViewController : NeoWCCardTableViewController
 @end
 
-@interface NeoWCDebugDashboardViewController : NeoWCCardTableViewController
+@interface NeoWCDebugDashboardViewController : NeoWCCardTableViewController <UIAdaptivePresentationControllerDelegate>
 @property (nonatomic, copy) void (^closeHandler)(void);
 @property (nonatomic, weak) UIViewController *sourceViewController;
+@property (nonatomic, assign) BOOL transitioningToTool;
 @end
 
 @interface NeoWCViewPickerController : UIViewController
@@ -605,6 +606,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:dashboard];
     navigationController.modalPresentationStyle = UIModalPresentationFormSheet;
     [viewController presentViewController:navigationController animated:YES completion:nil];
+    navigationController.presentationController.delegate = dashboard;
 }
 
 - (void)beginViewPicking {
@@ -703,8 +705,31 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(closeTapped)];
 }
 
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    self.transitioningToTool = NO;
+    self.tableView.userInteractionEnabled = YES;
+    self.navigationController.view.userInteractionEnabled = YES;
+    self.navigationController.interactivePopGestureRecognizer.enabled = YES;
+}
+
 - (void)closeTapped {
-    [self dismissViewControllerAnimated:YES completion:self.closeHandler];
+    void (^handler)(void) = self.closeHandler;
+    self.closeHandler = nil;
+    [self dismissViewControllerAnimated:YES completion:handler];
+}
+
+- (void)presentationControllerDidDismiss:(__unused UIPresentationController *)presentationController {
+    void (^handler)(void) = self.closeHandler;
+    self.closeHandler = nil;
+    if (handler) handler();
+}
+
+- (void)pushDebugToolController:(UIViewController *)controller {
+    if (!controller || self.transitioningToTool || self.navigationController.transitionCoordinator) return;
+    self.transitioningToTool = YES;
+    self.tableView.userInteractionEnabled = NO;
+    [self.navigationController pushViewController:controller animated:YES];
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 2; }
@@ -719,7 +744,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     cell.accessoryType = UITableViewCellAccessoryNone;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     if (indexPath.section == 0) {
-        NSArray *titles = @[@"当前页面层级", @"视图选择器", @"Runtime 类搜索", @"NeoWC 日志", @"朋友圈互动诊断"];
+        NSArray *titles = @[@"当前页面层级", @"视图选择器", @"Runtime 类搜索", @"NeoWC 日志", @"朋友圈提醒诊断"];
         NSArray *symbols = @[@"square.3.layers.3d", @"viewfinder", @"magnifyingglass", @"doc.text", @"bubble.left.and.exclamationmark.bubble.right"];
         cell.textLabel.text = titles[indexPath.row];
         cell.imageView.image = [UIImage systemImageNamed:symbols[indexPath.row]];
@@ -735,21 +760,21 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (indexPath.section != 0) return;
+    if (indexPath.section != 0 || self.transitioningToTool) return;
     if (indexPath.row == 0) {
         UIViewController *page = self.sourceViewController;
         if (page) {
             NeoWCObjectInspectorViewController *inspector = [[NeoWCObjectInspectorViewController alloc] initWithObject:page.view inspectedClass:page.class];
-            [self.navigationController pushViewController:inspector animated:YES];
+            [self pushDebugToolController:inspector];
         }
     } else if (indexPath.row == 1) {
         [self dismissViewControllerAnimated:YES completion:^{ [[NeoWCDebugManager sharedManager] beginViewPicking]; }];
     } else if (indexPath.row == 2) {
-        [self.navigationController pushViewController:[[NeoWCRuntimeSearchViewController alloc] initWithStyle:UITableViewStylePlain] animated:YES];
+        [self pushDebugToolController:[[NeoWCRuntimeSearchViewController alloc] initWithStyle:UITableViewStylePlain]];
     } else if (indexPath.row == 3) {
-        [self.navigationController pushViewController:[[NeoWCLogViewController alloc] initWithStyle:UITableViewStylePlain] animated:YES];
+        [self pushDebugToolController:[[NeoWCLogViewController alloc] initWithStyle:UITableViewStylePlain]];
     } else {
-        [self.navigationController pushViewController:[[NeoWCMomentsInteractionDiagnosticsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped] animated:YES];
+        [self pushDebugToolController:[[NeoWCMomentsInteractionDiagnosticsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped]];
     }
 }
 
@@ -792,7 +817,6 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     [super viewDidLoad];
     self.title = NSStringFromClass(self.inspectedClass);
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(closeTapped)];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"复制报告" style:UIBarButtonItemStylePlain target:self action:@selector(copyReport)];
 
     UITextView *textView = [UITextView new];
@@ -810,6 +834,16 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     ]];
     self.textView = textView;
     textView.text = [self inspectionReport];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    BOOL isRootController = self.navigationController.viewControllers.firstObject == self;
+    self.navigationItem.leftBarButtonItem = isRootController
+        ? [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose
+                                                       target:self
+                                                       action:@selector(closeTapped)]
+        : nil;
 }
 
 - (void)closeTapped {
