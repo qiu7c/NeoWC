@@ -10,10 +10,12 @@ extern void MSHookMessageEx(Class cls, SEL selector, IMP replacement, IMP *origi
 
 static void (*NeoWCOriginalTimelineCheckNewMessage)(id, SEL);
 static void (*NeoWCOriginalTimelineViewDidAppear)(id, SEL, BOOL);
-static NSUInteger (*NeoWCOriginalNotificationUnreadCount)(id, SEL);
-static NSUInteger (*NeoWCOriginalNotificationRelatedUnreadCount)(id, SEL);
+static unsigned int (*NeoWCOriginalNotificationUnreadCount)(id, SEL);
+static unsigned int (*NeoWCOriginalNotificationRelatedUnreadCount)(id, SEL);
 static id (*NeoWCOriginalNotificationLastUnreadMessage)(id, SEL);
 static id (*NeoWCOriginalNotificationLatestReadMessage)(id, SEL);
+static id (*NeoWCOriginalNotificationUnreadMessages)(id, SEL);
+static BOOL (*NeoWCOriginalNotificationAddRawMessage)(id, SEL, id, BOOL);
 static id (*NeoWCOriginalCommentMessagesWithDataArray)(id, SEL, id);
 static void (*NeoWCOriginalCommentRefreshFooter)(id, SEL, id);
 static void (*NeoWCOriginalCommentUpdateSections)(id, SEL);
@@ -30,6 +32,7 @@ typedef NS_ENUM(NSUInteger, NeoWCDiagnosticSignature) {
     NeoWCDiagnosticSignatureObjectOneObject,
     NeoWCDiagnosticSignatureVoidOneObject,
     NeoWCDiagnosticSignatureVoidOneBool,
+    NeoWCDiagnosticSignatureBoolObjectBool,
 };
 
 @interface NeoWCMomentsInteractionDiagnosticManager : NSObject
@@ -37,12 +40,15 @@ typedef NS_ENUM(NSUInteger, NeoWCDiagnosticSignature) {
 @property (nonatomic, assign) NSUInteger sequence;
 @property (nonatomic, strong) NSMutableArray<NSString *> *events;
 @property (nonatomic, strong) NSMutableSet<NSString *> *installedHooks;
+@property (nonatomic, strong, nullable) id capturedNotificationManager;
+@property (nonatomic, strong) NSMutableArray *capturedMessages;
 @property (nonatomic, strong, nullable) NSURL *latestReportURL;
 + (instancetype)sharedManager;
 - (void)startRecording;
 - (void)stopRecording;
 - (void)clearRecording;
 - (void)recordEvent:(NSString *)event object:(nullable id)object;
+- (void)captureNotificationManager:(nullable id)manager message:(nullable id)message;
 - (void)installAvailableHooks;
 - (NSURL * _Nullable)writeReportWithReason:(NSString *)reason error:(NSError **)error;
 - (BOOL)triggerTimelineCheck;
@@ -60,9 +66,10 @@ static BOOL NeoWCTypeIsInteger(const char *type) {
 
 static BOOL NeoWCMethodMatchesSignature(Method method, NeoWCDiagnosticSignature signature) {
     if (!method) return NO;
-    unsigned int expectedArguments = (signature == NeoWCDiagnosticSignatureObjectOneObject ||
-                                      signature == NeoWCDiagnosticSignatureVoidOneObject ||
-                                      signature == NeoWCDiagnosticSignatureVoidOneBool) ? 3 : 2;
+    unsigned int expectedArguments = signature == NeoWCDiagnosticSignatureBoolObjectBool ? 4 :
+        ((signature == NeoWCDiagnosticSignatureObjectOneObject ||
+          signature == NeoWCDiagnosticSignatureVoidOneObject ||
+          signature == NeoWCDiagnosticSignatureVoidOneBool) ? 3 : 2);
     if (method_getNumberOfArguments(method) != expectedArguments) return NO;
 
     char *returnType = method_copyReturnType(method);
@@ -81,15 +88,24 @@ static BOOL NeoWCMethodMatchesSignature(Method method, NeoWCDiagnosticSignature 
         case NeoWCDiagnosticSignatureObjectOneObject:
             validReturn = normalizedReturn[0] == '@';
             break;
+        case NeoWCDiagnosticSignatureBoolObjectBool:
+            validReturn = normalizedReturn[0] == 'B' || normalizedReturn[0] == 'c';
+            break;
     }
     free(returnType);
-    if (!validReturn || expectedArguments != 3) return validReturn;
+    if (!validReturn || expectedArguments == 2) return validReturn;
 
     char *argumentType = method_copyArgumentType(method, 2);
     const char argumentCode = NeoWCSkipTypeQualifiers(argumentType)[0];
     BOOL validArgument = signature == NeoWCDiagnosticSignatureVoidOneBool
         ? (argumentCode == 'B' || argumentCode == 'c') : argumentCode == '@';
     free(argumentType);
+    if (validArgument && signature == NeoWCDiagnosticSignatureBoolObjectBool) {
+        argumentType = method_copyArgumentType(method, 3);
+        const char boolCode = NeoWCSkipTypeQualifiers(argumentType)[0];
+        validArgument = boolCode == 'B' || boolCode == 'c';
+        free(argumentType);
+    }
     return validArgument;
 }
 
@@ -175,6 +191,19 @@ static void NeoWCAppendObjectReport(NSMutableString *report, NSString *title, id
             [report appendFormat:@"%s %s = %@\n", type, name, value ?: @"nil"];
         }
         free(ivars);
+    }
+}
+
+static void NeoWCAppendCollectionObjectReports(NSMutableString *report, NSString *title, id collection) {
+    [report appendFormat:@"\nCOLLECTION %@\n%@\n", title, NeoWCDiagnosticOneLine(collection)];
+    if (![collection conformsToProtocol:@protocol(NSFastEnumeration)]) return;
+    NSUInteger index = 0;
+    for (id object in collection) {
+        NeoWCAppendObjectReport(report, [NSString stringWithFormat:@"%@[%lu]", title, (unsigned long)index], object);
+        if (++index >= 12) {
+            [report appendString:@"\n<remaining collection objects omitted>\n"];
+            break;
+        }
     }
 }
 
@@ -273,6 +302,10 @@ static void NeoWCRecordMomentEvent(NSString *event, id object) {
     [[NeoWCMomentsInteractionDiagnosticManager sharedManager] recordEvent:event object:object];
 }
 
+static void NeoWCCaptureNotificationObjects(id manager, id message) {
+    [[NeoWCMomentsInteractionDiagnosticManager sharedManager] captureNotificationManager:manager message:message];
+}
+
 static void NeoWCHookTimelineCheckNewMessage(id self, SEL _cmd) {
     NeoWCLastTimelineController = self;
     NeoWCRecordMomentEvent(@"WCTimeLineViewController checkNewMessage BEFORE", self);
@@ -287,33 +320,59 @@ static void NeoWCHookTimelineViewDidAppear(id self, SEL _cmd, BOOL animated) {
     if (NeoWCOriginalTimelineViewDidAppear) NeoWCOriginalTimelineViewDidAppear(self, _cmd, animated);
 }
 
-static NSUInteger NeoWCHookNotificationUnreadCount(id self, SEL _cmd) {
-    NSUInteger value = NeoWCOriginalNotificationUnreadCount ? NeoWCOriginalNotificationUnreadCount(self, _cmd) : 0;
-    NeoWCRecordMomentEvent([NSString stringWithFormat:@"WCNotificationCenterMgr getUnReadMessageCount => %lu", (unsigned long)value], self);
+static unsigned int NeoWCHookNotificationUnreadCount(id self, SEL _cmd) {
+    unsigned int value = NeoWCOriginalNotificationUnreadCount ? NeoWCOriginalNotificationUnreadCount(self, _cmd) : 0;
+    NeoWCCaptureNotificationObjects(self, nil);
+    NeoWCRecordMomentEvent([NSString stringWithFormat:@"WCNotificationCenterMgr getUnReadMessageCount => %u", value], self);
     return value;
 }
 
-static NSUInteger NeoWCHookNotificationRelatedUnreadCount(id self, SEL _cmd) {
-    NSUInteger value = NeoWCOriginalNotificationRelatedUnreadCount ? NeoWCOriginalNotificationRelatedUnreadCount(self, _cmd) : 0;
-    NeoWCRecordMomentEvent([NSString stringWithFormat:@"WCNotificationCenterMgr getUnReadMessageCountReleatedToMe => %lu", (unsigned long)value], self);
+static unsigned int NeoWCHookNotificationRelatedUnreadCount(id self, SEL _cmd) {
+    unsigned int value = NeoWCOriginalNotificationRelatedUnreadCount ? NeoWCOriginalNotificationRelatedUnreadCount(self, _cmd) : 0;
+    NeoWCCaptureNotificationObjects(self, nil);
+    NeoWCRecordMomentEvent([NSString stringWithFormat:@"WCNotificationCenterMgr getUnReadMessageCountReleatedToMe => %u", value], self);
     return value;
 }
 
 static id NeoWCHookNotificationLastUnreadMessage(id self, SEL _cmd) {
     id value = NeoWCOriginalNotificationLastUnreadMessage ? NeoWCOriginalNotificationLastUnreadMessage(self, _cmd) : nil;
+    NeoWCCaptureNotificationObjects(self, value);
     NeoWCRecordMomentEvent(@"WCNotificationCenterMgr getLastUnReadMessage RETURN", value);
     return value;
 }
 
 static id NeoWCHookNotificationLatestReadMessage(id self, SEL _cmd) {
     id value = NeoWCOriginalNotificationLatestReadMessage ? NeoWCOriginalNotificationLatestReadMessage(self, _cmd) : nil;
+    NeoWCCaptureNotificationObjects(self, value);
     NeoWCRecordMomentEvent(@"WCNotificationCenterMgr getLatestReadMessage RETURN", value);
     return value;
 }
 
-static id NeoWCHookCommentMessagesWithDataArray(id self, SEL _cmd, id dataArray) {
-    NeoWCRecordMomentEvent(@"WCNewCommentListViewController getWCMessagesWithDataArray: ARG", dataArray);
-    id value = NeoWCOriginalCommentMessagesWithDataArray ? NeoWCOriginalCommentMessagesWithDataArray(self, _cmd, dataArray) : nil;
+static id NeoWCHookNotificationUnreadMessages(id self, SEL _cmd) {
+    id value = NeoWCOriginalNotificationUnreadMessages ? NeoWCOriginalNotificationUnreadMessages(self, _cmd) : nil;
+    NeoWCCaptureNotificationObjects(self, nil);
+    if ([value conformsToProtocol:@protocol(NSFastEnumeration)]) {
+        for (id message in value) NeoWCCaptureNotificationObjects(self, message);
+    }
+    NeoWCRecordMomentEvent(@"WCNotificationCenterMgr getUnReadMessages RETURN", value);
+    return value;
+}
+
+static BOOL NeoWCHookNotificationAddRawMessage(id self, SEL _cmd, id message, BOOL hasRead) {
+    NeoWCCaptureNotificationObjects(self, message);
+    NeoWCRecordMomentEvent([NSString stringWithFormat:@"WCNotificationCenterMgr addNewRawMessage:hasRead: BEFORE hasRead=%@",
+                            hasRead ? @"YES" : @"NO"], message);
+    BOOL result = NeoWCOriginalNotificationAddRawMessage
+        ? NeoWCOriginalNotificationAddRawMessage(self, _cmd, message, hasRead) : NO;
+    NeoWCRecordMomentEvent([NSString stringWithFormat:@"WCNotificationCenterMgr addNewRawMessage:hasRead: RETURN %@",
+                            result ? @"YES" : @"NO"], message);
+    return result;
+}
+
+static id NeoWCHookCommentMessagesWithDataArray(id self, SEL _cmd, id argument) {
+    NeoWCRecordMomentEvent(@"WCNewCommentListViewController getWCMessagesWithDataArray: ARGUMENT", argument);
+    id value = NeoWCOriginalCommentMessagesWithDataArray ? NeoWCOriginalCommentMessagesWithDataArray(self, _cmd, argument) : nil;
+    NeoWCCaptureNotificationObjects(nil, value);
     NeoWCRecordMomentEvent(@"WCNewCommentListViewController getWCMessagesWithDataArray: RETURN", value);
     return value;
 }
@@ -354,8 +413,22 @@ static void NeoWCHookCommentViewDidAppear(id self, SEL _cmd, BOOL animated) {
         manager = [NeoWCMomentsInteractionDiagnosticManager new];
         manager.events = [NSMutableArray array];
         manager.installedHooks = [NSMutableSet set];
+        manager.capturedMessages = [NSMutableArray array];
     });
     return manager;
+}
+
+- (void)captureNotificationManager:(id)manager message:(id)message {
+    if (!self.isRecording) return;
+    @synchronized (self) {
+        if (manager) self.capturedNotificationManager = manager;
+        if (!message) return;
+        for (id existing in self.capturedMessages) {
+            if (existing == message) return;
+        }
+        [self.capturedMessages addObject:message];
+        while (self.capturedMessages.count > 24) [self.capturedMessages removeObjectAtIndex:0];
+    }
 }
 
 - (void)recordEvent:(NSString *)event object:(id)object {
@@ -413,6 +486,12 @@ static void NeoWCHookCommentViewDidAppear(id self, SEL _cmd, BOOL animated) {
         [self installHookForClass:@"WCNotificationCenterMgr" selector:@"getLatestReadMessage"
                         signature:NeoWCDiagnosticSignatureObjectNoArguments
                       replacement:(IMP)NeoWCHookNotificationLatestReadMessage original:(IMP *)&NeoWCOriginalNotificationLatestReadMessage];
+        [self installHookForClass:@"WCNotificationCenterMgr" selector:@"getUnReadMessages"
+                        signature:NeoWCDiagnosticSignatureObjectNoArguments
+                      replacement:(IMP)NeoWCHookNotificationUnreadMessages original:(IMP *)&NeoWCOriginalNotificationUnreadMessages];
+        [self installHookForClass:@"WCNotificationCenterMgr" selector:@"addNewRawMessage:hasRead:"
+                        signature:NeoWCDiagnosticSignatureBoolObjectBool
+                      replacement:(IMP)NeoWCHookNotificationAddRawMessage original:(IMP *)&NeoWCOriginalNotificationAddRawMessage];
         [self installHookForClass:@"WCNewCommentListViewController" selector:@"getWCMessagesWithDataArray:"
                         signature:NeoWCDiagnosticSignatureObjectOneObject
                       replacement:(IMP)NeoWCHookCommentMessagesWithDataArray original:(IMP *)&NeoWCOriginalCommentMessagesWithDataArray];
@@ -436,6 +515,8 @@ static void NeoWCHookCommentViewDidAppear(id self, SEL _cmd, BOOL animated) {
 - (void)startRecording {
     @synchronized (self) {
         [self.events removeAllObjects];
+        [self.capturedMessages removeAllObjects];
+        self.capturedNotificationManager = nil;
         self.sequence = 0;
         self.recording = YES;
     }
@@ -452,6 +533,8 @@ static void NeoWCHookCommentViewDidAppear(id self, SEL _cmd, BOOL animated) {
     @synchronized (self) {
         self.recording = NO;
         [self.events removeAllObjects];
+        [self.capturedMessages removeAllObjects];
+        self.capturedNotificationManager = nil;
         self.sequence = 0;
         self.latestReportURL = nil;
     }
@@ -480,26 +563,38 @@ static void NeoWCHookCommentViewDidAppear(id self, SEL _cmd, BOOL animated) {
     @synchronized (self) { installed = [self.installedHooks.allObjects sortedArrayUsingSelector:@selector(compare:)]; }
     [report appendFormat:@"已安装追踪 Hook：\n%@\n", installed.count > 0 ? [installed componentsJoinedByString:@"\n"] : @"<none>"];
 
-    NSArray<NSString *> *classNames = @[@"WCNotificationCenterMgr", @"WCTimeLineViewController",
+    NSArray<NSString *> *classNames = @[@"WCNotificationCenterMgr", @"WCSNSMessage", @"WCTimeLineViewController",
                                          @"WCCommentListViewController", @"WCNewCommentListViewController",
                                          @"FindFriendEntryViewController"];
     for (NSString *className in classNames) NeoWCAppendClassReport(report, className);
 
-    id manager = NeoWCMomentsNotificationManager();
-    NeoWCAppendObjectReport(report, @"WCNotificationCenterMgr service", manager);
+    id serviceManager = NeoWCMomentsNotificationManager();
+    id capturedManager = nil;
+    NSArray *capturedMessages = nil;
+    @synchronized (self) {
+        capturedManager = self.capturedNotificationManager;
+        capturedMessages = [self.capturedMessages copy];
+    }
+    id manager = capturedManager ?: serviceManager;
+    NeoWCAppendObjectReport(report, @"WCNotificationCenterMgr captured from Hook", capturedManager);
+    if (serviceManager != capturedManager) NeoWCAppendObjectReport(report, @"WCNotificationCenterMgr service lookup", serviceManager);
     [report appendString:@"\n\nKNOWN GETTERS\n"];
     id lastUnread = nil;
     id latestRead = nil;
+    id unreadMessages = nil;
     for (NSString *selectorName in @[@"getUnReadMessageCount", @"getUnReadMessageCountReleatedToMe",
-                                      @"getLastUnReadMessage", @"getLatestReadMessage"]) {
+                                      @"getLastUnReadMessage", @"getLatestReadMessage", @"getUnReadMessages"]) {
         id object = nil;
         NSString *value = NeoWCInvokeNoArgumentSelector(manager, selectorName, &object);
         [report appendFormat:@"%@ => %@\n", selectorName, value];
         if ([selectorName isEqualToString:@"getLastUnReadMessage"]) lastUnread = object;
         if ([selectorName isEqualToString:@"getLatestReadMessage"]) latestRead = object;
+        if ([selectorName isEqualToString:@"getUnReadMessages"]) unreadMessages = object;
     }
     NeoWCAppendObjectReport(report, @"getLastUnReadMessage", lastUnread);
     if (latestRead != lastUnread) NeoWCAppendObjectReport(report, @"getLatestReadMessage", latestRead);
+    NeoWCAppendCollectionObjectReports(report, @"getUnReadMessages", unreadMessages);
+    NeoWCAppendCollectionObjectReports(report, @"messages captured from Hook", capturedMessages);
 
     id timeline = NeoWCLastTimelineController;
     NeoWCAppendObjectReport(report, @"last WCTimeLineViewController", timeline);
