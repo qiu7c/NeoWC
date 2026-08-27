@@ -679,6 +679,32 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
     [self presentSheet:sheet];
 }
 
+- (void)presentMomentsReminderForwardTargetPicker {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSInteger selected = [defaults integerForKey:NeoWCMomentsReminderForwardTargetKey];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"朋友圈转发目标"
+                                                                    message:@"文字及已勾选的媒体会发送到所选会话"
+                                                             preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSDictionary *> *options = @[
+        @{ @"title": @"自己的聊天框", @"value": @0 },
+        @{ @"title": @"文件传输助手", @"value": @1 },
+    ];
+    for (NSDictionary *option in options) {
+        NSInteger value = [option[@"value"] integerValue];
+        NSString *title = option[@"title"];
+        if (value == selected) title = [title stringByAppendingString:@" ✓"];
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [defaults setInteger:value forKey:NeoWCMomentsReminderForwardTargetKey];
+            [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification
+                                                               object:NeoWCMomentsReminderForwardTargetKey];
+            NeoWCMomentsReminderSettingsDidChange();
+            [self reload];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentSheet:sheet];
+}
+
 - (void)performActionForItem:(NeoWCSettingItem *)item {
     switch (item.action) {
         case NeoWCSettingActionConfigManager: [self push:[NeoWCConfigManagerViewController new]]; break;
@@ -755,6 +781,9 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
                                        maximum:3600
                                    notifyChange:YES
                                     applyScale:NO];
+            break;
+        case NeoWCSettingActionMomentsReminderForwardTarget:
+            [self presentMomentsReminderForwardTargetPicker];
             break;
         default: break;
     }

@@ -78,6 +78,7 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionSendConfirmationPauseDuration,
     NeoWCSettingActionMomentsReminderUsers,
     NeoWCSettingActionMomentsReminderInterval,
+    NeoWCSettingActionMomentsReminderForwardTarget,
 };
 
 @interface NeoWCSettingItem : NSObject

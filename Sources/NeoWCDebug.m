@@ -1,6 +1,7 @@
 #import "NeoWCDebug.h"
 #import "NeoWCInterfaceTweaks.h"
 #import "NeoWCCardTableViewController.h"
+#import "NeoWCMomentsInteractionDiagnostics.h"
 #import <objc/runtime.h>
 #import <mach-o/dyld.h>
 #import <stdint.h>
@@ -707,7 +708,7 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 2; }
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return section == 0 ? 4 : 3; }
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return section == 0 ? 5 : 3; }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section { return section == 0 ? @"工具" : @"环境"; }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -718,8 +719,8 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
     cell.accessoryType = UITableViewCellAccessoryNone;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     if (indexPath.section == 0) {
-        NSArray *titles = @[@"当前页面层级", @"视图选择器", @"Runtime 类搜索", @"NeoWC 日志"];
-        NSArray *symbols = @[@"square.3.layers.3d", @"viewfinder", @"magnifyingglass", @"doc.text"];
+        NSArray *titles = @[@"当前页面层级", @"视图选择器", @"Runtime 类搜索", @"NeoWC 日志", @"朋友圈互动诊断"];
+        NSArray *symbols = @[@"square.3.layers.3d", @"viewfinder", @"magnifyingglass", @"doc.text", @"bubble.left.and.exclamationmark.bubble.right"];
         cell.textLabel.text = titles[indexPath.row];
         cell.imageView.image = [UIImage systemImageNamed:symbols[indexPath.row]];
         cell.accessoryType = UITableViewCellAccessoryNone;
@@ -745,8 +746,10 @@ static void NeoWCAppendViewTree(NSMutableString *report, UIView *view, NSUIntege
         [self dismissViewControllerAnimated:YES completion:^{ [[NeoWCDebugManager sharedManager] beginViewPicking]; }];
     } else if (indexPath.row == 2) {
         [self.navigationController pushViewController:[[NeoWCRuntimeSearchViewController alloc] initWithStyle:UITableViewStylePlain] animated:YES];
-    } else {
+    } else if (indexPath.row == 3) {
         [self.navigationController pushViewController:[[NeoWCLogViewController alloc] initWithStyle:UITableViewStylePlain] animated:YES];
+    } else {
+        [self.navigationController pushViewController:[[NeoWCMomentsInteractionDiagnosticsViewController alloc] initWithStyle:UITableViewStyleInsetGrouped] animated:YES];
     }
 }
 
