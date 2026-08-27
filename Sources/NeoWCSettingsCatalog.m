@@ -7,6 +7,7 @@
 #import "NeoWCMessageBlock.h"
 #import "NeoWCSendConfirmation.h"
 #import "NeoWCBackgroundKeeper.h"
+#import "NeoWCMomentsInteractionReminder.h"
 #import "NeoWCMomentsReminder.h"
 #import <stdlib.h>
 
@@ -96,6 +97,9 @@ void NeoWCSettingsHandleSwitchChange(NSString *key, BOOL enabled) {
     }
     if ([key isEqualToString:NeoWCBackgroundKeepAliveEnabledKey]) {
         NeoWCBackgroundKeeperSettingsDidChange();
+    }
+    if ([key isEqualToString:NeoWCMomentsInteractionReminderEnabledKey]) {
+        NeoWCMomentsInteractionReminderSettingsDidChange();
     }
     if ([key isEqualToString:NeoWCMomentsReminderEnabledKey] ||
         [key isEqualToString:NeoWCMomentsReminderUsersKey] ||
@@ -219,6 +223,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCMomentsPreciseTimeKey: @NO,
         NeoWCMomentsPreciseTimeFormatKey: NeoWCMomentsPreciseTimeDefaultFormat,
         NeoWCBackgroundKeepAliveEnabledKey: @NO,
+        NeoWCMomentsInteractionReminderEnabledKey: @NO,
         NeoWCMomentsReminderEnabledKey: @NO,
         NeoWCMomentsReminderUsersKey: @[],
         NeoWCMomentsReminderIntervalKey: @60,
@@ -517,6 +522,9 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     NSString *reminderSubtitle = backgroundEnabled
         ? @"周期检测特别关注好友的新朋友圈"
         : @"建议开启“保持后台运行”，否则可能只在前台检测";
+    NSString *interactionSubtitle = backgroundEnabled
+        ? @"检测新的朋友圈点赞或评论并发送提醒"
+        : @"建议开启“保持后台运行”，否则可能只在前台检测";
     NeoWCSettingItem *forwardToChat = NeoWCItem(@"转发到聊天", @"开启后默认只转发文字", @"paperplane",
                                                 NeoWCSettingRowKindSwitch, NeoWCMomentsReminderForwardEnabledKey,
                                                 nil, NeoWCSettingActionNone);
@@ -543,6 +551,10 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     NeoWCAddFeature(moments,
                     NeoWCItem(@"朋友圈提醒", reminderSubtitle, @"bell.badge", NeoWCSettingRowKindSwitch, NeoWCMomentsReminderEnabledKey, nil, NeoWCSettingActionNone),
                     reminderChildren, defaults, collapsed);
+    [moments insertObject:NeoWCItem(@"朋友圈互动提醒", interactionSubtitle, @"bubble.left.and.exclamationmark.bubble.right",
+                                    NeoWCSettingRowKindSwitch, NeoWCMomentsInteractionReminderEnabledKey,
+                                    nil, NeoWCSettingActionNone)
+                  atIndex:0];
     CGFloat intensity = [defaults doubleForKey:NeoWCMomentsLikeHapticIntensityKey];
     NSString *intensityText = intensity < 0.34 ? @"轻" : (intensity < 0.75 ? @"中" : @"强");
     NeoWCSettingItem *haptic = NeoWCItem(@"点赞震动", @"点赞成功时提供触感反馈", @"waveform", NeoWCSettingRowKindSwitch, NeoWCMomentsLikeHapticEnabledKey, nil, NeoWCSettingActionNone);

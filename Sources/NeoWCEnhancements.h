@@ -14,6 +14,7 @@ FOUNDATION_EXPORT NSString *const NeoWCMomentsPreciseTimeKey;
 FOUNDATION_EXPORT NSString *const NeoWCMomentsPreciseTimeFormatKey;
 FOUNDATION_EXPORT NSString *const NeoWCMomentsPreciseTimeDefaultFormat;
 FOUNDATION_EXPORT NSString *const NeoWCBackgroundKeepAliveEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCMomentsInteractionReminderEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCMomentsReminderEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCMomentsReminderUsersKey;
 FOUNDATION_EXPORT NSString *const NeoWCMomentsReminderIntervalKey;

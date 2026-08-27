@@ -15,6 +15,7 @@ NSString *const NeoWCMomentsPreciseTimeKey = @"com.qiu7c.neowc.moments.precise-t
 NSString *const NeoWCMomentsPreciseTimeFormatKey = @"com.qiu7c.neowc.moments.precise-time-format";
 NSString *const NeoWCMomentsPreciseTimeDefaultFormat = @"yyyy-MM-dd HH:mm:ss";
 NSString *const NeoWCBackgroundKeepAliveEnabledKey = @"com.qiu7c.neowc.background.keep-alive";
+NSString *const NeoWCMomentsInteractionReminderEnabledKey = @"com.qiu7c.neowc.moments.interaction-reminder";
 NSString *const NeoWCMomentsReminderEnabledKey = @"com.qiu7c.neowc.moments.reminder";
 NSString *const NeoWCMomentsReminderUsersKey = @"com.qiu7c.neowc.moments.reminder.users";
 NSString *const NeoWCMomentsReminderIntervalKey = @"com.qiu7c.neowc.moments.reminder.interval";

@@ -210,10 +210,12 @@
         [self saveCollapsedFeatureKeys];
     }
     NeoWCSettingsHandleSwitchChange(item.defaultsKey, enabled);
-    if (enabled && [item.defaultsKey isEqualToString:NeoWCMomentsReminderEnabledKey] &&
+    BOOL momentsReminderNeedsBackground = [item.defaultsKey isEqualToString:NeoWCMomentsReminderEnabledKey] ||
+        [item.defaultsKey isEqualToString:NeoWCMomentsInteractionReminderEnabledKey];
+    if (enabled && momentsReminderNeedsBackground &&
         ![defaults boolForKey:NeoWCBackgroundKeepAliveEnabledKey]) {
         UIAlertController *recommendation = [UIAlertController alertControllerWithTitle:@"建议开启保持后台运行"
-                                                                                 message:@"未开启时，朋友圈提醒可能只有在微信前台活跃期间才能检测。两个功能仍保持独立，可暂不启用后台保持。"
+                                                                                 message:@"未开启时，朋友圈提醒可能只有在微信前台活跃期间才能检测。两个功能保持独立，可暂不启用后台保持。"
                                                                           preferredStyle:UIAlertControllerStyleAlert];
         [recommendation addAction:[UIAlertAction actionWithTitle:@"暂不开启" style:UIAlertActionStyleCancel handler:nil]];
         __weak typeof(self) weakSelf = self;

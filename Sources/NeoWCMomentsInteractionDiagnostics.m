@@ -202,6 +202,56 @@ static void NeoWCCaptureNotificationObjects(id manager, id message) {
     [[NeoWCMomentsInteractionDiagnosticManager sharedManager] captureNotificationManager:manager message:message];
 }
 
+static id NeoWCDiagnosticMessageObjectGetter(id message, const char *selectorName) {
+    if (!message || !selectorName) return nil;
+    SEL selector = sel_registerName(selectorName);
+    Method method = class_getInstanceMethod([message class], selector);
+    if (!method || method_getNumberOfArguments(method) != 2) return nil;
+    char *returnType = method_copyReturnType(method);
+    BOOL matches = NeoWCSkipTypeQualifiers(returnType)[0] == '@';
+    free(returnType);
+    if (!matches) return nil;
+    @try { return ((id (*)(id, SEL))objc_msgSend)(message, selector); }
+    @catch (__unused NSException *exception) { return nil; }
+}
+
+static BOOL NeoWCDiagnosticMessageType(id message, long long *result) {
+    if (result) *result = 0;
+    SEL selector = sel_registerName("msgTypeFromClientId");
+    Method method = message ? class_getInstanceMethod([message class], selector) : NULL;
+    if (!method || method_getNumberOfArguments(method) != 2) return NO;
+    char *returnType = method_copyReturnType(method);
+    BOOL matches = NeoWCSkipTypeQualifiers(returnType)[0] == 'q';
+    free(returnType);
+    if (!matches) return NO;
+    @try {
+        long long value = ((long long (*)(id, SEL))objc_msgSend)(message, selector);
+        if (result) *result = value;
+        return YES;
+    } @catch (__unused NSException *exception) {
+        return NO;
+    }
+}
+
+static void NeoWCRecordDiagnosticMessageSnapshot(NSString *source, id message) {
+    if (!message) return;
+    long long messageType = 0;
+    BOOL hasMessageType = NeoWCDiagnosticMessageType(message, &messageType);
+    id comment = NeoWCDiagnosticMessageObjectGetter(message, "comment");
+    id referenceComment = NeoWCDiagnosticMessageObjectGetter(message, "refComment");
+    id messageID = NeoWCDiagnosticMessageObjectGetter(message, "msgID");
+    id objectID = NeoWCDiagnosticMessageObjectGetter(message, "objID");
+    id parentObjectID = NeoWCDiagnosticMessageObjectGetter(message, "parentObjID");
+    id clientID = NeoWCDiagnosticMessageObjectGetter(message, "clientId");
+    NSString *event = [NSString stringWithFormat:
+        @"WCSNSMessage SNAPSHOT source=%@ type=%@ comment=%@ refComment=%@ msgID=%@ objID=%@ parentObjID=%@ clientId=%@",
+        source ?: @"unknown", hasMessageType ? [NSString stringWithFormat:@"%lld", messageType] : @"UNAVAILABLE",
+        NeoWCDiagnosticOneLine(comment), NeoWCDiagnosticOneLine(referenceComment),
+        NeoWCDiagnosticOneLine(messageID), NeoWCDiagnosticOneLine(objectID),
+        NeoWCDiagnosticOneLine(parentObjectID), NeoWCDiagnosticOneLine(clientID)];
+    NeoWCRecordMomentEvent(event, message);
+}
+
 static void NeoWCHookTimelineCheckNewMessage(id self, SEL _cmd) {
     NeoWCLastTimelineController = self;
     NeoWCRecordMomentEvent(@"WCTimeLineViewController checkNewMessage BEFORE", self);
@@ -233,6 +283,7 @@ static unsigned int NeoWCHookNotificationRelatedUnreadCount(id self, SEL _cmd) {
 static id NeoWCHookNotificationLastUnreadMessage(id self, SEL _cmd) {
     id value = NeoWCOriginalNotificationLastUnreadMessage ? NeoWCOriginalNotificationLastUnreadMessage(self, _cmd) : nil;
     NeoWCCaptureNotificationObjects(self, value);
+    NeoWCRecordDiagnosticMessageSnapshot(@"getLastUnReadMessage", value);
     NeoWCRecordMomentEvent(@"WCNotificationCenterMgr getLastUnReadMessage RETURN", value);
     return value;
 }
@@ -240,6 +291,7 @@ static id NeoWCHookNotificationLastUnreadMessage(id self, SEL _cmd) {
 static id NeoWCHookNotificationLatestReadMessage(id self, SEL _cmd) {
     id value = NeoWCOriginalNotificationLatestReadMessage ? NeoWCOriginalNotificationLatestReadMessage(self, _cmd) : nil;
     NeoWCCaptureNotificationObjects(self, value);
+    NeoWCRecordDiagnosticMessageSnapshot(@"getLatestReadMessage", value);
     NeoWCRecordMomentEvent(@"WCNotificationCenterMgr getLatestReadMessage RETURN", value);
     return value;
 }
@@ -269,6 +321,7 @@ static id NeoWCHookCommentMessagesWithDataArray(id self, SEL _cmd, id argument) 
     NeoWCRecordMomentEvent(@"WCNewCommentListViewController getWCMessagesWithDataArray: ARGUMENT", argument);
     id value = NeoWCOriginalCommentMessagesWithDataArray ? NeoWCOriginalCommentMessagesWithDataArray(self, _cmd, argument) : nil;
     NeoWCCaptureNotificationObjects(nil, value);
+    NeoWCRecordDiagnosticMessageSnapshot(@"commentList", value);
     NeoWCRecordMomentEvent(@"WCNewCommentListViewController getWCMessagesWithDataArray: RETURN", value);
     return value;
 }
@@ -459,7 +512,7 @@ static void NeoWCHookCommentViewDidAppear(id self, SEL _cmd, BOOL animated) {
     @synchronized (self) { installed = [self.installedHooks.allObjects sortedArrayUsingSelector:@selector(compare:)]; }
     [report appendFormat:@"已安装追踪 Hook：\n%@\n", installed.count > 0 ? [installed componentsJoinedByString:@"\n"] : @"<none>"];
 
-    NSArray<NSString *> *classNames = @[@"WCNotificationCenterMgr", @"WCSNSMessage", @"WCTimeLineViewController",
+    NSArray<NSString *> *classNames = @[@"WCNotificationCenterMgr", @"WCSNSMessage", @"WCUserComment", @"WCTimeLineViewController",
                                          @"WCCommentListViewController", @"WCNewCommentListViewController",
                                          @"FindFriendEntryViewController"];
     for (NSString *className in classNames) NeoWCAppendClassReport(report, className);
@@ -546,8 +599,8 @@ static void NeoWCHookCommentViewDidAppear(id self, SEL _cmd, BOOL animated) {
         cell.detailTextLabel.text = details[indexPath.row];
         cell.imageView.image = [UIImage systemImageNamed:symbols[indexPath.row]];
     } else {
-        NSArray *steps = @[@"1. 点击“开始记录”，然后关闭调试中心。",
-                           @"2. 停留在朋友圈主界面，让另一个账号点赞或评论；再打开新消息页并下拉刷新。",
+        NSArray *steps = @[@"1. 点击“开始记录”，然后关闭调试中心并进入朋友圈主界面。",
+                           @"2. 让另一个账号先点赞，等待红点变化；再发表评论，随后打开新消息页。",
                            @"3. 回到这里点击“停止并保存”，再点右上角“导出”发送诊断文件。"];
         cell.textLabel.text = steps[indexPath.row];
         cell.detailTextLabel.text = nil;
@@ -568,7 +621,7 @@ static void NeoWCHookCommentViewDidAppear(id self, SEL _cmd, BOOL animated) {
     NeoWCMomentsInteractionDiagnosticManager *manager = [NeoWCMomentsInteractionDiagnosticManager sharedManager];
     if (indexPath.row == 0) {
         [manager startRecording];
-        [self showMessage:@"已经开始记录" detail:@"现在关闭调试中心，进入朋友圈主界面等待一次点赞或评论，然后打开新消息页并下拉刷新。"];
+        [self showMessage:@"已经开始记录" detail:@"进入朋友圈主界面，让另一个账号先点赞、再评论；两次操作之间等待红点变化，最后打开新消息页。"];
     } else if (indexPath.row == 1) {
         [manager stopRecording];
         NSError *error = nil;

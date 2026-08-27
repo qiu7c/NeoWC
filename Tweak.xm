@@ -16,6 +16,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCSettingsCatalog.h"
 #import "Sources/NeoWCBackgroundKeeper.h"
 #import "Sources/NeoWCMomentsReminder.h"
+#import "Sources/NeoWCMomentsInteractionReminder.h"
 #import "Sources/NeoWCAccount.h"
 #import "Sources/NeoWCAntiRevoke.h"
 #import "Sources/NeoWCChatExport.h"
@@ -6478,11 +6479,13 @@ didReceiveNotificationResponse:(id)response
 - (void)applicationDidBecomeActive:(UIApplication *)application {
     %orig(application);
     NeoWCMomentsReminderTick();
+    NeoWCMomentsInteractionReminderTick();
 }
 
 - (void)careEnoughForTheLiving {
     %orig;
     NeoWCMomentsReminderTick();
+    NeoWCMomentsInteractionReminderTick();
 }
 
 - (void)userNotificationCenter:(id)center
@@ -6493,6 +6496,22 @@ didReceiveNotificationResponse:(id)response
         return;
     }
     %orig;
+}
+
+%end
+
+%hook WCNotificationCenterMgr
+
+- (unsigned int)getUnReadMessageCount {
+    unsigned int count = %orig;
+    NeoWCMomentsInteractionObserveUnreadCount(self, count);
+    return count;
+}
+
+- (id)getLastUnReadMessage {
+    id message = %orig;
+    NeoWCMomentsInteractionObserveLastUnreadMessage(self, message);
+    return message;
 }
 
 %end
