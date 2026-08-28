@@ -2,7 +2,10 @@
 #import "NeoWCAccount.h"
 #import "NeoWCLogging.h"
 #import "NeoWCEnhancements.h"
+#import "NeoWCInAppNotification.h"
+#import "NeoWCRuntimeFeatures.h"
 #import <UserNotifications/UserNotifications.h>
+#import <UIKit/UIKit.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <stdlib.h>
@@ -108,6 +111,15 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
         body = count > 1
             ? [NSString stringWithFormat:@"收到 %lu 条新互动，最新：%@", (unsigned long)count, detail]
             : detail;
+    }
+    if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
+        NSString *symbolName = messageType == 1 ? @"heart.fill" :
+                               (messageType == 2 ? @"bubble.left.fill" : @"bell.fill");
+        NSString *identifier = [@"moments-interaction:" stringByAppendingString:messageKey ?: @"unknown"];
+        NeoWCShowInAppNotification(title, body, identifier, symbolName, ^{
+            NeoWCOpenMomentsTimeline();
+        });
+        return;
     }
     UNMutableNotificationContent *content = [UNMutableNotificationContent new];
     content.title = title;

@@ -1,0 +1,305 @@
+#import "NeoWCInAppNotification.h"
+#import "NeoWCLogging.h"
+
+#import <UIKit/UIKit.h>
+
+static const NSTimeInterval NeoWCInAppNotificationDuration = 4.0;
+static const NSTimeInterval NeoWCInAppNotificationDuplicateInterval = 5.0;
+
+@interface NeoWCInAppNotificationRequest : NSObject
+@property (nonatomic, copy) NSString *title;
+@property (nonatomic, copy) NSString *body;
+@property (nonatomic, copy) NSString *identifier;
+@property (nonatomic, copy) NSString *symbolName;
+@property (nonatomic, copy, nullable) dispatch_block_t action;
+@end
+
+@implementation NeoWCInAppNotificationRequest
+@end
+
+@interface NeoWCInAppBannerView : UIControl
+@property (nonatomic, strong) UIImageView *symbolView;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *bodyLabel;
+- (instancetype)initWithRequest:(NeoWCInAppNotificationRequest *)request;
+@end
+
+@implementation NeoWCInAppBannerView
+
+- (instancetype)initWithRequest:(NeoWCInAppNotificationRequest *)request {
+    self = [super initWithFrame:CGRectZero];
+    if (!self) return nil;
+
+    self.translatesAutoresizingMaskIntoConstraints = NO;
+    self.layer.cornerRadius = 16.0;
+    self.layer.cornerCurve = kCACornerCurveContinuous;
+    self.layer.shadowColor = UIColor.blackColor.CGColor;
+    self.layer.shadowOpacity = 0.16;
+    self.layer.shadowRadius = 16.0;
+    self.layer.shadowOffset = CGSizeMake(0.0, 7.0);
+    self.accessibilityTraits = UIAccessibilityTraitButton;
+    self.accessibilityLabel = [NSString stringWithFormat:@"%@，%@", request.title, request.body];
+
+    UIVisualEffectView *background = [[UIVisualEffectView alloc]
+        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
+    background.translatesAutoresizingMaskIntoConstraints = NO;
+    background.userInteractionEnabled = NO;
+    background.layer.cornerRadius = 16.0;
+    background.layer.cornerCurve = kCACornerCurveContinuous;
+    background.clipsToBounds = YES;
+    [self addSubview:background];
+
+    UIView *iconBackground = [UIView new];
+    iconBackground.translatesAutoresizingMaskIntoConstraints = NO;
+    iconBackground.backgroundColor = [UIColor colorWithRed:0.12 green:0.72 blue:0.32 alpha:1.0];
+    iconBackground.layer.cornerRadius = 11.0;
+    iconBackground.layer.cornerCurve = kCACornerCurveContinuous;
+    [background.contentView addSubview:iconBackground];
+
+    UIImageSymbolConfiguration *configuration =
+        [UIImageSymbolConfiguration configurationWithPointSize:19.0 weight:UIImageSymbolWeightSemibold];
+    UIImage *symbol = [UIImage systemImageNamed:request.symbolName withConfiguration:configuration] ?:
+                      [UIImage systemImageNamed:@"bell.fill" withConfiguration:configuration];
+    self.symbolView = [[UIImageView alloc] initWithImage:symbol];
+    self.symbolView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.symbolView.contentMode = UIViewContentModeScaleAspectFit;
+    self.symbolView.tintColor = UIColor.whiteColor;
+    [iconBackground addSubview:self.symbolView];
+
+    self.titleLabel = [UILabel new];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.text = request.title;
+    self.titleLabel.textColor = UIColor.labelColor;
+    self.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    self.titleLabel.adjustsFontForContentSizeCategory = YES;
+    self.titleLabel.numberOfLines = 1;
+    self.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    [background.contentView addSubview:self.titleLabel];
+
+    self.bodyLabel = [UILabel new];
+    self.bodyLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.bodyLabel.text = request.body;
+    self.bodyLabel.textColor = UIColor.secondaryLabelColor;
+    self.bodyLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    self.bodyLabel.adjustsFontForContentSizeCategory = YES;
+    self.bodyLabel.numberOfLines = 2;
+    self.bodyLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    [background.contentView addSubview:self.bodyLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [background.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [background.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [background.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [background.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+        [iconBackground.leadingAnchor constraintEqualToAnchor:background.contentView.leadingAnchor constant:14.0],
+        [iconBackground.centerYAnchor constraintEqualToAnchor:background.contentView.centerYAnchor],
+        [iconBackground.widthAnchor constraintEqualToConstant:44.0],
+        [iconBackground.heightAnchor constraintEqualToConstant:44.0],
+        [self.symbolView.centerXAnchor constraintEqualToAnchor:iconBackground.centerXAnchor],
+        [self.symbolView.centerYAnchor constraintEqualToAnchor:iconBackground.centerYAnchor],
+        [self.symbolView.widthAnchor constraintEqualToConstant:24.0],
+        [self.symbolView.heightAnchor constraintEqualToConstant:24.0],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:iconBackground.trailingAnchor constant:12.0],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:background.contentView.trailingAnchor constant:-14.0],
+        [self.titleLabel.topAnchor constraintEqualToAnchor:background.contentView.topAnchor constant:12.0],
+        [self.bodyLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
+        [self.bodyLabel.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
+        [self.bodyLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:3.0],
+        [self.bodyLabel.bottomAnchor constraintEqualToAnchor:background.contentView.bottomAnchor constant:-12.0],
+        [self.heightAnchor constraintGreaterThanOrEqualToConstant:72.0],
+    ]];
+    return self;
+}
+
+@end
+
+@interface NeoWCInAppNotificationCenter : NSObject
+@property (nonatomic, strong) NSMutableArray<NeoWCInAppNotificationRequest *> *queue;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSDate *> *recentIdentifiers;
+@property (nonatomic, strong, nullable) NeoWCInAppNotificationRequest *currentRequest;
+@property (nonatomic, strong, nullable) NeoWCInAppBannerView *currentBanner;
+@property (nonatomic, assign) NSUInteger presentationToken;
+@property (nonatomic, assign) BOOL dismissing;
++ (instancetype)sharedCenter;
+- (void)enqueueRequest:(NeoWCInAppNotificationRequest *)request;
+- (void)showNextIfPossible;
+- (void)dismissCurrentAnimated:(BOOL)animated completion:(dispatch_block_t _Nullable)completion;
+- (void)dismissAll;
+@end
+
+@implementation NeoWCInAppNotificationCenter
+
++ (instancetype)sharedCenter {
+    static NeoWCInAppNotificationCenter *center;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        center = [NeoWCInAppNotificationCenter new];
+        center.queue = [NSMutableArray array];
+        center.recentIdentifiers = [NSMutableDictionary dictionary];
+        [NSNotificationCenter.defaultCenter addObserver:center
+                                               selector:@selector(applicationDidEnterBackground:)
+                                                   name:UIApplicationDidEnterBackgroundNotification
+                                                 object:nil];
+    });
+    return center;
+}
+
+- (UIWindow *)activeWindow {
+    UIWindow *fallback = nil;
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:UIWindowScene.class] ||
+            scene.activationState != UISceneActivationStateForegroundActive) continue;
+        for (UIWindow *window in ((UIWindowScene *)scene).windows.reverseObjectEnumerator) {
+            if (window.hidden || window.alpha <= 0.0 || window.windowLevel != UIWindowLevelNormal) continue;
+            if (window.isKeyWindow) return window;
+            if (!fallback) fallback = window;
+        }
+    }
+    return fallback;
+}
+
+- (void)enqueueRequest:(NeoWCInAppNotificationRequest *)request {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self enqueueRequest:request]; });
+        return;
+    }
+    if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return;
+
+    NSDate *now = NSDate.date;
+    for (NSString *identifier in self.recentIdentifiers.allKeys.copy) {
+        if ([now timeIntervalSinceDate:self.recentIdentifiers[identifier]] >
+            NeoWCInAppNotificationDuplicateInterval) {
+            [self.recentIdentifiers removeObjectForKey:identifier];
+        }
+    }
+    NSDate *lastShown = self.recentIdentifiers[request.identifier];
+    if (lastShown && [now timeIntervalSinceDate:lastShown] <= NeoWCInAppNotificationDuplicateInterval) return;
+    self.recentIdentifiers[request.identifier] = now;
+
+    [self.queue addObject:request];
+    if (self.queue.count > 8) [self.queue removeObjectAtIndex:0];
+    [self showNextIfPossible];
+}
+
+- (void)showNextIfPossible {
+    if (self.currentRequest || self.dismissing || self.queue.count == 0) return;
+    UIWindow *window = [self activeWindow];
+    if (!window) {
+        NeoWCLog(@"应用内提醒未显示：没有可用的前台窗口");
+        [self.queue removeAllObjects];
+        return;
+    }
+
+    NeoWCInAppNotificationRequest *request = self.queue.firstObject;
+    [self.queue removeObjectAtIndex:0];
+    self.currentRequest = request;
+    NeoWCInAppBannerView *banner = [[NeoWCInAppBannerView alloc] initWithRequest:request];
+    self.currentBanner = banner;
+    [banner addTarget:self action:@selector(bannerTapped:) forControlEvents:UIControlEventTouchUpInside];
+    UISwipeGestureRecognizer *swipe = [[UISwipeGestureRecognizer alloc]
+        initWithTarget:self action:@selector(bannerSwiped:)];
+    swipe.direction = UISwipeGestureRecognizerDirectionUp;
+    [banner addGestureRecognizer:swipe];
+    [window addSubview:banner];
+    [NSLayoutConstraint activateConstraints:@[
+        [banner.leadingAnchor constraintEqualToAnchor:window.leadingAnchor constant:12.0],
+        [banner.trailingAnchor constraintEqualToAnchor:window.trailingAnchor constant:-12.0],
+        [banner.topAnchor constraintEqualToAnchor:window.safeAreaLayoutGuide.topAnchor constant:8.0],
+    ]];
+    [window layoutIfNeeded];
+
+    banner.transform = CGAffineTransformMakeTranslation(0.0, -CGRectGetMaxY(banner.frame) - 20.0);
+    banner.alpha = 0.35;
+    [UIView animateWithDuration:0.42
+                          delay:0.0
+         usingSpringWithDamping:0.84
+          initialSpringVelocity:0.45
+                        options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionCurveEaseOut
+                     animations:^{
+        banner.transform = CGAffineTransformIdentity;
+        banner.alpha = 1.0;
+    } completion:nil];
+    [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
+
+    NSUInteger token = ++self.presentationToken;
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                 (int64_t)(NeoWCInAppNotificationDuration * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        typeof(self) strongSelf = weakSelf;
+        if (!strongSelf || strongSelf.presentationToken != token || strongSelf.currentRequest != request) return;
+        [strongSelf dismissCurrentAnimated:YES completion:nil];
+    });
+}
+
+- (void)bannerTapped:(__unused NeoWCInAppBannerView *)sender {
+    dispatch_block_t action = self.currentRequest.action;
+    [self dismissCurrentAnimated:YES completion:action];
+}
+
+- (void)bannerSwiped:(__unused UISwipeGestureRecognizer *)recognizer {
+    [self dismissCurrentAnimated:YES completion:nil];
+}
+
+- (void)dismissCurrentAnimated:(BOOL)animated completion:(dispatch_block_t)completion {
+    NeoWCInAppBannerView *banner = self.currentBanner;
+    if (!self.currentRequest || !banner) {
+        if (completion) completion();
+        return;
+    }
+    self.presentationToken++;
+    self.dismissing = YES;
+    self.currentRequest = nil;
+    void (^finished)(void) = ^{
+        [banner removeFromSuperview];
+        self.currentBanner = nil;
+        self.dismissing = NO;
+        if (completion) completion();
+        [self showNextIfPossible];
+    };
+    if (!animated) {
+        finished();
+        return;
+    }
+    [UIView animateWithDuration:0.22
+                          delay:0.0
+                        options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionCurveEaseIn
+                     animations:^{
+        banner.transform = CGAffineTransformMakeTranslation(0.0, -CGRectGetMaxY(banner.frame) - 20.0);
+        banner.alpha = 0.0;
+    } completion:^(__unused BOOL didFinish) { finished(); }];
+}
+
+- (void)applicationDidEnterBackground:(__unused NSNotification *)notification {
+    [self dismissAll];
+}
+
+- (void)dismissAll {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self dismissAll]; });
+        return;
+    }
+    [self.queue removeAllObjects];
+    [self dismissCurrentAnimated:NO completion:nil];
+}
+
+@end
+
+void NeoWCShowInAppNotification(NSString *title,
+                                NSString *body,
+                                NSString *identifier,
+                                NSString *symbolName,
+                                dispatch_block_t action) {
+    if (title.length == 0 || body.length == 0) return;
+    NeoWCInAppNotificationRequest *request = [NeoWCInAppNotificationRequest new];
+    request.title = title;
+    request.body = body;
+    request.identifier = identifier.length > 0 ? identifier : NSUUID.UUID.UUIDString;
+    request.symbolName = symbolName.length > 0 ? symbolName : @"bell.fill";
+    request.action = action;
+    [[NeoWCInAppNotificationCenter sharedCenter] enqueueRequest:request];
+}
+
+void NeoWCDismissInAppNotifications(void) {
+    [[NeoWCInAppNotificationCenter sharedCenter] dismissAll];
+}

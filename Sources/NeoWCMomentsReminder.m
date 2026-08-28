@@ -2,6 +2,8 @@
 #import "NeoWCAccount.h"
 #import "NeoWCLogging.h"
 #import "NeoWCEnhancements.h"
+#import "NeoWCInAppNotification.h"
+#import "NeoWCRuntimeFeatures.h"
 #import <AVFoundation/AVFoundation.h>
 #import <UserNotifications/UserNotifications.h>
 #import <UIKit/UIKit.h>
@@ -332,6 +334,14 @@ static void NeoWCMomentsReminderNotify(NSString *username, NSString *nickname, N
     if (name.length == 0) name = @"好友";
     NSString *body = content.length > 0 ? content : @"发布了新朋友圈";
     if (body.length > 180) body = [[body substringToIndex:177] stringByAppendingString:@"…"];
+    if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
+        NSString *identifier = [NSString stringWithFormat:@"moments-reminder:%@:%@",
+                                  username ?: @"unknown", tid ?: @"unknown"];
+        NeoWCShowInAppNotification(name, body, identifier, @"circle.grid.3x3", ^{
+            NeoWCOpenMomentsTimeline();
+        });
+        return;
+    }
     UNMutableNotificationContent *notification = [UNMutableNotificationContent new];
     notification.title = name;
     notification.body = body;
