@@ -39,14 +39,6 @@ static id NeoWCMomentsInteractionObjectGetter(id object, const char *selectorNam
     @catch (__unused NSException *exception) { return nil; }
 }
 
-static unsigned int NeoWCMomentsInteractionUnsignedGetter(id object, const char *selectorName) {
-    if (!object || !selectorName) return 0;
-    SEL selector = sel_registerName(selectorName);
-    if (!NeoWCMomentsInteractionMethodHasEncoding(object, selector, "I16@0:8")) return 0;
-    @try { return ((unsigned int (*)(id, SEL))objc_msgSend)(object, selector); }
-    @catch (__unused NSException *exception) { return 0; }
-}
-
 static NSString *NeoWCMomentsInteractionStringGetter(id object, const char *selectorName) {
     SEL selector = sel_registerName(selectorName);
     if (!NeoWCMomentsInteractionMethodMatches(object, selector, '@')) return nil;
@@ -82,23 +74,6 @@ static long long NeoWCMomentsInteractionMessageType(id message) {
     if (!matches) return 0;
     @try { return ((long long (*)(id, SEL))objc_msgSend)(message, selector); }
     @catch (__unused NSException *exception) { return 0; }
-}
-
-static id NeoWCMomentsInteractionCandidateFromMessages(id messages, NSString *lastMessageKey) {
-    if (![messages conformsToProtocol:@protocol(NSFastEnumeration)]) return nil;
-    id candidate = nil;
-    unsigned int candidateTime = 0;
-    for (id message in messages) {
-        NSString *key = NeoWCMomentsInteractionMessageKey(message);
-        if (key.length == 0 || [key isEqualToString:lastMessageKey]) continue;
-        id comment = NeoWCMomentsInteractionObjectGetter(message, "comment");
-        unsigned int createTime = NeoWCMomentsInteractionUnsignedGetter(comment, "createTime");
-        if (!candidate || createTime > candidateTime) {
-            candidate = message;
-            candidateTime = createTime;
-        }
-    }
-    return candidate;
 }
 
 static void NeoWCMomentsInteractionShowForegroundToast(NSString *message) {
@@ -202,7 +177,6 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
 @property (nonatomic, assign) NSUInteger pendingIncrease;
 @property (nonatomic, assign) BOOL baselineReady;
 @property (nonatomic, assign) BOOL lastMessageReadScheduled;
-@property (nonatomic, assign) NSUInteger resolutionAttempt;
 + (instancetype)sharedManager;
 - (void)observeManager:(id)manager unreadCount:(unsigned int)count;
 - (void)observeManager:(id)manager lastUnreadMessage:(id)message;
@@ -240,7 +214,6 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     self.lastMessageKey = [state[@"messageKey"] isKindOfClass:NSString.class] ? state[@"messageKey"] : nil;
     self.pendingIncrease = [state[@"pending"] unsignedIntegerValue];
     self.lastMessageReadScheduled = NO;
-    self.resolutionAttempt = 0;
 }
 
 - (void)saveState {
@@ -258,57 +231,15 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
         typeof(self) strongSelf = weakSelf;
+        strongSelf.lastMessageReadScheduled = NO;
         if (!strongSelf || strongSelf.pendingIncrease == 0 ||
-            !NeoWCEnhancementEnabled(NeoWCMomentsInteractionReminderEnabledKey)) {
-            strongSelf.lastMessageReadScheduled = NO;
-            return;
-        }
-
-        id message = nil;
+            !NeoWCEnhancementEnabled(NeoWCMomentsInteractionReminderEnabledKey)) return;
         SEL lastSelector = sel_registerName("getLastUnReadMessage");
-        if (NeoWCMomentsInteractionMethodHasEncoding(manager, lastSelector, "@16@0:8")) {
-            @try { message = ((id (*)(id, SEL))objc_msgSend)(manager, lastSelector); }
-            @catch (NSException *exception) {
-                NeoWCLog(@"读取朋友圈最后未读互动失败：%@", exception.reason ?: @"未知异常");
-            }
+        if (!NeoWCMomentsInteractionMethodHasEncoding(manager, lastSelector, "@16@0:8")) return;
+        @try { ((id (*)(id, SEL))objc_msgSend)(manager, lastSelector); }
+        @catch (NSException *exception) {
+            NeoWCLog(@"读取朋友圈最后未读互动失败：%@", exception.reason ?: @"未知异常");
         }
-        if (strongSelf.pendingIncrease > 0 && message) {
-            [strongSelf observeManager:manager lastUnreadMessage:message];
-        }
-
-        if (strongSelf.pendingIncrease > 0) {
-            SEL listSelector = sel_registerName("getUnReadMessages");
-            if (NeoWCMomentsInteractionMethodHasEncoding(manager, listSelector, "@16@0:8")) {
-                @try {
-                    id messages = ((id (*)(id, SEL))objc_msgSend)(manager, listSelector);
-                    id candidate = NeoWCMomentsInteractionCandidateFromMessages(messages, strongSelf.lastMessageKey);
-                    if (candidate) [strongSelf observeManager:manager lastUnreadMessage:candidate];
-                } @catch (NSException *exception) {
-                    NeoWCLog(@"读取朋友圈未读互动列表失败：%@", exception.reason ?: @"未知异常");
-                }
-            }
-        }
-
-        if (strongSelf.pendingIncrease == 0) {
-            strongSelf.lastMessageReadScheduled = NO;
-            strongSelf.resolutionAttempt = 0;
-            return;
-        }
-        static const NSTimeInterval retryDelays[] = { 1.0, 2.0, 4.0, 8.0, 15.0, 30.0 };
-        NSUInteger retryCount = sizeof(retryDelays) / sizeof(retryDelays[0]);
-        if (strongSelf.resolutionAttempt >= retryCount) {
-            strongSelf.lastMessageReadScheduled = NO;
-            return;
-        }
-        NSTimeInterval delay = retryDelays[strongSelf.resolutionAttempt++];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            typeof(self) retrySelf = weakSelf;
-            retrySelf.lastMessageReadScheduled = NO;
-            if (retrySelf.pendingIncrease > 0) {
-                [retrySelf scheduleLastMessageReadFromManager:retrySelf.notificationManager ?: manager];
-            }
-        });
     });
 }
 
@@ -327,18 +258,13 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
         return;
     }
     if (count > self.lastUnreadCount) {
-        if (self.pendingIncrease == 0) self.resolutionAttempt = 0;
         self.pendingIncrease += count - self.lastUnreadCount;
         self.lastUnreadCount = count;
         [self saveState];
         [self scheduleLastMessageReadFromManager:manager ?: self.notificationManager];
-    } else if (count == self.lastUnreadCount && self.pendingIncrease > 0 && !self.lastMessageReadScheduled) {
-        self.resolutionAttempt = 0;
-        [self scheduleLastMessageReadFromManager:manager ?: self.notificationManager];
     } else if (count < self.lastUnreadCount) {
         self.lastUnreadCount = count;
         self.pendingIncrease = 0;
-        self.resolutionAttempt = 0;
         [self saveState];
     }
 }
@@ -355,7 +281,6 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     if (messageKey.length == 0) return;
     NSUInteger increase = self.pendingIncrease;
     self.pendingIncrease = 0;
-    self.resolutionAttempt = 0;
     BOOL duplicate = [self.lastMessageKey isEqualToString:messageKey];
     long long messageType = NeoWCMomentsInteractionMessageType(message);
     self.lastMessageKey = messageKey;
@@ -370,11 +295,6 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     }
     if (!NeoWCEnhancementEnabled(NeoWCMomentsInteractionReminderEnabledKey)) return;
     id manager = self.notificationManager;
-    if (!manager) {
-        Class managerClass = objc_getClass("WCNotificationCenterMgr");
-        manager = managerClass ? NeoWCServiceForClass(managerClass) : nil;
-        if (manager) self.notificationManager = manager;
-    }
     SEL selector = sel_registerName("getUnReadMessageCount");
     if (!NeoWCMomentsInteractionMethodHasEncoding(manager, selector, "I16@0:8")) return;
     @try { ((unsigned int (*)(id, SEL))objc_msgSend)(manager, selector); }
@@ -389,7 +309,6 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     self.account = nil;
     self.baselineReady = NO;
     self.lastMessageReadScheduled = NO;
-    self.resolutionAttempt = 0;
     if (NeoWCEnhancementEnabled(NeoWCMomentsInteractionReminderEnabledKey)) [self tick];
 }
 

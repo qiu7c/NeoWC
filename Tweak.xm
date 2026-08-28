@@ -17,6 +17,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCBackgroundKeeper.h"
 #import "Sources/NeoWCMomentsReminder.h"
 #import "Sources/NeoWCMomentsInteractionReminder.h"
+#import "Sources/NeoWCMomentsPrewarmer.h"
 #import "Sources/NeoWCAccount.h"
 #import "Sources/NeoWCAntiRevoke.h"
 #import "Sources/NeoWCChatExport.h"
@@ -6467,6 +6468,7 @@ didReceiveNotificationResponse:(id)response
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
     %orig(application);
+    NeoWCMomentsPrewarmCancel();
     NeoWCBackgroundKeeperEnterBackground();
 }
 
@@ -6477,6 +6479,7 @@ didReceiveNotificationResponse:(id)response
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
     %orig(application);
+    NeoWCMomentsPrewarmIfNeeded();
     NeoWCMomentsReminderTick();
     NeoWCMomentsInteractionReminderTick();
 }
