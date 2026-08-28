@@ -6,6 +6,35 @@
 static const NSTimeInterval NeoWCInAppNotificationDuration = 4.0;
 static const NSTimeInterval NeoWCInAppNotificationDuplicateInterval = 5.0;
 
+NSString *const NeoWCInAppNotificationSymbolKey = @"com.qiu7c.neowc.in-app-notification.symbol";
+NSString *const NeoWCInAppNotificationHeightKey = @"com.qiu7c.neowc.in-app-notification.height";
+NSString *const NeoWCInAppNotificationBlurIntensityKey = @"com.qiu7c.neowc.in-app-notification.blur-intensity";
+CGFloat const NeoWCInAppNotificationMinimumHeight = 56.0;
+CGFloat const NeoWCInAppNotificationMaximumHeight = 90.0;
+
+NSString *NeoWCInAppNotificationResolvedSymbolName(NSString *requestedSymbolName) {
+    NSString *stored = [NSUserDefaults.standardUserDefaults stringForKey:NeoWCInAppNotificationSymbolKey];
+    if (stored.length == 0 || [stored isEqualToString:@"automatic"]) {
+        return requestedSymbolName.length > 0 ? requestedSymbolName : @"bell.fill";
+    }
+    return stored;
+}
+
+CGFloat NeoWCInAppNotificationPreferredHeight(void) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    CGFloat value = [defaults objectForKey:NeoWCInAppNotificationHeightKey]
+        ? [defaults doubleForKey:NeoWCInAppNotificationHeightKey] : 60.0;
+    return MIN(NeoWCInAppNotificationMaximumHeight,
+               MAX(NeoWCInAppNotificationMinimumHeight, value));
+}
+
+CGFloat NeoWCInAppNotificationBlurIntensity(void) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    CGFloat value = [defaults objectForKey:NeoWCInAppNotificationBlurIntensityKey]
+        ? [defaults doubleForKey:NeoWCInAppNotificationBlurIntensityKey] : 0.85;
+    return MIN(1.0, MAX(0.20, value));
+}
+
 @interface NeoWCInAppNotificationRequest : NSObject
 @property (nonatomic, copy) NSString *title;
 @property (nonatomic, copy) NSString *body;
@@ -21,6 +50,7 @@ static const NSTimeInterval NeoWCInAppNotificationDuplicateInterval = 5.0;
 @property (nonatomic, strong) UIImageView *symbolView;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *bodyLabel;
+@property (nonatomic, strong) UIViewPropertyAnimator *blurAnimator;
 - (instancetype)initWithRequest:(NeoWCInAppNotificationRequest *)request;
 @end
 
@@ -31,34 +61,43 @@ static const NSTimeInterval NeoWCInAppNotificationDuplicateInterval = 5.0;
     if (!self) return nil;
 
     self.translatesAutoresizingMaskIntoConstraints = NO;
-    self.layer.cornerRadius = 16.0;
+    self.layer.cornerRadius = 14.0;
     self.layer.cornerCurve = kCACornerCurveContinuous;
     self.layer.shadowColor = UIColor.blackColor.CGColor;
     self.layer.shadowOpacity = 0.16;
-    self.layer.shadowRadius = 16.0;
-    self.layer.shadowOffset = CGSizeMake(0.0, 7.0);
+    self.layer.shadowRadius = 12.0;
+    self.layer.shadowOffset = CGSizeMake(0.0, 5.0);
     self.accessibilityTraits = UIAccessibilityTraitButton;
     self.accessibilityLabel = [NSString stringWithFormat:@"%@，%@", request.title, request.body];
 
-    UIVisualEffectView *background = [[UIVisualEffectView alloc]
-        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
+    UIVisualEffectView *background = [[UIVisualEffectView alloc] initWithEffect:nil];
     background.translatesAutoresizingMaskIntoConstraints = NO;
     background.userInteractionEnabled = NO;
-    background.layer.cornerRadius = 16.0;
+    background.layer.cornerRadius = 14.0;
     background.layer.cornerCurve = kCACornerCurveContinuous;
     background.clipsToBounds = YES;
     [self addSubview:background];
 
+    CGFloat blurIntensity = NeoWCInAppNotificationBlurIntensity();
+    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+    self.blurAnimator = [[UIViewPropertyAnimator alloc] initWithDuration:1.0
+                                                                   curve:UIViewAnimationCurveLinear
+                                                              animations:^{ background.effect = blurEffect; }];
+    self.blurAnimator.fractionComplete = blurIntensity;
+    background.contentView.backgroundColor =
+        [UIColor.systemBackgroundColor colorWithAlphaComponent:(1.0 - blurIntensity) * 0.55];
+
     UIView *iconBackground = [UIView new];
     iconBackground.translatesAutoresizingMaskIntoConstraints = NO;
     iconBackground.backgroundColor = [UIColor colorWithRed:0.12 green:0.72 blue:0.32 alpha:1.0];
-    iconBackground.layer.cornerRadius = 11.0;
+    iconBackground.layer.cornerRadius = 10.0;
     iconBackground.layer.cornerCurve = kCACornerCurveContinuous;
     [background.contentView addSubview:iconBackground];
 
     UIImageSymbolConfiguration *configuration =
         [UIImageSymbolConfiguration configurationWithPointSize:19.0 weight:UIImageSymbolWeightSemibold];
-    UIImage *symbol = [UIImage systemImageNamed:request.symbolName withConfiguration:configuration] ?:
+    NSString *resolvedSymbolName = NeoWCInAppNotificationResolvedSymbolName(request.symbolName);
+    UIImage *symbol = [UIImage systemImageNamed:resolvedSymbolName withConfiguration:configuration] ?:
                       [UIImage systemImageNamed:@"bell.fill" withConfiguration:configuration];
     self.symbolView = [[UIImageView alloc] initWithImage:symbol];
     self.symbolView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -91,22 +130,22 @@ static const NSTimeInterval NeoWCInAppNotificationDuplicateInterval = 5.0;
         [background.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [background.topAnchor constraintEqualToAnchor:self.topAnchor],
         [background.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
-        [iconBackground.leadingAnchor constraintEqualToAnchor:background.contentView.leadingAnchor constant:14.0],
+        [iconBackground.leadingAnchor constraintEqualToAnchor:background.contentView.leadingAnchor constant:12.0],
         [iconBackground.centerYAnchor constraintEqualToAnchor:background.contentView.centerYAnchor],
-        [iconBackground.widthAnchor constraintEqualToConstant:44.0],
-        [iconBackground.heightAnchor constraintEqualToConstant:44.0],
+        [iconBackground.widthAnchor constraintEqualToConstant:38.0],
+        [iconBackground.heightAnchor constraintEqualToConstant:38.0],
         [self.symbolView.centerXAnchor constraintEqualToAnchor:iconBackground.centerXAnchor],
         [self.symbolView.centerYAnchor constraintEqualToAnchor:iconBackground.centerYAnchor],
-        [self.symbolView.widthAnchor constraintEqualToConstant:24.0],
-        [self.symbolView.heightAnchor constraintEqualToConstant:24.0],
-        [self.titleLabel.leadingAnchor constraintEqualToAnchor:iconBackground.trailingAnchor constant:12.0],
-        [self.titleLabel.trailingAnchor constraintEqualToAnchor:background.contentView.trailingAnchor constant:-14.0],
-        [self.titleLabel.topAnchor constraintEqualToAnchor:background.contentView.topAnchor constant:12.0],
+        [self.symbolView.widthAnchor constraintEqualToConstant:21.0],
+        [self.symbolView.heightAnchor constraintEqualToConstant:21.0],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:iconBackground.trailingAnchor constant:10.0],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:background.contentView.trailingAnchor constant:-12.0],
+        [self.titleLabel.topAnchor constraintEqualToAnchor:background.contentView.topAnchor constant:9.0],
         [self.bodyLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
         [self.bodyLabel.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
-        [self.bodyLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:3.0],
-        [self.bodyLabel.bottomAnchor constraintEqualToAnchor:background.contentView.bottomAnchor constant:-12.0],
-        [self.heightAnchor constraintGreaterThanOrEqualToConstant:72.0],
+        [self.bodyLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:1.0],
+        [self.bodyLabel.bottomAnchor constraintEqualToAnchor:background.contentView.bottomAnchor constant:-9.0],
+        [self.heightAnchor constraintGreaterThanOrEqualToConstant:NeoWCInAppNotificationPreferredHeight()],
     ]];
     return self;
 }

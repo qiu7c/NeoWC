@@ -9,6 +9,7 @@
 #import "NeoWCBackgroundKeeper.h"
 #import "NeoWCMomentsInteractionReminder.h"
 #import "NeoWCMomentsReminder.h"
+#import "NeoWCInAppNotification.h"
 #import <stdlib.h>
 
 NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
@@ -243,6 +244,9 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCScrollHighRefreshRateEnabledKey: @NO,
         NeoWCGlobalAvatarRoundingEnabledKey: @NO,
         NeoWCGlobalAvatarCornerPercentKey: @100.0,
+        NeoWCInAppNotificationSymbolKey: @"automatic",
+        NeoWCInAppNotificationHeightKey: @60.0,
+        NeoWCInAppNotificationBlurIntensityKey: @0.85,
         NeoWCExpandedCategoriesKey: @[@"messages"],
         NeoWCCollapsedFeaturesKey: @[],
     }];
@@ -260,7 +264,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
             NeoWCItem(@"界面禁用", @"隐藏不需要的界面元素和广告", @"eye.slash", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenInterfaceDisabled),
             NeoWCItem(@"界面优化", @"头像、胶囊、缩放与输入栏样式", @"paintbrush", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenInterface),
             NeoWCItem(@"常用增强", @"自动化、扫码、资料和本地显示", @"bolt", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenEnhancements),
-            NeoWCItem(@"插件设置", @"日志、配置与插件入口管理", @"gearshape.2", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenPlugin),
+            NeoWCItem(@"插件设置", @"通知样式、日志、配置与插件入口", @"gearshape.2", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenPlugin),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"about" title:@"关于"
                                              footer:[NSString stringWithFormat:@"NeoWC · %@", NeoWCDisplayVersion]
@@ -685,6 +689,14 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
 }
 
 static NSArray<NeoWCSettingSection *> *NeoWCPluginSections(NSUserDefaults *defaults) {
+    NSString *notificationSymbol = [defaults stringForKey:NeoWCInAppNotificationSymbolKey] ?: @"automatic";
+    NSString *notificationValue = [notificationSymbol isEqualToString:@"automatic"]
+        ? @"跟随类型" : @"自定义";
+    NSArray<NeoWCSettingItem *> *notifications = @[
+        NeoWCItem(@"应用内通知样式", @"调整左侧图标、横幅高度和背景模糊度", @"bell.fill",
+                  NeoWCSettingRowKindDetail, nil, notificationValue,
+                  NeoWCSettingActionInAppNotificationAppearance),
+    ];
     NSArray<NeoWCSettingItem *> *logging = @[
         NeoWCItem(@"记录运行日志", @"关闭后停止新增普通日志，最多保留本次运行 500 条", @"text.alignleft", NeoWCSettingRowKindSwitch, NeoWCLoggingEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"查看运行日志", @"查看、复制或清空本次微信运行记录", @"doc.text.magnifyingglass", NeoWCSettingRowKindDetail, nil,
@@ -696,6 +708,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCPluginSections(NSUserDefaults *defau
     ];
     (void)defaults;
     return @[
+        [NeoWCSettingSection sectionWithIdentifier:@"in-app-notifications" title:@"通知" footer:@"仅影响 NeoWC 在微信前台显示的自绘提醒。" items:notifications],
         [NeoWCSettingSection sectionWithIdentifier:@"logging" title:@"日志" footer:@"运行日志只保存在内存中，退出微信后自动清空。" items:logging],
         [NeoWCSettingSection sectionWithIdentifier:@"plugin-management" title:@"配置与入口" footer:nil items:management],
     ];

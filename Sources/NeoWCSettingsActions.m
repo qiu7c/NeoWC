@@ -11,6 +11,7 @@
 #import "NeoWCMeMenuViewController.h"
 #import "NeoWCMessageBlock.h"
 #import "NeoWCPluginManager.h"
+#import "NeoWCInAppNotificationSettingsViewController.h"
 #import "NeoWCReleaseNotes.h"
 #import "NeoWCQuickReplyViewController.h"
 #import "NeoWCSendConfirmationViewController.h"
@@ -680,6 +681,7 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         case NeoWCSettingActionMessageTimePosition: [self presentMessageTimePositionPicker]; break;
         case NeoWCSettingActionMessageTimeAvatarSpacing: [self presentNumberEditorWithTitle:item.title message:@"请输入 -6 到 8 之间的数值；负值向上，正值向下" key:NeoWCChatMessageTimeAvatarSpacingKey minimum:-6 maximum:8 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionPluginManager: [self push:[WCPluginsViewController new]]; break;
+        case NeoWCSettingActionInAppNotificationAppearance: [self push:[NeoWCInAppNotificationSettingsViewController new]]; break;
         case NeoWCSettingActionHapticIntensity: [self presentHapticIntensityPicker]; break;
         case NeoWCSettingActionStepMode: [self presentStepModePicker]; break;
         case NeoWCSettingActionFixedSteps: [self presentFixedStepsEditor]; break;
