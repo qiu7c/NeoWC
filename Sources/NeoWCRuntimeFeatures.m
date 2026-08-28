@@ -515,11 +515,7 @@ UNNotificationPresentationOptions NeoWCWillPresentOptionsForNotification(
                              [neoWCType isEqualToString:@"moments-interaction"];
     if (!isMomentsReminder) return originalOptions;
     UNNotificationPresentationOptions options = originalOptions | UNNotificationPresentationOptionSound;
-    if (@available(iOS 14.0, *)) {
-        options |= UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList;
-    } else {
-        options |= UNNotificationPresentationOptionAlert;
-    }
+    options |= UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList;
     return options;
 }
 
