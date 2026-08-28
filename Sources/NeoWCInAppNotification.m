@@ -5,6 +5,7 @@
 
 static const NSTimeInterval NeoWCInAppNotificationDuration = 4.0;
 static const NSTimeInterval NeoWCInAppNotificationDuplicateInterval = 5.0;
+static const NSTimeInterval NeoWCTransientHUDDuration = 1.6;
 
 NSString *const NeoWCInAppNotificationSymbolKey = @"com.qiu7c.neowc.in-app-notification.symbol";
 NSString *const NeoWCInAppNotificationHeightKey = @"com.qiu7c.neowc.in-app-notification.height";
@@ -35,6 +36,20 @@ CGFloat NeoWCInAppNotificationBlurIntensity(void) {
     return MIN(1.0, MAX(0.20, value));
 }
 
+static UIWindow *NeoWCInAppActiveWindow(void) {
+    UIWindow *fallback = nil;
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:UIWindowScene.class] ||
+            scene.activationState != UISceneActivationStateForegroundActive) continue;
+        for (UIWindow *window in ((UIWindowScene *)scene).windows.reverseObjectEnumerator) {
+            if (window.hidden || window.alpha <= 0.0 || window.windowLevel != UIWindowLevelNormal) continue;
+            if (window.isKeyWindow) return window;
+            if (!fallback) fallback = window;
+        }
+    }
+    return fallback;
+}
+
 @interface NeoWCInAppNotificationRequest : NSObject
 @property (nonatomic, copy) NSString *title;
 @property (nonatomic, copy) NSString *body;
@@ -50,7 +65,6 @@ CGFloat NeoWCInAppNotificationBlurIntensity(void) {
 @property (nonatomic, strong) UIImageView *symbolView;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *bodyLabel;
-@property (nonatomic, strong) UIViewPropertyAnimator *blurAnimator;
 - (instancetype)initWithRequest:(NeoWCInAppNotificationRequest *)request;
 @end
 
@@ -80,10 +94,13 @@ CGFloat NeoWCInAppNotificationBlurIntensity(void) {
 
     CGFloat blurIntensity = NeoWCInAppNotificationBlurIntensity();
     UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-    self.blurAnimator = [[UIViewPropertyAnimator alloc] initWithDuration:1.0
-                                                                   curve:UIViewAnimationCurveLinear
-                                                              animations:^{ background.effect = blurEffect; }];
-    self.blurAnimator.fractionComplete = blurIntensity;
+    UIViewPropertyAnimator *blurAnimator = [[UIViewPropertyAnimator alloc]
+        initWithDuration:1.0
+                   curve:UIViewAnimationCurveLinear
+              animations:^{ background.effect = blurEffect; }];
+    blurAnimator.fractionComplete = blurIntensity;
+    [blurAnimator stopAnimation:NO];
+    [blurAnimator finishAnimationAtPosition:UIViewAnimatingPositionCurrent];
     background.contentView.backgroundColor =
         [UIColor.systemBackgroundColor colorWithAlphaComponent:(1.0 - blurIntensity) * 0.55];
 
@@ -152,6 +169,147 @@ CGFloat NeoWCInAppNotificationBlurIntensity(void) {
 
 @end
 
+@interface NeoWCTransientHUDCenter : NSObject
+@property (nonatomic, strong, nullable) UIView *currentHUD;
+@property (nonatomic, assign) NSUInteger presentationToken;
++ (instancetype)sharedCenter;
+- (void)showMessage:(NSString *)message symbolName:(NSString *)symbolName;
+@end
+
+@implementation NeoWCTransientHUDCenter
+
++ (instancetype)sharedCenter {
+    static NeoWCTransientHUDCenter *center;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        center = [NeoWCTransientHUDCenter new];
+        [NSNotificationCenter.defaultCenter addObserver:center
+                                               selector:@selector(applicationDidEnterBackground:)
+                                                   name:UIApplicationDidEnterBackgroundNotification
+                                                 object:nil];
+    });
+    return center;
+}
+
+- (void)applicationDidEnterBackground:(__unused NSNotification *)notification {
+    self.presentationToken++;
+    [self.currentHUD.layer removeAllAnimations];
+    [self.currentHUD removeFromSuperview];
+    self.currentHUD = nil;
+}
+
+- (void)showMessage:(NSString *)message symbolName:(NSString *)symbolName {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self showMessage:message symbolName:symbolName]; });
+        return;
+    }
+    if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return;
+    UIWindow *window = NeoWCInAppActiveWindow();
+    if (!window) {
+        NeoWCLog(@"居中提示未显示：没有可用的前台窗口");
+        return;
+    }
+
+    self.presentationToken++;
+    [self.currentHUD.layer removeAllAnimations];
+    [self.currentHUD removeFromSuperview];
+
+    UIView *hud = [UIView new];
+    hud.translatesAutoresizingMaskIntoConstraints = NO;
+    hud.userInteractionEnabled = NO;
+    hud.layer.cornerRadius = 14.0;
+    hud.layer.cornerCurve = kCACornerCurveContinuous;
+    hud.layer.shadowColor = UIColor.blackColor.CGColor;
+    hud.layer.shadowOpacity = 0.18;
+    hud.layer.shadowRadius = 18.0;
+    hud.layer.shadowOffset = CGSizeMake(0.0, 8.0);
+
+    UIVisualEffectView *background = [[UIVisualEffectView alloc]
+        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
+    background.translatesAutoresizingMaskIntoConstraints = NO;
+    background.userInteractionEnabled = NO;
+    background.layer.cornerRadius = 14.0;
+    background.layer.cornerCurve = kCACornerCurveContinuous;
+    background.clipsToBounds = YES;
+    [hud addSubview:background];
+
+    UIImageSymbolConfiguration *configuration =
+        [UIImageSymbolConfiguration configurationWithPointSize:31.0 weight:UIImageSymbolWeightMedium];
+    UIImage *symbol = [UIImage systemImageNamed:symbolName withConfiguration:configuration] ?:
+                      [UIImage systemImageNamed:@"checkmark.circle.fill" withConfiguration:configuration];
+    UIImageView *symbolView = [[UIImageView alloc] initWithImage:symbol];
+    symbolView.translatesAutoresizingMaskIntoConstraints = NO;
+    symbolView.contentMode = UIViewContentModeScaleAspectFit;
+    symbolView.tintColor = [UIColor colorWithRed:0.10 green:0.70 blue:0.29 alpha:1.0];
+    [background.contentView addSubview:symbolView];
+
+    UILabel *label = [UILabel new];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.text = message;
+    label.textAlignment = NSTextAlignmentCenter;
+    label.textColor = UIColor.labelColor;
+    label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    label.adjustsFontForContentSizeCategory = YES;
+    label.numberOfLines = 2;
+    [background.contentView addSubview:label];
+
+    [window addSubview:hud];
+    [NSLayoutConstraint activateConstraints:@[
+        [hud.centerXAnchor constraintEqualToAnchor:window.centerXAnchor],
+        [hud.centerYAnchor constraintEqualToAnchor:window.centerYAnchor constant:-12.0],
+        [hud.widthAnchor constraintEqualToConstant:238.0],
+        [hud.heightAnchor constraintGreaterThanOrEqualToConstant:112.0],
+        [background.leadingAnchor constraintEqualToAnchor:hud.leadingAnchor],
+        [background.trailingAnchor constraintEqualToAnchor:hud.trailingAnchor],
+        [background.topAnchor constraintEqualToAnchor:hud.topAnchor],
+        [background.bottomAnchor constraintEqualToAnchor:hud.bottomAnchor],
+        [symbolView.centerXAnchor constraintEqualToAnchor:background.contentView.centerXAnchor],
+        [symbolView.topAnchor constraintEqualToAnchor:background.contentView.topAnchor constant:19.0],
+        [symbolView.widthAnchor constraintEqualToConstant:36.0],
+        [symbolView.heightAnchor constraintEqualToConstant:36.0],
+        [label.leadingAnchor constraintEqualToAnchor:background.contentView.leadingAnchor constant:16.0],
+        [label.trailingAnchor constraintEqualToAnchor:background.contentView.trailingAnchor constant:-16.0],
+        [label.topAnchor constraintEqualToAnchor:symbolView.bottomAnchor constant:10.0],
+        [label.bottomAnchor constraintEqualToAnchor:background.contentView.bottomAnchor constant:-17.0],
+    ]];
+    self.currentHUD = hud;
+    [window layoutIfNeeded];
+
+    hud.alpha = 0.0;
+    hud.transform = CGAffineTransformMakeScale(0.92, 0.92);
+    [UIView animateWithDuration:0.22
+                          delay:0.0
+         usingSpringWithDamping:0.86
+          initialSpringVelocity:0.25
+                        options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionCurveEaseOut
+                     animations:^{
+        hud.alpha = 1.0;
+        hud.transform = CGAffineTransformIdentity;
+    } completion:nil];
+
+    NSUInteger token = self.presentationToken;
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                 (int64_t)(NeoWCTransientHUDDuration * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        typeof(self) strongSelf = weakSelf;
+        if (!strongSelf || strongSelf.presentationToken != token || strongSelf.currentHUD != hud) return;
+        [UIView animateWithDuration:0.20
+                              delay:0.0
+                            options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionCurveEaseIn
+                         animations:^{
+            hud.alpha = 0.0;
+            hud.transform = CGAffineTransformMakeScale(0.96, 0.96);
+        } completion:^(__unused BOOL finished) {
+            if (strongSelf.currentHUD != hud) return;
+            [hud removeFromSuperview];
+            strongSelf.currentHUD = nil;
+        }];
+    });
+}
+
+@end
+
 @interface NeoWCInAppNotificationCenter : NSObject
 @property (nonatomic, strong) NSMutableArray<NeoWCInAppNotificationRequest *> *queue;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSDate *> *recentIdentifiers;
@@ -184,17 +342,7 @@ CGFloat NeoWCInAppNotificationBlurIntensity(void) {
 }
 
 - (UIWindow *)activeWindow {
-    UIWindow *fallback = nil;
-    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-        if (![scene isKindOfClass:UIWindowScene.class] ||
-            scene.activationState != UISceneActivationStateForegroundActive) continue;
-        for (UIWindow *window in ((UIWindowScene *)scene).windows.reverseObjectEnumerator) {
-            if (window.hidden || window.alpha <= 0.0 || window.windowLevel != UIWindowLevelNormal) continue;
-            if (window.isKeyWindow) return window;
-            if (!fallback) fallback = window;
-        }
-    }
-    return fallback;
+    return NeoWCInAppActiveWindow();
 }
 
 - (void)enqueueRequest:(NeoWCInAppNotificationRequest *)request {
@@ -337,6 +485,13 @@ void NeoWCShowInAppNotification(NSString *title,
     request.symbolName = symbolName.length > 0 ? symbolName : @"bell.fill";
     request.action = action;
     [[NeoWCInAppNotificationCenter sharedCenter] enqueueRequest:request];
+}
+
+void NeoWCShowTransientHUD(NSString *message, NSString *symbolName) {
+    if (message.length == 0) return;
+    [[NeoWCTransientHUDCenter sharedCenter]
+        showMessage:message
+         symbolName:symbolName.length > 0 ? symbolName : @"checkmark.circle.fill"];
 }
 
 void NeoWCDismissInAppNotifications(void) {

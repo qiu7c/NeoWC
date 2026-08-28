@@ -17,6 +17,8 @@ FOUNDATION_EXPORT void NeoWCShowInAppNotification(NSString *title,
                                                    NSString *identifier,
                                                    NSString *symbolName,
                                                    dispatch_block_t _Nullable action);
+FOUNDATION_EXPORT void NeoWCShowTransientHUD(NSString *message,
+                                             NSString *symbolName);
 FOUNDATION_EXPORT void NeoWCDismissInAppNotifications(void);
 
 NS_ASSUME_NONNULL_END

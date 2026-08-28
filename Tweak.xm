@@ -38,6 +38,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCContactInfoCard.h"
 #import "Sources/NeoWCInfoListViewController.h"
 #import "Sources/NeoWCSilkEncoder.h"
+#import "Sources/NeoWCInAppNotification.h"
 
 @interface WCActionSheet : NSObject
 - (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
@@ -6030,38 +6031,6 @@ static void NeoWCRemoveWalletLongPressIfNeeded(UIView *view) {
 
 @end
 
-static void NeoWCShowLoginToast(NSString *message) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *window = NeoWCActiveApplicationWindow();
-        UIViewController *controller = NeoWCTopControllerForLoginToast(window.rootViewController);
-        if (!controller.view.window) return;
-
-        UILabel *toast = [UILabel new];
-        toast.translatesAutoresizingMaskIntoConstraints = NO;
-        toast.text = message;
-        toast.textAlignment = NSTextAlignmentCenter;
-        toast.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
-        toast.textColor = UIColor.whiteColor;
-        toast.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.90];
-        toast.layer.cornerRadius = 12.0;
-        toast.layer.cornerCurve = kCACornerCurveContinuous;
-        toast.layer.masksToBounds = YES;
-        toast.userInteractionEnabled = NO;
-        [controller.view addSubview:toast];
-        [NSLayoutConstraint activateConstraints:@[
-            [toast.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
-            [toast.bottomAnchor constraintEqualToAnchor:controller.view.safeAreaLayoutGuide.bottomAnchor constant:-44.0],
-            [toast.heightAnchor constraintEqualToConstant:40.0],
-            [toast.widthAnchor constraintGreaterThanOrEqualToConstant:164.0],
-        ]];
-        toast.alpha = 0.0;
-        [UIView animateWithDuration:0.18 animations:^{ toast.alpha = 1.0; }];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [UIView animateWithDuration:0.2 animations:^{ toast.alpha = 0.0; } completion:^(__unused BOOL finished) { [toast removeFromSuperview]; }];
-        });
-    });
-}
-
 static BOOL NeoWCTryAuthorizeGame(MMAuthorizeUserInfoViewController *controller) {
     if (!controller || !NeoWCEnhancementEnabled(NeoWCAutoGameAuthorizeKey)) return NO;
     if ([objc_getAssociatedObject(controller, &NeoWCGameDidAuthorizeKey) boolValue]) return YES;
@@ -6070,7 +6039,7 @@ static BOOL NeoWCTryAuthorizeGame(MMAuthorizeUserInfoViewController *controller)
     objc_setAssociatedObject(controller, &NeoWCGameDidAuthorizeKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [allowButton sendActionsForControlEvents:UIControlEventTouchUpInside];
     NeoWCLog(@"已自动允许游戏扫码授权");
-    NeoWCShowLoginToast(@"已自动允许游戏授权");
+    NeoWCShowTransientHUD(@"已自动允许游戏授权", @"gamecontroller.fill");
     return YES;
 }
 
@@ -12475,7 +12444,7 @@ static BOOL NeoWCPresentCallConfirmation(VoIPBubbleMessageCellView *cell, BOOL v
     dispatch_async(dispatch_get_main_queue(), ^{
         [self onTapConfirmButton];
         NeoWCLog(@"已自动确认多设备登录");
-        NeoWCShowLoginToast(@"已自动确认设备登录");
+        NeoWCShowTransientHUD(@"已自动确认设备登录", @"desktopcomputer");
     });
 }
 
