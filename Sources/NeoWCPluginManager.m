@@ -248,6 +248,190 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
 
 @class WCPluginsViewController;
 
+@interface WCPCategoryPillControl : UIControl
+@property (nonatomic, copy) NSArray<NSString *> *categories;
+@property (nonatomic, assign) NSInteger selectedSegmentIndex;
+@end
+
+@interface WCPCategoryPillControl ()
+@property (nonatomic, strong) UIView *backdropView;
+@property (nonatomic, strong) UIView *selectionView;
+@property (nonatomic, strong) UIStackView *stackView;
+@property (nonatomic, copy) NSArray<UIButton *> *buttons;
+@property (nonatomic, strong, nullable) NSLayoutConstraint *selectionCenterConstraint;
+@property (nonatomic, strong, nullable) NSLayoutConstraint *selectionWidthConstraint;
+@end
+
+@implementation WCPCategoryPillControl
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (!self) return nil;
+
+    self.translatesAutoresizingMaskIntoConstraints = NO;
+    self.layer.cornerRadius = 20.0;
+    self.layer.cornerCurve = kCACornerCurveContinuous;
+
+    self.backdropView = [UIView new];
+    self.backdropView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.backdropView.userInteractionEnabled = NO;
+    self.backdropView.layer.cornerRadius = 20.0;
+    self.backdropView.layer.cornerCurve = kCACornerCurveContinuous;
+    self.backdropView.layer.masksToBounds = YES;
+    [self addSubview:self.backdropView];
+
+    self.selectionView = [UIView new];
+    self.selectionView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.selectionView.userInteractionEnabled = NO;
+    self.selectionView.layer.cornerRadius = 17.0;
+    self.selectionView.layer.cornerCurve = kCACornerCurveContinuous;
+    self.selectionView.layer.shadowColor = UIColor.blackColor.CGColor;
+    self.selectionView.layer.shadowOffset = CGSizeMake(0.0, 2.0);
+    self.selectionView.layer.shadowRadius = 5.0;
+    [self addSubview:self.selectionView];
+
+    self.stackView = [[UIStackView alloc] initWithFrame:CGRectZero];
+    self.stackView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.stackView.axis = UILayoutConstraintAxisHorizontal;
+    self.stackView.alignment = UIStackViewAlignmentFill;
+    self.stackView.distribution = UIStackViewDistributionFillEqually;
+    self.stackView.spacing = 0.0;
+    [self addSubview:self.stackView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.backdropView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [self.backdropView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [self.backdropView.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [self.backdropView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+        [self.stackView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:3.0],
+        [self.stackView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-3.0],
+        [self.stackView.topAnchor constraintEqualToAnchor:self.topAnchor constant:3.0],
+        [self.stackView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-3.0],
+        [self.selectionView.centerYAnchor constraintEqualToAnchor:self.stackView.centerYAnchor],
+        [self.selectionView.heightAnchor constraintEqualToAnchor:self.stackView.heightAnchor],
+    ]];
+    [self updateColors];
+    return self;
+}
+
+- (void)setCategories:(NSArray<NSString *> *)categories {
+    NSArray<NSString *> *normalized = [categories copy] ?: @[];
+    if ([_categories isEqualToArray:normalized]) return;
+    _categories = normalized;
+    for (UIButton *button in self.buttons) {
+        [self.stackView removeArrangedSubview:button];
+        [button removeFromSuperview];
+    }
+
+    NSMutableArray<UIButton *> *buttons = [NSMutableArray arrayWithCapacity:_categories.count];
+    [_categories enumerateObjectsUsingBlock:^(NSString *title, NSUInteger index, __unused BOOL *stop) {
+        UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+        button.tag = (NSInteger)index;
+        button.titleLabel.font = WCPScaledFont(UIFontTextStyleSubheadline, 14.0, UIFontWeightRegular);
+        button.titleLabel.adjustsFontSizeToFitWidth = YES;
+        button.titleLabel.minimumScaleFactor = 0.72;
+        button.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        button.accessibilityLabel = title;
+        [button setTitle:title forState:UIControlStateNormal];
+        [button addTarget:self action:@selector(categoryButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [self.stackView addArrangedSubview:button];
+        [buttons addObject:button];
+    }];
+    self.buttons = buttons;
+    if (_categories.count == 0) {
+        _selectedSegmentIndex = UISegmentedControlNoSegment;
+    } else if (_selectedSegmentIndex < 0 || _selectedSegmentIndex >= (NSInteger)_categories.count) {
+        _selectedSegmentIndex = 0;
+    }
+    [self updateSelectionAnimated:NO];
+}
+
+- (void)setSelectedSegmentIndex:(NSInteger)selectedSegmentIndex {
+    if (self.categories.count == 0) {
+        _selectedSegmentIndex = UISegmentedControlNoSegment;
+    } else {
+        _selectedSegmentIndex = MAX(0, MIN(selectedSegmentIndex, (NSInteger)self.categories.count - 1));
+    }
+    [self updateSelectionAnimated:NO];
+}
+
+- (void)categoryButtonTapped:(UIButton *)button {
+    if (button.tag == self.selectedSegmentIndex) return;
+    _selectedSegmentIndex = button.tag;
+    [self updateSelectionAnimated:YES];
+    [self sendActionsForControlEvents:UIControlEventValueChanged];
+}
+
+- (void)updateSelectionAnimated:(BOOL)animated {
+    BOOL hasSelection = self.selectedSegmentIndex >= 0 &&
+                        self.selectedSegmentIndex < (NSInteger)self.buttons.count;
+    self.selectionView.hidden = !hasSelection;
+    if (!hasSelection) return;
+
+    UIButton *selectedButton = self.buttons[(NSUInteger)self.selectedSegmentIndex];
+    [self layoutIfNeeded];
+    [self.selectionCenterConstraint setActive:NO];
+    [self.selectionWidthConstraint setActive:NO];
+    self.selectionCenterConstraint = [self.selectionView.centerXAnchor constraintEqualToAnchor:selectedButton.centerXAnchor];
+    self.selectionWidthConstraint = [self.selectionView.widthAnchor constraintEqualToAnchor:selectedButton.widthAnchor];
+    [NSLayoutConstraint activateConstraints:@[self.selectionCenterConstraint, self.selectionWidthConstraint]];
+
+    void (^changes)(void) = ^{
+        [self layoutIfNeeded];
+        [self updateButtonAppearance];
+    };
+    if (animated) {
+        [UIView animateWithDuration:0.30
+                              delay:0.0
+             usingSpringWithDamping:0.86
+              initialSpringVelocity:0.25
+                            options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionAllowUserInteraction
+                         animations:changes
+                         completion:nil];
+    } else {
+        changes();
+    }
+}
+
+- (void)updateButtonAppearance {
+    [self.buttons enumerateObjectsUsingBlock:^(UIButton *button, NSUInteger index, __unused BOOL *stop) {
+        BOOL selected = index == (NSUInteger)self.selectedSegmentIndex;
+        [button setTitleColor:selected ? UIColor.labelColor : UIColor.secondaryLabelColor
+                    forState:UIControlStateNormal];
+        button.titleLabel.font = WCPScaledFont(UIFontTextStyleSubheadline,
+                                               14.0,
+                                               selected ? UIFontWeightSemibold : UIFontWeightRegular);
+        button.accessibilityTraits = selected ? UIAccessibilityTraitButton | UIAccessibilityTraitSelected
+                                              : UIAccessibilityTraitButton;
+    }];
+}
+
+- (void)updateColors {
+    self.backdropView.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
+            ? [UIColor colorWithWhite:1.0 alpha:0.09]
+            : [UIColor colorWithWhite:0.48 alpha:0.10];
+    }];
+    self.selectionView.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
+            ? UIColor.tertiarySystemGroupedBackgroundColor
+            : UIColor.whiteColor;
+    }];
+    self.selectionView.layer.shadowOpacity = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark ? 0.28 : 0.12;
+    [self updateButtonAppearance];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    if (@available(iOS 13.0, *)) {
+        if ([self.traitCollection hasDifferentColorAppearanceComparedToTraitCollection:previousTraitCollection]) {
+            [self updateColors];
+        }
+    }
+}
+
+@end
+
 @interface WCPCategoryOrderEditorController : NeoWCCardTableViewController
 - (instancetype)initWithOwner:(WCPluginsViewController *)owner;
 @end
@@ -261,7 +445,7 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
 @property (nonatomic, strong) UIImageView *heroIcon;
 @property (nonatomic, strong) UILabel *heroTitle;
 @property (nonatomic, strong) UILabel *heroSubtitle;
-@property (nonatomic, strong) UISegmentedControl *categoryControl;
+@property (nonatomic, strong) WCPCategoryPillControl *categoryControl;
 - (NSString *)identifierForModel:(WCPluginModel *)model;
 - (NSString *)displayNameForModel:(WCPluginModel *)model;
 - (NSString *)displayVersionForModel:(WCPluginModel *)model;
@@ -272,7 +456,7 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
 - (void)buildHeader;
 - (void)registryChanged:(NSNotification *)note;
 - (void)reloadCategories;
-- (void)categoryChanged:(UISegmentedControl *)sender;
+- (void)categoryChanged:(WCPCategoryPillControl *)sender;
 - (void)switchChanged:(UISwitch *)sender;
 - (void)rowLongPressed:(UILongPressGestureRecognizer *)gesture;
 - (void)headerLongPressed:(UILongPressGestureRecognizer *)gesture;
@@ -322,7 +506,7 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
     self.heroIcon = [UIImageView new]; self.heroIcon.translatesAutoresizingMaskIntoConstraints = NO; self.heroIcon.contentMode = UIViewContentModeScaleAspectFill; self.heroIcon.clipsToBounds = YES; [header addSubview:self.heroIcon];
     self.heroTitle = [UILabel new]; self.heroTitle.translatesAutoresizingMaskIntoConstraints = NO; self.heroTitle.font = WCPScaledFont(UIFontTextStyleHeadline, 19.0, UIFontWeightSemibold); self.heroTitle.adjustsFontForContentSizeCategory = YES; self.heroTitle.textAlignment = NSTextAlignmentCenter; [header addSubview:self.heroTitle];
     self.heroSubtitle = [UILabel new]; self.heroSubtitle.translatesAutoresizingMaskIntoConstraints = NO; self.heroSubtitle.font = WCPScaledFont(UIFontTextStyleSubheadline, 14.0, UIFontWeightRegular); self.heroSubtitle.adjustsFontForContentSizeCategory = YES; self.heroSubtitle.textColor = UIColor.secondaryLabelColor; self.heroSubtitle.textAlignment = NSTextAlignmentCenter; [header addSubview:self.heroSubtitle];
-    self.categoryControl = [UISegmentedControl new]; self.categoryControl.translatesAutoresizingMaskIntoConstraints = NO; [self.categoryControl setTitleTextAttributes:@{NSFontAttributeName: WCPScaledFont(UIFontTextStyleSubheadline, 14.0, UIFontWeightRegular)} forState:UIControlStateNormal]; [self.categoryControl setTitleTextAttributes:@{NSFontAttributeName: WCPScaledFont(UIFontTextStyleSubheadline, 14.0, UIFontWeightSemibold)} forState:UIControlStateSelected]; [self.categoryControl addTarget:self action:@selector(categoryChanged:) forControlEvents:UIControlEventValueChanged]; [header addSubview:self.categoryControl];
+    self.categoryControl = [WCPCategoryPillControl new]; [self.categoryControl addTarget:self action:@selector(categoryChanged:) forControlEvents:UIControlEventValueChanged]; [header addSubview:self.categoryControl];
     [header addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(headerLongPressed:)]];
     [NSLayoutConstraint activateConstraints:@[
         [self.heroIcon.centerXAnchor constraintEqualToAnchor:header.centerXAnchor], [self.heroIcon.topAnchor constraintEqualToAnchor:header.topAnchor constant:24], [self.heroIcon.widthAnchor constraintEqualToConstant:72], [self.heroIcon.heightAnchor constraintEqualToConstant:72],
@@ -367,7 +551,13 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
     NSArray *defaults = @[@"定制", @"功能"]; NSMutableArray *saved = [NSMutableArray array];
     for (id category in WCPArray(WCPCustomCategoriesKey)) if ([category isKindOfClass:NSString.class] && [category length] && ![saved containsObject:category]) [saved addObject:category];
     NSArray *categories = saved.count > 0 ? saved : defaults; self.categories = categories; if (![categories containsObject:self.currentCategory]) self.currentCategory = categories.firstObject;
-    if (self.categoryControl) { [self.categoryControl removeAllSegments]; [categories enumerateObjectsUsingBlock:^(NSString *item, NSUInteger idx, BOOL *stop) { [self.categoryControl insertSegmentWithTitle:item atIndex:idx animated:NO]; }]; self.categoryControl.selectedSegmentIndex = [categories indexOfObject:self.currentCategory]; }
+    if (self.categoryControl) {
+        self.categoryControl.categories = categories;
+        NSInteger selectedIndex = [categories indexOfObject:self.currentCategory];
+        if (self.categoryControl.selectedSegmentIndex != selectedIndex) {
+            self.categoryControl.selectedSegmentIndex = selectedIndex;
+        }
+    }
 }
 - (void)reloadTableData {
     [self reloadCategories]; NSArray *models; @synchronized (WCPluginsMgr.sharedInstance) { models = [WCPluginsMgr.sharedInstance.plugins copy]; }
@@ -375,7 +565,7 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
     NSDictionary *orders = WCPDictionary(WCPOrdersKey); [filtered sortUsingComparator:^NSComparisonResult(WCPluginModel *left, WCPluginModel *right) { NSNumber *l = orders[[self identifierForModel:left]], *r = orders[[self identifierForModel:right]]; if (l && r && l.integerValue != r.integerValue) return l.integerValue < r.integerValue ? NSOrderedAscending : NSOrderedDescending; if (l) return NSOrderedAscending; if (r) return NSOrderedDescending; return [[self displayNameForModel:left] localizedCompare:[self displayNameForModel:right]]; }];
     self.allVisibleModels = filtered; NSUInteger perPage = MAX(1, [NSUserDefaults.standardUserDefaults integerForKey:WCPPerPageKey] ?: 10); NSUInteger pages = MAX((NSUInteger)1, (filtered.count + perPage - 1) / perPage); if (self.currentPage >= pages) self.currentPage = pages - 1; NSUInteger start = MIN(self.currentPage * perPage, filtered.count); NSUInteger length = MIN(perPage, filtered.count - start); self.pageModels = length ? [filtered subarrayWithRange:NSMakeRange(start, length)] : @[]; [self updateHeader]; [self updatePaginationFooter]; [self.tableView reloadData];
 }
-- (void)categoryChanged:(UISegmentedControl *)sender { if (sender.selectedSegmentIndex < 0 || sender.selectedSegmentIndex >= (NSInteger)self.categories.count) return; self.currentCategory = self.categories[sender.selectedSegmentIndex]; self.currentPage = 0; [self reloadTableData]; }
+- (void)categoryChanged:(WCPCategoryPillControl *)sender { if (sender.selectedSegmentIndex < 0 || sender.selectedSegmentIndex >= (NSInteger)self.categories.count) return; self.currentCategory = self.categories[sender.selectedSegmentIndex]; self.currentPage = 0; [self reloadTableData]; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return self.pageModels.count; }
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section { return self.allVisibleModels.count ? nil : @"暂无已注册的插件"; }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {

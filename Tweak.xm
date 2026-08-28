@@ -5570,6 +5570,8 @@ static NSString *NeoWCMediaToVoiceDisplayName(id message, NeoWCMediaToVoiceKind 
 static void NeoWCPresentMediaToVoiceConfirmation(id cell, NeoWCMediaToVoiceKind kind) {
     if (!NeoWCMediaToVoiceKindEnabled(kind)) return;
     id message = NeoWCMessageWrapForCell(cell);
+    if (kind == NeoWCMediaToVoiceKindAudioFile && !NeoWCMessageIsConvertibleAudioFile(message)) return;
+    if (kind == NeoWCMediaToVoiceKindMusic && !NeoWCMessageIsMusicCard(message)) return;
     NSString *session = [NeoWCSessionForMessage(message) copy];
     UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
     if (!message || session.length == 0 || !presenter.view.window) return;
@@ -5630,10 +5632,7 @@ static NSArray *NeoWCOperationMenuItemsWithMediaToVoice(id target,
                                                          NeoWCMediaToVoiceKind kind) {
     if (![originalItems isKindOfClass:NSArray.class] || !NeoWCMediaToVoiceKindEnabled(kind)) return originalItems;
     id message = NeoWCMessageWrapForCell(target);
-    // WeChatX adds the AppFileMessageCellViewV2 action before inspecting the
-    // attachment extension; the conversion action remains responsible for
-    // validating that a complete supported audio file exists.
-    BOOL eligible = kind == NeoWCMediaToVoiceKindAudioFile ? YES :
+    BOOL eligible = kind == NeoWCMediaToVoiceKindAudioFile ? NeoWCMessageIsConvertibleAudioFile(message) :
         (kind == NeoWCMediaToVoiceKindMusic ? NeoWCMessageIsMusicCard(message) : message != nil);
     if (!eligible) return originalItems;
     for (id item in originalItems) {
@@ -10666,7 +10665,8 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
     if (action == @selector(neowc_addToQuickReply:)) return NeoWCMessageCanAddToQuickReply(NeoWCMessageWrapForCell(self));
     if (action == @selector(neowc_convertAudioFileToVoice:)) {
-        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindAudioFile);
+        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindAudioFile) &&
+               NeoWCMessageIsConvertibleAudioFile(NeoWCMessageWrapForCell(self));
     }
     return %orig;
 }

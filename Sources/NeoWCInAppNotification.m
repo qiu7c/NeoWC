@@ -84,7 +84,8 @@ static UIWindow *NeoWCInAppActiveWindow(void) {
     self.accessibilityTraits = UIAccessibilityTraitButton;
     self.accessibilityLabel = [NSString stringWithFormat:@"%@，%@", request.title, request.body];
 
-    UIVisualEffectView *background = [[UIVisualEffectView alloc] initWithEffect:nil];
+    UIVisualEffectView *background = [[UIVisualEffectView alloc]
+        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
     background.translatesAutoresizingMaskIntoConstraints = NO;
     background.userInteractionEnabled = NO;
     background.layer.cornerRadius = 14.0;
@@ -93,16 +94,8 @@ static UIWindow *NeoWCInAppActiveWindow(void) {
     [self addSubview:background];
 
     CGFloat blurIntensity = NeoWCInAppNotificationBlurIntensity();
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-    UIViewPropertyAnimator *blurAnimator = [[UIViewPropertyAnimator alloc]
-        initWithDuration:1.0
-                   curve:UIViewAnimationCurveLinear
-              animations:^{ background.effect = blurEffect; }];
-    blurAnimator.fractionComplete = blurIntensity;
-    [blurAnimator stopAnimation:NO];
-    [blurAnimator finishAnimationAtPosition:UIViewAnimatingPositionCurrent];
     background.contentView.backgroundColor =
-        [UIColor.systemBackgroundColor colorWithAlphaComponent:(1.0 - blurIntensity) * 0.55];
+        [UIColor.systemBackgroundColor colorWithAlphaComponent:0.10 + (1.0 - blurIntensity) * 0.45];
 
     UIView *iconBackground = [UIView new];
     iconBackground.translatesAutoresizingMaskIntoConstraints = NO;
@@ -231,6 +224,8 @@ static UIWindow *NeoWCInAppActiveWindow(void) {
     background.layer.cornerRadius = 14.0;
     background.layer.cornerCurve = kCACornerCurveContinuous;
     background.clipsToBounds = YES;
+    background.contentView.backgroundColor =
+        [UIColor.systemBackgroundColor colorWithAlphaComponent:0.10];
     [hud addSubview:background];
 
     UIImageSymbolConfiguration *configuration =
