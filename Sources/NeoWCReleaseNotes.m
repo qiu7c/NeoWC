@@ -45,6 +45,24 @@ NSArray<NeoWCReleaseNote *> *NeoWCReleaseNotes(void) {
     dispatch_once(&onceToken, ^{
         notes = @[
             [NeoWCReleaseNote noteWithVersion:NeoWCDisplayVersion
+                                     headline:@"朋友圈提醒、设置重组与稳定性更新"
+                                        items:@[
+                [NeoWCReleaseNoteItem itemWithTitle:@"朋友圈特别关注提醒"
+                                               detail:@"支持选择特别关注好友、调整检测间隔，并可把文字转发到自己的聊天框或文件传输助手；图片和视频按需单独开启。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"朋友圈互动提醒"
+                                               detail:@"补充点赞和评论提醒、系统通知与进入朋友圈初始化；可关闭详细信息，仅显示收到新的评论或点赞。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"朋友圈评论防删除"
+                                               detail:@"保留本次微信运行中已加载后被删除的评论，并支持调整删除标识文字、字号和颜色。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"好友与群聊信息卡片"
+                                               detail:@"优化昵称、备注、原始账号、添加时间、添加天数和共同群聊顺序；共同群聊和群内好友支持进入对应页面与长按复制。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"快捷回复与媒体转语音修复"
+                                               detail:@"加强素材持久化、导出、侧滑和面板布局，修正搜索框背景；补齐视频、音频文件和音乐卡片转语音菜单入口。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"设置重新分类"
+                                               detail:@"按聊天、朋友圈、界面禁用、界面优化、常用增强和插件设置重新整理；日志与配置集中到插件设置，作者主页和历史更新记录保留在设置首页底部。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"精简用户版本"
+                                               detail:@"开发调试工具迁移到独立 WCDebug，移除未开放的快捷收款链接、视频解析和音乐点歌代码。"],
+            ]],
+            [NeoWCReleaseNote noteWithVersion:@"0.1.5"
                                      headline:@"快捷回复与防误发"
                                         items:@[
                 [NeoWCReleaseNoteItem itemWithTitle:@"快捷回复"
@@ -57,6 +75,17 @@ NSArray<NeoWCReleaseNote *> *NeoWCReleaseNotes(void) {
                                               detail:@"按好友和群聊分区显示头像并勾选受保护会话，发送按钮与已证实文字入口双层拦截，并在会话失效或进入后台时取消发送。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"朋友圈实况保存优化"
                                               detail:@"调整冷缓存下载完成后的媒体路径获取顺序，继续由微信原生实况配对流程保存。"],
+            ]],
+            [NeoWCReleaseNote noteWithVersion:@"0.1.4"
+                                     headline:@"朋友圈、交互与流畅度全面升级"
+                                        items:@[
+                [NeoWCReleaseNoteItem itemWithTitle:@"朋友圈高清发布" detail:@"新增高清图片和原视频入口，减少发布过程中的画质损失。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"保存朋友圈媒体" detail:@"支持保存朋友圈图片、视频和实况照片，并提供保存结果提示。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"滑动屏幕高刷" detail:@"前台滑动时使用设备支持的最高刷新率，浏览更加顺滑。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"主页右滑扩展" detail:@"增加备注、朋友圈、折叠群聊、勿扰和置顶等快捷操作。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"流畅度与手势优化" detail:@"减少多处卡顿，并解决消息手势与页面返回手势之间的冲突。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"编辑图片快捷发送" detail:@"优化图片和当前会话识别，编辑后可通过确认页发送到当前聊天。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"语音转发" detail:@"在语音长按菜单中新增转发入口，补齐语音消息转发流程。"],
             ]],
         ];
     });
@@ -72,6 +101,47 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
     [NSUserDefaults.standardUserDefaults setObject:NeoWCDisplayVersion forKey:NeoWCLastShownReleaseNotesVersionKey];
 }
 
+@implementation NeoWCReleaseNotesHistoryViewController
+
+- (instancetype)init {
+    return [self initWithStyle:UITableViewStyleInsetGrouped];
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"更新日志";
+    self.tableView.rowHeight = UITableViewAutomaticDimension;
+    self.tableView.estimatedRowHeight = 84.0;
+}
+
+- (NSInteger)numberOfSectionsInTableView:(__unused UITableView *)tableView {
+    return NeoWCReleaseNotes().count;
+}
+
+- (NSInteger)tableView:(__unused UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return NeoWCReleaseNotes()[section].items.count;
+}
+
+- (NSString *)tableView:(__unused UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    NeoWCReleaseNote *note = NeoWCReleaseNotes()[section];
+    return [NSString stringWithFormat:@"V %@ · %@", note.version, note.headline];
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"NeoWCReleaseHistoryCell"];
+    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"NeoWCReleaseHistoryCell"];
+    NeoWCReleaseNoteItem *item = NeoWCReleaseNotes()[indexPath.section].items[indexPath.row];
+    cell.textLabel.text = item.title;
+    cell.textLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+    cell.detailTextLabel.text = item.detail;
+    cell.detailTextLabel.numberOfLines = 0;
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    return cell;
+}
+
+@end
+
 @interface NeoWCReleaseNotesViewController ()
 @property (nonatomic, strong) UIControl *backdropView;
 @property (nonatomic, strong) UIView *cardView;
@@ -85,7 +155,6 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
     self = [super initWithNibName:nil bundle:nil];
     if (self) {
         self.modalPresentationStyle = UIModalPresentationOverFullScreen;
-        self.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
     }
     return self;
 }
@@ -144,12 +213,13 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
     self.cardView = [UIView new];
     self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
     self.cardView.backgroundColor = UIColor.clearColor;
-    self.cardView.layer.cornerRadius = 28.0;
+    self.cardView.layer.cornerRadius = 26.0;
     self.cardView.layer.cornerCurve = kCACornerCurveContinuous;
+    self.cardView.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
     self.cardView.layer.shadowColor = UIColor.blackColor.CGColor;
-    self.cardView.layer.shadowOpacity = 0.08;
-    self.cardView.layer.shadowRadius = 18.0;
-    self.cardView.layer.shadowOffset = CGSizeMake(0.0, 6.0);
+    self.cardView.layer.shadowOpacity = 0.12;
+    self.cardView.layer.shadowRadius = 20.0;
+    self.cardView.layer.shadowOffset = CGSizeMake(0.0, -4.0);
     [self.view addSubview:self.cardView];
 
     UIVisualEffectView *materialView = [[UIVisualEffectView alloc]
@@ -157,9 +227,18 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
     materialView.translatesAutoresizingMaskIntoConstraints = NO;
     materialView.userInteractionEnabled = NO;
     materialView.clipsToBounds = YES;
-    materialView.layer.cornerRadius = 28.0;
+    materialView.layer.cornerRadius = 26.0;
     materialView.layer.cornerCurve = kCACornerCurveContinuous;
+    materialView.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
     [self.cardView addSubview:materialView];
+
+    UIView *grabberView = [UIView new];
+    grabberView.translatesAutoresizingMaskIntoConstraints = NO;
+    grabberView.backgroundColor = UIColor.tertiaryLabelColor;
+    grabberView.layer.cornerRadius = 2.5;
+    grabberView.userInteractionEnabled = NO;
+    grabberView.accessibilityElementsHidden = YES;
+    [self.cardView addSubview:grabberView];
 
     NeoWCReleaseNote *note = NeoWCReleaseNotes().firstObject;
 
@@ -226,10 +305,6 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
     [self.cardView addSubview:scrollView];
     [self.cardView addSubview:doneButton];
 
-    NSLayoutConstraint *preferredCardWidth = [self.cardView.widthAnchor constraintEqualToAnchor:self.view.widthAnchor constant:-36.0];
-    preferredCardWidth.priority = UILayoutPriorityDefaultHigh;
-    NSLayoutConstraint *preferredScrollHeight = [scrollView.heightAnchor constraintEqualToConstant:420.0];
-    preferredScrollHeight.priority = UILayoutPriorityDefaultHigh;
     [NSLayoutConstraint activateConstraints:@[
         [self.backdropView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.backdropView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -239,18 +314,18 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
         [materialView.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor],
         [materialView.topAnchor constraintEqualToAnchor:self.cardView.topAnchor],
         [materialView.bottomAnchor constraintEqualToAnchor:self.cardView.bottomAnchor],
-        [self.cardView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.cardView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
-        [self.cardView.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:18.0],
-        [self.cardView.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-18.0],
-        [self.cardView.widthAnchor constraintLessThanOrEqualToConstant:430.0],
-        preferredCardWidth,
-        [self.cardView.topAnchor constraintGreaterThanOrEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:18.0],
-        [self.cardView.bottomAnchor constraintLessThanOrEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-18.0],
+        [self.cardView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.cardView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.cardView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [self.cardView.heightAnchor constraintEqualToAnchor:self.view.heightAnchor multiplier:0.58],
+        [grabberView.centerXAnchor constraintEqualToAnchor:self.cardView.centerXAnchor],
+        [grabberView.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:10.0],
+        [grabberView.widthAnchor constraintEqualToConstant:38.0],
+        [grabberView.heightAnchor constraintEqualToConstant:5.0],
         [headingStack.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:22.0],
-        [headingStack.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:22.0],
+        [headingStack.topAnchor constraintEqualToAnchor:grabberView.bottomAnchor constant:12.0],
         [headingStack.trailingAnchor constraintLessThanOrEqualToAnchor:closeButton.leadingAnchor constant:-8.0],
-        [closeButton.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:17.0],
+        [closeButton.centerYAnchor constraintEqualToAnchor:headingStack.topAnchor constant:17.0],
         [closeButton.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-17.0],
         [closeButton.widthAnchor constraintEqualToConstant:44.0],
         [closeButton.heightAnchor constraintEqualToConstant:34.0],
@@ -260,10 +335,8 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
         [versionLabel.heightAnchor constraintEqualToConstant:26.0],
         [scrollView.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:22.0],
         [scrollView.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-22.0],
-        [scrollView.topAnchor constraintEqualToAnchor:versionLabel.bottomAnchor constant:16.0],
-        [scrollView.heightAnchor constraintGreaterThanOrEqualToConstant:160.0],
-        [scrollView.heightAnchor constraintLessThanOrEqualToConstant:420.0],
-        preferredScrollHeight,
+        [scrollView.topAnchor constraintEqualToAnchor:versionLabel.bottomAnchor constant:14.0],
+        [scrollView.heightAnchor constraintGreaterThanOrEqualToConstant:72.0],
         [itemsStack.leadingAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.leadingAnchor],
         [itemsStack.trailingAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.trailingAnchor],
         [itemsStack.topAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.topAnchor],
@@ -271,8 +344,8 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
         [itemsStack.widthAnchor constraintEqualToAnchor:scrollView.frameLayoutGuide.widthAnchor],
         [doneButton.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:22.0],
         [doneButton.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-22.0],
-        [doneButton.topAnchor constraintEqualToAnchor:scrollView.bottomAnchor constant:18.0],
-        [doneButton.bottomAnchor constraintEqualToAnchor:self.cardView.bottomAnchor constant:-20.0],
+        [doneButton.topAnchor constraintEqualToAnchor:scrollView.bottomAnchor constant:14.0],
+        [doneButton.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-12.0],
         [doneButton.heightAnchor constraintEqualToConstant:50.0],
     ]];
 }
@@ -281,9 +354,7 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
     [super viewWillAppear:animated];
     if (self.appeared) return;
     self.backdropView.alpha = 0.0;
-    self.cardView.alpha = 0.0;
-    self.cardView.transform = CGAffineTransformConcat(CGAffineTransformMakeScale(0.94, 0.94),
-                                                       CGAffineTransformMakeTranslation(0.0, 18.0));
+    self.cardView.transform = CGAffineTransformMakeTranslation(0.0, CGRectGetHeight(UIScreen.mainScreen.bounds));
 }
 
 - (void)viewDidAppear:(BOOL)animated {
@@ -298,7 +369,6 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
                         options:UIViewAnimationOptionCurveEaseOut
                      animations:^{
         self.backdropView.alpha = 1.0;
-        self.cardView.alpha = 1.0;
         self.cardView.transform = CGAffineTransformIdentity;
     } completion:nil];
 }
@@ -309,8 +379,7 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
     NSTimeInterval duration = UIAccessibilityIsReduceMotionEnabled() ? 0.01 : 0.2;
     [UIView animateWithDuration:duration animations:^{
         self.backdropView.alpha = 0.0;
-        self.cardView.alpha = 0.0;
-        self.cardView.transform = CGAffineTransformMakeScale(0.97, 0.97);
+        self.cardView.transform = CGAffineTransformMakeTranslation(0.0, CGRectGetHeight(UIScreen.mainScreen.bounds));
     } completion:^(__unused BOOL finished) {
         [self dismissViewControllerAnimated:NO completion:nil];
     }];

@@ -5,7 +5,6 @@
 #import "NeoWCSettingsModels.h"
 #import "NeoWCSettingsUI.h"
 #import "NeoWCAntiRevoke.h"
-#import "NeoWCDebug.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCInterfaceTweaks.h"
 #import "NeoWCPluginManager.h"
@@ -45,9 +44,11 @@
 - (NSString *)titleForCategory:(NeoWCSettingsCategory)category {
     switch (category) {
         case NeoWCSettingsCategoryMessages: return @"聊天增强";
+        case NeoWCSettingsCategoryMoments: return @"朋友圈增强";
+        case NeoWCSettingsCategoryInterfaceDisabled: return @"界面禁用";
         case NeoWCSettingsCategoryEnhancements: return @"常用增强";
         case NeoWCSettingsCategoryInterface: return @"界面优化";
-        case NeoWCSettingsCategoryDeveloper: return @"开发者功能";
+        case NeoWCSettingsCategoryPlugin: return @"插件设置";
         case NeoWCSettingsCategoryRoot:
         default: return @"NeoWC";
     }
@@ -348,9 +349,11 @@
     }
     switch (item.action) {
         case NeoWCSettingActionOpenMessages: [self openCategory:NeoWCSettingsCategoryMessages]; break;
+        case NeoWCSettingActionOpenMoments: [self openCategory:NeoWCSettingsCategoryMoments]; break;
+        case NeoWCSettingActionOpenInterfaceDisabled: [self openCategory:NeoWCSettingsCategoryInterfaceDisabled]; break;
         case NeoWCSettingActionOpenEnhancements: [self openCategory:NeoWCSettingsCategoryEnhancements]; break;
         case NeoWCSettingActionOpenInterface: [self openCategory:NeoWCSettingsCategoryInterface]; break;
-        case NeoWCSettingActionOpenDeveloper: [self openCategory:NeoWCSettingsCategoryDeveloper]; break;
+        case NeoWCSettingActionOpenPlugin: [self openCategory:NeoWCSettingsCategoryPlugin]; break;
         default: [self.actions performActionForItem:item]; break;
     }
 }

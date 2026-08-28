@@ -5,9 +5,11 @@ NS_ASSUME_NONNULL_BEGIN
 typedef NS_ENUM(NSInteger, NeoWCSettingsCategory) {
     NeoWCSettingsCategoryRoot,
     NeoWCSettingsCategoryMessages,
+    NeoWCSettingsCategoryMoments,
+    NeoWCSettingsCategoryInterfaceDisabled,
     NeoWCSettingsCategoryEnhancements,
     NeoWCSettingsCategoryInterface,
-    NeoWCSettingsCategoryDeveloper,
+    NeoWCSettingsCategoryPlugin,
 };
 
 typedef NS_ENUM(NSInteger, NeoWCSettingRowKind) {
@@ -20,13 +22,16 @@ typedef NS_ENUM(NSInteger, NeoWCSettingRowKind) {
 typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionNone,
     NeoWCSettingActionOpenMessages,
+    NeoWCSettingActionOpenMoments,
+    NeoWCSettingActionOpenInterfaceDisabled,
     NeoWCSettingActionOpenEnhancements,
     NeoWCSettingActionOpenInterface,
-    NeoWCSettingActionOpenDeveloper,
+    NeoWCSettingActionOpenPlugin,
     NeoWCSettingActionConfigManager,
     NeoWCSettingActionAuthorProfile,
     NeoWCSettingActionFindFriend,
     NeoWCSettingActionReleaseNotes,
+    NeoWCSettingActionLogRecords,
     NeoWCSettingActionBlockUsers,
     NeoWCSettingActionBlockKeywords,
     NeoWCSettingActionLongPressMenus,
@@ -37,8 +42,6 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionRevokeFilter,
     NeoWCSettingActionRevokeLocalTemplate,
     NeoWCSettingActionRevokeReplyTemplate,
-    NeoWCSettingActionDebugCenter,
-    NeoWCSettingActionCompatibility,
     NeoWCSettingActionGlobalScale,
     NeoWCSettingActionSettingsScale,
     NeoWCSettingActionInnerRadius,
@@ -70,15 +73,13 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionReplySwipeTriggerDistance,
     NeoWCSettingActionGlobalAvatarCornerPercent,
     NeoWCSettingActionQuickReplyLibrary,
-    NeoWCSettingActionVideoParserURL,
-    NeoWCSettingActionVideoParserSendMode,
-    NeoWCSettingActionVideoParserGroups,
-    NeoWCSettingActionMusicOrderGroups,
     NeoWCSettingActionSendConfirmationConversations,
     NeoWCSettingActionSendConfirmationPauseDuration,
     NeoWCSettingActionMomentsReminderUsers,
     NeoWCSettingActionMomentsReminderInterval,
     NeoWCSettingActionMomentsReminderForwardTarget,
+    NeoWCSettingActionMomentsCommentAntiDeleteText,
+    NeoWCSettingActionMomentsCommentAntiDeleteFontSize,
 };
 
 @interface NeoWCSettingItem : NSObject

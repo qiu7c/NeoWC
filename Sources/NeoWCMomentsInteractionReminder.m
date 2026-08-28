@@ -1,6 +1,6 @@
 #import "NeoWCMomentsInteractionReminder.h"
 #import "NeoWCAccount.h"
-#import "NeoWCDebug.h"
+#import "NeoWCLogging.h"
 #import "NeoWCEnhancements.h"
 #import <UserNotifications/UserNotifications.h>
 #import <UIKit/UIKit.h>
@@ -130,6 +130,8 @@ static void NeoWCMomentsInteractionShowForegroundToast(NSString *message) {
 static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey,
                                            long long messageType, id message) {
     NSString *typeName = messageType == 1 ? @"点赞" : (messageType == 2 ? @"评论" : @"互动");
+    BOOL showsDetails = [NSUserDefaults.standardUserDefaults
+        boolForKey:NeoWCMomentsInteractionReminderDetailsEnabledKey];
     id comment = NeoWCMomentsInteractionObjectGetter(message, "comment");
     NSString *username = NeoWCMomentsInteractionStringGetter(comment, "username");
     NSString *nickname = NeoWCMomentsInteractionStringGetter(comment, "nickname");
@@ -148,9 +150,9 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     } else {
         detail = [NSString stringWithFormat:@"收到新的朋友圈%@", typeName];
     }
-    NSString *body = count > 1
-        ? [NSString stringWithFormat:@"收到 %lu 条新互动，%@", (unsigned long)count, detail]
-        : detail;
+    NSString *body = showsDetails
+        ? (count > 1 ? [NSString stringWithFormat:@"收到 %lu 条新互动，%@", (unsigned long)count, detail] : detail)
+        : [NSString stringWithFormat:@"朋友圈收到新的%@", typeName];
     if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
         NeoWCMomentsInteractionShowForegroundToast(body);
         return;

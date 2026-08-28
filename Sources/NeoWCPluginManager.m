@@ -1,5 +1,5 @@
 #import "NeoWCPluginManager.h"
-#import "NeoWCDebug.h"
+#import "NeoWCLogging.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCSettingsCatalog.h"
 #import <objc/message.h>

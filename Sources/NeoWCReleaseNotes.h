@@ -1,4 +1,5 @@
 #import <UIKit/UIKit.h>
+#import "NeoWCCardTableViewController.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -22,6 +23,9 @@ FOUNDATION_EXPORT BOOL NeoWCShouldPresentCurrentReleaseNotes(void);
 FOUNDATION_EXPORT void NeoWCMarkCurrentReleaseNotesPresented(void);
 
 @interface NeoWCReleaseNotesViewController : UIViewController
+@end
+
+@interface NeoWCReleaseNotesHistoryViewController : NeoWCCardTableViewController
 @end
 
 NS_ASSUME_NONNULL_END

@@ -1,19 +1,19 @@
 # NeoWC
 
-NeoWC is a native UIKit WeChat enhancement tweak. Version `0.1.2` adds native multi-message capture presets, export tools, anti-revoke records, runtime compatibility diagnostics, and safer edited-image quick sending.
+NeoWC is a native UIKit WeChat enhancement tweak. Version `0.1.6` adds Moments reminders and comment protection, improves quick replies and media-to-voice actions, and reorganizes settings around user-facing features.
 
-The settings page groups features into collapsible message, privacy, appearance, and laboratory categories. Category expansion state is remembered locally. NeoWC uses a transparent, single-stroke monogram that combines the letter N with a conversation tail; `Assets/NeoWCIcon.svg` is the matching scalable design source.
+The settings page groups features into Chat, Moments, Interface Disable, Interface Optimization, Common Enhancements, and Plugin Settings. Category expansion state is remembered locally. NeoWC uses a transparent, single-stroke monogram that combines the letter N with a conversation tail; `Assets/NeoWCIcon.svg` is the matching scalable design source.
 
-## Debug tools
+## Logs and development tools
 
-The laboratory category contains an explicitly controlled debug floating button. NeoWC does not install a global activation gesture. The debug center currently provides a one-shot view picker, view/controller and runtime metadata, class search, Logos hook skeleton copying, and an internal NeoWC log viewer.
+Plugin Settings contains a bounded in-memory runtime log viewer and configuration import/export. Runtime inspection and developer tooling live in the separate WCDebug plugin and are not included in NeoWC.
 
 ## Entry
 
 When `WCPluginsMgr` is available, NeoWC registers:
 
 - Title: `NeoWC`
-- Version: `0.1.2`
+- Version: `0.1.6`
 - Controller: `NeoWCSettingsViewController`
 
 ## Build

@@ -3,7 +3,7 @@
 
 #import "NeoWCAccount.h"
 #import "NeoWCCompatibility.h"
-#import "NeoWCDebug.h"
+#import "NeoWCLogging.h"
 #import "NeoWCEnhancements.h"
 
 #import <objc/message.h>

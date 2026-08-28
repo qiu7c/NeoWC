@@ -1,6 +1,6 @@
 #import "NeoWCMomentsReminder.h"
 #import "NeoWCAccount.h"
-#import "NeoWCDebug.h"
+#import "NeoWCLogging.h"
 #import "NeoWCEnhancements.h"
 #import <AVFoundation/AVFoundation.h>
 #import <UserNotifications/UserNotifications.h>
@@ -380,11 +380,12 @@ static void NeoWCMomentsReminderShowForegroundToast(NSString *message) {
 
 static void NeoWCMomentsReminderNotify(NSString *username, NSString *nickname, NSString *content, uint64_t createdAt, NSString *tid) {
     NSString *name = nickname.length > 0 ? nickname : username;
+    if (name.length == 0) name = @"好友";
     NSString *body = content.length > 0 ? [NSString stringWithFormat:@"%@：%@", name, content] :
                                           [NSString stringWithFormat:@"%@ 发布了新朋友圈", name];
     if (body.length > 180) body = [[body substringToIndex:177] stringByAppendingString:@"…"];
     if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
-        NeoWCMomentsReminderShowForegroundToast(@"您关注的朋友圈已更新");
+        NeoWCMomentsReminderShowForegroundToast([NSString stringWithFormat:@"您关注的%@朋友圈已更新", name]);
         return;
     }
 

@@ -1,5 +1,5 @@
 #import "NeoWCBackgroundKeeper.h"
-#import "NeoWCDebug.h"
+#import "NeoWCLogging.h"
 #import "NeoWCEnhancements.h"
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>

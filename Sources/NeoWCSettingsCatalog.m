@@ -2,7 +2,7 @@
 #import "NeoWCAntiRevoke.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCInterfaceTweaks.h"
-#import "NeoWCDebug.h"
+#import "NeoWCLogging.h"
 #import "NeoWCQuickReplyStore.h"
 #import "NeoWCMessageBlock.h"
 #import "NeoWCSendConfirmation.h"
@@ -15,7 +15,7 @@ NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
 NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 
-NSString *const NeoWCDisplayVersion = @"0.1.5";
+NSString *const NeoWCDisplayVersion = @"0.1.6";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -88,9 +88,6 @@ void NeoWCSettingsHandleSwitchChange(NSString *key, BOOL enabled) {
     }
     if ([key hasPrefix:@"com.qiu7c.neowc."]) {
         [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:key];
-    }
-    if ([key isEqualToString:NeoWCDebugFloatingEnabledKey]) {
-        [[NeoWCDebugManager sharedManager] setFloatingEnabled:enabled];
     }
     if ([key isEqualToString:NeoWCAntiRevokeKey]) {
         [NSNotificationCenter.defaultCenter postNotificationName:NeoWCAntiRevokePromptDidChangeNotification object:nil];
@@ -207,13 +204,6 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCInputSwipeActionsEnabledKey: @NO,
         NeoWCQuickReplyEnabledKey: @NO,
         NeoWCQuickReplyInstantSendEnabledKey: @NO,
-        NeoWCPaymentLinkEnabledKey: @NO,
-        NeoWCVideoParserEnabledKey: @NO,
-        NeoWCVideoParserCustomURLKey: @"",
-        NeoWCVideoParserSendModeKey: @0,
-        NeoWCVideoParserGroupsKey: @[],
-        NeoWCMusicOrderEnabledKey: @NO,
-        NeoWCMusicOrderGroupsKey: @[],
         NeoWCSendConfirmationEnabledKey: @NO,
         NeoWCSendConfirmationUsersKey: @{},
         NeoWCSendConfirmationPauseSecondsKey: @60,
@@ -224,6 +214,11 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCMomentsPreciseTimeFormatKey: NeoWCMomentsPreciseTimeDefaultFormat,
         NeoWCBackgroundKeepAliveEnabledKey: @NO,
         NeoWCMomentsInteractionReminderEnabledKey: @NO,
+        NeoWCMomentsInteractionReminderDetailsEnabledKey: @YES,
+        NeoWCMomentsCommentAntiDeleteEnabledKey: @NO,
+        NeoWCMomentsCommentAntiDeleteTextKey: @"←该评论已删除",
+        NeoWCMomentsCommentAntiDeleteFontSizeKey: @12.0,
+        NeoWCMomentsCommentAntiDeleteColorKey: @"#8E8E93FF",
         NeoWCMomentsReminderEnabledKey: @NO,
         NeoWCMomentsReminderUsersKey: @[],
         NeoWCMomentsReminderIntervalKey: @60,
@@ -238,8 +233,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCMultiSelectExportTextKey: @YES,
         NeoWCMultiSelectSaveImagesKey: @YES,
         NeoWCMultiSelectShareCardKey: @YES,
-        NeoWCDebugLoggingEnabledKey: @YES,
-        NeoWCPaymentLinkDiagnosticsEnabledKey: @NO,
+        NeoWCLoggingEnabledKey: @YES,
         NeoWCChatInputRoundingEnabledKey: @NO,
         NeoWCChatInputInnerRoundingKey: @YES,
         NeoWCChatInputOuterRoundingKey: @YES,
@@ -255,13 +249,6 @@ void NeoWCSettingsRegisterDefaults(void) {
 }
 
 static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
-    NSMutableArray<NeoWCSettingItem *> *maintenanceItems = [NSMutableArray arrayWithObjects:
-        NeoWCItem(@"配置管理", @"导入、导出或重置 NeoWC 配置", @"externaldrive", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionConfigManager),
-        NeoWCItem(@"作者主页", @"在微信中查看作者资料", @"person.crop.circle", NeoWCSettingRowKindDetail, nil, @"查看", NeoWCSettingActionAuthorProfile),
-        NeoWCItem(@"版本", @"NeoWC · 点击查看更新日志", @"shippingbox", NeoWCSettingRowKindDetail, nil, NeoWCDisplayVersion, NeoWCSettingActionReleaseNotes), nil];
-    NeoWCSettingSection *maintenance = [NeoWCSettingSection sectionWithIdentifier:@"maintenance" title:@"维护"
-                                                                           footer:[NSString stringWithFormat:@"NeoWC · %@", NeoWCDisplayVersion]
-                                                                            items:maintenanceItems];
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"master" title:nil
                                              footer:@"关闭后仅保留设置入口，所有增强功能停止生效。"
@@ -269,11 +256,18 @@ static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
         [NeoWCSettingSection sectionWithIdentifier:@"categories" title:@"功能"
                                              footer:nil items:@[
             NeoWCItem(@"聊天增强", @"消息、编辑、提醒与导出", @"bubble.left.and.bubble.right", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenMessages),
-            NeoWCItem(@"常用增强", @"朋友圈、扫码、运动与本地显示", @"bolt", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenEnhancements),
-            NeoWCItem(@"界面优化", @"头像、胶囊、缩放与入口显示", @"paintbrush", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenInterface),
-            NeoWCItem(@"开发者功能", @"日志、兼容性与快捷入口", @"hammer", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenDeveloper),
+            NeoWCItem(@"朋友圈增强", @"提醒、互动、发布和媒体操作", @"photo.on.rectangle.angled", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenMoments),
+            NeoWCItem(@"界面禁用", @"隐藏不需要的界面元素和广告", @"eye.slash", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenInterfaceDisabled),
+            NeoWCItem(@"界面优化", @"头像、胶囊、缩放与输入栏样式", @"paintbrush", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenInterface),
+            NeoWCItem(@"常用增强", @"自动化、扫码、资料和本地显示", @"bolt", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenEnhancements),
+            NeoWCItem(@"插件设置", @"日志、配置与插件入口管理", @"gearshape.2", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenPlugin),
         ]],
-        maintenance,
+        [NeoWCSettingSection sectionWithIdentifier:@"about" title:@"关于"
+                                             footer:[NSString stringWithFormat:@"NeoWC · %@", NeoWCDisplayVersion]
+                                              items:@[
+            NeoWCItem(@"作者主页", @"在微信中查看作者资料", @"person.crop.circle", NeoWCSettingRowKindDetail, nil, @"查看", NeoWCSettingActionAuthorProfile),
+            NeoWCItem(@"版本与更新日志", @"查看当前版本和历史版本记录", @"shippingbox", NeoWCSettingRowKindDetail, nil, NeoWCDisplayVersion, NeoWCSettingActionReleaseNotes),
+        ]],
     ];
 }
 
@@ -372,33 +366,6 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
                                 NeoWCCountText(NeoWCQuickReplyStore.sharedStore.items.count), NeoWCSettingActionQuickReplyLibrary)],
                     defaults,
                     collapsed);
-    // 暂停开放：保留收款小账本实现，待官方字段链稳定后恢复入口。
-#if 0
-    [interaction addObject:NeoWCItem(@"快捷收款链接", @"发送 #fk 修改标题和编号，登记后发送原生收款卡片",
-                                     @"link.badge.plus", NeoWCSettingRowKindSwitch,
-                                     NeoWCPaymentLinkEnabledKey, nil, NeoWCSettingActionNone)];
-#endif
-    // 暂停开放：保留完整实现，等待稳定的视频解析和点歌接口后恢复。
-#if 0
-    NSInteger videoSendMode = [defaults integerForKey:NeoWCVideoParserSendModeKey];
-    NSString *videoAPI = [defaults stringForKey:NeoWCVideoParserCustomURLKey];
-    NeoWCAddFeature(interaction,
-                    NeoWCItem(@"视频解析", @"识别已开启群聊中的视频分享链接", @"play.rectangle", NeoWCSettingRowKindSwitch, NeoWCVideoParserEnabledKey, nil, NeoWCSettingActionNone),
-                    @[
-                        NeoWCItem(@"解析接口", @"填写返回视频地址与封面地址的 HTTPS 接口", @"link", NeoWCSettingRowKindDetail, nil,
-                                  videoAPI.length > 0 ? @"已设置" : @"未设置", NeoWCSettingActionVideoParserURL),
-                        NeoWCItem(@"发送方式", @"原生视频会下载后发送；链接卡片由微信浏览器打开", @"paperplane", NeoWCSettingRowKindDetail, nil,
-                                  videoSendMode == 1 ? @"链接卡片" : @"原生视频", NeoWCSettingActionVideoParserSendMode),
-                        NeoWCItem(@"启用群聊", @"只识别所选群聊中新收到的视频分享消息", @"person.3", NeoWCSettingRowKindDetail, nil,
-                                  NeoWCCountText([defaults arrayForKey:NeoWCVideoParserGroupsKey].count), NeoWCSettingActionVideoParserGroups),
-                    ],
-                    defaults,
-                    collapsed);
-    NeoWCAddFeature(interaction,
-                    NeoWCItem(@"音乐点歌", @"识别群聊中的“点歌 + 歌名”并回复音乐卡片", @"music.note", NeoWCSettingRowKindSwitch, NeoWCMusicOrderEnabledKey, nil, NeoWCSettingActionNone),
-                    @[NeoWCItem(@"启用群聊", @"只在所选群聊中识别点歌消息", @"person.3", NeoWCSettingRowKindDetail, nil,
-                                NeoWCCountText([defaults arrayForKey:NeoWCMusicOrderGroupsKey].count), NeoWCSettingActionMusicOrderGroups)], defaults, collapsed);
-#endif
     NeoWCAddFeature(interaction, NeoWCItem(@"语音自动转文字", @"收到语音后自动转成文字", @"waveform.and.mic", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"忽略群聊语音", @"群聊中的语音保持原样", @"person.3", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnoreGroupKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"忽略私聊语音", @"私聊中的语音保持原样", @"person", NeoWCSettingRowKindSwitch, NeoWCAutoVoiceTranscriptionIgnorePrivateKey, nil, NeoWCSettingActionNone),
@@ -505,14 +472,17 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     ];
 }
 
-static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *defaults, NSSet<NSString *> *collapsed) {
+static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *defaults,
+                                                                 NSSet<NSString *> *collapsed,
+                                                                 BOOL momentsOnly) {
     NSMutableArray *automation = [NSMutableArray arrayWithArray:@[
         NeoWCItem(@"保持后台运行", @"尽量维持微信后台活跃，供朋友圈提醒等周期功能使用", @"moon.zzz", NeoWCSettingRowKindSwitch, NeoWCBackgroundKeepAliveEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"设备扫码自动登录", @"自动确认电脑、平板等设备登录", @"desktopcomputer", NeoWCSettingRowKindSwitch, NeoWCAutoDeviceLoginKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"游戏授权自动允许", @"自动确认游戏扫码授权", @"gamecontroller", NeoWCSettingRowKindSwitch, NeoWCAutoGameAuthorizeKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"伪装扫码来源", @"将相册识别结果按相机扫码处理", @"qrcode.viewfinder", NeoWCSettingRowKindSwitch, NeoWCQRCodeCameraSourceEnabledKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"主页右滑扩展", @"增加备注、朋友圈、折叠群聊、勿扰与置顶操作", @"rectangle.and.hand.point.up.left", NeoWCSettingRowKindSwitch, NeoWCHomeSwipeActionsEnabledKey, nil, NeoWCSettingActionNone),
     ]];
+    NSArray<NeoWCSettingItem *> *scan = @[
+        NeoWCItem(@"伪装扫码来源", @"将相册识别结果按相机扫码处理", @"qrcode.viewfinder", NeoWCSettingRowKindSwitch, NeoWCQRCodeCameraSourceEnabledKey, nil, NeoWCSettingActionNone),
+    ];
     NSMutableArray *moments = [NSMutableArray array];
     NSUInteger reminderUserCount = [[defaults arrayForKey:NeoWCMomentsReminderUsersKey] count];
     NSInteger reminderInterval = MAX(30, MIN(3600, [defaults integerForKey:NeoWCMomentsReminderIntervalKey]));
@@ -551,10 +521,33 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     NeoWCAddFeature(moments,
                     NeoWCItem(@"朋友圈提醒", reminderSubtitle, @"bell.badge", NeoWCSettingRowKindSwitch, NeoWCMomentsReminderEnabledKey, nil, NeoWCSettingActionNone),
                     reminderChildren, defaults, collapsed);
-    [moments insertObject:NeoWCItem(@"朋友圈互动提醒", interactionSubtitle, @"bubble.left.and.exclamationmark.bubble.right",
-                                    NeoWCSettingRowKindSwitch, NeoWCMomentsInteractionReminderEnabledKey,
-                                    nil, NeoWCSettingActionNone)
-                  atIndex:0];
+    NSMutableArray<NeoWCSettingItem *> *interactionRows = [NSMutableArray array];
+    NeoWCAddFeature(interactionRows,
+                    NeoWCItem(@"朋友圈互动提醒", interactionSubtitle, @"bubble.left.and.exclamationmark.bubble.right",
+                              NeoWCSettingRowKindSwitch, NeoWCMomentsInteractionReminderEnabledKey,
+                              nil, NeoWCSettingActionNone),
+                    @[
+                        NeoWCItem(@"显示详细信息", @"关闭后仅提示收到新的评论或点赞", @"text.bubble",
+                                  NeoWCSettingRowKindSwitch, NeoWCMomentsInteractionReminderDetailsEnabledKey,
+                                  nil, NeoWCSettingActionNone),
+                    ], defaults, collapsed);
+    [moments insertObjects:interactionRows
+                 atIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, interactionRows.count)]];
+    NSString *antiDeleteText = [defaults stringForKey:NeoWCMomentsCommentAntiDeleteTextKey] ?: @"←该评论已删除";
+    CGFloat antiDeleteFontSize = [defaults doubleForKey:NeoWCMomentsCommentAntiDeleteFontSizeKey];
+    antiDeleteFontSize = MIN(24.0, MAX(6.0, antiDeleteFontSize > 0.0 ? antiDeleteFontSize : 12.0));
+    NSString *antiDeleteColor = [defaults stringForKey:NeoWCMomentsCommentAntiDeleteColorKey] ?: @"#8E8E93FF";
+    NeoWCAddFeature(moments,
+                    NeoWCItem(@"朋友圈评论防删除", @"保留本次微信运行中已加载后被删除的评论", @"bubble.left.and.text.bubble.right",
+                              NeoWCSettingRowKindSwitch, NeoWCMomentsCommentAntiDeleteEnabledKey, nil, NeoWCSettingActionNone),
+                    @[
+                        NeoWCItem(@"删除标识文字", @"追加在已删除评论末尾", @"textformat", NeoWCSettingRowKindDetail,
+                                  nil, antiDeleteText, NeoWCSettingActionMomentsCommentAntiDeleteText),
+                        NeoWCItem(@"删除标识字号", @"限制在 6 到 24 之间", @"textformat.size", NeoWCSettingRowKindDetail,
+                                  nil, [NSString stringWithFormat:@"%.0f", antiDeleteFontSize], NeoWCSettingActionMomentsCommentAntiDeleteFontSize),
+                        NeoWCItem(@"删除标识颜色", @"只改变追加标识的颜色", @"paintpalette", NeoWCSettingRowKindDetail,
+                                  NeoWCMomentsCommentAntiDeleteColorKey, antiDeleteColor.uppercaseString, NeoWCSettingActionMessageTimeColor),
+                    ], defaults, collapsed);
     CGFloat intensity = [defaults doubleForKey:NeoWCMomentsLikeHapticIntensityKey];
     NSString *intensityText = intensity < 0.34 ? @"轻" : (intensity < 0.75 ? @"中" : @"强");
     NeoWCSettingItem *haptic = NeoWCItem(@"点赞震动", @"点赞成功时提供触感反馈", @"waveform", NeoWCSettingRowKindSwitch, NeoWCMomentsLikeHapticEnabledKey, nil, NeoWCSettingActionNone);
@@ -612,16 +605,21 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     NeoWCAddFeature(local, NeoWCItem(@"好友数量本地显示", @"替换明确的好友数量文案", @"person.2", NeoWCSettingRowKindSwitch, NeoWCContactsCountEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"设置好友数量", @"输入本机显示的好友数量", @"number", NeoWCSettingRowKindDetail, nil, contacts > 0 ? [NSString stringWithFormat:@"%ld 个", (long)contacts] : @"设置", NeoWCSettingActionContactsCount)
     ], defaults, collapsed);
-    [local addObject:NeoWCItem(@"广告精简", @"精简朋友圈、视频号、广告推送与小程序启动广告", @"rectangle.badge.xmark", NeoWCSettingRowKindSwitch, NeoWCAdBlockerKey, nil, NeoWCSettingActionNone)];
+    if (momentsOnly) {
+        return @[[NeoWCSettingSection sectionWithIdentifier:@"moments" title:nil footer:nil items:moments]];
+    }
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"automation" title:@"自动化" footer:@"保持后台运行可能增加耗电；自动登录和授权会跳过手动确认，请只在可信环境开启。" items:automation],
-        [NeoWCSettingSection sectionWithIdentifier:@"moments" title:@"朋友圈" footer:nil items:moments],
-        [NeoWCSettingSection sectionWithIdentifier:@"local-display" title:@"运动与本地显示" footer:@"钱包余额和好友数量只修改本机显示。" items:local],
+        [NeoWCSettingSection sectionWithIdentifier:@"scan" title:@"扫码增强" footer:nil items:scan],
+        [NeoWCSettingSection sectionWithIdentifier:@"local-display" title:@"资料、运动与本地显示" footer:@"钱包余额和好友数量只修改本机显示。" items:local],
     ];
 }
 
-static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *defaults, NSSet<NSString *> *collapsed) {
+static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *defaults,
+                                                               NSSet<NSString *> *collapsed,
+                                                               BOOL disabledOnly) {
     NSMutableArray *display = [NSMutableArray array];
+    NSMutableArray *disabled = [NSMutableArray array];
     NeoWCAddFeature(display,
                     NeoWCItem(@"全局头像圆角", @"统一调整微信头像组件的圆角", @"person.crop.square", NeoWCSettingRowKindSwitch, NeoWCGlobalAvatarRoundingEnabledKey, nil, NeoWCSettingActionNone),
                     @[
@@ -635,12 +633,14 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
         NeoWCItem(@"全局页面缩放比例", @"同时调整应用界面和网页文字", @"rectangle.compress.vertical", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", globalScale], NeoWCSettingActionGlobalScale),
         NeoWCItem(@"NeoWC 设置页缩放比例", @"仅调整本设置页", @"list.bullet.rectangle", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", settingsScale], NeoWCSettingActionSettingsScale),
     ], defaults, collapsed);
-    [display addObjectsFromArray:@[
+    [disabled addObjectsFromArray:@[
         NeoWCItem(@"隐藏群标题尾部", @"隐藏群人数和免打扰标记并居中群名", @"bell.slash", NeoWCSettingRowKindSwitch, NeoWCHideChatMuteIconKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"隐藏截屏分享按钮", @"不显示右下角截图转发浮层", @"rectangle.on.rectangle.slash", NeoWCSettingRowKindSwitch, NeoWCHideScreenshotForwardKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"隐藏页面分割线", @"不显示列表和页面中的细分割线", @"rectangle.split.1x2", NeoWCSettingRowKindSwitch, NeoWCHideSeparatorLinesKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"开启强制高刷", @"前台锁定为设备支持的最高刷新率", @"speedometer", NeoWCSettingRowKindSwitch, NeoWCScrollHighRefreshRateEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"广告精简", @"精简朋友圈、视频号、广告推送与小程序启动广告", @"rectangle.badge.xmark", NeoWCSettingRowKindSwitch, NeoWCAdBlockerKey, nil, NeoWCSettingActionNone),
     ]];
+    [display addObject:NeoWCItem(@"开启强制高刷", @"前台锁定为设备支持的最高刷新率", @"speedometer", NeoWCSettingRowKindSwitch, NeoWCScrollHighRefreshRateEnabledKey, nil, NeoWCSettingActionNone)];
+    [display addObject:NeoWCItem(@"主页右滑扩展", @"增加备注、朋友圈、折叠群聊、勿扰与置顶操作", @"rectangle.and.hand.point.up.left", NeoWCSettingRowKindSwitch, NeoWCHomeSwipeActionsEnabledKey, nil, NeoWCSettingActionNone)];
     NSMutableArray *chatCapsules = [NSMutableArray array];
     BOOL supportsLiquidGlass = NeoWCSystemSupportsNativeLiquidGlass();
     NSInteger glassStyle = [defaults integerForKey:NeoWCChatTopBarEffectStyleKey];
@@ -672,29 +672,33 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
     if ([defaults boolForKey:NeoWCChatInputOuterRoundingKey] && ![collapsed containsObject:NeoWCChatInputOuterRoundingKey]) [roundingChildren addObject:NeoWCItem(@"外部圆角程度", @"输入 0 到 40", @"slider.horizontal.3", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatInputOuterRadiusKey]], NeoWCSettingActionOuterRadius)];
     NeoWCAddFeature(input, NeoWCItem(@"聊天输入栏圆角", @"分别控制输入框与外部工具栏", @"rectangle.roundedtop", NeoWCSettingRowKindSwitch, NeoWCChatInputRoundingEnabledKey, nil, NeoWCSettingActionNone), roundingChildren, defaults, collapsed);
     NSUInteger hiddenMeCount = [defaults arrayForKey:NeoWCMeMenuHiddenTitlesKey].count;
-    NSArray *management = @[
-        NeoWCItem(@"我的页面入口管理", @"隐藏作品、小店与卡包或表情入口", @"person.crop.rectangle.stack", NeoWCSettingRowKindDetail, nil, NeoWCCountText(hiddenMeCount), NeoWCSettingActionMeMenu),
-        NeoWCItem(@"插件管理", @"分类、排序；长按任意开关可添加快捷开关", @"square.stack.3d.up", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionPluginManager),
-    ];
+    [disabled addObject:NeoWCItem(@"我的页面入口管理", @"隐藏作品、小店与卡包或表情入口", @"person.crop.rectangle.stack", NeoWCSettingRowKindDetail, nil, NeoWCCountText(hiddenMeCount), NeoWCSettingActionMeMenu)];
+    if (disabledOnly) {
+        return @[[NeoWCSettingSection sectionWithIdentifier:@"interface-disabled" title:nil
+                                                     footer:@"关闭对应开关后恢复微信原始界面。" items:disabled]];
+    }
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"display" title:@"显示" footer:@"关闭后恢复微信原始样式。" items:display],
         [NeoWCSettingSection sectionWithIdentifier:@"chat-capsules" title:@"聊天顶栏" footer:@"展开胶囊顶栏可调整内容尺寸与玻璃效果。" items:chatCapsules],
         [NeoWCSettingSection sectionWithIdentifier:@"input" title:@"输入栏" footer:nil items:input],
-        [NeoWCSettingSection sectionWithIdentifier:@"entry-management" title:@"入口管理" footer:nil items:management],
     ];
 }
 
-static NSArray<NeoWCSettingSection *> *NeoWCDeveloperSections(NSUserDefaults *defaults, NSSet<NSString *> *collapsed) {
-    NSMutableArray *items = [NSMutableArray arrayWithArray:@[
-        NeoWCItem(@"调试悬浮按钮", @"仅由此开关控制，不监听全局手势", @"wrench.and.screwdriver", NeoWCSettingRowKindSwitch, NeoWCDebugFloatingEnabledKey, nil, NeoWCSettingActionNone),
-        NeoWCItem(@"记录调试日志", @"关闭后停止新增运行日志", @"text.alignleft", NeoWCSettingRowKindSwitch, NeoWCDebugLoggingEnabledKey, nil, NeoWCSettingActionNone),
-#if 0
-        NeoWCItem(@"收款链接诊断", @"仅脱敏记录官方收款接口与消息卡片结构", @"waveform.path.ecg", NeoWCSettingRowKindSwitch, NeoWCPaymentLinkDiagnosticsEnabledKey, nil, NeoWCSettingActionNone),
-#endif
-        NeoWCItem(@"调试中心", @"视图检查、Runtime 搜索与日志", @"ladybug", NeoWCSettingRowKindDetail, nil, @"打开", NeoWCSettingActionDebugCenter),
-        NeoWCItem(@"功能兼容性", @"检查类、Selector 与触发状态", @"checklist", NeoWCSettingRowKindDetail, nil, @"检查", NeoWCSettingActionCompatibility),
-    ]];
-    return @[[NeoWCSettingSection sectionWithIdentifier:@"developer" title:nil footer:nil items:items]];
+static NSArray<NeoWCSettingSection *> *NeoWCPluginSections(NSUserDefaults *defaults) {
+    NSArray<NeoWCSettingItem *> *logging = @[
+        NeoWCItem(@"记录运行日志", @"关闭后停止新增普通日志，最多保留本次运行 500 条", @"text.alignleft", NeoWCSettingRowKindSwitch, NeoWCLoggingEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"查看运行日志", @"查看、复制或清空本次微信运行记录", @"doc.text.magnifyingglass", NeoWCSettingRowKindDetail, nil,
+                  NeoWCCountText(NeoWCLogEntries().count), NeoWCSettingActionLogRecords),
+    ];
+    NSArray<NeoWCSettingItem *> *management = @[
+        NeoWCItem(@"配置管理", @"导入、导出或重置 NeoWC 配置", @"externaldrive", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionConfigManager),
+        NeoWCItem(@"插件入口管理", @"分类、排序；长按任意开关可添加快捷开关", @"square.stack.3d.up", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionPluginManager),
+    ];
+    (void)defaults;
+    return @[
+        [NeoWCSettingSection sectionWithIdentifier:@"logging" title:@"日志" footer:@"运行日志只保存在内存中，退出微信后自动清空。" items:logging],
+        [NeoWCSettingSection sectionWithIdentifier:@"plugin-management" title:@"配置与入口" footer:nil items:management],
+    ];
 }
 
 NSArray<NeoWCSettingSection *> *NeoWCSettingsBuildSections(NeoWCSettingsCategory category,
@@ -703,9 +707,11 @@ NSArray<NeoWCSettingSection *> *NeoWCSettingsBuildSections(NeoWCSettingsCategory
     NSSet *collapsed = collapsedFeatureKeys ?: [NSSet set];
     switch (category) {
         case NeoWCSettingsCategoryMessages: return NeoWCMessageSections(defaults, collapsed);
-        case NeoWCSettingsCategoryEnhancements: return NeoWCEnhancementSections(defaults, collapsed);
-        case NeoWCSettingsCategoryInterface: return NeoWCInterfaceSections(defaults, collapsed);
-        case NeoWCSettingsCategoryDeveloper: return NeoWCDeveloperSections(defaults, collapsed);
+        case NeoWCSettingsCategoryMoments: return NeoWCEnhancementSections(defaults, collapsed, YES);
+        case NeoWCSettingsCategoryInterfaceDisabled: return NeoWCInterfaceSections(defaults, collapsed, YES);
+        case NeoWCSettingsCategoryEnhancements: return NeoWCEnhancementSections(defaults, collapsed, NO);
+        case NeoWCSettingsCategoryInterface: return NeoWCInterfaceSections(defaults, collapsed, NO);
+        case NeoWCSettingsCategoryPlugin: return NeoWCPluginSections(defaults);
         case NeoWCSettingsCategoryRoot:
         default: return NeoWCRootSections();
     }
