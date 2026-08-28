@@ -64,7 +64,6 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionRedEnvelopeFontSize,
     NeoWCSettingActionChatTopAvatarSize,
     NeoWCSettingActionChatTopNicknameSize,
-    NeoWCSettingActionChatTopEffectStyle,
     NeoWCSettingActionChatGlassBlurIntensity,
     NeoWCSettingActionChatGlassTintOpacity,
     NeoWCSettingActionChatGlassWhiteStrength,

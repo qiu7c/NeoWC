@@ -399,44 +399,6 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
     [self presentSheet:sheet];
 }
 
-- (void)presentChatTopEffectStylePicker {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    BOOL supportsLiquid = NeoWCSystemSupportsNativeLiquidGlass();
-    NSInteger stored = [defaults integerForKey:NeoWCChatTopBarEffectStyleKey];
-    NSInteger current = stored == NeoWCChatTopBarEffectStyleFauxLiquid
-        ? NeoWCChatTopBarEffectStyleFauxLiquid
-        : (supportsLiquid && stored == NeoWCChatTopBarEffectStyleLiquid
-            ? NeoWCChatTopBarEffectStyleLiquid : NeoWCChatTopBarEffectStyleMaterial);
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"模糊效果"
-                                                                    message:supportsLiquid
-                                                                        ? @"伪液态玻璃使用低开销高光与轮廓层；原生液态玻璃使用 iOS 26 UIGlassEffect。"
-                                                                        : @"伪液态玻璃使用低开销高光与轮廓层，支持当前系统。"
-                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-    NSMutableArray *options = [NSMutableArray arrayWithObject:
-        @{@"title": @"超薄玻璃", @"value": @(NeoWCChatTopBarEffectStyleMaterial)}];
-    [options addObject:@{@"title": @"伪液态玻璃", @"value": @(NeoWCChatTopBarEffectStyleFauxLiquid)}];
-    if (supportsLiquid) {
-        [options addObject:@{@"title": @"原生液态玻璃", @"value": @(NeoWCChatTopBarEffectStyleLiquid)}];
-    }
-    __weak typeof(self) weakSelf = self;
-    for (NSDictionary *option in options) {
-        NSInteger value = [option[@"value"] integerValue];
-        NSString *title = value == current
-            ? [NSString stringWithFormat:@"✓  %@", option[@"title"]]
-            : option[@"title"];
-        [sheet addAction:[UIAlertAction actionWithTitle:title
-                                                     style:UIAlertActionStyleDefault
-                                                   handler:^(__unused UIAlertAction *action) {
-            [defaults setInteger:value forKey:NeoWCChatTopBarEffectStyleKey];
-            [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification
-                                                               object:NeoWCChatTopBarEffectStyleKey];
-            [weakSelf reload];
-        }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentSheet:sheet];
-}
-
 - (void)presentStepModePicker {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     NSInteger current = [defaults integerForKey:NeoWCStepModeKey];
@@ -692,7 +654,6 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         case NeoWCSettingActionRedEnvelopeFontSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 10 到 24 之间的字号" key:NeoWCRedEnvelopeDetailFontSizeKey minimum:10 maximum:24 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatTopAvatarSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 24 到 34 之间的头像大小" key:NeoWCChatTopBarAvatarSizeKey minimum:24 maximum:34 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatTopNicknameSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 12 到 18 之间的昵称字号" key:NeoWCChatTopBarNicknameSizeKey minimum:12 maximum:18 notifyChange:YES applyScale:NO]; break;
-        case NeoWCSettingActionChatTopEffectStyle: [self presentChatTopEffectStylePicker]; break;
         case NeoWCSettingActionChatGlassBlurIntensity: [self presentNumberEditorWithTitle:item.title message:@"请输入 20 到 100 之间的百分比" key:NeoWCChatGlassBlurIntensityKey minimum:20 maximum:100 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatGlassTintOpacity: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 30 之间的百分比；0 表示不额外染色" key:NeoWCChatGlassTintOpacityKey minimum:0 maximum:30 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatGlassWhiteStrength: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 50 之间的百分比；数值越高白玻璃越明显" key:NeoWCChatGlassWhiteStrengthKey minimum:0 maximum:50 notifyChange:YES applyScale:NO]; break;

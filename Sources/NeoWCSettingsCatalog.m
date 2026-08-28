@@ -111,6 +111,7 @@ void NeoWCSettingsHandleSwitchChange(NSString *key, BOOL enabled) {
 }
 
 void NeoWCSettingsRegisterDefaults(void) {
+    [NSUserDefaults.standardUserDefaults removeObjectForKey:@"com.qiu7c.neowc.chat.top-bar-capsule.effect-style"];
     [NSUserDefaults.standardUserDefaults registerDefaults:@{
         NeoWCEnabledKey: @YES,
         NeoWCAntiRevokeKey: @YES,
@@ -155,7 +156,6 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCQuoteJumpImageEnabledKey: @YES,
         NeoWCQuoteJumpVideoEnabledKey: @YES,
         NeoWCChatTopBarCapsuleEnabledKey: @NO,
-        NeoWCChatTopBarEffectStyleKey: @(NeoWCChatTopBarEffectStyleMaterial),
         NeoWCChatTopBarShadowEnabledKey: @YES,
         NeoWCChatGlassBlurIntensityKey: @100.0,
         NeoWCChatGlassTintOpacityKey: @8.0,
@@ -646,18 +646,12 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
     [display addObject:NeoWCItem(@"开启强制高刷", @"前台锁定为设备支持的最高刷新率", @"speedometer", NeoWCSettingRowKindSwitch, NeoWCScrollHighRefreshRateEnabledKey, nil, NeoWCSettingActionNone)];
     [display addObject:NeoWCItem(@"主页右滑扩展", @"增加备注、朋友圈、折叠群聊、勿扰与置顶操作", @"rectangle.and.hand.point.up.left", NeoWCSettingRowKindSwitch, NeoWCHomeSwipeActionsEnabledKey, nil, NeoWCSettingActionNone)];
     NSMutableArray *chatCapsules = [NSMutableArray array];
-    BOOL supportsLiquidGlass = NeoWCSystemSupportsNativeLiquidGlass();
-    NSInteger glassStyle = [defaults integerForKey:NeoWCChatTopBarEffectStyleKey];
-    NSString *glassStyleName = glassStyle == NeoWCChatTopBarEffectStyleFauxLiquid
-        ? @"伪液态玻璃"
-        : (supportsLiquidGlass && glassStyle == NeoWCChatTopBarEffectStyleLiquid ? @"原生液态玻璃" : @"超薄玻璃");
     NSString *glassTintColor = [defaults stringForKey:NeoWCChatGlassTintColorKey] ?: @"#FFFFFFFF";
     NeoWCAddFeature(chatCapsules,
                     NeoWCItem(@"胶囊顶栏", @"隐藏整条顶栏背景，左右使用玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatTopBarCapsuleEnabledKey, nil, NeoWCSettingActionNone),
                     @[
         NeoWCItem(@"头像大小", @"限制在 24 到 34 之间", @"person.crop.circle", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarAvatarSizeKey]], NeoWCSettingActionChatTopAvatarSize),
         NeoWCItem(@"昵称字号", @"限制在 12 到 18 之间", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarNicknameSizeKey]], NeoWCSettingActionChatTopNicknameSize),
-        NeoWCItem(@"玻璃类型", supportsLiquidGlass ? @"超薄、伪液态或 iOS 原生液态玻璃" : @"超薄与伪液态玻璃均支持当前系统", @"circle.lefthalf.filled", NeoWCSettingRowKindDetail, nil, NeoWCCurrentSelection(glassStyleName), NeoWCSettingActionChatTopEffectStyle),
         NeoWCItem(@"模糊强度", @"限制在 20% 到 100%", @"drop.halffull", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassBlurIntensityKey]], NeoWCSettingActionChatGlassBlurIntensity),
         NeoWCItem(@"染色颜色", @"选择玻璃覆盖色，染色强度为 0 时不显示", @"paintpalette.fill", NeoWCSettingRowKindDetail, NeoWCChatGlassTintColorKey, glassTintColor.uppercaseString, NeoWCSettingActionMessageTimeColor),
         NeoWCItem(@"染色强度", @"限制在 0% 到 30%；0% 不额外染色", @"paintpalette", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassTintOpacityKey]], NeoWCSettingActionChatGlassTintOpacity),
@@ -683,7 +677,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
     }
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"display" title:@"显示" footer:@"关闭后恢复微信原始样式。" items:display],
-        [NeoWCSettingSection sectionWithIdentifier:@"chat-capsules" title:@"聊天顶栏" footer:@"展开胶囊顶栏可调整内容尺寸与玻璃效果。" items:chatCapsules],
+        [NeoWCSettingSection sectionWithIdentifier:@"chat-capsules" title:@"聊天顶栏" footer:@"胶囊顶栏与置顶消息统一使用磨砂玻璃，可继续精调尺寸、模糊和颜色。" items:chatCapsules],
         [NeoWCSettingSection sectionWithIdentifier:@"input" title:@"输入栏" footer:nil items:input],
     ];
 }

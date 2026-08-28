@@ -56,7 +56,6 @@ FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpImageEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQuoteJumpVideoEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarCapsuleEnabledKey;
-FOUNDATION_EXPORT NSString *const NeoWCChatTopBarEffectStyleKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatTopBarShadowEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatGlassBlurIntensityKey;
 FOUNDATION_EXPORT NSString *const NeoWCChatGlassTintOpacityKey;
@@ -134,11 +133,6 @@ typedef NS_ENUM(NSInteger, NeoWCAvatarQuickMenuGesture) {
     NeoWCAvatarQuickMenuGestureLongPress = 2,
 };
 
-typedef NS_ENUM(NSInteger, NeoWCChatTopBarEffectStyle) {
-    NeoWCChatTopBarEffectStyleMaterial = 0,
-    NeoWCChatTopBarEffectStyleLiquid = 1,
-    NeoWCChatTopBarEffectStyleFauxLiquid = 2,
-};
 FOUNDATION_EXPORT NSString *const NeoWCPageScaleEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCPageScaleGlobalPercentKey;
 FOUNDATION_EXPORT NSString *const NeoWCSettingsPageScalePercentKey;
@@ -173,7 +167,6 @@ FOUNDATION_EXPORT NSString *const NeoWCMultiSelectShareCardKey;
 FOUNDATION_EXPORT NSString *const NeoWCEnhancementDidChangeNotification;
 
 FOUNDATION_EXPORT BOOL NeoWCEnhancementEnabled(NSString *key);
-FOUNDATION_EXPORT BOOL NeoWCSystemSupportsNativeLiquidGlass(void);
 FOUNDATION_EXPORT CGFloat NeoWCScalePercentForDefaultsKey(NSString *key, CGFloat defaultValue);
 FOUNDATION_EXPORT NSString *NeoWCNormalizedMomentsDateFormat(NSString *format);
 FOUNDATION_EXPORT UIColor *NeoWCColorForDefaultsKey(NSString *key, UIColor *fallbackColor);

@@ -294,7 +294,7 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
     self.stackView.translatesAutoresizingMaskIntoConstraints = NO;
     self.stackView.axis = UILayoutConstraintAxisHorizontal;
     self.stackView.alignment = UIStackViewAlignmentFill;
-    self.stackView.distribution = UIStackViewDistributionFillEqually;
+    self.stackView.distribution = UIStackViewDistributionFill;
     self.stackView.spacing = 0.0;
     [self addSubview:self.stackView];
 
@@ -331,6 +331,10 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
         button.titleLabel.adjustsFontSizeToFitWidth = YES;
         button.titleLabel.minimumScaleFactor = 0.72;
         button.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        button.contentEdgeInsets = UIEdgeInsetsMake(0.0, 22.0, 0.0, 22.0);
+        [button setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+        [button setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh
+                                               forAxis:UILayoutConstraintAxisHorizontal];
         button.accessibilityLabel = title;
         [button setTitle:title forState:UIControlStateNormal];
         [button addTarget:self action:@selector(categoryButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
@@ -512,7 +516,7 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
         [self.heroIcon.centerXAnchor constraintEqualToAnchor:header.centerXAnchor], [self.heroIcon.topAnchor constraintEqualToAnchor:header.topAnchor constant:24], [self.heroIcon.widthAnchor constraintEqualToConstant:72], [self.heroIcon.heightAnchor constraintEqualToConstant:72],
         [self.heroTitle.leadingAnchor constraintGreaterThanOrEqualToAnchor:header.leadingAnchor constant:24], [self.heroTitle.trailingAnchor constraintLessThanOrEqualToAnchor:header.trailingAnchor constant:-24], [self.heroTitle.centerXAnchor constraintEqualToAnchor:header.centerXAnchor], [self.heroTitle.topAnchor constraintEqualToAnchor:self.heroIcon.bottomAnchor constant:12],
         [self.heroSubtitle.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:28], [self.heroSubtitle.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-28], [self.heroSubtitle.topAnchor constraintEqualToAnchor:self.heroTitle.bottomAnchor constant:8],
-        [self.categoryControl.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:20], [self.categoryControl.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-20], [self.categoryControl.topAnchor constraintEqualToAnchor:self.heroSubtitle.bottomAnchor constant:24], [self.categoryControl.heightAnchor constraintEqualToConstant:40]
+        [self.categoryControl.centerXAnchor constraintEqualToAnchor:header.centerXAnchor], [self.categoryControl.leadingAnchor constraintGreaterThanOrEqualToAnchor:header.leadingAnchor constant:20], [self.categoryControl.trailingAnchor constraintLessThanOrEqualToAnchor:header.trailingAnchor constant:-20], [self.categoryControl.topAnchor constraintEqualToAnchor:self.heroSubtitle.bottomAnchor constant:24], [self.categoryControl.heightAnchor constraintEqualToConstant:40]
     ]];
     self.tableView.tableHeaderView = header; [self updateHeader];
 }

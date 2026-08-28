@@ -57,7 +57,6 @@ NSString *const NeoWCQuoteJumpEnabledKey = @"com.qiu7c.neowc.chat.quote-jump";
 NSString *const NeoWCQuoteJumpImageEnabledKey = @"com.qiu7c.neowc.chat.quote-jump.image";
 NSString *const NeoWCQuoteJumpVideoEnabledKey = @"com.qiu7c.neowc.chat.quote-jump.video";
 NSString *const NeoWCChatTopBarCapsuleEnabledKey = @"com.qiu7c.neowc.chat.top-bar-capsule";
-NSString *const NeoWCChatTopBarEffectStyleKey = @"com.qiu7c.neowc.chat.top-bar-capsule.effect-style";
 NSString *const NeoWCChatTopBarShadowEnabledKey = @"com.qiu7c.neowc.chat.top-bar-capsule.shadow";
 NSString *const NeoWCChatGlassBlurIntensityKey = @"com.qiu7c.neowc.chat.capsule-glass.blur-intensity";
 NSString *const NeoWCChatGlassTintOpacityKey = @"com.qiu7c.neowc.chat.capsule-glass.tint-opacity";
@@ -244,9 +243,4 @@ UIColor *NeoWCDynamicColorForDefaultsKeys(NSString *lightKey,
     return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
         return traits.userInterfaceStyle == UIUserInterfaceStyleDark ? darkColor : lightColor;
     }];
-}
-
-BOOL NeoWCSystemSupportsNativeLiquidGlass(void) {
-    NSOperatingSystemVersion version = NSProcessInfo.processInfo.operatingSystemVersion;
-    return version.majorVersion >= 26 && NSClassFromString(@"UIGlassEffect") != Nil;
 }

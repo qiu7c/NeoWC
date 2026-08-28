@@ -398,11 +398,9 @@ static char NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey;
 static char NeoWCChatTopContainerOriginalBackgroundColorKey;
 static char NeoWCChatTopBackgroundOriginalHiddenKey;
 static char NeoWCChatTopGlassEffectMarkerKey;
-static char NeoWCChatTopGlassEffectAnimatorKey;
 static char NeoWCChatTopTypingActiveKey;
 static char NeoWCChatTopStableDisplayNameKey;
 static char NeoWCChatTypingStatusLabelMarkerKey;
-static char NeoWCChatGlassAppliedStyleKey;
 static char NeoWCChatTopOriginalClipsToBoundsKey;
 static char NeoWCChatTopOriginalBorderWidthKey;
 static char NeoWCChatTopOriginalCornerRadiusKey;
@@ -6144,7 +6142,6 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
                         }
                         BOOL refreshChatTop = !changedKey ||
                             [changedKey isEqualToString:NeoWCChatTopBarCapsuleEnabledKey] ||
-                            [changedKey isEqualToString:NeoWCChatTopBarEffectStyleKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarShadowEnabledKey] ||
                             [changedKey isEqualToString:NeoWCChatGlassBlurIntensityKey] ||
                             [changedKey isEqualToString:NeoWCChatGlassTintOpacityKey] ||
@@ -7419,6 +7416,53 @@ static void NeoWCPresentQuickReplyLibrary(BaseMsgContentViewController *controll
 static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller);
 static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
 
+@interface NeoWCChatTopAvatarHostView : UIView
+@property (nonatomic, strong) UIView *sourceView;
+- (instancetype)initWithSourceView:(UIView *)sourceView;
+@end
+
+@implementation NeoWCChatTopAvatarHostView
+
+- (instancetype)initWithSourceView:(UIView *)sourceView {
+    self = [super initWithFrame:CGRectZero];
+    if (!self) return nil;
+    self.translatesAutoresizingMaskIntoConstraints = NO;
+    self.backgroundColor = UIColor.clearColor;
+    self.clipsToBounds = YES;
+    self.layer.cornerCurve = kCACornerCurveContinuous;
+    _sourceView = sourceView;
+    _sourceView.translatesAutoresizingMaskIntoConstraints = YES;
+    _sourceView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _sourceView.userInteractionEnabled = NO;
+    [self addSubview:_sourceView];
+    return self;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGFloat radius = CGRectGetHeight(self.bounds) * 0.5;
+    self.layer.cornerRadius = radius;
+    self.sourceView.frame = self.bounds;
+    self.sourceView.clipsToBounds = YES;
+    self.sourceView.layer.cornerRadius = radius;
+    self.sourceView.layer.cornerCurve = kCACornerCurveContinuous;
+    [self.sourceView layoutIfNeeded];
+
+    UIImageView *imageView = [self.sourceView isKindOfClass:UIImageView.class]
+        ? (UIImageView *)self.sourceView
+        : NeoWCTweakValueForSelectorNames(self.sourceView, @[@"headImageView", @"imageView"]);
+    if ([imageView isKindOfClass:UIImageView.class]) {
+        imageView.frame = self.sourceView.bounds;
+        imageView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        imageView.contentMode = UIViewContentModeScaleAspectFill;
+        imageView.clipsToBounds = YES;
+        imageView.layer.cornerRadius = radius;
+        imageView.layer.cornerCurve = kCACornerCurveContinuous;
+    }
+}
+
+@end
+
 static CGFloat NeoWCChatTopClampedValue(NSString *key, CGFloat fallback,
                                        CGFloat minimum, CGFloat maximum) {
     id stored = [NSUserDefaults.standardUserDefaults objectForKey:key];
@@ -7505,66 +7549,11 @@ static BOOL NeoWCSetChatTypingState(BaseMsgContentViewController *controller, id
 
 static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibilityLabel);
 
-static NeoWCChatTopBarEffectStyle NeoWCChatTopEffectStyle(void) {
-    NSInteger value = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCChatTopBarEffectStyleKey];
-    if (value == NeoWCChatTopBarEffectStyleFauxLiquid) return NeoWCChatTopBarEffectStyleFauxLiquid;
-    if (value == NeoWCChatTopBarEffectStyleLiquid && NeoWCSystemSupportsNativeLiquidGlass()) {
-        return NeoWCChatTopBarEffectStyleLiquid;
-    }
-    return NeoWCChatTopBarEffectStyleMaterial;
-}
-
-static UIVisualEffect *NeoWCChatTopVisualEffect(void) {
-    if (NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleLiquid) {
-        Class glassEffectClass = NSClassFromString(@"UIGlassEffect");
-        SEL factory = NSSelectorFromString(@"effectWithStyle:");
-        if (glassEffectClass && [glassEffectClass respondsToSelector:factory]) {
-            UIVisualEffect *effect = ((id (*)(id, SEL, NSInteger))objc_msgSend)(glassEffectClass,
-                                                                                factory,
-                                                                                0);
-            SEL interactiveSelector = NSSelectorFromString(@"setInteractive:");
-            if ([effect respondsToSelector:interactiveSelector]) {
-                ((void (*)(id, SEL, BOOL))objc_msgSend)(effect, interactiveSelector, NO);
-            }
-            if (effect) return effect;
-        }
-        return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
-    }
-    if (NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleFauxLiquid) {
-        return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
-    }
-    return [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
-}
-
 static CGFloat NeoWCChatGlassPercent(NSString *key, CGFloat fallback,
                                      CGFloat minimum, CGFloat maximum) {
     id stored = [NSUserDefaults.standardUserDefaults objectForKey:key];
     CGFloat value = [stored respondsToSelector:@selector(doubleValue)] ? [stored doubleValue] : fallback;
     return MIN(maximum, MAX(minimum, value));
-}
-
-static void NeoWCConfigureChatTopGlassLayer(UIVisualEffectView *effectView) {
-    UIVisualEffect *effect = NeoWCChatTopVisualEffect();
-    CGFloat blurIntensity = NeoWCChatGlassPercent(NeoWCChatGlassBlurIntensityKey,
-                                                  100.0, 20.0, 100.0) / 100.0;
-    if (blurIntensity >= 0.999) {
-        effectView.effect = effect;
-    } else {
-        effectView.effect = nil;
-        __weak UIVisualEffectView *weakEffectView = effectView;
-        UIViewPropertyAnimator *animator = [[UIViewPropertyAnimator alloc]
-            initWithDuration:1.0 curve:UIViewAnimationCurveLinear animations:^{
-                weakEffectView.effect = effect;
-            }];
-        [animator startAnimation];
-        [animator pauseAnimation];
-        animator.fractionComplete = blurIntensity;
-        objc_setAssociatedObject(effectView, &NeoWCChatTopGlassEffectAnimatorKey,
-                                 animator, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-
-    effectView.layer.borderWidth = 0.0;
-    effectView.layer.borderColor = UIColor.clearColor.CGColor;
 }
 
 static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectView **effectViewOut) {
@@ -7576,25 +7565,17 @@ static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectVi
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     UIVisualEffectView *effectView = container.effectView;
-    NeoWCConfigureChatTopGlassLayer(effectView);
+    CGFloat blurIntensity = NeoWCChatGlassPercent(NeoWCChatGlassBlurIntensityKey,
+                                                  100.0, 20.0, 100.0) / 100.0;
     UIColor *tintColor = NeoWCColorForDefaultsKey(NeoWCChatGlassTintColorKey, UIColor.whiteColor);
     CGFloat tintOpacity = NeoWCChatGlassPercent(NeoWCChatGlassTintOpacityKey,
                                                 8.0, 0.0, 30.0) / 100.0;
     CGFloat whiteStrength = NeoWCChatGlassPercent(NeoWCChatGlassWhiteStrengthKey,
                                                   18.0, 0.0, 50.0) / 100.0;
-    [container configureFauxLiquidEnabled:NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleFauxLiquid
-                                tintColor:tintColor
-                              tintOpacity:tintOpacity
-                             whiteStrength:whiteStrength];
-    if (NeoWCChatTopEffectStyle() == NeoWCChatTopBarEffectStyleMaterial) {
-        UIColor *outlineColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-            return traits.userInterfaceStyle == UIUserInterfaceStyleDark
-                ? [UIColor.whiteColor colorWithAlphaComponent:0.14]
-                : [UIColor.blackColor colorWithAlphaComponent:0.10];
-        }];
-        effectView.layer.borderWidth = 0.5;
-        effectView.layer.borderColor = outlineColor.CGColor;
-    }
+    [container configureFrostedGlassWithBlurIntensity:blurIntensity
+                                             tintColor:tintColor
+                                           tintOpacity:tintOpacity
+                                         whiteStrength:whiteStrength];
     objc_setAssociatedObject(effectView, &NeoWCChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (effectViewOut) *effectViewOut = effectView;
@@ -7633,22 +7614,8 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
 
     UIView *avatarSource = NeoWCChatTopAvatarView(contact, userName);
     NeoWCExcludeHeadViewFromGlobalAvatarRounding(avatarSource);
-    id avatarImage = NeoWCTweakValueForSelectorNames(avatarSource, @[@"headImageView"]);
-    if ([avatarImage isKindOfClass:UIImageView.class]) {
-        ((UIImageView *)avatarImage).contentMode = UIViewContentModeScaleAspectFit;
-    }
-    UIView *avatar = [UIView new];
-    avatar.translatesAutoresizingMaskIntoConstraints = NO;
-    avatar.backgroundColor = UIColor.clearColor;
-    avatar.clipsToBounds = YES;
-    avatar.layer.cornerRadius = avatarSize / 2.0;
-    avatar.layer.cornerCurve = kCACornerCurveContinuous;
-    avatarSource.translatesAutoresizingMaskIntoConstraints = NO;
-    avatarSource.clipsToBounds = YES;
-    avatarSource.layer.cornerRadius = avatarSize / 2.0;
-    avatarSource.layer.cornerCurve = kCACornerCurveContinuous;
-    avatarSource.userInteractionEnabled = NO;
-    [avatar addSubview:avatarSource];
+    NeoWCChatTopAvatarHostView *avatar = [[NeoWCChatTopAvatarHostView alloc]
+        initWithSourceView:avatarSource];
     [content addSubview:avatar];
 
     UILabel *label = [UILabel new];
@@ -7704,10 +7671,6 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
         [avatar.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
         [avatar.widthAnchor constraintEqualToConstant:avatarSize],
         [avatar.heightAnchor constraintEqualToConstant:avatarSize],
-        [avatarSource.centerXAnchor constraintEqualToAnchor:avatar.centerXAnchor],
-        [avatarSource.centerYAnchor constraintEqualToAnchor:avatar.centerYAnchor],
-        [avatarSource.widthAnchor constraintEqualToConstant:avatarSize],
-        [avatarSource.heightAnchor constraintEqualToConstant:avatarSize],
         [label.leadingAnchor constraintEqualToAnchor:avatar.trailingAnchor constant:8.0],
         [label.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
     ]];
@@ -8058,14 +8021,16 @@ static void NeoWCSetChatNavigationContainerClear(UIView *view, BOOL clear) {
     }
 }
 
-static void NeoWCApplyChatNavigationBackground(BaseMsgContentViewController *controller, BOOL hidden) {
+static void NeoWCApplyChatNavigationBackgroundWithNavigation(BaseMsgContentViewController *controller,
+                                                              UINavigationController *navigationController,
+                                                              BOOL hidden) {
     NeoWCSetChatContentNavigationBackgroundTransparent(controller, hidden);
-    UINavigationBar *navigationBar = controller.navigationController.navigationBar;
+    UINavigationBar *navigationBar = navigationController.navigationBar;
     NeoWCSetChatNavigationHostTransparent(navigationBar, hidden);
     NeoWCSetChatNavigationHostTransparent(navigationBar.superview, hidden);
     NeoWCSetChatNavigationBackgroundHidden(navigationBar, hidden);
     NeoWCSetChatNavigationDirectBackgroundsHidden(navigationBar, hidden);
-    UIView *navigationRoot = controller.navigationController.view;
+    UIView *navigationRoot = navigationController.view;
     UIView *view = navigationBar;
     for (NSUInteger depth = 0; view && depth < 4; depth++, view = view.superview) {
         NeoWCSetChatNavigationContainerClear(view, hidden);
@@ -8078,8 +8043,15 @@ static void NeoWCApplyChatNavigationBackground(BaseMsgContentViewController *con
     }
 }
 
-static void NeoWCRestoreChatNavigationPresentation(BaseMsgContentViewController *controller) {
-    UINavigationBar *navigationBar = controller.navigationController.navigationBar;
+static void NeoWCApplyChatNavigationBackground(BaseMsgContentViewController *controller, BOOL hidden) {
+    NeoWCApplyChatNavigationBackgroundWithNavigation(controller,
+                                                     controller.navigationController,
+                                                     hidden);
+}
+
+static void NeoWCRestoreChatNavigationPresentationWithNavigation(BaseMsgContentViewController *controller,
+                                                                  UINavigationController *navigationController) {
+    UINavigationBar *navigationBar = navigationController.navigationBar;
     id standardAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationStandardAppearanceKey);
     id compactAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationCompactAppearanceKey);
     id scrollEdgeAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationScrollEdgeAppearanceKey);
@@ -8098,7 +8070,12 @@ static void NeoWCRestoreChatNavigationPresentation(BaseMsgContentViewController 
     NSNumber *includesOpaqueBars = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey);
     if (edges) controller.edgesForExtendedLayout = (UIRectEdge)edges.unsignedIntegerValue;
     if (includesOpaqueBars) controller.extendedLayoutIncludesOpaqueBars = includesOpaqueBars.boolValue;
-    NeoWCApplyChatNavigationBackground(controller, NO);
+    NeoWCApplyChatNavigationBackgroundWithNavigation(controller, navigationController, NO);
+}
+
+static void NeoWCRestoreChatNavigationPresentation(BaseMsgContentViewController *controller) {
+    NeoWCRestoreChatNavigationPresentationWithNavigation(controller,
+                                                         controller.navigationController);
 }
 
 static UIBarButtonItem *NeoWCNativeChatMoreItem(BaseMsgContentViewController *controller) {
@@ -8294,9 +8271,9 @@ static BOOL NeoWCJumpToReferencedMessage(CommonMessageCellView *cell) {
 }
 
 static void NeoWCSetPinnedMessageDescendantBackgroundsClear(UIView *view,
-                                                            UIVisualEffectView *blurView,
+                                                            UIView *glassView,
                                                             BOOL clear) {
-    if (!view || view == blurView || [view isDescendantOfView:blurView]) return;
+    if (!view || view == glassView || [view isDescendantOfView:glassView]) return;
     id originalColor = objc_getAssociatedObject(view, &NeoWCChatPinnedOriginalBackgroundColorKey);
     if (clear) {
         if (!originalColor) {
@@ -8311,16 +8288,16 @@ static void NeoWCSetPinnedMessageDescendantBackgroundsClear(UIView *view,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     for (UIView *subview in view.subviews) {
-        NeoWCSetPinnedMessageDescendantBackgroundsClear(subview, blurView, clear);
+        NeoWCSetPinnedMessageDescendantBackgroundsClear(subview, glassView, clear);
     }
 }
 
 static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
     if (!tipsView) return;
     BOOL enabled = NeoWCEnhancementEnabled(NeoWCChatTopBarCapsuleEnabledKey);
-    UIVisualEffectView *blurView = objc_getAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey);
+    NeoWCGlassCapsuleView *glassView = objc_getAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey);
     if (!enabled) {
-        NeoWCSetPinnedMessageDescendantBackgroundsClear(tipsView, blurView, NO);
+        NeoWCSetPinnedMessageDescendantBackgroundsClear(tipsView, glassView, NO);
         NSNumber *shadowOpacity = objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOpacityKey);
         if (shadowOpacity) {
             tipsView.layer.shadowOpacity = shadowOpacity.floatValue;
@@ -8333,7 +8310,7 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
             tipsView.layer.borderColor = borderColor == NSNull.null ? nil : (__bridge CGColorRef)borderColor;
             objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOpacityKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
-        [blurView removeFromSuperview];
+        [glassView removeFromSuperview];
         objc_setAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
@@ -8354,33 +8331,35 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
     tipsView.layer.borderWidth = 0.0;
     tipsView.layer.borderColor = UIColor.clearColor.CGColor;
 
-    if (!blurView) {
-        blurView = [[UIVisualEffectView alloc] initWithEffect:nil];
-        blurView.userInteractionEnabled = NO;
-        blurView.clipsToBounds = YES;
-        blurView.layer.cornerRadius = 14.0;
-        blurView.layer.cornerCurve = kCACornerCurveContinuous;
-        objc_setAssociatedObject(blurView, &NeoWCChatTopGlassEffectMarkerKey,
+    if (!glassView) {
+        glassView = [NeoWCGlassCapsuleView new];
+        glassView.userInteractionEnabled = NO;
+        glassView.capsuleCornerRadius = 14.0;
+        [glassView configureShadowEnabled:NO];
+        objc_setAssociatedObject(glassView, &NeoWCChatTopGlassEffectMarkerKey,
                                  @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey,
-                                 blurView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                                 glassView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    NSNumber *appliedStyle = objc_getAssociatedObject(blurView, &NeoWCChatGlassAppliedStyleKey);
-    NSNumber *desiredStyle = @(NeoWCChatTopEffectStyle());
-    if (![appliedStyle isEqualToNumber:desiredStyle]) {
-        blurView.effect = NeoWCChatTopVisualEffect();
-        NeoWCConfigureChatTopGlassLayer(blurView);
-        objc_setAssociatedObject(blurView, &NeoWCChatGlassAppliedStyleKey,
-                                 desiredStyle, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    blurView.frame = CGRectInset(tipsView.bounds, 8.0, 0.0);
-    blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    if (blurView.superview != tipsView) {
-        [tipsView insertSubview:blurView atIndex:0];
+    CGFloat blurIntensity = NeoWCChatGlassPercent(NeoWCChatGlassBlurIntensityKey,
+                                                  100.0, 20.0, 100.0) / 100.0;
+    UIColor *tintColor = NeoWCColorForDefaultsKey(NeoWCChatGlassTintColorKey, UIColor.whiteColor);
+    CGFloat tintOpacity = NeoWCChatGlassPercent(NeoWCChatGlassTintOpacityKey,
+                                                8.0, 0.0, 30.0) / 100.0;
+    CGFloat whiteStrength = NeoWCChatGlassPercent(NeoWCChatGlassWhiteStrengthKey,
+                                                  18.0, 0.0, 50.0) / 100.0;
+    [glassView configureFrostedGlassWithBlurIntensity:blurIntensity
+                                             tintColor:tintColor
+                                           tintOpacity:tintOpacity
+                                         whiteStrength:whiteStrength];
+    glassView.frame = CGRectInset(tipsView.bounds, 8.0, 0.0);
+    glassView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    if (glassView.superview != tipsView) {
+        [tipsView insertSubview:glassView atIndex:0];
     } else {
-        [tipsView sendSubviewToBack:blurView];
+        [tipsView sendSubviewToBack:glassView];
     }
-    NeoWCSetPinnedMessageDescendantBackgroundsClear(tipsView, blurView, YES);
+    NeoWCSetPinnedMessageDescendantBackgroundsClear(tipsView, glassView, YES);
 }
 
 static char NeoWCRawContactIDKey;
@@ -10124,7 +10103,27 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)viewWillDisappear:(BOOL)animated {
     %orig(animated);
-    NeoWCRestoreChatNavigationPresentation(self);
+    if (NeoWCEnhancementEnabled(NeoWCChatTopBarCapsuleEnabledKey)) {
+        NeoWCApplyTransparentChatTopAppearance(self);
+        NeoWCApplyChatNavigationBackground(self, YES);
+        id<UIViewControllerTransitionCoordinator> coordinator = self.transitionCoordinator;
+        if (coordinator) {
+            __weak BaseMsgContentViewController *weakController = self;
+            __weak UINavigationController *weakNavigation = self.navigationController;
+            [coordinator animateAlongsideTransition:nil
+                                         completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+                BaseMsgContentViewController *strongController = weakController;
+                UINavigationController *navigationController = weakNavigation;
+                if (!strongController) return;
+                if (context.isCancelled) {
+                    NeoWCUpdateChatTopBar(strongController);
+                } else {
+                    NeoWCRestoreChatNavigationPresentationWithNavigation(strongController,
+                                                                         navigationController);
+                }
+            }];
+        }
+    }
     UIViewController *controller = (UIViewController *)self;
     if (controller.isMovingFromParentViewController || controller.isBeingDismissed) {
         if (NeoWCSendConfirmationChatController == self) NeoWCSendConfirmationChatController = nil;
@@ -10151,6 +10150,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
+    NeoWCRestoreChatNavigationPresentation(self);
     if (NeoWCVisibleChatController == self) NeoWCVisibleChatController = nil;
 }
 
