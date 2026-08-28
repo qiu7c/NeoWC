@@ -467,6 +467,14 @@ static void NeoWCOpenHomeRemark(id owner, id contact, BOOL group);
 static void NeoWCOpenHomeMoments(id owner, id contact);
 static void NeoWCSynchronizeAvatarQuickGesture(CommonMessageCellView *cell);
 static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *headView);
+static NSInteger NeoWCGroupMemberRemovalScene(id groupContact,
+                                               id memberContact,
+                                               NSString *memberUserName);
+static void NeoWCConfirmRemoveGroupMember(UIViewController *presenter,
+                                          id groupContact,
+                                          id memberContact,
+                                          NSString *memberUserName,
+                                          NSInteger scene);
 static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id contact, BOOL group);
 static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCGroupMemberInfoRows(id contact,
                                                                                    id groupContact,
@@ -2764,6 +2772,45 @@ static void NeoWCOpenAvatarTransfer(id chatController, NSString *targetUserName,
     ((void (*)(id, SEL, id, id))objc_msgSend)(manager, startSelector, chatController, data);
 }
 
+static void NeoWCOpenGroupMemberHistory(UIViewController *presenter,
+                                        NSString *chatRoomUserName,
+                                        id memberContact) {
+    if (!presenter || ![chatRoomUserName hasSuffix:@"@chatroom"] || !memberContact) {
+        NeoWCShowTransientMessage(@"未取得群成员资料", NO);
+        return;
+    }
+    Class controllerClass = NSClassFromString(@"ChatRoomMemMsgListViewController");
+    SEL initializer = NSSelectorFromString(@"initWithChat:memContact:");
+    Method method = controllerClass ? class_getInstanceMethod(controllerClass, initializer) : NULL;
+    if (!method || method_getNumberOfArguments(method) != 4 ||
+        !NeoWCMethodReturnsObject(method) ||
+        !NeoWCMethodArgumentIsObject(method, 2) ||
+        !NeoWCMethodArgumentIsObject(method, 3)) {
+        NeoWCShowTransientMessage(@"当前微信版本不支持成员聊天记录", NO);
+        return;
+    }
+    UIViewController *controller = nil;
+    @try {
+        controller = ((id (*)(id, SEL, id, id))objc_msgSend)([controllerClass alloc],
+                                                              initializer,
+                                                              chatRoomUserName,
+                                                              memberContact);
+    } @catch (NSException *exception) {
+        NeoWCLog(@"打开群成员聊天记录失败：%@", exception.reason ?: exception.name);
+    }
+    if (![controller isKindOfClass:UIViewController.class]) {
+        NeoWCShowTransientMessage(@"无法打开成员聊天记录", NO);
+        return;
+    }
+    if (presenter.navigationController) {
+        [presenter.navigationController pushViewController:controller animated:YES];
+    } else {
+        [presenter presentViewController:[[UINavigationController alloc] initWithRootViewController:controller]
+                                animated:YES
+                              completion:nil];
+    }
+}
+
 static void NeoWCOpenAvatarInfoCard(UIViewController *chatController,
                                     id contact,
                                     UIImage *avatar,
@@ -2827,6 +2874,9 @@ static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
     id message = NeoWCMessageWrapForCell(cell);
     id contact = group ? NeoWCMessageChatContact(message) : nil;
     if (!contact) contact = NeoWCContactForUserName(targetUserName);
+    id groupContact = group ? NeoWCContactForUserName(chatUserName) : nil;
+    NSInteger removalScene = (group && !isSelf)
+        ? NeoWCGroupMemberRemovalScene(groupContact, contact, targetUserName) : 0;
     NSString *displayName = NeoWCAvatarDisplayName(contact, targetUserName);
     UIImage *avatar = NeoWCAvatarSnapshot(headView);
     __weak UIViewController *weakController = chatController;
@@ -2835,6 +2885,7 @@ static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
     NSString *retainedTarget = [targetUserName copy];
     NSString *retainedChat = [chatUserName copy];
     id retainedContact = contact;
+    id retainedGroupContact = groupContact;
 
     NSMutableArray<NeoWCAvatarQuickAction *> *actions = [NSMutableArray array];
     if (NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey)) {
@@ -2864,6 +2915,17 @@ static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
     if (group && !isSelf) {
         [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"私聊" symbolName:@"bubble.left" handler:^{
             NeoWCOpenChatForUserName(retainedTarget);
+        }]];
+    }
+    if (group) {
+        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"聊天记录" symbolName:@"clock.arrow.circlepath" handler:^{
+            NeoWCOpenGroupMemberHistory(weakController, retainedChat, retainedContact);
+        }]];
+    }
+    if (removalScene > 0) {
+        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"移出群聊" symbolName:@"person.fill.xmark" handler:^{
+            NeoWCConfirmRemoveGroupMember(weakController, retainedGroupContact, retainedContact,
+                                          retainedTarget, removalScene);
         }]];
     }
     [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"朋友圈" symbolName:@"circle.grid.3x3" handler:^{
@@ -7454,7 +7516,9 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
     if ([imageView isKindOfClass:UIImageView.class]) {
         imageView.frame = self.sourceView.bounds;
         imageView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        imageView.contentMode = UIViewContentModeScaleAspectFill;
+        // Match the host/WCPulse avatar behavior: preserve the complete image
+        // inside the circular viewport instead of zooming and center-cropping.
+        imageView.contentMode = UIViewContentModeScaleAspectFit;
         imageView.clipsToBounds = YES;
         imageView.layer.cornerRadius = radius;
         imageView.layer.cornerCurve = kCACornerCurveContinuous;
@@ -8544,9 +8608,10 @@ static NSString *NeoWCAdditionDaysValue(NSString *title, NSString *value) {
 
 static uint32_t NeoWCContactAddTime(id contact) {
     if (!contact) return 0;
-    // WCRefine 2.1-2 reads the local value first and only falls back to the
-    // server-side add/create value when the local value is unavailable or 0.
-    for (NSString *name in @[@"m_uiLocalAddContactTime", @"m_uiAddCreateTime"]) {
+    // WCPulse 1.7-2 hooks the official profile row and reads m_uiAddCreateTime.
+    // Prefer that server-populated value; retain the local field only as a
+    // compatibility fallback for host versions that do not expose it.
+    for (NSString *name in @[@"m_uiAddCreateTime", @"m_uiLocalAddContactTime"]) {
         SEL selector = NSSelectorFromString(name);
         if (![contact respondsToSelector:selector]) continue;
         @try {
@@ -8567,7 +8632,7 @@ static NSString *NeoWCContactAddTimeValue(id contact) {
     NSDateFormatter *formatter = [NSDateFormatter new];
     formatter.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"zh_CN"];
     formatter.timeZone = NSTimeZone.localTimeZone;
-    formatter.dateFormat = @"yyyy年M月d日 HH:mm";
+    formatter.dateFormat = @"yyyy年M月d日 HH:mm:ss";
     NSString *text = [formatter stringFromDate:date];
     return text;
 }
@@ -8600,9 +8665,12 @@ static NSArray *NeoWCOfficialRelatedGroups(id controller) {
     id logic = NeoWCRawProfileValue(controller,
                                     @[@"m_relatedGroupLogic", @"relatedGroupLogic"]);
     if (!logic) logic = objc_getAssociatedObject(controller, &NeoWCOfficialRelatedGroupLogicKey);
-    // WCRefine's confirmed chain reads/writes ContactRelatedGroupLogic's
-    // _arrRelatedGroup and marks _bSearchDone; it does not establish an ABI for
-    // the similarly named getContactRelatedGroup string.
+    // WCPulse 1.7-2 reads ContactRelatedGroupLogic through this no-argument
+    // object getter for non-friends. Fall back to the backing ivar for host
+    // versions where the getter is unavailable.
+    id officialGroups = NeoWCCallCompatibleObjectGetter(logic, @"getContactRelatedGroup");
+    if ([officialGroups isKindOfClass:NSArray.class]) return officialGroups;
+    if ([officialGroups isKindOfClass:NSSet.class]) return [officialGroups allObjects];
     id groups = NeoWCRawProfileValue(logic, @[@"_arrRelatedGroup"]);
     if ([groups isKindOfClass:NSArray.class]) return groups;
     if ([groups isKindOfClass:NSSet.class]) return [groups allObjects];
@@ -8658,9 +8726,18 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCMergeInfoCardRows(N
     }
     NSMutableArray *rows = [NSMutableArray array];
     NSMutableSet *titles = [NSMutableSet set];
-    // Official social-information values arrive asynchronously and must win
-    // over locally computed placeholders with the same title.
-    NSArray *combined = [(officialRows ?: @[]) arrayByAddingObjectsFromArray:baseRows ?: @[]];
+    // The direct m_uiAddCreateTime rendering preserves seconds and must win
+    // over a coarser native table value. Other official values still replace
+    // locally computed placeholders when they arrive asynchronously.
+    NSMutableArray *combined = [NSMutableArray array];
+    for (NSDictionary *row in baseRows ?: @[]) {
+        NSString *title = row[@"title"];
+        if ([title isEqualToString:@"添加时间"] || [title isEqualToString:@"添加天数"]) {
+            [combined addObject:row];
+        }
+    }
+    [combined addObjectsFromArray:officialRows ?: @[]];
+    [combined addObjectsFromArray:baseRows ?: @[]];
     for (NSDictionary *row in combined) {
         NSString *title = row[@"title"];
         NSString *value = row[@"value"];
@@ -9218,18 +9295,13 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id 
         NeoWCAddInfoCardRow(rows, @"添加时间", NeoWCContactAddTimeValue(contact));
         NeoWCAddInfoCardRow(rows, @"添加天数", NeoWCContactAddDaysValue(contact));
         NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
-        Class contactManagerClass = objc_getClass("CContactMgr");
-        id contactManager = contactManagerClass ? NeoWCServiceForClass(contactManagerClass) : nil;
-        SEL membershipSelector = NSSelectorFromString(@"isInContactList:");
-        BOOL membershipAvailable = NO;
-        BOOL isFriend = NeoWCIsUsernameInContactList(contactManager, membershipSelector,
-                                                     userName, &membershipAvailable);
-        if (membershipAvailable && isFriend) {
-            NSInteger commonCount = NeoWCCommonGroupCount(userName);
-            NeoWCAddInfoCardRow(rows, @"共同群聊", commonCount >= 0
-                ? [NSString stringWithFormat:@"%ld 个", (long)commonCount]
-                : @"正在加载");
-        }
+        // The host related-group service supports non-friends too. Keep the
+        // local group scan as an immediate value while the official result is
+        // loaded and merged asynchronously.
+        NSInteger commonCount = NeoWCCommonGroupCount(userName);
+        NeoWCAddInfoCardRow(rows, @"共同群聊", commonCount >= 0
+            ? [NSString stringWithFormat:@"%ld 个", (long)commonCount]
+            : @"正在加载");
     }
     return rows;
 }
@@ -9318,6 +9390,142 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCGroupMemberInfoRows
     if (friendCount >= 0) NeoWCAddInfoCardRow(rows, @"群内好友",
                                                [NSString stringWithFormat:@"%ld 人", (long)friendCount]);
     return rows;
+}
+
+static NSString *NeoWCGroupMemberInviterUserName(id groupContact, id memberContact,
+                                                  NSString *memberUserName) {
+    id chatRoomData = NeoWCRawProfileValue(groupContact,
+        @[@"m_ChatRoomData", @"m_chatRoomData", @"chatRoomData"]);
+    SEL selector = NSSelectorFromString(@"getInviterNameForUsername:");
+    Method method = chatRoomData ? class_getInstanceMethod([chatRoomData class], selector) : NULL;
+    if (method && method_getNumberOfArguments(method) == 3 &&
+        NeoWCMethodReturnsObject(method) && NeoWCMethodArgumentIsObject(method, 2)) {
+        @try {
+            id value = ((id (*)(id, SEL, id))objc_msgSend)(chatRoomData, selector, memberUserName);
+            if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
+        } @catch (__unused NSException *exception) {}
+    }
+    id fallback = NeoWCRawProfileValue(memberContact,
+        @[@"m_InviteUserName", @"m_inviteUserName", @"inviteUserName", @"inviterUserName"]);
+    return [fallback isKindOfClass:NSString.class] && [fallback length] > 0 ? fallback : nil;
+}
+
+static NSInteger NeoWCGroupMemberRemovalScene(id groupContact,
+                                               id memberContact,
+                                               NSString *memberUserName) {
+    NSString *selfUserName = NeoWCCurrentUserWXID();
+    NSString *groupUserName = NeoWCContactUserName(groupContact);
+    if (!groupContact || !memberContact || ![groupUserName hasSuffix:@"@chatroom"] ||
+        memberUserName.length == 0 || selfUserName.length == 0 ||
+        [memberUserName isEqualToString:selfUserName]) return 0;
+
+    Class groupManagerClass = NSClassFromString(@"CGroupMgr");
+    id groupManager = groupManagerClass ? NeoWCServiceForClass(groupManagerClass) : nil;
+    SEL groupGetter = NSSelectorFromString(@"getContactByName:");
+    Method groupGetterMethod = groupManager ? class_getInstanceMethod([groupManager class], groupGetter) : NULL;
+    id resolvedGroupContact = groupContact;
+    if (groupGetterMethod && method_getNumberOfArguments(groupGetterMethod) == 3 &&
+        NeoWCMethodReturnsObject(groupGetterMethod) &&
+        NeoWCMethodArgumentIsObject(groupGetterMethod, 2)) {
+        @try {
+            id value = ((id (*)(id, SEL, id))objc_msgSend)(groupManager, groupGetter, groupUserName);
+            if (value) resolvedGroupContact = value;
+        } @catch (__unused NSException *exception) {}
+    }
+
+    BOOL memberListAvailable = NO;
+    BOOL isCurrentMember = NO;
+    SEL memberListSelector = NSSelectorFromString(@"GetGroupMemberUserListByContact:");
+    Method memberListMethod = groupManager
+        ? class_getInstanceMethod([groupManager class], memberListSelector) : NULL;
+    if (memberListMethod && method_getNumberOfArguments(memberListMethod) == 3 &&
+        NeoWCMethodReturnsObject(memberListMethod) &&
+        NeoWCMethodArgumentIsObject(memberListMethod, 2)) {
+        @try {
+            id list = ((id (*)(id, SEL, id))objc_msgSend)(groupManager,
+                memberListSelector, resolvedGroupContact);
+            if ([list isKindOfClass:NSArray.class]) {
+                memberListAvailable = [(NSArray *)list count] > 0;
+                isCurrentMember = [(NSArray *)list containsObject:memberUserName];
+            }
+        } @catch (__unused NSException *exception) {}
+    }
+    if (!memberListAvailable) {
+        isCurrentMember = [NeoWCGroupMemberUserNames(resolvedGroupContact) containsObject:memberUserName];
+    }
+    if (!isCurrentMember) return 0;
+
+    NSString *owner = NeoWCRawProfileValue(resolvedGroupContact,
+        @[@"m_nsOwner", @"m_nsChatRoomOwner", @"ownerUserName", @"owner"]);
+    if ([memberUserName isEqualToString:owner]) return 0;
+    if ([selfUserName isEqualToString:owner]) return 1;
+
+    NSArray<NSString *> *admins = NeoWCProfileStringList(NeoWCRawProfileValue(resolvedGroupContact,
+        @[@"m_nsChatRoomAdminList", @"m_nsAdminList", @"adminList", @"admins"]));
+    if ([admins containsObject:selfUserName]) return 1;
+
+    NSString *inviter = NeoWCGroupMemberInviterUserName(resolvedGroupContact,
+                                                         memberContact,
+                                                         memberUserName);
+    return [inviter isEqualToString:selfUserName] ? 2 : 0;
+}
+
+static BOOL NeoWCMethodArgumentIsIntegerScalar(Method method, unsigned int index) {
+    if (!method || index >= method_getNumberOfArguments(method)) return NO;
+    char type[16] = {0};
+    method_getArgumentType(method, index, type, sizeof(type));
+    const char *cursor = type;
+    while (*cursor == 'r' || *cursor == 'n' || *cursor == 'N' || *cursor == 'o' ||
+           *cursor == 'O' || *cursor == 'R' || *cursor == 'V') cursor++;
+    return strchr("cCsSiIlLqQB", *cursor) != NULL;
+}
+
+static void NeoWCConfirmRemoveGroupMember(UIViewController *presenter,
+                                          id groupContact,
+                                          id memberContact,
+                                          NSString *memberUserName,
+                                          NSInteger scene) {
+    NSInteger currentScene = NeoWCGroupMemberRemovalScene(groupContact, memberContact, memberUserName);
+    if (!presenter || currentScene <= 0) {
+        NeoWCShowTransientMessage(@"当前无权移出该成员", NO);
+        return;
+    }
+    scene = currentScene;
+    NSString *groupUserName = NeoWCContactUserName(groupContact);
+    NSString *displayName = NeoWCAvatarDisplayName(memberContact, memberUserName);
+    NSString *message = [NSString stringWithFormat:@"确定将“%@”移出当前群聊？", displayName];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"移出群成员"
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"移出" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        Class managerClass = NSClassFromString(@"CGroupMgr");
+        id manager = managerClass ? NeoWCServiceForClass(managerClass) : nil;
+        SEL selector = NSSelectorFromString(@"DeleteGroupMember:withMemberList:scene:");
+        if (![manager respondsToSelector:selector]) {
+            selector = NSSelectorFromString(@"p_DeleteGroupMember:withMemberList:scene:");
+        }
+        Method method = manager ? class_getInstanceMethod([manager class], selector) : NULL;
+        char returnType[8] = {0};
+        if (method) method_getReturnType(method, returnType, sizeof(returnType));
+        if (!method || method_getNumberOfArguments(method) != 5 ||
+            (returnType[0] != 'B' && returnType[0] != 'c') ||
+            !NeoWCMethodArgumentIsObject(method, 2) ||
+            !NeoWCMethodArgumentIsObject(method, 3) ||
+            !NeoWCMethodArgumentIsIntegerScalar(method, 4)) {
+            NeoWCShowTransientMessage(@"当前微信版本不支持移出成员", NO);
+            return;
+        }
+        BOOL accepted = NO;
+        @try {
+            accepted = ((BOOL (*)(id, SEL, id, id, NSInteger))objc_msgSend)(manager,
+                selector, groupUserName, @[memberUserName], scene);
+        } @catch (NSException *exception) {
+            NeoWCLog(@"移出群成员失败：%@", exception.reason ?: exception.name);
+        }
+        NeoWCShowTransientMessage(accepted ? @"已提交移出请求" : @"移出成员失败", accepted);
+    }]];
+    [presenter presentViewController:alert animated:YES completion:nil];
 }
 
 static void NeoWCOpenProfileInfoCard(id controller) {
