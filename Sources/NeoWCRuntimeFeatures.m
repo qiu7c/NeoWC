@@ -6,6 +6,7 @@
 #import "NeoWCLogging.h"
 #import "NeoWCEnhancements.h"
 
+#import <UserNotifications/UserNotifications.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <string.h>
@@ -500,6 +501,26 @@ BOOL NeoWCHandleNotificationResponse(id response, void (^completionHandler)(void
     NeoWCCompatibilityMarkTriggered(@"notification-direct-chat");
     if (completionHandler) completionHandler();
     return YES;
+}
+
+UNNotificationPresentationOptions NeoWCWillPresentOptionsForNotification(
+    id notification,
+    UNNotificationPresentationOptions originalOptions) {
+    id request = NeoWCRuntimeSafeValue(notification, @"request");
+    id content = NeoWCRuntimeSafeValue(request, @"content");
+    NSDictionary *userInfo = NeoWCRuntimeSafeValue(content, @"userInfo");
+    id rawNeoWCType = [userInfo isKindOfClass:[NSDictionary class]] ? userInfo[@"neowc"] : nil;
+    NSString *neoWCType = [rawNeoWCType isKindOfClass:[NSString class]] ? rawNeoWCType : nil;
+    BOOL isMomentsReminder = [neoWCType isEqualToString:@"moments-reminder"] ||
+                             [neoWCType isEqualToString:@"moments-interaction"];
+    if (!isMomentsReminder) return originalOptions;
+    UNNotificationPresentationOptions options = originalOptions | UNNotificationPresentationOptionSound;
+    if (@available(iOS 14.0, *)) {
+        options |= UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList;
+    } else {
+        options |= UNNotificationPresentationOptionAlert;
+    }
+    return options;
 }
 
 UIView *NeoWCWalletHeaderForView(UIView *view) {

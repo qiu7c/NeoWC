@@ -6447,6 +6447,17 @@ didReceiveNotificationResponse:(id)response
 
 %hook MicroMessengerAppDelegate
 
+- (void)userNotificationCenter:(id)center
+       willPresentNotification:(id)notification
+         withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler {
+    id retainedNotification = notification;
+    void (^retainedCompletion)(UNNotificationPresentationOptions) = [completionHandler copy];
+    %orig(center, notification, ^(UNNotificationPresentationOptions originalOptions) {
+        if (!retainedCompletion) return;
+        retainedCompletion(NeoWCWillPresentOptionsForNotification(retainedNotification, originalOptions));
+    });
+}
+
 - (void)applicationDidEnterBackground:(UIApplication *)application {
     %orig(application);
     NeoWCMomentsPrewarmCancel();

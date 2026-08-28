@@ -3,7 +3,6 @@
 #import "NeoWCLogging.h"
 #import "NeoWCEnhancements.h"
 #import <UserNotifications/UserNotifications.h>
-#import <UIKit/UIKit.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <stdlib.h>
@@ -76,57 +75,6 @@ static long long NeoWCMomentsInteractionMessageType(id message) {
     @catch (__unused NSException *exception) { return 0; }
 }
 
-static void NeoWCMomentsInteractionShowForegroundToast(NSString *message) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *window = nil;
-        for (UIWindow *candidate in UIApplication.sharedApplication.windows.reverseObjectEnumerator) {
-            if (!candidate.hidden && candidate.alpha > 0.0 && candidate.windowLevel == UIWindowLevelNormal) {
-                window = candidate;
-                if (candidate.isKeyWindow) break;
-            }
-        }
-        if (!window || message.length == 0) return;
-        const NSInteger toastTag = 0x4E574D49;
-        [[window viewWithTag:toastTag] removeFromSuperview];
-        UIView *toast = [UIView new];
-        toast.tag = toastTag;
-        toast.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.9];
-        toast.layer.cornerRadius = 13.0;
-        toast.layer.cornerCurve = kCACornerCurveContinuous;
-        toast.layer.masksToBounds = YES;
-        toast.translatesAutoresizingMaskIntoConstraints = NO;
-        UILabel *label = [UILabel new];
-        label.text = message;
-        label.textColor = UIColor.whiteColor;
-        label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
-        label.adjustsFontForContentSizeCategory = YES;
-        label.numberOfLines = 3;
-        label.textAlignment = NSTextAlignmentCenter;
-        label.translatesAutoresizingMaskIntoConstraints = NO;
-        [toast addSubview:label];
-        [window addSubview:toast];
-        [NSLayoutConstraint activateConstraints:@[
-            [toast.centerXAnchor constraintEqualToAnchor:window.centerXAnchor],
-            [toast.bottomAnchor constraintEqualToAnchor:window.safeAreaLayoutGuide.bottomAnchor constant:-46.0],
-            [toast.widthAnchor constraintGreaterThanOrEqualToConstant:240.0],
-            [toast.leadingAnchor constraintGreaterThanOrEqualToAnchor:window.leadingAnchor constant:18.0],
-            [toast.trailingAnchor constraintLessThanOrEqualToAnchor:window.trailingAnchor constant:-18.0],
-            [toast.heightAnchor constraintGreaterThanOrEqualToConstant:48.0],
-            [label.leadingAnchor constraintEqualToAnchor:toast.leadingAnchor constant:18.0],
-            [label.trailingAnchor constraintEqualToAnchor:toast.trailingAnchor constant:-18.0],
-            [label.topAnchor constraintEqualToAnchor:toast.topAnchor constant:12.0],
-            [label.bottomAnchor constraintEqualToAnchor:toast.bottomAnchor constant:-12.0],
-        ]];
-        toast.alpha = 0.0;
-        [UIView animateWithDuration:0.2 animations:^{ toast.alpha = 1.0; } completion:^(__unused BOOL finished) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [UIView animateWithDuration:0.2 animations:^{ toast.alpha = 0.0; }
-                                 completion:^(__unused BOOL hidden) { [toast removeFromSuperview]; }];
-            });
-        }];
-    });
-}
-
 static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey,
                                            long long messageType, id message) {
     NSString *typeName = messageType == 1 ? @"点赞" : (messageType == 2 ? @"评论" : @"互动");
@@ -140,27 +88,32 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     if (commentContent.length > 100) {
         commentContent = [[commentContent substringToIndex:97] stringByAppendingString:@"…"];
     }
+    NSString *title = showsDetails && author.length > 0 ? author : @"朋友圈互动";
     NSString *detail = nil;
-    if (messageType == 1 && author.length > 0) {
-        detail = [NSString stringWithFormat:@"%@ 点赞了你的朋友圈", author];
-    } else if (messageType == 2 && author.length > 0 && commentContent.length > 0) {
-        detail = [NSString stringWithFormat:@"%@ 评论：%@", author, commentContent];
-    } else if (messageType == 2 && author.length > 0) {
-        detail = [NSString stringWithFormat:@"%@ 评论了你的朋友圈", author];
+    if (showsDetails && messageType == 1) {
+        detail = @"点赞了你的朋友圈";
+    } else if (showsDetails && messageType == 2 && commentContent.length > 0) {
+        detail = [NSString stringWithFormat:@"评论：%@", commentContent];
+    } else if (showsDetails && messageType == 2) {
+        detail = @"评论了你的朋友圈";
     } else {
-        detail = [NSString stringWithFormat:@"收到新的朋友圈%@", typeName];
+        detail = [NSString stringWithFormat:@"朋友圈收到新的%@", typeName];
     }
-    NSString *body = showsDetails
-        ? (count > 1 ? [NSString stringWithFormat:@"收到 %lu 条新互动，%@", (unsigned long)count, detail] : detail)
-        : [NSString stringWithFormat:@"朋友圈收到新的%@", typeName];
-    if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
-        NeoWCMomentsInteractionShowForegroundToast(body);
-        return;
+    NSString *body = nil;
+    if (!showsDetails) {
+        body = count > 1
+            ? [NSString stringWithFormat:@"朋友圈收到 %lu 条新互动", (unsigned long)count]
+            : detail;
+    } else {
+        body = count > 1
+            ? [NSString stringWithFormat:@"收到 %lu 条新互动，最新：%@", (unsigned long)count, detail]
+            : detail;
     }
     UNMutableNotificationContent *content = [UNMutableNotificationContent new];
-    content.title = [NSString stringWithFormat:@"朋友圈%@提醒", typeName];
+    content.title = title;
     content.body = body;
     content.sound = UNNotificationSound.defaultSound;
+    content.threadIdentifier = @"neowc.moments.interaction";
     content.userInfo = @{ @"neowc": @"moments-interaction" };
     NSString *identifier = [NSString stringWithFormat:@"neowc.moments.interaction.%lu.%lu",
                               (unsigned long)messageKey.hash, (unsigned long)count];

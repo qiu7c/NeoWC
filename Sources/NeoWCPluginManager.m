@@ -78,6 +78,80 @@ static NSArray *WCPArray(NSString *key) {
     NSArray *value = [NSUserDefaults.standardUserDefaults arrayForKey:key];
     return [value isKindOfClass:NSArray.class] ? value : @[];
 }
+
+static BOOL WCPIsLegacyNeoWCDebugSwitchKey(NSString *key) {
+    return [key isKindOfClass:NSString.class] && [key hasPrefix:@"com.qiu7c.neowc.debug."];
+}
+
+static BOOL WCPIsLegacyNeoWCDebugIdentifier(NSString *identifier) {
+    if (![identifier isKindOfClass:NSString.class]) return NO;
+    if ([identifier hasPrefix:@"switch:"]) {
+        return WCPIsLegacyNeoWCDebugSwitchKey([identifier substringFromIndex:[@"switch:" length]]);
+    }
+    return [identifier isEqualToString:@"controller:NeoWCDebugShortcutViewController"] ||
+           [identifier isEqualToString:@"controller:NeoWCDebugDashboardViewController"];
+}
+
+static NSString *WCPIdentifierForModel(WCPluginModel *model) {
+    if (model.isController && model.controller.length) return [@"controller:" stringByAppendingString:model.controller];
+    if (!model.isController && model.key.length) return [@"switch:" stringByAppendingString:model.key];
+    return [@"title:" stringByAppendingString:model.title ?: @""];
+}
+
+static void WCPCleanupLegacyNeoWCDebugRegistration(void) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    BOOL changed = NO;
+
+    NSMutableDictionary *quickSwitches = WCPMutableDictionary(WCPNeoWCQuickSwitchesKey);
+    for (NSString *key in [quickSwitches.allKeys copy]) {
+        if (!WCPIsLegacyNeoWCDebugSwitchKey(key)) continue;
+        [quickSwitches removeObjectForKey:key];
+        changed = YES;
+    }
+    if (changed) [defaults setObject:quickSwitches forKey:WCPNeoWCQuickSwitchesKey];
+
+    for (NSString *storageKey in @[WCPCategoriesKey, WCPNamesKey, WCPVersionsKey, WCPOrdersKey]) {
+        NSMutableDictionary *values = WCPMutableDictionary(storageKey);
+        BOOL storageChanged = NO;
+        for (NSString *identifier in [values.allKeys copy]) {
+            if (!WCPIsLegacyNeoWCDebugIdentifier(identifier)) continue;
+            [values removeObjectForKey:identifier];
+            storageChanged = YES;
+        }
+        if (storageChanged) {
+            [defaults setObject:values forKey:storageKey];
+            changed = YES;
+        }
+    }
+
+    NSMutableArray *hidden = [NSMutableArray arrayWithArray:WCPArray(WCPHiddenKey)];
+    NSIndexSet *hiddenIndexes = [hidden indexesOfObjectsPassingTest:^BOOL(id value, NSUInteger idx, BOOL *stop) {
+        (void)idx; (void)stop;
+        return WCPIsLegacyNeoWCDebugIdentifier(value);
+    }];
+    if (hiddenIndexes.count > 0) {
+        [hidden removeObjectsAtIndexes:hiddenIndexes];
+        [defaults setObject:hidden forKey:WCPHiddenKey];
+        changed = YES;
+    }
+
+    WCPluginsMgr *manager = WCPluginsMgr.sharedInstance;
+    @synchronized (manager) {
+        NSIndexSet *modelIndexes = [manager.plugins indexesOfObjectsPassingTest:^BOOL(WCPluginModel *model, NSUInteger idx, BOOL *stop) {
+            (void)idx; (void)stop;
+            return WCPIsLegacyNeoWCDebugIdentifier(WCPIdentifierForModel(model));
+        }];
+        if (modelIndexes.count > 0) {
+            [manager.plugins removeObjectsAtIndexes:modelIndexes];
+            changed = YES;
+        }
+    }
+
+    if (!changed) return;
+    [NSNotificationCenter.defaultCenter postNotificationName:WCPDidChangeNotification object:manager];
+    NeoWCLog(@"已清理 NeoWC 旧版开发调试插件入口");
+}
+
 static void WCPShow(UIViewController *controller, UIAlertController *alert) {
     UIPopoverPresentationController *popover = alert.popoverPresentationController;
     if (popover) { popover.sourceView = controller.view; popover.sourceRect = CGRectMake(CGRectGetMidX(controller.view.bounds), CGRectGetMaxY(controller.view.bounds) - 1.0, 1.0, 1.0); }
@@ -107,9 +181,7 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
     return manager;
 }
 - (NSString *)identifier:(WCPluginModel *)model {
-    if (model.isController && model.controller.length) return [@"controller:" stringByAppendingString:model.controller];
-    if (!model.isController && model.key.length) return [@"switch:" stringByAppendingString:model.key];
-    return [@"title:" stringByAppendingString:model.title ?: @""];
+    return WCPIdentifierForModel(model);
 }
 - (void)addModel:(WCPluginModel *)model {
     if (!model.title.length) return;
@@ -163,6 +235,7 @@ void NeoWCPluginManagerSetQuickSwitchRegistered(NSString *key, NSString *title, 
 }
 
 void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
+    WCPCleanupLegacyNeoWCDebugRegistration();
     NSDictionary *saved = WCPDictionary(WCPNeoWCQuickSwitchesKey);
     [saved enumerateKeysAndObjectsUsingBlock:^(id key, id title, BOOL *stop) {
         (void)stop;

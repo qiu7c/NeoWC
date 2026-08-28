@@ -60,7 +60,7 @@ NSArray<NeoWCReleaseNote *> *NeoWCReleaseNotes(void) {
                 [NeoWCReleaseNoteItem itemWithTitle:@"设置重新分类"
                                                detail:@"按聊天、朋友圈、界面禁用、界面优化、常用增强和插件设置重新整理；日志与配置集中到插件设置，作者主页和历史更新记录保留在设置首页底部。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"精简用户版本"
-                                               detail:@"开发调试工具迁移到独立 WCDebug，移除未开放的快捷收款链接、视频解析和音乐点歌代码。"],
+                                               detail:@"开发调试工具迁移到独立 WCDebug，并自动清理 NeoWC 旧调试快捷入口；同时移除未开放的快捷收款链接、视频解析和音乐点歌代码。"],
             ]],
             [NeoWCReleaseNote noteWithVersion:@"0.1.5"
                                      headline:@"快捷回复与防误发"

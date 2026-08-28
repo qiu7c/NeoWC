@@ -327,72 +327,16 @@ static id NeoWCMomentsReminderContact(NSString *username) {
     return ((id (*)(id, SEL, id))objc_msgSend)(manager, contactSelector, username);
 }
 
-static void NeoWCMomentsReminderShowForegroundToast(NSString *message) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *window = nil;
-        for (UIWindow *candidate in UIApplication.sharedApplication.windows.reverseObjectEnumerator) {
-            if (!candidate.hidden && candidate.alpha > 0.0 && candidate.windowLevel == UIWindowLevelNormal) {
-                window = candidate;
-                if (candidate.isKeyWindow) break;
-            }
-        }
-        if (!window || message.length == 0) return;
-        const NSInteger toastTag = 0x4E574D52;
-        [[window viewWithTag:toastTag] removeFromSuperview];
-        UIView *toast = [UIView new];
-        toast.tag = toastTag;
-        toast.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.9];
-        toast.layer.cornerRadius = 13.0;
-        toast.layer.cornerCurve = kCACornerCurveContinuous;
-        toast.layer.masksToBounds = YES;
-        toast.translatesAutoresizingMaskIntoConstraints = NO;
-        UILabel *label = [UILabel new];
-        label.text = message;
-        label.textColor = UIColor.whiteColor;
-        label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
-        label.adjustsFontForContentSizeCategory = YES;
-        label.numberOfLines = 2;
-        label.textAlignment = NSTextAlignmentCenter;
-        label.translatesAutoresizingMaskIntoConstraints = NO;
-        [toast addSubview:label];
-        [window addSubview:toast];
-        [NSLayoutConstraint activateConstraints:@[
-            [toast.centerXAnchor constraintEqualToAnchor:window.centerXAnchor],
-            [toast.centerYAnchor constraintEqualToAnchor:window.centerYAnchor],
-            [toast.widthAnchor constraintGreaterThanOrEqualToConstant:220.0],
-            [toast.leadingAnchor constraintGreaterThanOrEqualToAnchor:window.leadingAnchor constant:24.0],
-            [toast.trailingAnchor constraintLessThanOrEqualToAnchor:window.trailingAnchor constant:-24.0],
-            [toast.heightAnchor constraintGreaterThanOrEqualToConstant:48.0],
-            [label.leadingAnchor constraintEqualToAnchor:toast.leadingAnchor constant:18.0],
-            [label.trailingAnchor constraintEqualToAnchor:toast.trailingAnchor constant:-18.0],
-            [label.topAnchor constraintEqualToAnchor:toast.topAnchor constant:12.0],
-            [label.bottomAnchor constraintEqualToAnchor:toast.bottomAnchor constant:-12.0],
-        ]];
-        toast.alpha = 0.0;
-        [UIView animateWithDuration:0.2 animations:^{ toast.alpha = 1.0; } completion:^(__unused BOOL finished) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [UIView animateWithDuration:0.2 animations:^{ toast.alpha = 0.0; }
-                                 completion:^(__unused BOOL hidden) { [toast removeFromSuperview]; }];
-            });
-        }];
-    });
-}
-
 static void NeoWCMomentsReminderNotify(NSString *username, NSString *nickname, NSString *content, uint64_t createdAt, NSString *tid) {
     NSString *name = nickname.length > 0 ? nickname : username;
     if (name.length == 0) name = @"好友";
-    NSString *body = content.length > 0 ? [NSString stringWithFormat:@"%@：%@", name, content] :
-                                          [NSString stringWithFormat:@"%@ 发布了新朋友圈", name];
+    NSString *body = content.length > 0 ? content : @"发布了新朋友圈";
     if (body.length > 180) body = [[body substringToIndex:177] stringByAppendingString:@"…"];
-    if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
-        NeoWCMomentsReminderShowForegroundToast([NSString stringWithFormat:@"您关注的%@朋友圈已更新", name]);
-        return;
-    }
-
     UNMutableNotificationContent *notification = [UNMutableNotificationContent new];
-    notification.title = @"朋友圈提醒";
+    notification.title = name;
     notification.body = body;
     notification.sound = UNNotificationSound.defaultSound;
+    notification.threadIdentifier = @"neowc.moments.reminder";
     notification.userInfo = @{ @"neowc": @"moments-reminder", @"username": username ?: @"", @"tid": tid ?: @"" };
     NSString *identifier = [NSString stringWithFormat:@"neowc.moments.%@.%@.%llu", username ?: @"unknown", tid ?: @"unknown", createdAt];
     UNTimeIntervalNotificationTrigger *trigger = [UNTimeIntervalNotificationTrigger triggerWithTimeInterval:1.0 repeats:NO];
