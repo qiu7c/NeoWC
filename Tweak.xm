@@ -123,7 +123,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 @interface BaseMsgContentViewController : UIViewController
 - (id)GetContact;
 - (void)returnToOriginalMsg:(id)message;
-- (void)neowc_openChatSearch;
+- (void)neowc_openChatSearch:(id)sender;
 - (void)neowc_toggleSendConfirmation:(UILongPressGestureRecognizer *)recognizer;
 @end
 
@@ -7809,22 +7809,40 @@ static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibili
 
 static id NeoWCOfficialChatSearchHost(BaseMsgContentViewController *controller) {
     if (!controller) return nil;
+    SEL nativeSearchSelector = NSSelectorFromString(@"onSearchButton:");
     SEL initializeSelector = NSSelectorFromString(@"initMsgSearchHelper:");
     NSMutableArray *candidates = [NSMutableArray arrayWithObject:controller];
     if (controller.parentViewController) [candidates addObject:controller.parentViewController];
     UIViewController *topController = controller.navigationController.topViewController;
     if (topController && ![candidates containsObject:topController]) [candidates addObject:topController];
     for (id candidate in candidates) {
-        if (![candidate respondsToSelector:initializeSelector]) continue;
+        if (![candidate respondsToSelector:nativeSearchSelector] &&
+            ![candidate respondsToSelector:initializeSelector]) continue;
         UINavigationController *navigationController = [candidate navigationController];
         if (!navigationController || navigationController.topViewController == candidate) return candidate;
     }
     return nil;
 }
 
-static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller) {
+static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller, id sender) {
     id searchHost = NeoWCOfficialChatSearchHost(controller);
     if (!searchHost) return NO;
+
+    // Let the chat controller run its complete native entry point first. It
+    // creates/configures WCSearchController and owns every cancel/pop path.
+    SEL nativeSearchSelector = NSSelectorFromString(@"onSearchButton:");
+    Method nativeSearchMethod = class_getInstanceMethod([searchHost class], nativeSearchSelector);
+    if ([searchHost respondsToSelector:nativeSearchSelector] &&
+        nativeSearchMethod && method_getNumberOfArguments(nativeSearchMethod) == 3 &&
+        NeoWCMethodArgumentIsObject(nativeSearchMethod, 2)) {
+        if (objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey)) {
+            objc_setAssociatedObject(controller, &NeoWCChatSearchTransitionKey,
+                                     @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            NeoWCRestoreChatTopBar(controller);
+        }
+        ((void (*)(id, SEL, id))objc_msgSend)(searchHost, nativeSearchSelector, sender);
+        return YES;
+    }
 
     SEL initializeSelector = NSSelectorFromString(@"initMsgSearchHelper:");
     if ([searchHost respondsToSelector:initializeSelector]) {
@@ -7933,13 +7951,13 @@ static UIBarButtonItem *NeoWCOfficialChatSearchBarButton(BaseMsgContentViewContr
         NeoWCMethodArgumentIsObject(factoryMethod, 6)) {
         id item = ((id (*)(id, SEL, id, id, SEL, NSInteger, id))objc_msgSend)(
             utilityClass, factorySelector, @"icons_outlined_search", controller,
-            @selector(neowc_openChatSearch), 2, @"search");
+            @selector(neowc_openChatSearch:), 2, @"search");
         if ([item isKindOfClass:[UIBarButtonItem class]]) return item;
     }
     return [[UIBarButtonItem alloc] initWithImage:NeoWCChatSearchImage()
                                             style:UIBarButtonItemStylePlain
                                            target:controller
-                                           action:@selector(neowc_openChatSearch)];
+                                           action:@selector(neowc_openChatSearch:)];
 }
 
 static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *controller,
@@ -7969,7 +7987,7 @@ static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *co
     BOOL includesSearch = NeoWCEnhancementEnabled(NeoWCChatSearchButtonEnabledKey);
     if (includesSearch) {
         UIButton *search = NeoWCChatTopCapsuleButton(NeoWCChatCapsuleSearchImage(), @"搜索聊天记录");
-        [search addTarget:controller action:@selector(neowc_openChatSearch) forControlEvents:UIControlEventTouchUpInside];
+        [search addTarget:controller action:@selector(neowc_openChatSearch:) forControlEvents:UIControlEventTouchUpInside];
         [stack addArrangedSubview:search];
     }
     [stack addArrangedSubview:more];
@@ -10491,8 +10509,8 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook BaseMsgContentViewController
 
 %new
-- (void)neowc_openChatSearch {
-    if (!NeoWCOpenOfficialChatSearch(self)) {
+- (void)neowc_openChatSearch:(id)sender {
+    if (!NeoWCOpenOfficialChatSearch(self, sender)) {
         NeoWCShowTransientMessage(@"当前微信版本暂不支持聊天记录搜索", NO);
     }
 }
