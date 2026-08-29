@@ -444,6 +444,7 @@ static void NeoWCShowTransientMessage(NSString *message, BOOL success);
 static BOOL NeoWCMethodReturnsVoid(Method method);
 static BOOL NeoWCMethodReturnsObject(Method method);
 static BOOL NeoWCMethodArgumentIsObject(Method method, unsigned int index);
+static BOOL NeoWCMethodArgumentIsIntegerScalar(Method method, unsigned int index);
 static BOOL NeoWCMomentCanSaveMedia(id dataItem);
 static void NeoWCSaveMomentMedia(id dataItem, UIViewController *presenter);
 @class NeoWCReplyTransformSnapshot;
@@ -7550,7 +7551,23 @@ static CGFloat NeoWCChatTopLeftCapsuleHeight(void) {
     return MAX(38.0, NeoWCChatTopAvatarSize() + 8.0);
 }
 
+static UIImageView *NeoWCChatTopPlainAvatarImageView(UIImage *image) {
+    if (![image isKindOfClass:UIImage.class]) return nil;
+    UIImageView *imageView = [[UIImageView alloc] initWithImage:image];
+    imageView.backgroundColor = UIColor.clearColor;
+    imageView.contentMode = UIViewContentModeScaleAspectFit;
+    imageView.clipsToBounds = YES;
+    return imageView;
+}
+
 static UIView *NeoWCChatTopAvatarView(id contact, NSString *userName) {
+    // Do not embed MMHeadImageView when the contact image is already available:
+    // that host view applies its own crop while being resized and makes square
+    // avatars look optically zoomed inside our second circular viewport.
+    id contactImage = NeoWCTweakValueForSelectorNames(contact, @[@"getContactHeadImage"]);
+    UIImageView *plainImageView = NeoWCChatTopPlainAvatarImageView(contactImage);
+    if (plainImageView) return plainImageView;
+
     NSString *headURL = NeoWCTweakSafeValue(contact, @"m_nsHeadImgUrl");
     if (![headURL isKindOfClass:[NSString class]] || headURL.length == 0) {
         headURL = NeoWCTweakSafeValue(contact, @"m_nsHeadImgUrlHD");
@@ -7564,7 +7581,17 @@ static UIView *NeoWCChatTopAvatarView(id contact, NSString *userName) {
                                                                       headURL ?: @"",
                                                                       YES,
                                                                       NO);
-        if ([view isKindOfClass:[UIView class]]) return view;
+        if ([view isKindOfClass:[UIView class]]) {
+            id hostedImageView = [view isKindOfClass:UIImageView.class]
+                ? view : NeoWCTweakValueForSelectorNames(view, @[@"headImageView", @"imageView"]);
+            UIImage *hostedImage = [hostedImageView isKindOfClass:UIImageView.class]
+                ? ((UIImageView *)hostedImageView).image : nil;
+            plainImageView = NeoWCChatTopPlainAvatarImageView(hostedImage);
+            if (plainImageView) return plainImageView;
+            // The helper may still be loading asynchronously. Preserve it only
+            // as a last-resort path so an uncached avatar can eventually appear.
+            return view;
+        }
     }
     UIImageView *fallback = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"person.crop.circle.fill"]];
     fallback.tintColor = UIColor.tertiaryLabelColor;
@@ -9107,9 +9134,69 @@ static NSArray *NeoWCProfileObjectCollection(id target, NSArray<NSString *> *sel
 }
 
 static NSArray *NeoWCAllChatRoomContacts(void) {
+    NSMutableArray *groups = [NSMutableArray array];
+    NSMutableSet<NSString *> *groupNames = [NSMutableSet set];
+    void (^appendGroup)(id) = ^(id contact) {
+        if (!contact) return;
+        NSString *name = NeoWCRawProfileValue(contact,
+            @[@"m_nsUsrName", @"m_nsUserName", @"userName", @"username"]);
+        if (name.length == 0 || [groupNames containsObject:name]) return;
+        BOOL isChatRoom = [name hasSuffix:@"@chatroom"];
+        SEL chatRoomSelector = NSSelectorFromString(@"isChatroom");
+        Method chatRoomMethod = class_getInstanceMethod([contact class], chatRoomSelector);
+        if (chatRoomMethod && method_getNumberOfArguments(chatRoomMethod) == 2) {
+            char returnType[8] = {0};
+            method_getReturnType(chatRoomMethod, returnType, sizeof(returnType));
+            if (returnType[0] == 'B' || returnType[0] == 'c') {
+                @try {
+                    isChatRoom = ((BOOL (*)(id, SEL))objc_msgSend)(contact, chatRoomSelector);
+                } @catch (__unused NSException *exception) {}
+            }
+        }
+        if (!isChatRoom) return;
+        [groupNames addObject:name];
+        [groups addObject:contact];
+    };
+
+    // WCPulse 1.7-2 first walks MMNewSessionMgr.SessionNewArray. This is
+    // important for non-friends because some active groups are absent from
+    // ContactsDataLogic's cached chat-room collection.
+    Class sessionManagerClass = objc_getClass("MMNewSessionMgr");
+    id sessionManager = sessionManagerClass ? NeoWCServiceForClass(sessionManagerClass) : nil;
+    NSArray *sessions = NeoWCProfileObjectCollection(sessionManager, @[@"SessionNewArray"]);
+    for (id session in sessions ?: @[]) {
+        NSString *name = NeoWCRawProfileValue(session,
+            @[@"m_nsUserName", @"m_nsUsrName", @"userName", @"username"]);
+        if (name.length == 0 || [groupNames containsObject:name]) continue;
+        appendGroup(NeoWCContactForUserName(name));
+    }
+
+    Class contactManagerClass = objc_getClass("CContactMgr");
+    id contactManager = contactManagerClass ? NeoWCServiceForClass(contactManagerClass) : nil;
+    SEL contactListSelector = NSSelectorFromString(@"getContactList:contactType:");
+    Method contactListMethod = contactManager
+        ? class_getInstanceMethod([contactManager class], contactListSelector) : NULL;
+    if (contactListMethod && method_getNumberOfArguments(contactListMethod) == 4 &&
+        NeoWCMethodReturnsObject(contactListMethod) &&
+        NeoWCMethodArgumentIsIntegerScalar(contactListMethod, 2) &&
+        NeoWCMethodArgumentIsIntegerScalar(contactListMethod, 3)) {
+        @try {
+            id value = ((id (*)(id, SEL, NSInteger, NSInteger))objc_msgSend)(
+                contactManager, contactListSelector, 1, 0);
+            if ([value conformsToProtocol:@protocol(NSFastEnumeration)]) {
+                for (id contact in value) appendGroup(contact);
+            }
+        } @catch (__unused NSException *exception) {}
+    }
+
+    // Retain the older source as a compatibility fallback and merge it rather
+    // than returning early; WeChat versions differ in which cache is complete.
     Class dataLogicClass = objc_getClass("ContactsDataLogic");
     id dataLogic = dataLogicClass ? NeoWCServiceForClass(dataLogicClass) : nil;
-    return NeoWCProfileObjectCollection(dataLogic, @[@"getChatRoomContacts"]);
+    for (id contact in NeoWCProfileObjectCollection(dataLogic, @[@"getChatRoomContacts"]) ?: @[]) {
+        appendGroup(contact);
+    }
+    return groups;
 }
 
 static BOOL NeoWCContactListMethodIsCompatible(id manager, SEL selector) {
@@ -9298,9 +9385,9 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id 
         NeoWCAddInfoCardRow(rows, @"添加时间", NeoWCContactAddTimeValue(contact));
         NeoWCAddInfoCardRow(rows, @"添加天数", NeoWCContactAddDaysValue(contact));
         NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
-        // The host related-group service supports non-friends too. Keep the
-        // local group scan as an immediate value while the official result is
-        // loaded and merged asynchronously.
+        // The native related-group search exits early for non-friends. Seed the
+        // row from the WCPulse-compatible session/contact scan, then merge any
+        // official result that becomes available asynchronously.
         NSInteger commonCount = NeoWCCommonGroupCount(userName);
         NeoWCAddInfoCardRow(rows, @"共同群聊", commonCount >= 0
             ? [NSString stringWithFormat:@"%ld 个", (long)commonCount]
