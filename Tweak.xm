@@ -7925,19 +7925,14 @@ static BOOL NeoWCIsManagedChatSearcher(id searcher) {
 
 static void NeoWCHideManagedChatSearchBar(id searcher) {
     if (!NeoWCIsManagedChatSearcher(searcher)) return;
-    UIView *storedContainer = objc_getAssociatedObject(searcher, &NeoWCManagedChatSearchBarContainerKey);
-    [storedContainer.layer removeAllAnimations];
-    storedContainer.hidden = YES;
-
     SEL searchBarSelector = NSSelectorFromString(@"searchBar");
     id searchBar = [searcher respondsToSelector:searchBarSelector]
         ? ((id (*)(id, SEL))objc_msgSend)(searcher, searchBarSelector)
         : nil;
-    UIView *currentContainer = [searchBar respondsToSelector:@selector(superview)] ? [searchBar superview] : nil;
-    if (currentContainer != storedContainer) {
-        [currentContainer.layer removeAllAnimations];
-        currentContainer.hidden = YES;
-    }
+    if (![searchBar isKindOfClass:[UIView class]]) return;
+    UIView *searchBarView = (UIView *)searchBar;
+    [searchBarView.layer removeAllAnimations];
+    searchBarView.hidden = YES;
 }
 
 static void NeoWCCompleteManagedChatSearchDismissal(id searcher) {
@@ -10546,20 +10541,15 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook WCSearcher
 
 - (void)searchBarCancelButtonClicked:(id)searchBar {
-    BOOL managed = NeoWCIsManagedChatSearcher(self);
-    if (managed) NeoWCHideManagedChatSearchBar(self);
     %orig;
-    if (managed) NeoWCHideManagedChatSearchBar(self);
 }
 
 - (void)willDismissSearchController:(id)searchController {
-    if (NeoWCIsManagedChatSearcher(self)) NeoWCHideManagedChatSearchBar(self);
     %orig;
 }
 
 - (void)didDismissSearchController:(id)searchController {
     BOOL managed = NeoWCIsManagedChatSearcher(self);
-    if (managed) NeoWCHideManagedChatSearchBar(self);
     %orig;
     if (managed) NeoWCCompleteManagedChatSearchDismissal(self);
 }
@@ -10570,20 +10560,34 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)wcsSearchBarCancelButtonClicked:(id)searchBar {
     id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
-    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
+    SEL activeSelector = NSSelectorFromString(@"isSearchBarActive");
+    BOOL wasActive = [self respondsToSelector:activeSelector]
+        ? ((BOOL (*)(id, SEL))objc_msgSend)(self, activeSelector)
+        : NO;
     %orig;
-    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
+    if (searcher && wasActive) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!NeoWCIsManagedChatSearcher(searcher)) return;
+            SEL stillActiveSelector = NSSelectorFromString(@"isSearchBarActive");
+            BOOL stillActive = [self respondsToSelector:stillActiveSelector]
+                ? ((BOOL (*)(id, SEL))objc_msgSend)(self, stillActiveSelector)
+                : NO;
+            if (!stillActive) {
+                SEL exitSelector = NSSelectorFromString(@"doExit");
+                if ([self respondsToSelector:exitSelector]) {
+                    ((void (*)(id, SEL))objc_msgSend)(self, exitSelector);
+                }
+            }
+        });
+    }
 }
 
 - (void)wcsWillDismissSearch:(id)searchController {
-    id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
-    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
     %orig;
 }
 
 - (void)wcsDidDismissSearch:(id)searchController {
     id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
-    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
     %orig;
     if (searcher) NeoWCCompleteManagedChatSearchDismissal(searcher);
     objc_setAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey, nil,
@@ -10591,22 +10595,15 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 - (void)onSearchPanGestureMoveRight {
-    id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
-    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
     %orig;
-    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
 }
 
 - (void)moveSearchVCToRight {
-    id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
-    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
     %orig;
-    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
 }
 
 - (void)removeSearchVC {
     id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
-    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
     %orig;
     if (searcher) NeoWCCompleteManagedChatSearchDismissal(searcher);
     objc_setAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey, nil,
