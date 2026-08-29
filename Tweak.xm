@@ -380,6 +380,7 @@ static char NeoWCChatTopCapsuleItemKey;
 static char NeoWCChatSearchItemKey;
 static char NeoWCManagedChatSearcherKey;
 static char NeoWCManagedChatSearchBarContainerKey;
+static char NeoWCManagedChatSearchHelperSearcherKey;
 static char NeoWCChatTopOriginalLeftItemsKey;
 static char NeoWCChatTopOriginalRightItemsKey;
 static char NeoWCChatTopOriginalTitleViewKey;
@@ -7883,6 +7884,8 @@ static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller
         }
         objc_setAssociatedObject(searcher, &NeoWCManagedChatSearcherKey,
                                  @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(helper, &NeoWCManagedChatSearchHelperSearcherKey,
+                                 searcher, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         SEL usePanSelector = NSSelectorFromString(@"setBUsePanGesture:");
         if ([searcher respondsToSelector:usePanSelector]) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(searcher, usePanSelector, YES);
@@ -10559,6 +10562,55 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
     if (managed) NeoWCHideManagedChatSearchBar(self);
     %orig;
     if (managed) NeoWCCompleteManagedChatSearchDismissal(self);
+}
+
+%end
+
+%hook MsgSearchHelper
+
+- (void)wcsSearchBarCancelButtonClicked:(id)searchBar {
+    id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
+    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
+    %orig;
+    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
+}
+
+- (void)wcsWillDismissSearch:(id)searchController {
+    id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
+    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
+    %orig;
+}
+
+- (void)wcsDidDismissSearch:(id)searchController {
+    id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
+    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
+    %orig;
+    if (searcher) NeoWCCompleteManagedChatSearchDismissal(searcher);
+    objc_setAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey, nil,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+- (void)onSearchPanGestureMoveRight {
+    id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
+    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
+    %orig;
+    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
+}
+
+- (void)moveSearchVCToRight {
+    id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
+    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
+    %orig;
+    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
+}
+
+- (void)removeSearchVC {
+    id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
+    if (searcher) NeoWCHideManagedChatSearchBar(searcher);
+    %orig;
+    if (searcher) NeoWCCompleteManagedChatSearchDismissal(searcher);
+    objc_setAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey, nil,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 %end
