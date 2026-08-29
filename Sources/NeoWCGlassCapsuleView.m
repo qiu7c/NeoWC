@@ -16,6 +16,22 @@
 
 @implementation NeoWCGlassCapsuleView
 
+- (void)invalidateBlurAnimator {
+    UIViewPropertyAnimator *animator = self.blurAnimator;
+    if (!animator) return;
+    if (animator.state == UIViewAnimatingStateActive) {
+        [animator stopAnimation:NO];
+    }
+    if (animator.state == UIViewAnimatingStateStopped) {
+        [animator finishAnimationAtPosition:UIViewAnimatingPositionCurrent];
+    }
+    self.blurAnimator = nil;
+}
+
+- (void)dealloc {
+    [self invalidateBlurAnimator];
+}
+
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (!self) return nil;
@@ -58,8 +74,7 @@
 }
 
 - (void)rebuildBlurEffect {
-    [self.blurAnimator stopAnimation:YES];
-    self.blurAnimator = nil;
+    [self invalidateBlurAnimator];
     self.effectView.alpha = 1.0;
     self.effectView.effect = nil;
 
