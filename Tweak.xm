@@ -378,6 +378,7 @@ static char NeoWCVoiceTranscriptionAttemptedKey;
 static char NeoWCChatTopProfileItemKey;
 static char NeoWCChatTopCapsuleItemKey;
 static char NeoWCChatSearchItemKey;
+static char NeoWCChatSearchHelperKey;
 static char NeoWCChatTopOriginalLeftItemsKey;
 static char NeoWCChatTopOriginalRightItemsKey;
 static char NeoWCChatTopOriginalTitleViewKey;
@@ -7809,115 +7810,125 @@ static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibili
 
 static id NeoWCOfficialChatSearchHost(BaseMsgContentViewController *controller) {
     if (!controller) return nil;
-    SEL nativeSearchSelector = NSSelectorFromString(@"onSearchButton:");
-    SEL initializeSelector = NSSelectorFromString(@"initMsgSearchHelper:");
-    NSMutableArray *candidates = [NSMutableArray arrayWithObject:controller];
-    if (controller.parentViewController) [candidates addObject:controller.parentViewController];
-    UIViewController *topController = controller.navigationController.topViewController;
-    if (topController && ![candidates containsObject:topController]) [candidates addObject:topController];
-    for (id candidate in candidates) {
-        if (![candidate respondsToSelector:nativeSearchSelector] &&
-            ![candidate respondsToSelector:initializeSelector]) continue;
-        UINavigationController *navigationController = [candidate navigationController];
-        if (!navigationController || navigationController.topViewController == candidate) return candidate;
+    UINavigationController *navigationController = controller.navigationController;
+    return (!navigationController || navigationController.topViewController == controller)
+        ? controller : nil;
+}
+
+static NSString *NeoWCChatSearchSessionId(id controller) {
+    SEL currentChatSelector = NSSelectorFromString(@"getCurrentChatName");
+    if ([controller respondsToSelector:currentChatSelector]) {
+        id value = ((id (*)(id, SEL))objc_msgSend)(controller, currentChatSelector);
+        if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
+    }
+    return NeoWCChatUserName(controller);
+}
+
+static id NeoWCChatSearchGetChatContact(id controller, __unused SEL selector) {
+    SEL getContactSelector = NSSelectorFromString(@"GetContact");
+    if ([controller respondsToSelector:getContactSelector]) {
+        id contact = ((id (*)(id, SEL))objc_msgSend)(controller, getContactSelector);
+        if (contact) return contact;
+    }
+    SEL getCContactSelector = NSSelectorFromString(@"GetCContact");
+    if ([controller respondsToSelector:getCContactSelector]) {
+        return ((id (*)(id, SEL))objc_msgSend)(controller, getCContactSelector);
     }
     return nil;
 }
 
+static id NeoWCChatSearchGetSessionValue(id controller, __unused SEL selector) {
+    return NeoWCChatSearchSessionId(controller);
+}
+
+static void NeoWCInstallChatSearchDelegateMethods(void) {
+    Class controllerClass = NSClassFromString(@"BaseMsgContentViewController");
+    if (!controllerClass) return;
+    class_addMethod(controllerClass, NSSelectorFromString(@"getChatContact"),
+                    (IMP)NeoWCChatSearchGetChatContact, "@@:");
+    class_addMethod(controllerClass, NSSelectorFromString(@"getChatName"),
+                    (IMP)NeoWCChatSearchGetSessionValue, "@@:");
+    class_addMethod(controllerClass, NSSelectorFromString(@"getSessionId"),
+                    (IMP)NeoWCChatSearchGetSessionValue, "@@:");
+    class_addMethod(controllerClass, NSSelectorFromString(@"reportSessionId"),
+                    (IMP)NeoWCChatSearchGetSessionValue, "@@:");
+}
+
 static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller, id sender) {
+    (void)sender;
     id searchHost = NeoWCOfficialChatSearchHost(controller);
     if (!searchHost) return NO;
 
-    // Let the chat controller run its complete native entry point first. It
-    // creates/configures WCSearchController and owns every cancel/pop path.
-    SEL nativeSearchSelector = NSSelectorFromString(@"onSearchButton:");
-    Method nativeSearchMethod = class_getInstanceMethod([searchHost class], nativeSearchSelector);
-    if ([searchHost respondsToSelector:nativeSearchSelector] &&
-        nativeSearchMethod && method_getNumberOfArguments(nativeSearchMethod) == 3 &&
-        NeoWCMethodArgumentIsObject(nativeSearchMethod, 2)) {
-        if (objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey)) {
-            objc_setAssociatedObject(controller, &NeoWCChatSearchTransitionKey,
-                                     @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            NeoWCRestoreChatTopBar(controller);
-        }
-        ((void (*)(id, SEL, id))objc_msgSend)(searchHost, nativeSearchSelector, sender);
-        return YES;
+    // WeChatX 2.1-9 creates a separate MsgSearchHelper with the contents
+    // controller. That initializer supplies the current session to FTS;
+    // entering only through onSearchButton: can show an empty search shell.
+    Class helperClass = NSClassFromString(@"MsgSearchHelper");
+    SEL initSelector = NSSelectorFromString(@"initWithContentsController:");
+    if (!helperClass || ![helperClass instancesRespondToSelector:initSelector]) return NO;
+
+    id helper = objc_getAssociatedObject(searchHost, &NeoWCChatSearchHelperKey);
+    if (helper && ![helper isKindOfClass:helperClass]) helper = nil;
+    if (!helper) {
+        helper = ((id (*)(id, SEL, id))objc_msgSend)([helperClass alloc], initSelector, searchHost);
+        if (!helper) return NO;
+        objc_setAssociatedObject(searchHost, &NeoWCChatSearchHelperKey,
+                                 helper, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 
-    SEL initializeSelector = NSSelectorFromString(@"initMsgSearchHelper:");
-    if ([searchHost respondsToSelector:initializeSelector]) {
-        ((void (*)(id, SEL, NSUInteger))objc_msgSend)(searchHost, initializeSelector, (NSUInteger)0);
+    SEL delegateSelector = NSSelectorFromString(@"setM_delegate:");
+    if ([helper respondsToSelector:delegateSelector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(helper, delegateSelector, searchHost);
+    }
+    SEL sceneSelector = NSSelectorFromString(@"setM_eMsgSearchHelperScene:");
+    if ([helper respondsToSelector:sceneSelector]) {
+        ((void (*)(id, SEL, NSUInteger))objc_msgSend)(helper, sceneSelector, (NSUInteger)0);
     }
 
-    SEL interactivePopSelector = NSSelectorFromString(@"setM_bInteractivePopEnabled:");
-    if ([searchHost respondsToSelector:interactivePopSelector]) {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(searchHost, interactivePopSelector, NO);
+    BOOL isGroupChat = [NeoWCChatSearchSessionId(searchHost) hasSuffix:@"@chatroom"];
+    SEL showNameSelector = NSSelectorFromString(@"setM_bShowSearchByName:");
+    if ([helper respondsToSelector:showNameSelector]) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, showNameSelector, isGroupChat);
+    }
+    SEL showTimeSelector = NSSelectorFromString(@"setM_bShowSearchByTime:");
+    if ([helper respondsToSelector:showTimeSelector]) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, showTimeSelector, YES);
+    }
+    SEL panCancelSelector = NSSelectorFromString(@"setBUsePanCancelGesture:");
+    if ([helper respondsToSelector:panCancelSelector]) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, panCancelSelector, YES);
     }
 
-    id helper = nil;
-    SEL helperSelector = NSSelectorFromString(@"m_oMsgSearchHelper");
-    if ([searchHost respondsToSelector:helperSelector]) {
-        helper = ((id (*)(id, SEL))objc_msgSend)(searchHost, helperSelector);
+    NeoWCTweakSetValue(helper, @"m_searchParentVC", searchHost);
+    NSArray<NSNumber *> *buttonIndexes = isGroupChat
+        ? @[@1, @2, @6, @3, @4, @5, @7, @8, @9, @12, @14, @13, @10, @11, @15]
+        : @[@2, @6, @3, @4, @5, @7, @8, @9, @12, @14, @13, @10, @11, @15];
+    NeoWCTweakSetValue(helper, @"m_buttonIndexes", buttonIndexes);
+
+    id searcher = nil;
+    for (NSString *selectorName in @[@"getSearcher", @"searcher"]) {
+        SEL selector = NSSelectorFromString(selectorName);
+        if (![helper respondsToSelector:selector]) continue;
+        searcher = ((id (*)(id, SEL))objc_msgSend)(helper, selector);
+        if (searcher) break;
     }
-    if (!helper) helper = NeoWCExactIvarValue(searchHost, @"m_oMsgSearchHelper");
-    if (!helper) helper = NeoWCExactIvarValue(searchHost, @"_m_oMsgSearchHelper");
-    if (helper) {
-        SEL finishSelector = NSSelectorFromString(@"finishSearch");
-        if ([helper respondsToSelector:finishSelector]) {
-            ((void (*)(id, SEL))objc_msgSend)(helper, finishSelector);
-        }
+    if (!searcher) searcher = NeoWCExactIvarValue(helper, @"_searcher");
 
-        SEL panCancelSelector = NSSelectorFromString(@"setBUsePanCancelGesture:");
-        if ([helper respondsToSelector:panCancelSelector]) {
-            ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, panCancelSelector, YES);
-        }
-
-        id searcher = nil;
-        SEL searcherSelector = NSSelectorFromString(@"searcher");
-        if ([helper respondsToSelector:searcherSelector]) {
-            searcher = ((id (*)(id, SEL))objc_msgSend)(helper, searcherSelector);
-        }
-        if (!searcher) searcher = NeoWCExactIvarValue(helper, @"_searcher");
-        SEL searchBarSelector = NSSelectorFromString(@"searchBar");
-        if ([searcher respondsToSelector:searchBarSelector]) {
-            id searchBar = ((id (*)(id, SEL))objc_msgSend)(searcher, searchBarSelector);
-            UIView *searchBarContainer = [searchBar respondsToSelector:@selector(superview)] ? [searchBar superview] : nil;
-            searchBarContainer.hidden = YES;
-
-            SEL setYSelector = NSSelectorFromString(@"setY:");
-            Class uiUtilClass = NSClassFromString(@"UiUtil");
-            SEL statusBarHeightSelector = NSSelectorFromString(@"normalStatusBarHeight");
-            if ([searchBarContainer respondsToSelector:setYSelector] &&
-                [uiUtilClass respondsToSelector:statusBarHeightSelector]) {
-                CGFloat statusBarHeight = ((CGFloat (*)(id, SEL))objc_msgSend)(uiUtilClass, statusBarHeightSelector);
-                ((void (*)(id, SEL, CGFloat))objc_msgSend)(searchBarContainer, setYSelector, statusBarHeight);
-            }
-
-        }
-        SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
-        if ([searcher respondsToSelector:pushSelector]) {
-            // The searcher owns the navigation transition. Restore WeChat's
-            // original items first so our capsule cannot be captured as the
-            // disappearing chat bar or left behind during an interactive pop.
-            if (objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey)) {
-                objc_setAssociatedObject(controller, &NeoWCChatSearchTransitionKey,
-                                         @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                NeoWCRestoreChatTopBar(controller);
-            }
-            ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
-            return YES;
-        }
+    SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
+    SEL activeSelector = NSSelectorFromString(@"setActive:animated:completion:");
+    if (![searcher respondsToSelector:pushSelector] &&
+        ![searcher respondsToSelector:activeSelector]) return NO;
+    if (objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey)) {
+        objc_setAssociatedObject(controller, &NeoWCChatSearchTransitionKey,
+                                 @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NeoWCRestoreChatTopBar(controller);
     }
-
-    SEL fallbackSelector = NSSelectorFromString(@"onSearchItem");
-    if ([searchHost respondsToSelector:fallbackSelector]) {
-        ((void (*)(id, SEL))objc_msgSend)(searchHost, fallbackSelector);
-        return YES;
+    if ([searcher respondsToSelector:pushSelector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
+    } else {
+        ((void (*)(id, SEL, BOOL, BOOL, id))objc_msgSend)(searcher, activeSelector,
+                                                         YES, NO, nil);
     }
-    if ([searchHost respondsToSelector:interactivePopSelector]) {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(searchHost, interactivePopSelector, YES);
-    }
-    return NO;
+    return YES;
 }
 
 static UIImage *NeoWCChatSearchImage(void) {
@@ -13205,6 +13216,7 @@ static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
 
 %ctor {
     %init;
+    NeoWCInstallChatSearchDelegateMethods();
     NeoWCMomentsCommentAntiDeleteInstallHooks();
     NeoWCInstallExclusiveRedEnvelopeHooks();
     if ([CADisplayLink instancesRespondToSelector:@selector(setPreferredFrameRateRange:)]) {
