@@ -7806,73 +7806,67 @@ static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibili
     return button;
 }
 
-static BOOL NeoWCChatSearchMethodHasSupportedReturn(Method method) {
-    return NeoWCMethodReturnsVoid(method) || NeoWCMethodReturnsObject(method);
+static BOOL NeoWCChatSearchMethodAvailable(id receiver, SEL selector, unsigned int argumentCount) {
+    if (!receiver || ![receiver respondsToSelector:selector]) return NO;
+    Method method = receiver ? class_getInstanceMethod([receiver class], selector) : NULL;
+    return !method || method_getNumberOfArguments(method) == argumentCount;
 }
 
-static BOOL NeoWCChatSearchMethodHasIntegerArgument(id receiver, SEL selector) {
-    Method method = receiver ? class_getInstanceMethod([receiver class], selector) : NULL;
-    return method && method_getNumberOfArguments(method) == 3 &&
-        NeoWCChatSearchMethodHasSupportedReturn(method) &&
-        NeoWCMethodArgumentIsIntegerScalar(method, 2);
-}
-
-static BOOL NeoWCChatSearchMethodIsObjectGetter(id receiver, SEL selector) {
-    Method method = receiver ? class_getInstanceMethod([receiver class], selector) : NULL;
-    return method && method_getNumberOfArguments(method) == 2 && NeoWCMethodReturnsObject(method);
-}
-
-static BOOL NeoWCChatSearchMethodHasObjectArgument(id receiver, SEL selector) {
-    Method method = receiver ? class_getInstanceMethod([receiver class], selector) : NULL;
-    return method && method_getNumberOfArguments(method) == 3 &&
-        NeoWCChatSearchMethodHasSupportedReturn(method) && NeoWCMethodArgumentIsObject(method, 2);
-}
-
-static BOOL NeoWCChatSearchMethodHasNoArguments(id receiver, SEL selector) {
-    Method method = receiver ? class_getInstanceMethod([receiver class], selector) : NULL;
-    return method && method_getNumberOfArguments(method) == 2 &&
-        NeoWCChatSearchMethodHasSupportedReturn(method);
+static id NeoWCOfficialChatSearchHost(BaseMsgContentViewController *controller) {
+    if (!controller) return nil;
+    SEL initializeSelector = NSSelectorFromString(@"initMsgSearchHelper:");
+    NSMutableArray *candidates = [NSMutableArray arrayWithObject:controller];
+    if (controller.parentViewController) [candidates addObject:controller.parentViewController];
+    UIViewController *topController = controller.navigationController.topViewController;
+    if (topController && ![candidates containsObject:topController]) [candidates addObject:topController];
+    for (id candidate in candidates) {
+        if (![candidate respondsToSelector:initializeSelector]) continue;
+        UINavigationController *navigationController = [candidate navigationController];
+        if (!navigationController || navigationController.topViewController == candidate) return candidate;
+    }
+    return nil;
 }
 
 static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller) {
-    if (!controller || controller.navigationController.topViewController != controller) return NO;
+    id searchHost = NeoWCOfficialChatSearchHost(controller);
+    if (!searchHost) return NO;
 
     SEL initializeSelector = NSSelectorFromString(@"initMsgSearchHelper:");
-    if (NeoWCChatSearchMethodHasIntegerArgument(controller, initializeSelector)) {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, initializeSelector, NO);
+    if (NeoWCChatSearchMethodAvailable(searchHost, initializeSelector, 3)) {
+        ((void (*)(id, SEL, NSUInteger))objc_msgSend)(searchHost, initializeSelector, (NSUInteger)0);
     }
 
     SEL interactivePopSelector = NSSelectorFromString(@"setM_bInteractivePopEnabled:");
-    if (NeoWCChatSearchMethodHasIntegerArgument(controller, interactivePopSelector)) {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, interactivePopSelector, NO);
+    if (NeoWCChatSearchMethodAvailable(searchHost, interactivePopSelector, 3)) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(searchHost, interactivePopSelector, NO);
     }
 
     id helper = nil;
     SEL helperSelector = NSSelectorFromString(@"m_oMsgSearchHelper");
-    if (NeoWCChatSearchMethodIsObjectGetter(controller, helperSelector)) {
-        helper = ((id (*)(id, SEL))objc_msgSend)(controller, helperSelector);
+    if (NeoWCChatSearchMethodAvailable(searchHost, helperSelector, 2)) {
+        helper = ((id (*)(id, SEL))objc_msgSend)(searchHost, helperSelector);
     }
     if (helper) {
         SEL panCancelSelector = NSSelectorFromString(@"setBUsePanCancelGesture:");
-        if (NeoWCChatSearchMethodHasIntegerArgument(helper, panCancelSelector)) {
+        if (NeoWCChatSearchMethodAvailable(helper, panCancelSelector, 3)) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, panCancelSelector, YES);
         }
 
         id searcher = nil;
         SEL searcherSelector = NSSelectorFromString(@"searcher");
-        if (NeoWCChatSearchMethodIsObjectGetter(helper, searcherSelector)) {
+        if (NeoWCChatSearchMethodAvailable(helper, searcherSelector, 2)) {
             searcher = ((id (*)(id, SEL))objc_msgSend)(helper, searcherSelector);
         }
         SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
-        if (NeoWCChatSearchMethodHasObjectArgument(searcher, pushSelector)) {
+        if (NeoWCChatSearchMethodAvailable(searcher, pushSelector, 3)) {
             ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
             return YES;
         }
     }
 
     SEL fallbackSelector = NSSelectorFromString(@"onSearchItem");
-    if (NeoWCChatSearchMethodHasNoArguments(controller, fallbackSelector)) {
-        ((void (*)(id, SEL))objc_msgSend)(controller, fallbackSelector);
+    if (NeoWCChatSearchMethodAvailable(searchHost, fallbackSelector, 2)) {
+        ((void (*)(id, SEL))objc_msgSend)(searchHost, fallbackSelector);
         return YES;
     }
     return NO;
