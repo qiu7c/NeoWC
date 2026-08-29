@@ -10561,7 +10561,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)wcsSearchBarCancelButtonClicked:(id)searchBar {
     id searcher = objc_getAssociatedObject(self, &NeoWCManagedChatSearchHelperSearcherKey);
     SEL activeSelector = NSSelectorFromString(@"isSearchBarActive");
-    BOOL wasActive = [self respondsToSelector:activeSelector]
+    BOOL wasActive = [(id)self respondsToSelector:activeSelector]
         ? ((BOOL (*)(id, SEL))objc_msgSend)(self, activeSelector)
         : NO;
     %orig;
@@ -10569,12 +10569,12 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (!NeoWCIsManagedChatSearcher(searcher)) return;
             SEL stillActiveSelector = NSSelectorFromString(@"isSearchBarActive");
-            BOOL stillActive = [self respondsToSelector:stillActiveSelector]
+            BOOL stillActive = [(id)self respondsToSelector:stillActiveSelector]
                 ? ((BOOL (*)(id, SEL))objc_msgSend)(self, stillActiveSelector)
                 : NO;
             if (!stillActive) {
                 SEL exitSelector = NSSelectorFromString(@"doExit");
-                if ([self respondsToSelector:exitSelector]) {
+                if ([(id)self respondsToSelector:exitSelector]) {
                     ((void (*)(id, SEL))objc_msgSend)(self, exitSelector);
                 }
             }
