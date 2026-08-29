@@ -1,6 +1,6 @@
 # NeoWC
 
-NeoWC is a native UIKit WeChat enhancement tweak. Version `0.1.6` adds Moments reminders and comment protection, improves quick replies and media-to-voice actions, and reorganizes settings around user-facing features.
+NeoWC is a native UIKit WeChat enhancement tweak. Version `0.1.7` adds the native chat search entry and aligns its navigation with WeChat's own search flow, while retaining the Moments reminders, quick replies, and media-to-voice improvements.
 
 The settings page groups features into Chat, Moments, Interface Disable, Interface Optimization, Common Enhancements, and Plugin Settings. Category expansion state is remembered locally. NeoWC uses a transparent, single-stroke monogram that combines the letter N with a conversation tail; `Assets/NeoWCIcon.svg` is the matching scalable design source.
 
@@ -13,7 +13,7 @@ Plugin Settings contains a bounded in-memory runtime log viewer and configuratio
 When `WCPluginsMgr` is available, NeoWC registers:
 
 - Title: `NeoWC`
-- Version: `0.1.6`
+- Version: `0.1.7`
 - Controller: `NeoWCSettingsViewController`
 
 ## Build

@@ -44,7 +44,17 @@ NSArray<NeoWCReleaseNote *> *NeoWCReleaseNotes(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         notes = @[
-            [NeoWCReleaseNote noteWithVersion:NeoWCDisplayVersion
+            [NeoWCReleaseNote noteWithVersion:@"0.1.7"
+                                     headline:@"聊天搜索稳定性与原生返回链路"
+                                        items:@[
+                [NeoWCReleaseNoteItem itemWithTitle:@"原生聊天记录搜索"
+                                               detail:@"通过微信官方 MsgSearchHelper/WCSearcher 链路打开聊天记录搜索，保留官方搜索结果和返回手势。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"返回与取消稳定性"
+                                               detail:@"按微信原生退出顺序处理取消、右滑和返回按钮，避免重复退出、搜索框残留与顶栏状态错乱。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"搜索框显示优化"
+                                               detail:@"预隐藏官方搜索框容器，减少聊天顶栏切换时的背景闪现。"],
+            ]],
+            [NeoWCReleaseNote noteWithVersion:@"0.1.6"
                                      headline:@"朋友圈提醒、设置重组与稳定性更新"
                                         items:@[
                 [NeoWCReleaseNoteItem itemWithTitle:@"朋友圈特别关注提醒"
