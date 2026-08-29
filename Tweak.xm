@@ -7503,10 +7503,13 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
 - (void)layoutSubviews {
     [super layoutSubviews];
     CGFloat radius = CGRectGetHeight(self.bounds) * 0.5;
+    CGFloat imageInset = MIN(2.0, MAX(1.0, CGRectGetHeight(self.bounds) * 0.065));
+    CGRect imageFrame = CGRectInset(self.bounds, imageInset, imageInset);
+    CGFloat imageRadius = CGRectGetHeight(imageFrame) * 0.5;
     self.layer.cornerRadius = radius;
-    self.sourceView.frame = self.bounds;
+    self.sourceView.frame = imageFrame;
     self.sourceView.clipsToBounds = YES;
-    self.sourceView.layer.cornerRadius = radius;
+    self.sourceView.layer.cornerRadius = imageRadius;
     self.sourceView.layer.cornerCurve = kCACornerCurveContinuous;
     [self.sourceView layoutIfNeeded];
 
@@ -7520,7 +7523,7 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
         // inside the circular viewport instead of zooming and center-cropping.
         imageView.contentMode = UIViewContentModeScaleAspectFit;
         imageView.clipsToBounds = YES;
-        imageView.layer.cornerRadius = radius;
+        imageView.layer.cornerRadius = imageRadius;
         imageView.layer.cornerCurve = kCACornerCurveContinuous;
     }
 }
