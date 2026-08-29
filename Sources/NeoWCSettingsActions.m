@@ -588,6 +588,34 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
     [self presentSheet:sheet];
 }
 
+- (void)presentChatGlassStylePicker {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSInteger selected = [defaults integerForKey:NeoWCChatGlassStyleKey];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"玻璃样式"
+        message:@"磨砂玻璃保持纯模糊；伪液态额外加入自适应透底、渐变高光边缘和轻微体积阴影。"
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray<NSDictionary *> *options = @[
+        @{@"title": @"磨砂玻璃", @"value": @0},
+        @{@"title": @"伪液态", @"value": @1},
+    ];
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary *option in options) {
+        NSInteger value = [option[@"value"] integerValue];
+        NSString *title = option[@"title"];
+        if (value == selected) title = [@"✓  " stringByAppendingString:title];
+        [sheet addAction:[UIAlertAction actionWithTitle:title
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *action) {
+            [defaults setInteger:value forKey:NeoWCChatGlassStyleKey];
+            [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification
+                                                               object:NeoWCChatGlassStyleKey];
+            [weakSelf reload];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentSheet:sheet];
+}
+
 - (void)presentMomentsReminderForwardTargetPicker {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     NSInteger selected = [defaults integerForKey:NeoWCMomentsReminderForwardTargetKey];
@@ -654,9 +682,8 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         case NeoWCSettingActionRedEnvelopeFontSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 10 到 24 之间的字号" key:NeoWCRedEnvelopeDetailFontSizeKey minimum:10 maximum:24 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatTopAvatarSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 24 到 34 之间的头像大小" key:NeoWCChatTopBarAvatarSizeKey minimum:24 maximum:34 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionChatTopNicknameSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 12 到 18 之间的昵称字号" key:NeoWCChatTopBarNicknameSizeKey minimum:12 maximum:18 notifyChange:YES applyScale:NO]; break;
+        case NeoWCSettingActionChatGlassStyle: [self presentChatGlassStylePicker]; break;
         case NeoWCSettingActionChatGlassBlurIntensity: [self presentNumberEditorWithTitle:item.title message:@"请输入 20 到 100 之间的百分比" key:NeoWCChatGlassBlurIntensityKey minimum:20 maximum:100 notifyChange:YES applyScale:NO]; break;
-        case NeoWCSettingActionChatGlassTintOpacity: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 30 之间的百分比；0 表示不额外染色" key:NeoWCChatGlassTintOpacityKey minimum:0 maximum:30 notifyChange:YES applyScale:NO]; break;
-        case NeoWCSettingActionChatGlassWhiteStrength: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 50 之间的百分比；数值越高白玻璃越明显" key:NeoWCChatGlassWhiteStrengthKey minimum:0 maximum:50 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionMessageGestureAction: [self presentMessageGestureActionPickerForItem:item]; break;
         case NeoWCSettingActionAvatarQuickMenuGesture: [self presentAvatarQuickMenuGesturePicker]; break;
         case NeoWCSettingActionReplySwipeTriggerDistance: [self presentNumberEditorWithTitle:item.title message:@"请输入 36 到 100 之间的触发距离；数值越小越容易触发" key:NeoWCReplySwipeTriggerDistanceKey minimum:36 maximum:100 notifyChange:YES applyScale:NO]; break;

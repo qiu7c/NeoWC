@@ -5098,6 +5098,14 @@ static void NeoWCRefreshPinnedMessageGlassInView(UIView *view) {
     for (UIView *subview in view.subviews) NeoWCRefreshPinnedMessageGlassInView(subview);
 }
 
+static void NeoWCRefreshGlassBackdropsInView(UIView *view) {
+    if (!view) return;
+    if ([view isKindOfClass:NeoWCGlassCapsuleView.class]) {
+        [(NeoWCGlassCapsuleView *)view refreshBackdropAfterForeground];
+    }
+    for (UIView *subview in view.subviews) NeoWCRefreshGlassBackdropsInView(subview);
+}
+
 static void NeoWCRefreshAntiRevokeCellsInView(UIView *view) {
     if (!view) return;
     Class cellClass = NSClassFromString(@"CommonMessageCellView");
@@ -6165,6 +6173,11 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
                     usingBlock:^(__unused NSNotification *note) {
                         NeoWCRefreshDailyStepOverride();
                         NeoWCRefreshHighRefreshRateConfiguration();
+                        BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
+                        if (controller) {
+                            NeoWCRefreshGlassBackdropsInView(controller.navigationController.navigationBar);
+                            NeoWCRefreshGlassBackdropsInView(controller.view);
+                        }
                     }];
 
         [[NSNotificationCenter defaultCenter]
@@ -6205,16 +6218,14 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
                         }
                         BOOL refreshChatTop = !changedKey ||
                             [changedKey isEqualToString:NeoWCChatTopBarCapsuleEnabledKey] ||
-                            [changedKey isEqualToString:NeoWCChatTopBarShadowEnabledKey] ||
+                            [changedKey isEqualToString:NeoWCChatGlassStyleKey] ||
                             [changedKey isEqualToString:NeoWCChatGlassBlurIntensityKey] ||
-                            [changedKey isEqualToString:NeoWCChatGlassTintOpacityKey] ||
-                            [changedKey isEqualToString:NeoWCChatGlassTintColorKey] ||
-                            [changedKey isEqualToString:NeoWCChatGlassWhiteStrengthKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarAvatarSizeKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarNicknameSizeKey];
                         BaseMsgContentViewController *visibleChat = NeoWCResolveVisibleChatController();
                         if (refreshChatTop && visibleChat) {
                             NeoWCUpdateChatTopBar(visibleChat);
+                            NeoWCRefreshPinnedMessageGlassInView(visibleChat.view);
                         }
                     }];
 
@@ -6231,6 +6242,11 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
                             object:nil
                              queue:[NSOperationQueue mainQueue]
                         usingBlock:^(__unused NSNotification *note) {
+                            BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
+                            if (controller) {
+                                NeoWCRefreshGlassBackdropsInView(controller.navigationController.navigationBar);
+                                NeoWCRefreshGlassBackdropsInView(controller.view);
+                            }
                             refreshVisibleChatChrome();
                             // WeChat restores different background layers in separate passes.
                             // Replay after both passes without forcing a layout cycle.
@@ -7504,8 +7520,9 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
 - (void)layoutSubviews {
     [super layoutSubviews];
     CGFloat radius = CGRectGetHeight(self.bounds) * 0.5;
-    CGFloat imageInset = MIN(2.0, MAX(1.0, CGRectGetHeight(self.bounds) * 0.065));
-    CGRect imageFrame = CGRectInset(self.bounds, imageInset, imageInset);
+    // The source is now a plain image view, so the former optical inset only
+    // makes the avatar appear off-axis relative to the nickname and capsule.
+    CGRect imageFrame = self.bounds;
     CGFloat imageRadius = CGRectGetHeight(imageFrame) * 0.5;
     self.layer.cornerRadius = radius;
     self.sourceView.frame = imageFrame;
@@ -7650,29 +7667,21 @@ static CGFloat NeoWCChatGlassPercent(NSString *key, CGFloat fallback,
     return MIN(maximum, MAX(minimum, value));
 }
 
-static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIVisualEffectView **effectViewOut) {
+static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIView **contentViewOut) {
     NeoWCGlassCapsuleView *container = [NeoWCGlassCapsuleView new];
     container.capsuleCornerRadius = cornerRadius;
-    BOOL shadowEnabled = [NSUserDefaults.standardUserDefaults boolForKey:NeoWCChatTopBarShadowEnabledKey];
-    [container configureShadowEnabled:shadowEnabled];
     objc_setAssociatedObject(container, &NeoWCChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     UIVisualEffectView *effectView = container.effectView;
     CGFloat blurIntensity = NeoWCChatGlassPercent(NeoWCChatGlassBlurIntensityKey,
                                                   100.0, 20.0, 100.0) / 100.0;
-    UIColor *tintColor = NeoWCColorForDefaultsKey(NeoWCChatGlassTintColorKey, UIColor.whiteColor);
-    CGFloat tintOpacity = NeoWCChatGlassPercent(NeoWCChatGlassTintOpacityKey,
-                                                8.0, 0.0, 30.0) / 100.0;
-    CGFloat whiteStrength = NeoWCChatGlassPercent(NeoWCChatGlassWhiteStrengthKey,
-                                                  18.0, 0.0, 50.0) / 100.0;
-    [container configureFrostedGlassWithBlurIntensity:blurIntensity
-                                             tintColor:tintColor
-                                           tintOpacity:tintOpacity
-                                         whiteStrength:whiteStrength];
+    NSInteger glassStyle = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCChatGlassStyleKey];
+    if (glassStyle == 1) [container configurePseudoLiquidWithBlurIntensity:blurIntensity];
+    else [container configureFrostedGlassWithBlurIntensity:blurIntensity];
     objc_setAssociatedObject(effectView, &NeoWCChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if (effectViewOut) *effectViewOut = effectView;
+    if (contentViewOut) *contentViewOut = container.contentView;
     return container;
 }
 
@@ -7689,9 +7698,8 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     CGFloat nicknameSize = NeoWCChatTopNicknameSize();
     CGFloat capsuleHeight = NeoWCChatTopLeftCapsuleHeight();
 
-    UIVisualEffectView *glass = nil;
-    UIView *container = NeoWCChatTopGlassContainer(capsuleHeight / 2.0, &glass);
-    UIView *content = glass.contentView;
+    UIView *content = nil;
+    UIView *container = NeoWCChatTopGlassContainer(capsuleHeight / 2.0, &content);
 
     UIImageSymbolConfiguration *backConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:15.0
                                                                                                       weight:UIImageSymbolWeightMedium];
@@ -7797,16 +7805,16 @@ static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibili
 static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *controller,
                                                 UIBarButtonItem *moreItem) {
     if (!moreItem) return nil;
-    UIVisualEffectView *glass = nil;
+    UIView *content = nil;
     CGFloat capsuleHeight = MAX(36.0, NeoWCChatTopLeftCapsuleHeight() - 2.0);
-    UIView *capsule = NeoWCChatTopGlassContainer(capsuleHeight / 2.0, &glass);
+    UIView *capsule = NeoWCChatTopGlassContainer(capsuleHeight / 2.0, &content);
 
     UIStackView *stack = [[UIStackView alloc] init];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisHorizontal;
     stack.alignment = UIStackViewAlignmentFill;
     stack.distribution = UIStackViewDistributionFillEqually;
-    [glass.contentView addSubview:stack];
+    [content addSubview:stack];
 
     UIImage *moreImage = moreItem.image ?: [UIImage systemImageNamed:@"ellipsis"];
     UIButton *more = NeoWCChatTopCapsuleButton(moreImage, moreItem.accessibilityLabel ?: @"更多");
@@ -7822,10 +7830,10 @@ static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *co
     [NSLayoutConstraint activateConstraints:@[
         [capsule.widthAnchor constraintEqualToConstant:40.0],
         [capsule.heightAnchor constraintEqualToConstant:capsuleHeight],
-        [stack.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor],
-        [stack.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor],
-        [stack.topAnchor constraintEqualToAnchor:glass.contentView.topAnchor],
-        [stack.bottomAnchor constraintEqualToAnchor:glass.contentView.bottomAnchor],
+        [stack.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:content.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
     ]];
     return [[UIBarButtonItem alloc] initWithCustomView:capsule];
 }
@@ -8429,7 +8437,6 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
         glassView = [NeoWCGlassCapsuleView new];
         glassView.userInteractionEnabled = NO;
         glassView.capsuleCornerRadius = 14.0;
-        [glassView configureShadowEnabled:NO];
         objc_setAssociatedObject(glassView, &NeoWCChatTopGlassEffectMarkerKey,
                                  @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey,
@@ -8437,15 +8444,9 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
     }
     CGFloat blurIntensity = NeoWCChatGlassPercent(NeoWCChatGlassBlurIntensityKey,
                                                   100.0, 20.0, 100.0) / 100.0;
-    UIColor *tintColor = NeoWCColorForDefaultsKey(NeoWCChatGlassTintColorKey, UIColor.whiteColor);
-    CGFloat tintOpacity = NeoWCChatGlassPercent(NeoWCChatGlassTintOpacityKey,
-                                                8.0, 0.0, 30.0) / 100.0;
-    CGFloat whiteStrength = NeoWCChatGlassPercent(NeoWCChatGlassWhiteStrengthKey,
-                                                  18.0, 0.0, 50.0) / 100.0;
-    [glassView configureFrostedGlassWithBlurIntensity:blurIntensity
-                                             tintColor:tintColor
-                                           tintOpacity:tintOpacity
-                                         whiteStrength:whiteStrength];
+    NSInteger glassStyle = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCChatGlassStyleKey];
+    if (glassStyle == 1) [glassView configurePseudoLiquidWithBlurIntensity:blurIntensity];
+    else [glassView configureFrostedGlassWithBlurIntensity:blurIntensity];
     glassView.frame = CGRectInset(tipsView.bounds, 8.0, 0.0);
     glassView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     if (glassView.superview != tipsView) {

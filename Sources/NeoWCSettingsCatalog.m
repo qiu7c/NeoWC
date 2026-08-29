@@ -156,11 +156,8 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCQuoteJumpImageEnabledKey: @YES,
         NeoWCQuoteJumpVideoEnabledKey: @YES,
         NeoWCChatTopBarCapsuleEnabledKey: @NO,
-        NeoWCChatTopBarShadowEnabledKey: @YES,
+        NeoWCChatGlassStyleKey: @0,
         NeoWCChatGlassBlurIntensityKey: @100.0,
-        NeoWCChatGlassTintOpacityKey: @8.0,
-        NeoWCChatGlassTintColorKey: @"#FFFFFFFF",
-        NeoWCChatGlassWhiteStrengthKey: @18.0,
         NeoWCChatTopBarAvatarSizeKey: @30.0,
         NeoWCChatTopBarNicknameSizeKey: @15.0,
         NeoWCMessageBlockEnabledKey: @NO,
@@ -646,17 +643,15 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
     [display addObject:NeoWCItem(@"开启强制高刷", @"前台锁定为设备支持的最高刷新率", @"speedometer", NeoWCSettingRowKindSwitch, NeoWCScrollHighRefreshRateEnabledKey, nil, NeoWCSettingActionNone)];
     [display addObject:NeoWCItem(@"主页右滑扩展", @"增加备注、朋友圈、折叠群聊、勿扰与置顶操作", @"rectangle.and.hand.point.up.left", NeoWCSettingRowKindSwitch, NeoWCHomeSwipeActionsEnabledKey, nil, NeoWCSettingActionNone)];
     NSMutableArray *chatCapsules = [NSMutableArray array];
-    NSString *glassTintColor = [defaults stringForKey:NeoWCChatGlassTintColorKey] ?: @"#FFFFFFFF";
+    NSInteger glassStyle = [defaults integerForKey:NeoWCChatGlassStyleKey];
+    NSString *glassStyleName = glassStyle == 1 ? @"伪液态" : @"磨砂玻璃";
     NeoWCAddFeature(chatCapsules,
                     NeoWCItem(@"胶囊顶栏", @"隐藏整条顶栏背景，左右使用玻璃胶囊", @"capsule", NeoWCSettingRowKindSwitch, NeoWCChatTopBarCapsuleEnabledKey, nil, NeoWCSettingActionNone),
                     @[
         NeoWCItem(@"头像大小", @"限制在 24 到 34 之间", @"person.crop.circle", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarAvatarSizeKey]], NeoWCSettingActionChatTopAvatarSize),
         NeoWCItem(@"昵称字号", @"限制在 12 到 18 之间", @"textformat.size", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f", [defaults doubleForKey:NeoWCChatTopBarNicknameSizeKey]], NeoWCSettingActionChatTopNicknameSize),
+        NeoWCItem(@"玻璃样式", @"磨砂玻璃或独立的伪液态效果", @"circle.hexagongrid.fill", NeoWCSettingRowKindDetail, NeoWCChatGlassStyleKey, glassStyleName, NeoWCSettingActionChatGlassStyle),
         NeoWCItem(@"模糊强度", @"限制在 20% 到 100%", @"drop.halffull", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassBlurIntensityKey]], NeoWCSettingActionChatGlassBlurIntensity),
-        NeoWCItem(@"染色颜色", @"选择玻璃覆盖色，染色强度为 0 时不显示", @"paintpalette.fill", NeoWCSettingRowKindDetail, NeoWCChatGlassTintColorKey, glassTintColor.uppercaseString, NeoWCSettingActionMessageTimeColor),
-        NeoWCItem(@"染色强度", @"限制在 0% 到 30%；0% 不额外染色", @"paintpalette", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassTintOpacityKey]], NeoWCSettingActionChatGlassTintOpacity),
-        NeoWCItem(@"白玻璃强度", @"增加乳白透光感，范围 0% 到 50%", @"circle.fill", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", [defaults doubleForKey:NeoWCChatGlassWhiteStrengthKey]], NeoWCSettingActionChatGlassWhiteStrength),
-        NeoWCItem(@"胶囊阴影", @"左右胶囊使用轻微环境阴影", @"circle.dotted", NeoWCSettingRowKindSwitch, NeoWCChatTopBarShadowEnabledKey, nil, NeoWCSettingActionNone),
     ], defaults, collapsed);
     NSMutableArray *input = [NSMutableArray array];
     NSMutableArray *roundingChildren = [NSMutableArray array];
@@ -677,7 +672,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
     }
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"display" title:@"显示" footer:@"关闭后恢复微信原始样式。" items:display],
-        [NeoWCSettingSection sectionWithIdentifier:@"chat-capsules" title:@"聊天顶栏" footer:@"胶囊顶栏与置顶消息统一使用磨砂玻璃，可继续精调尺寸、模糊和颜色。" items:chatCapsules],
+        [NeoWCSettingSection sectionWithIdentifier:@"chat-capsules" title:@"聊天顶栏" footer:@"胶囊顶栏与置顶消息同步使用所选玻璃样式；普通磨砂只保留模糊强度。" items:chatCapsules],
         [NeoWCSettingSection sectionWithIdentifier:@"input" title:@"输入栏" footer:nil items:input],
     ];
 }
