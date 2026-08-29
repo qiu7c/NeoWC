@@ -592,7 +592,7 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     NSInteger selected = [defaults integerForKey:NeoWCChatGlassStyleKey];
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"玻璃样式"
-        message:@"磨砂玻璃保持纯模糊；伪液态额外加入自适应透底、渐变高光边缘和轻微体积阴影。"
+        message:@"磨砂玻璃保持纯模糊；伪液态额外加入贴合胶囊内部的柔和明暗和渐变高光边缘。"
         preferredStyle:UIAlertControllerStyleActionSheet];
     NSArray<NSDictionary *> *options = @[
         @{@"title": @"磨砂玻璃", @"value": @0},

@@ -9,7 +9,7 @@
 @property (nonatomic, strong) CAGradientLayer *liquidBodyLayer;
 @property (nonatomic, strong) CAGradientLayer *liquidRimLayer;
 @property (nonatomic, strong) CAShapeLayer *liquidRimMask;
-@property (nonatomic, assign) BOOL capsuleShadowEnabled;
+@property (nonatomic, strong) UIViewPropertyAnimator *blurAnimator;
 @property (nonatomic, assign) CGFloat appliedBlurIntensity;
 @property (nonatomic, assign) NSInteger appliedGlassStyle;
 @end
@@ -57,13 +57,24 @@
     return self;
 }
 
-- (void)configureShadowEnabled:(BOOL)enabled {
-    self.capsuleShadowEnabled = enabled;
-    self.layer.shadowColor = UIColor.blackColor.CGColor;
-    self.layer.shadowOpacity = enabled ? 0.075 : 0.0;
-    self.layer.shadowRadius = enabled ? 7.0 : 0.0;
-    self.layer.shadowOffset = enabled ? CGSizeMake(0.0, 2.0) : CGSizeZero;
-    [self updateCapsuleGeometry];
+- (void)rebuildBlurEffect {
+    [self.blurAnimator stopAnimation:YES];
+    self.blurAnimator = nil;
+    self.effectView.alpha = 1.0;
+    self.effectView.effect = nil;
+
+    UIBlurEffect *effect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
+    __weak typeof(self) weakSelf = self;
+    UIViewPropertyAnimator *animator = [[UIViewPropertyAnimator alloc]
+        initWithDuration:1.0
+        curve:UIViewAnimationCurveLinear
+        animations:^{
+            weakSelf.effectView.effect = effect;
+        }];
+    [animator startAnimation];
+    [animator pauseAnimation];
+    animator.fractionComplete = self.appliedBlurIntensity;
+    self.blurAnimator = animator;
 }
 
 - (void)configureGlassWithBlurIntensity:(CGFloat)blurIntensity style:(NSInteger)style {
@@ -73,19 +84,15 @@
 
     self.appliedBlurIntensity = intensity;
     self.appliedGlassStyle = style;
-    // Keep the ordinary frosted base free of additional tint, white wash and
-    // shadow. Pseudo-liquid volume is supplied only by its dedicated layers.
-    UIBlurEffect *effect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
-    self.effectView.effect = effect;
-    // A paused UIViewPropertyAnimator loses its fractional backdrop state when
-    // iOS suspends the app. Keep the material directly attached and apply the
-    // requested strength only to the isolated background view instead.
-    self.effectView.alpha = intensity;
+    // Interpolate the material itself so this setting changes the sampled
+    // backdrop blur instead of merely fading the finished glass surface.
+    [self rebuildBlurEffect];
     BOOL pseudoLiquid = style == 1;
     self.effectView.layer.borderWidth = pseudoLiquid ? 0.0 : 0.5;
     self.liquidShadeView.hidden = !pseudoLiquid;
     self.liquidRimLayer.hidden = !pseudoLiquid;
-    [self configureShadowEnabled:pseudoLiquid];
+    self.layer.shadowOpacity = 0.0;
+    self.layer.shadowPath = nil;
     [self applyTraitColors];
 }
 
@@ -99,12 +106,9 @@
 
 - (void)refreshBackdropAfterForeground {
     if (self.appliedGlassStyle < 0) return;
-    CGFloat intensity = self.appliedBlurIntensity;
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    self.effectView.effect = nil;
-    self.effectView.effect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
-    self.effectView.alpha = intensity;
+    [self rebuildBlurEffect];
     [CATransaction commit];
 }
 
@@ -112,25 +116,25 @@
     BOOL dark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
     if (self.appliedGlassStyle == 1) {
         self.liquidBodyLayer.colors = dark ? @[
-            (id)[UIColor.whiteColor colorWithAlphaComponent:0.075].CGColor,
-            (id)[UIColor.blackColor colorWithAlphaComponent:0.22].CGColor,
-            (id)[UIColor.blackColor colorWithAlphaComponent:0.38].CGColor,
+            (id)[UIColor.whiteColor colorWithAlphaComponent:0.055].CGColor,
+            (id)UIColor.clearColor.CGColor,
+            (id)[UIColor.blackColor colorWithAlphaComponent:0.085].CGColor,
         ] : @[
-            (id)[UIColor.whiteColor colorWithAlphaComponent:0.22].CGColor,
-            (id)[UIColor.whiteColor colorWithAlphaComponent:0.09].CGColor,
-            (id)[UIColor.blackColor colorWithAlphaComponent:0.045].CGColor,
+            (id)[UIColor.whiteColor colorWithAlphaComponent:0.14].CGColor,
+            (id)[UIColor.whiteColor colorWithAlphaComponent:0.025].CGColor,
+            (id)[UIColor.blackColor colorWithAlphaComponent:0.025].CGColor,
         ];
-        self.liquidBodyLayer.locations = @[@0.0, @0.45, @1.0];
+        self.liquidBodyLayer.locations = @[@0.0, @0.58, @1.0];
         self.liquidRimLayer.colors = dark ? @[
-            (id)[UIColor.whiteColor colorWithAlphaComponent:0.42].CGColor,
-            (id)[UIColor.whiteColor colorWithAlphaComponent:0.09].CGColor,
-            (id)[UIColor.blackColor colorWithAlphaComponent:0.16].CGColor,
             (id)[UIColor.whiteColor colorWithAlphaComponent:0.28].CGColor,
-        ] : @[
-            (id)[UIColor.whiteColor colorWithAlphaComponent:0.72].CGColor,
+            (id)[UIColor.whiteColor colorWithAlphaComponent:0.06].CGColor,
             (id)[UIColor.blackColor colorWithAlphaComponent:0.08].CGColor,
-            (id)[UIColor.blackColor colorWithAlphaComponent:0.16].CGColor,
-            (id)[UIColor.whiteColor colorWithAlphaComponent:0.58].CGColor,
+            (id)[UIColor.whiteColor colorWithAlphaComponent:0.18].CGColor,
+        ] : @[
+            (id)[UIColor.whiteColor colorWithAlphaComponent:0.50].CGColor,
+            (id)[UIColor.blackColor colorWithAlphaComponent:0.045].CGColor,
+            (id)[UIColor.blackColor colorWithAlphaComponent:0.09].CGColor,
+            (id)[UIColor.whiteColor colorWithAlphaComponent:0.38].CGColor,
         ];
         self.liquidRimLayer.locations = @[@0.0, @0.38, @0.72, @1.0];
     } else {
@@ -159,8 +163,6 @@
         cornerRadius:MAX(0.0, radius - rimWidth)]];
     self.liquidRimMask.frame = bounds;
     self.liquidRimMask.path = rimPath.CGPath;
-    UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:bounds cornerRadius:radius];
-    self.layer.shadowPath = self.capsuleShadowEnabled ? path.CGPath : nil;
 }
 
 - (void)layoutSubviews {

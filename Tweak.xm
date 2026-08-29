@@ -123,6 +123,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 @interface BaseMsgContentViewController : UIViewController
 - (id)GetContact;
 - (void)returnToOriginalMsg:(id)message;
+- (void)neowc_openChatSearch;
 - (void)neowc_toggleSendConfirmation:(UILongPressGestureRecognizer *)recognizer;
 @end
 
@@ -376,6 +377,7 @@ static char NeoWCVoiceTranscriptionInProgressKey;
 static char NeoWCVoiceTranscriptionAttemptedKey;
 static char NeoWCChatTopProfileItemKey;
 static char NeoWCChatTopCapsuleItemKey;
+static char NeoWCChatSearchItemKey;
 static char NeoWCChatTopOriginalLeftItemsKey;
 static char NeoWCChatTopOriginalRightItemsKey;
 static char NeoWCChatTopOriginalTitleViewKey;
@@ -445,6 +447,7 @@ static BOOL NeoWCMethodReturnsVoid(Method method);
 static BOOL NeoWCMethodReturnsObject(Method method);
 static BOOL NeoWCMethodArgumentIsObject(Method method, unsigned int index);
 static BOOL NeoWCMethodArgumentIsIntegerScalar(Method method, unsigned int index);
+static BOOL NeoWCMethodArgumentIsSelector(Method method, unsigned int index);
 static BOOL NeoWCMomentCanSaveMedia(id dataItem);
 static void NeoWCSaveMomentMedia(id dataItem, UIViewController *presenter);
 @class NeoWCReplyTransformSnapshot;
@@ -6217,6 +6220,7 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
                             NeoWCRefreshTrackedGlobalAvatarViews();
                         }
                         BOOL refreshChatTop = !changedKey ||
+                            [changedKey isEqualToString:NeoWCChatSearchButtonEnabledKey] ||
                             [changedKey isEqualToString:NeoWCChatTopBarCapsuleEnabledKey] ||
                             [changedKey isEqualToString:NeoWCChatGlassStyleKey] ||
                             [changedKey isEqualToString:NeoWCChatGlassBlurIntensityKey] ||
@@ -7802,6 +7806,105 @@ static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibili
     return button;
 }
 
+static BOOL NeoWCChatSearchMethodHasSupportedReturn(Method method) {
+    return NeoWCMethodReturnsVoid(method) || NeoWCMethodReturnsObject(method);
+}
+
+static BOOL NeoWCChatSearchMethodHasIntegerArgument(id receiver, SEL selector) {
+    Method method = receiver ? class_getInstanceMethod([receiver class], selector) : NULL;
+    return method && method_getNumberOfArguments(method) == 3 &&
+        NeoWCChatSearchMethodHasSupportedReturn(method) &&
+        NeoWCMethodArgumentIsIntegerScalar(method, 2);
+}
+
+static BOOL NeoWCChatSearchMethodIsObjectGetter(id receiver, SEL selector) {
+    Method method = receiver ? class_getInstanceMethod([receiver class], selector) : NULL;
+    return method && method_getNumberOfArguments(method) == 2 && NeoWCMethodReturnsObject(method);
+}
+
+static BOOL NeoWCChatSearchMethodHasObjectArgument(id receiver, SEL selector) {
+    Method method = receiver ? class_getInstanceMethod([receiver class], selector) : NULL;
+    return method && method_getNumberOfArguments(method) == 3 &&
+        NeoWCChatSearchMethodHasSupportedReturn(method) && NeoWCMethodArgumentIsObject(method, 2);
+}
+
+static BOOL NeoWCChatSearchMethodHasNoArguments(id receiver, SEL selector) {
+    Method method = receiver ? class_getInstanceMethod([receiver class], selector) : NULL;
+    return method && method_getNumberOfArguments(method) == 2 &&
+        NeoWCChatSearchMethodHasSupportedReturn(method);
+}
+
+static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller) {
+    if (!controller || controller.navigationController.topViewController != controller) return NO;
+
+    SEL initializeSelector = NSSelectorFromString(@"initMsgSearchHelper:");
+    if (NeoWCChatSearchMethodHasIntegerArgument(controller, initializeSelector)) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, initializeSelector, NO);
+    }
+
+    SEL interactivePopSelector = NSSelectorFromString(@"setM_bInteractivePopEnabled:");
+    if (NeoWCChatSearchMethodHasIntegerArgument(controller, interactivePopSelector)) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, interactivePopSelector, NO);
+    }
+
+    id helper = nil;
+    SEL helperSelector = NSSelectorFromString(@"m_oMsgSearchHelper");
+    if (NeoWCChatSearchMethodIsObjectGetter(controller, helperSelector)) {
+        helper = ((id (*)(id, SEL))objc_msgSend)(controller, helperSelector);
+    }
+    if (helper) {
+        SEL panCancelSelector = NSSelectorFromString(@"setBUsePanCancelGesture:");
+        if (NeoWCChatSearchMethodHasIntegerArgument(helper, panCancelSelector)) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, panCancelSelector, YES);
+        }
+
+        id searcher = nil;
+        SEL searcherSelector = NSSelectorFromString(@"searcher");
+        if (NeoWCChatSearchMethodIsObjectGetter(helper, searcherSelector)) {
+            searcher = ((id (*)(id, SEL))objc_msgSend)(helper, searcherSelector);
+        }
+        SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
+        if (NeoWCChatSearchMethodHasObjectArgument(searcher, pushSelector)) {
+            ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
+            return YES;
+        }
+    }
+
+    SEL fallbackSelector = NSSelectorFromString(@"onSearchItem");
+    if (NeoWCChatSearchMethodHasNoArguments(controller, fallbackSelector)) {
+        ((void (*)(id, SEL))objc_msgSend)(controller, fallbackSelector);
+        return YES;
+    }
+    return NO;
+}
+
+static UIImage *NeoWCChatSearchImage(void) {
+    UIImage *image = [UIImage imageNamed:@"icons_outlined_search"];
+    return image ?: [UIImage systemImageNamed:@"magnifyingglass"];
+}
+
+static UIBarButtonItem *NeoWCOfficialChatSearchBarButton(BaseMsgContentViewController *controller) {
+    Class utilityClass = NSClassFromString(@"MMUICommonUtil");
+    SEL factorySelector = NSSelectorFromString(@"getBarButtonWithImageName:target:action:style:accessibility:");
+    Method factoryMethod = utilityClass ? class_getClassMethod(utilityClass, factorySelector) : NULL;
+    if (factoryMethod && method_getNumberOfArguments(factoryMethod) == 7 &&
+        NeoWCMethodReturnsObject(factoryMethod) &&
+        NeoWCMethodArgumentIsObject(factoryMethod, 2) &&
+        NeoWCMethodArgumentIsObject(factoryMethod, 3) &&
+        NeoWCMethodArgumentIsSelector(factoryMethod, 4) &&
+        NeoWCMethodArgumentIsIntegerScalar(factoryMethod, 5) &&
+        NeoWCMethodArgumentIsObject(factoryMethod, 6)) {
+        id item = ((id (*)(id, SEL, id, id, SEL, NSInteger, id))objc_msgSend)(
+            utilityClass, factorySelector, @"icons_outlined_search", controller,
+            @selector(neowc_openChatSearch), 2, @"search");
+        if ([item isKindOfClass:[UIBarButtonItem class]]) return item;
+    }
+    return [[UIBarButtonItem alloc] initWithImage:NeoWCChatSearchImage()
+                                            style:UIBarButtonItemStylePlain
+                                           target:controller
+                                           action:@selector(neowc_openChatSearch)];
+}
+
 static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *controller,
                                                 UIBarButtonItem *moreItem) {
     if (!moreItem) return nil;
@@ -7826,9 +7929,15 @@ static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *co
         more.menu = moreItem.menu;
         more.showsMenuAsPrimaryAction = YES;
     }
+    BOOL includesSearch = NeoWCEnhancementEnabled(NeoWCChatSearchButtonEnabledKey);
+    if (includesSearch) {
+        UIButton *search = NeoWCChatTopCapsuleButton(NeoWCChatSearchImage(), @"搜索聊天记录");
+        [search addTarget:controller action:@selector(neowc_openChatSearch) forControlEvents:UIControlEventTouchUpInside];
+        [stack addArrangedSubview:search];
+    }
     [stack addArrangedSubview:more];
     [NSLayoutConstraint activateConstraints:@[
-        [capsule.widthAnchor constraintEqualToConstant:40.0],
+        [capsule.widthAnchor constraintEqualToConstant:includesSearch ? 76.0 : 40.0],
         [capsule.heightAnchor constraintEqualToConstant:capsuleHeight],
         [stack.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
         [stack.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
@@ -8197,6 +8306,34 @@ static UIBarButtonItem *NeoWCNativeChatMoreItem(BaseMsgContentViewController *co
     return original.firstObject;
 }
 
+static void NeoWCRemoveStandaloneChatSearchButton(BaseMsgContentViewController *controller) {
+    UIBarButtonItem *searchItem = objc_getAssociatedObject(controller, &NeoWCChatSearchItemKey);
+    if (!searchItem) return;
+    NSMutableArray *rightItems = [controller.navigationItem.rightBarButtonItems mutableCopy] ?: [NSMutableArray array];
+    [rightItems removeObjectIdenticalTo:searchItem];
+    controller.navigationItem.rightBarButtonItems = rightItems;
+    objc_setAssociatedObject(controller, &NeoWCChatSearchItemKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+static void NeoWCUpdateStandaloneChatSearchButton(BaseMsgContentViewController *controller) {
+    if (!NeoWCEnhancementEnabled(NeoWCChatSearchButtonEnabledKey)) {
+        NeoWCRemoveStandaloneChatSearchButton(controller);
+        return;
+    }
+    UIBarButtonItem *installed = objc_getAssociatedObject(controller, &NeoWCChatSearchItemKey);
+    NSArray *currentItems = controller.navigationItem.rightBarButtonItems ?: @[];
+    if (installed && [currentItems containsObject:installed]) return;
+
+    NSMutableArray *rightItems = [currentItems mutableCopy] ?: [NSMutableArray array];
+    if (installed) [rightItems removeObjectIdenticalTo:installed];
+    UIBarButtonItem *searchItem = NeoWCOfficialChatSearchBarButton(controller);
+    if (!searchItem) return;
+    [rightItems addObject:searchItem];
+    controller.navigationItem.rightBarButtonItems = rightItems;
+    objc_setAssociatedObject(controller, &NeoWCChatSearchItemKey,
+                             searchItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 static void NeoWCCaptureOriginalChatNavigationPresentationIfNeeded(BaseMsgContentViewController *controller) {
     UINavigationBar *navigationBar = controller.navigationController.navigationBar;
     if (navigationBar &&
@@ -8268,8 +8405,10 @@ static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller) {
 static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller) {
     if (!NeoWCEnhancementEnabled(NeoWCChatTopBarCapsuleEnabledKey)) {
         NeoWCRestoreChatTopBar(controller);
+        NeoWCUpdateStandaloneChatSearchButton(controller);
         return;
     }
+    NeoWCRemoveStandaloneChatSearchButton(controller);
     NeoWCCaptureOriginalChatNavigationPresentationIfNeeded(controller);
     UINavigationItem *navigationItem = controller.navigationItem;
     NSArray *originalLeft = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey);
@@ -8323,7 +8462,10 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller) {
 }
 
 static void NeoWCRefreshChatTopBarAfterWechatUpdate(BaseMsgContentViewController *controller) {
-    if (!NeoWCEnhancementEnabled(NeoWCChatTopBarCapsuleEnabledKey)) return;
+    if (!NeoWCEnhancementEnabled(NeoWCChatTopBarCapsuleEnabledKey)) {
+        NeoWCUpdateStandaloneChatSearchButton(controller);
+        return;
+    }
     if (!controller.isViewLoaded || !controller.view.window) return;
     if (controller.navigationController.topViewController != controller) return;
     UIBarButtonItem *profileItem = objc_getAssociatedObject(controller, &NeoWCChatTopProfileItemKey);
@@ -10310,6 +10452,13 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %end
 
 %hook BaseMsgContentViewController
+
+%new
+- (void)neowc_openChatSearch {
+    if (!NeoWCOpenOfficialChatSearch(self)) {
+        NeoWCShowTransientMessage(@"当前微信版本暂不支持聊天记录搜索", NO);
+    }
+}
 
 %new
 - (void)neowc_toggleSendConfirmation:(UILongPressGestureRecognizer *)recognizer {
@@ -12875,6 +13024,13 @@ static BOOL NeoWCMethodReturnsVoid(Method method) {
 static BOOL NeoWCMethodArgumentIsObject(Method method, unsigned int index) {
     char *type = method ? method_copyArgumentType(method, index) : NULL;
     BOOL matches = NeoWCUnqualifiedMethodType(type)[0] == '@';
+    if (type) free(type);
+    return matches;
+}
+
+static BOOL NeoWCMethodArgumentIsSelector(Method method, unsigned int index) {
+    char *type = method ? method_copyArgumentType(method, index) : NULL;
+    BOOL matches = type && strcmp(NeoWCUnqualifiedMethodType(type), @encode(SEL)) == 0;
     if (type) free(type);
     return matches;
 }
