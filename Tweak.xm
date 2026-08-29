@@ -378,6 +378,8 @@ static char NeoWCVoiceTranscriptionAttemptedKey;
 static char NeoWCChatTopProfileItemKey;
 static char NeoWCChatTopCapsuleItemKey;
 static char NeoWCChatSearchItemKey;
+static char NeoWCManagedChatSearcherKey;
+static char NeoWCManagedChatSearchBarContainerKey;
 static char NeoWCChatTopOriginalLeftItemsKey;
 static char NeoWCChatTopOriginalRightItemsKey;
 static char NeoWCChatTopOriginalTitleViewKey;
@@ -7821,6 +7823,8 @@ static id NeoWCOfficialChatSearchHost(BaseMsgContentViewController *controller) 
     return nil;
 }
 
+static BOOL NeoWCIsManagedChatSearcher(id searcher);
+
 static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller) {
     id searchHost = NeoWCOfficialChatSearchHost(controller);
     if (!searchHost) return NO;
@@ -7863,7 +7867,10 @@ static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller
         if ([searcher respondsToSelector:searchBarSelector]) {
             id searchBar = ((id (*)(id, SEL))objc_msgSend)(searcher, searchBarSelector);
             UIView *searchBarContainer = [searchBar respondsToSelector:@selector(superview)] ? [searchBar superview] : nil;
+            searchBarContainer.alpha = 1.0;
             searchBarContainer.hidden = YES;
+            objc_setAssociatedObject(searcher, &NeoWCManagedChatSearchBarContainerKey,
+                                     searchBarContainer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
             SEL setYSelector = NSSelectorFromString(@"setY:");
             Class uiUtilClass = NSClassFromString(@"UiUtil");
@@ -7874,9 +7881,26 @@ static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller
                 ((void (*)(id, SEL, CGFloat))objc_msgSend)(searchBarContainer, setYSelector, statusBarHeight);
             }
         }
+        objc_setAssociatedObject(searcher, &NeoWCManagedChatSearcherKey,
+                                 @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        SEL usePanSelector = NSSelectorFromString(@"setBUsePanGesture:");
+        if ([searcher respondsToSelector:usePanSelector]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(searcher, usePanSelector, YES);
+        }
         SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
         if ([searcher respondsToSelector:pushSelector]) {
             ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (!NeoWCIsManagedChatSearcher(searcher)) return;
+                SEL panGestureSelector = NSSelectorFromString(@"wcsPanGesture");
+                SEL preparePanSelector = NSSelectorFromString(@"preparePanGesture");
+                id panGesture = [searcher respondsToSelector:panGestureSelector]
+                    ? ((id (*)(id, SEL))objc_msgSend)(searcher, panGestureSelector)
+                    : nil;
+                if (!panGesture && [searcher respondsToSelector:preparePanSelector]) {
+                    ((void (*)(id, SEL))objc_msgSend)(searcher, preparePanSelector);
+                }
+            });
             return YES;
         }
     }
@@ -7892,9 +7916,60 @@ static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller
     return NO;
 }
 
+static BOOL NeoWCIsManagedChatSearcher(id searcher) {
+    return [objc_getAssociatedObject(searcher, &NeoWCManagedChatSearcherKey) boolValue];
+}
+
+static void NeoWCHideManagedChatSearchBar(id searcher) {
+    if (!NeoWCIsManagedChatSearcher(searcher)) return;
+    UIView *storedContainer = objc_getAssociatedObject(searcher, &NeoWCManagedChatSearchBarContainerKey);
+    [storedContainer.layer removeAllAnimations];
+    storedContainer.hidden = YES;
+
+    SEL searchBarSelector = NSSelectorFromString(@"searchBar");
+    id searchBar = [searcher respondsToSelector:searchBarSelector]
+        ? ((id (*)(id, SEL))objc_msgSend)(searcher, searchBarSelector)
+        : nil;
+    UIView *currentContainer = [searchBar respondsToSelector:@selector(superview)] ? [searchBar superview] : nil;
+    if (currentContainer != storedContainer) {
+        [currentContainer.layer removeAllAnimations];
+        currentContainer.hidden = YES;
+    }
+}
+
+static void NeoWCCompleteManagedChatSearchDismissal(id searcher) {
+    if (!NeoWCIsManagedChatSearcher(searcher)) return;
+    NeoWCHideManagedChatSearchBar(searcher);
+    SEL viewControllerSelector = NSSelectorFromString(@"viewController");
+    id host = [searcher respondsToSelector:viewControllerSelector]
+        ? ((id (*)(id, SEL))objc_msgSend)(searcher, viewControllerSelector)
+        : nil;
+    SEL interactivePopSelector = NSSelectorFromString(@"setM_bInteractivePopEnabled:");
+    if ([host respondsToSelector:interactivePopSelector]) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(host, interactivePopSelector, YES);
+    }
+    objc_setAssociatedObject(searcher, &NeoWCManagedChatSearcherKey, nil,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(searcher, &NeoWCManagedChatSearchBarContainerKey, nil,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 static UIImage *NeoWCChatSearchImage(void) {
     UIImage *image = [UIImage imageNamed:@"icons_outlined_search"];
     return image ?: [UIImage systemImageNamed:@"magnifyingglass"];
+}
+
+static UIImage *NeoWCChatCapsuleSearchImage(void) {
+    UIImage *image = NeoWCChatSearchImage();
+    if (!image) return nil;
+    CGSize size = CGSizeMake(18.0, 18.0);
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
+    format.opaque = NO;
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
+    UIImage *resized = [renderer imageWithActions:^(__unused UIGraphicsImageRendererContext *context) {
+        [image drawInRect:(CGRect){CGPointZero, size}];
+    }];
+    return [resized imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
 static UIBarButtonItem *NeoWCOfficialChatSearchBarButton(BaseMsgContentViewController *controller) {
@@ -7945,7 +8020,7 @@ static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *co
     }
     BOOL includesSearch = NeoWCEnhancementEnabled(NeoWCChatSearchButtonEnabledKey);
     if (includesSearch) {
-        UIButton *search = NeoWCChatTopCapsuleButton(NeoWCChatSearchImage(), @"搜索聊天记录");
+        UIButton *search = NeoWCChatTopCapsuleButton(NeoWCChatCapsuleSearchImage(), @"搜索聊天记录");
         [search addTarget:controller action:@selector(neowc_openChatSearch) forControlEvents:UIControlEventTouchUpInside];
         [stack addArrangedSubview:search];
     }
@@ -10461,6 +10536,29 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)layoutSubviews {
     %orig;
     NeoWCUpdatePinnedMessageGlass((UIView *)self);
+}
+
+%end
+
+%hook WCSearcher
+
+- (void)searchBarCancelButtonClicked:(id)searchBar {
+    BOOL managed = NeoWCIsManagedChatSearcher(self);
+    if (managed) NeoWCHideManagedChatSearchBar(self);
+    %orig;
+    if (managed) NeoWCHideManagedChatSearchBar(self);
+}
+
+- (void)willDismissSearchController:(id)searchController {
+    if (NeoWCIsManagedChatSearcher(self)) NeoWCHideManagedChatSearchBar(self);
+    %orig;
+}
+
+- (void)didDismissSearchController:(id)searchController {
+    BOOL managed = NeoWCIsManagedChatSearcher(self);
+    if (managed) NeoWCHideManagedChatSearchBar(self);
+    %orig;
+    if (managed) NeoWCCompleteManagedChatSearchDismissal(self);
 }
 
 %end

@@ -425,16 +425,22 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
 
 @implementation NeoWCAntiRevokeAppearanceViewController
 
+- (void)applyPreviewStageBackground {
+    self.stage.backgroundColor = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark
+        ? UIColor.blackColor
+        : [UIColor colorWithWhite:0.945 alpha:1.0];
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"提示外观预览";
     self.view.backgroundColor = UIColor.systemGroupedBackgroundColor;
     UIView *stage = [UIView new];
     stage.translatesAutoresizingMaskIntoConstraints = NO;
-    stage.backgroundColor = [UIColor colorWithWhite:0.945 alpha:1.0];
     stage.layer.cornerRadius = 14.0;
     [self.view addSubview:stage];
     self.stage = stage;
+    [self applyPreviewStageBackground];
 
     UIView *bubble = [UIView new];
     bubble.backgroundColor = [UIColor colorWithRed:0.58 green:0.91 blue:0.43 alpha:1.0];
@@ -537,6 +543,14 @@ BOOL NeoWCHandleRevokeMessage(id messageManager, id incomingMessage) {
         [reset.topAnchor constraintEqualToAnchor:xField.bottomAnchor constant:10.0],
     ]];
     [self layoutPrompt];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    if (!previousTraitCollection ||
+        previousTraitCollection.userInterfaceStyle != self.traitCollection.userInterfaceStyle) {
+        [self applyPreviewStageBackground];
+    }
 }
 
 - (void)viewDidLayoutSubviews {
