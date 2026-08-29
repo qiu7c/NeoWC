@@ -7806,12 +7806,6 @@ static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibili
     return button;
 }
 
-static BOOL NeoWCChatSearchMethodAvailable(id receiver, SEL selector, unsigned int argumentCount) {
-    if (!receiver || ![receiver respondsToSelector:selector]) return NO;
-    Method method = receiver ? class_getInstanceMethod([receiver class], selector) : NULL;
-    return !method || method_getNumberOfArguments(method) == argumentCount;
-}
-
 static id NeoWCOfficialChatSearchHost(BaseMsgContentViewController *controller) {
     if (!controller) return nil;
     SEL initializeSelector = NSSelectorFromString(@"initMsgSearchHelper:");
@@ -7832,42 +7826,68 @@ static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller
     if (!searchHost) return NO;
 
     SEL initializeSelector = NSSelectorFromString(@"initMsgSearchHelper:");
-    if (NeoWCChatSearchMethodAvailable(searchHost, initializeSelector, 3)) {
+    if ([searchHost respondsToSelector:initializeSelector]) {
         ((void (*)(id, SEL, NSUInteger))objc_msgSend)(searchHost, initializeSelector, (NSUInteger)0);
     }
 
     SEL interactivePopSelector = NSSelectorFromString(@"setM_bInteractivePopEnabled:");
-    if (NeoWCChatSearchMethodAvailable(searchHost, interactivePopSelector, 3)) {
+    if ([searchHost respondsToSelector:interactivePopSelector]) {
         ((void (*)(id, SEL, BOOL))objc_msgSend)(searchHost, interactivePopSelector, NO);
     }
 
     id helper = nil;
     SEL helperSelector = NSSelectorFromString(@"m_oMsgSearchHelper");
-    if (NeoWCChatSearchMethodAvailable(searchHost, helperSelector, 2)) {
+    if ([searchHost respondsToSelector:helperSelector]) {
         helper = ((id (*)(id, SEL))objc_msgSend)(searchHost, helperSelector);
     }
+    if (!helper) helper = NeoWCExactIvarValue(searchHost, @"m_oMsgSearchHelper");
+    if (!helper) helper = NeoWCExactIvarValue(searchHost, @"_m_oMsgSearchHelper");
     if (helper) {
+        SEL finishSelector = NSSelectorFromString(@"finishSearch");
+        if ([helper respondsToSelector:finishSelector]) {
+            ((void (*)(id, SEL))objc_msgSend)(helper, finishSelector);
+        }
+
         SEL panCancelSelector = NSSelectorFromString(@"setBUsePanCancelGesture:");
-        if (NeoWCChatSearchMethodAvailable(helper, panCancelSelector, 3)) {
+        if ([helper respondsToSelector:panCancelSelector]) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, panCancelSelector, YES);
         }
 
         id searcher = nil;
         SEL searcherSelector = NSSelectorFromString(@"searcher");
-        if (NeoWCChatSearchMethodAvailable(helper, searcherSelector, 2)) {
+        if ([helper respondsToSelector:searcherSelector]) {
             searcher = ((id (*)(id, SEL))objc_msgSend)(helper, searcherSelector);
         }
+        if (!searcher) searcher = NeoWCExactIvarValue(helper, @"_searcher");
+        SEL searchBarSelector = NSSelectorFromString(@"searchBar");
+        if ([searcher respondsToSelector:searchBarSelector]) {
+            id searchBar = ((id (*)(id, SEL))objc_msgSend)(searcher, searchBarSelector);
+            UIView *searchBarContainer = [searchBar respondsToSelector:@selector(superview)] ? [searchBar superview] : nil;
+            searchBarContainer.hidden = YES;
+
+            SEL setYSelector = NSSelectorFromString(@"setY:");
+            Class uiUtilClass = NSClassFromString(@"UiUtil");
+            SEL statusBarHeightSelector = NSSelectorFromString(@"normalStatusBarHeight");
+            if ([searchBarContainer respondsToSelector:setYSelector] &&
+                [uiUtilClass respondsToSelector:statusBarHeightSelector]) {
+                CGFloat statusBarHeight = ((CGFloat (*)(id, SEL))objc_msgSend)(uiUtilClass, statusBarHeightSelector);
+                ((void (*)(id, SEL, CGFloat))objc_msgSend)(searchBarContainer, setYSelector, statusBarHeight);
+            }
+        }
         SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
-        if (NeoWCChatSearchMethodAvailable(searcher, pushSelector, 3)) {
+        if ([searcher respondsToSelector:pushSelector]) {
             ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
             return YES;
         }
     }
 
     SEL fallbackSelector = NSSelectorFromString(@"onSearchItem");
-    if (NeoWCChatSearchMethodAvailable(searchHost, fallbackSelector, 2)) {
+    if ([searchHost respondsToSelector:fallbackSelector]) {
         ((void (*)(id, SEL))objc_msgSend)(searchHost, fallbackSelector);
         return YES;
+    }
+    if ([searchHost respondsToSelector:interactivePopSelector]) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(searchHost, interactivePopSelector, YES);
     }
     return NO;
 }
