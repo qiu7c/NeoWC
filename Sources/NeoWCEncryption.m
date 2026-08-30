@@ -140,6 +140,20 @@ static NSData *NeoWCDataFromBase64URLString(NSString *value) {
     return [[NSData alloc] initWithBase64EncodedString:base64 options:0];
 }
 
+static NSString *NeoWCEncryptedTextPayload(NSString *wireText) {
+    if (![wireText isKindOfClass:NSString.class]) return nil;
+    NSString *trimmed = [wireText stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (![trimmed hasPrefix:NeoWCEncryptedTextPlaceholder]) return nil;
+    NSString *encoded = [trimmed substringFromIndex:NeoWCEncryptedTextPlaceholder.length];
+    NSMutableCharacterSet *ignored = [NSCharacterSet.whitespaceAndNewlineCharacterSet mutableCopy];
+    [ignored addCharactersInString:@"\u200B\u200C\u200D\uFEFF"];
+    encoded = [[encoded componentsSeparatedByCharactersInSet:ignored] componentsJoinedByString:@""];
+    if (encoded.length == 0) return nil;
+    NSCharacterSet *invalid = [[NSCharacterSet characterSetWithCharactersInString:
+        @"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"] invertedSet];
+    return [encoded rangeOfCharacterFromSet:invalid].location == NSNotFound ? encoded : nil;
+}
+
 NSString *NeoWCEncryptedTextWireString(NSString *plainText, NSError **error) {
     NSData *plainData = [plainText dataUsingEncoding:NSUTF8StringEncoding];
     if (plainData.length == 0) {
@@ -175,8 +189,7 @@ NSString *NeoWCEncryptedTextWireString(NSString *plainText, NSError **error) {
 }
 
 BOOL NeoWCIsEncryptedTextWireString(NSString *wireText) {
-    if (![wireText isKindOfClass:NSString.class] || ![wireText hasPrefix:NeoWCEncryptedTextPlaceholder]) return NO;
-    NSString *encoded = [wireText substringFromIndex:NeoWCEncryptedTextPlaceholder.length];
+    NSString *encoded = NeoWCEncryptedTextPayload(wireText);
     if (encoded.length == 0) return NO;
     NSData *packet = NeoWCDataFromBase64URLString(encoded);
     if (packet.length < NeoWCTextFixedHeaderLength + 16 + NeoWCHMACLength) return NO;
@@ -185,8 +198,8 @@ BOOL NeoWCIsEncryptedTextWireString(NSString *wireText) {
 }
 
 NSString *NeoWCDecryptTextWireString(NSString *wireText, NSError **error) {
-    if (!NeoWCIsEncryptedTextWireString(wireText)) return nil;
-    NSString *encoded = [wireText substringFromIndex:NeoWCEncryptedTextPlaceholder.length];
+    NSString *encoded = NeoWCEncryptedTextPayload(wireText);
+    if (encoded.length == 0 || !NeoWCIsEncryptedTextWireString(wireText)) return nil;
     NSData *packet = NeoWCDataFromBase64URLString(encoded);
     if (packet.length < NeoWCTextFixedHeaderLength + 16 + NeoWCHMACLength) {
         NeoWCSetEncryptionError(error, 11, @"密文消息已截断");
