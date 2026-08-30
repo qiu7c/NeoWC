@@ -3,6 +3,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import <Photos/Photos.h>
 #import <AVFoundation/AVFoundation.h>
+#import <AVKit/AVKit.h>
 #import <math.h>
 #import <stdlib.h>
 #import <objc/message.h>
@@ -480,8 +481,8 @@ static void NeoWCRestoreReplyTransforms(NSArray<NeoWCReplyTransformSnapshot *> *
 
 static id NeoWCTweakSafeValue(id object, NSString *key);
 static void NeoWCTweakSetValue(id object, NSString *key, id value);
+static id NeoWCTweakValueForSelectorNames(id object, NSArray<NSString *> *selectorNames);
 static id NeoWCMessageManager(void);
-static NSString *NeoWCCurrentUserWXID(void);
 static id NeoWCMessageWrapForCell(id cell);
 static id NeoWCMessageForCellViewModel(id viewModel);
 static id NeoWCImageJokerMessageForObject(id object);
@@ -914,7 +915,7 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey, id> 
         inputPath = mediaURL.path;
     } else {
         UIImage *image = info[UIImagePickerControllerOriginalImage];
-        NSData *JPEGData = image ? [image jpegDataWithCompressionQuality:0.96] : nil;
+        NSData *JPEGData = image ? UIImageJPEGRepresentation(image, 0.96) : nil;
         if (JPEGData.length > 0) {
             inputPath = [NeoWCEncryptionTemporaryDirectory(@"Input")
                 stringByAppendingPathComponent:[NSString stringWithFormat:@"image_%@.jpg", NSUUID.UUID.UUIDString]];
