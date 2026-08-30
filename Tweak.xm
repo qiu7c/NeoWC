@@ -357,6 +357,8 @@ static char NeoWCQuickReplyPlusDelegateKey;
 static char NeoWCAlbumEncryptionSelectedKey;
 static char NeoWCAlbumEncryptionButtonKey;
 static char NeoWCAlbumEncryptionSendingKey;
+static char NeoWCOfficialAlbumTargetKey;
+static char NeoWCEncryptedTextDisplayOverrideKey;
 static char NeoWCWalletGestureRecognizerKey;
 static char NeoWCReplyPanRecognizerKey;
 static char NeoWCReplyPanDelegateKey;
@@ -917,22 +919,62 @@ static id NeoWCAlbumEncryptionStateOwner(id controller) {
     return controlCenter ?: controller;
 }
 
+// Matches WeChatX's compact native-looking picker control: a small check
+// glyph followed by a label, rather than a full-width system button.
+@interface NeoWCAlbumEncryptionButton : UIControl
+@property(nonatomic, assign, getter=isSelected) BOOL selected;
+@property(nonatomic, strong) UIImageView *checkImageView;
+@property(nonatomic, strong) UILabel *checkTitleLabel;
+@end
+
+@implementation NeoWCAlbumEncryptionButton
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (!self) return nil;
+    _checkImageView = [[UIImageView alloc] initWithFrame:CGRectZero];
+    _checkImageView.contentMode = UIViewContentModeScaleAspectFit;
+    _checkImageView.userInteractionEnabled = NO;
+    [self addSubview:_checkImageView];
+    _checkTitleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _checkTitleLabel.text = @"加密";
+    _checkTitleLabel.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightRegular];
+    _checkTitleLabel.textAlignment = NSTextAlignmentLeft;
+    _checkTitleLabel.userInteractionEnabled = NO;
+    [self addSubview:_checkTitleLabel];
+    self.accessibilityLabel = @"加密";
+    self.selected = NO;
+    return self;
+}
+- (void)setSelected:(BOOL)selected {
+    _selected = selected;
+    UIImage *image = [UIImage systemImageNamed:selected ? @"checkmark.circle.fill" : @"circle"];
+    self.checkImageView.image = image;
+    UIColor *color = selected ? [UIColor colorWithRed:0.10 green:0.72 blue:0.36 alpha:1.0]
+                              : UIColor.secondaryLabelColor;
+    self.checkImageView.tintColor = color;
+    self.checkTitleLabel.textColor = color;
+    self.accessibilityValue = selected ? @"已选中" : @"未选中";
+}
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGFloat h = MIN(21.0, CGRectGetHeight(self.bounds));
+    CGFloat y = floor((CGRectGetHeight(self.bounds) - h) * 0.5);
+    self.checkImageView.frame = CGRectMake(0.0, y, h, h);
+    self.checkTitleLabel.frame = CGRectMake(h + 3.0, y,
+                                             MAX(0.0, CGRectGetWidth(self.bounds) - h - 3.0), h);
+}
+@end
+
 static BOOL NeoWCAlbumEncryptionSelected(id controller) {
     id owner = NeoWCAlbumEncryptionStateOwner(controller);
     return [objc_getAssociatedObject(owner, &NeoWCAlbumEncryptionSelectedKey) boolValue];
 }
 
 static void NeoWCUpdateAlbumEncryptionButton(id controller) {
-    UIButton *button = objc_getAssociatedObject(controller, &NeoWCAlbumEncryptionButtonKey);
+    NeoWCAlbumEncryptionButton *button = objc_getAssociatedObject(controller, &NeoWCAlbumEncryptionButtonKey);
     if (!button) return;
     BOOL selected = NeoWCAlbumEncryptionSelected(controller);
-    NSString *symbolName = selected ? @"checkmark.circle.fill" : @"circle";
-    UIImage *symbol = [UIImage systemImageNamed:symbolName];
-    [button setImage:symbol forState:UIControlStateNormal];
-    [button setTitle:@" 加密" forState:UIControlStateNormal];
-    button.tintColor = selected ? [UIColor colorWithRed:0.10 green:0.72 blue:0.36 alpha:1.0]
-                                : UIColor.secondaryLabelColor;
-    button.accessibilityValue = selected ? @"已选中" : @"未选中";
+    button.selected = selected;
 }
 
 static void NeoWCToggleAlbumEncryption(id controller) {
@@ -945,7 +987,7 @@ static void NeoWCToggleAlbumEncryption(id controller) {
 
 static void NeoWCLayoutAlbumEncryptionButton(id controller, NSString *originCheckKey) {
     if (!controller) return;
-    UIButton *button = objc_getAssociatedObject(controller, &NeoWCAlbumEncryptionButtonKey);
+    NeoWCAlbumEncryptionButton *button = objc_getAssociatedObject(controller, &NeoWCAlbumEncryptionButtonKey);
     if (!NeoWCMediaEncryptionActive()) {
         button.hidden = YES;
         return;
@@ -957,11 +999,12 @@ static void NeoWCLayoutAlbumEncryptionButton(id controller, NSString *originChec
             : [@"_" stringByAppendingString:originCheckKey];
         originCheck = NeoWCTweakSafeValue(controller, fallbackKey);
     }
+    if (![originCheck isKindOfClass:UIView.class]) {
+        originCheck = NeoWCTweakSafeValue(controller, @"originImageCheck");
+    }
     if (![originCheck isKindOfClass:UIView.class] || !originCheck.superview) return;
     if (!button) {
-        button = [UIButton buttonWithType:UIButtonTypeSystem];
-        button.titleLabel.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightRegular];
-        button.accessibilityLabel = @"加密";
+        button = [[NeoWCAlbumEncryptionButton alloc] initWithFrame:CGRectZero];
         [button addTarget:controller action:NSSelectorFromString(@"neowc_toggleAlbumEncryption:")
              forControlEvents:UIControlEventTouchUpInside];
         [originCheck.superview addSubview:button];
@@ -972,8 +1015,8 @@ static void NeoWCLayoutAlbumEncryptionButton(id controller, NSString *originChec
         [originCheck.superview addSubview:button];
     }
     CGRect referenceFrame = originCheck.frame;
-    CGFloat height = MAX(32.0, CGRectGetHeight(referenceFrame));
-    CGFloat width = 72.0;
+    CGFloat height = MAX(21.0, CGRectGetHeight(referenceFrame));
+    CGFloat width = 58.0;
     CGFloat x = CGRectGetMaxX(referenceFrame) + 10.0;
     CGFloat maximumX = CGRectGetWidth(originCheck.superview.bounds) - width - 8.0;
     if (maximumX > 0.0) x = MIN(x, maximumX);
@@ -1000,16 +1043,37 @@ static NSString *NeoWCOriginalAssetFileName(id asset, BOOL video) {
 }
 
 static NSString *NeoWCOfficialAlbumTarget(id controller) {
-    id value = NeoWCTweakValueForSelectorNames(controller, @[@"getCurrentChatName"]);
-    if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
-    UIViewController *viewController = [controller isKindOfClass:UIViewController.class] ? controller : nil;
-    UINavigationController *navigationController = viewController.navigationController;
-    for (UIViewController *candidate in navigationController.viewControllers.reverseObjectEnumerator) {
-        value = NeoWCTweakValueForSelectorNames(candidate, @[@"getCurrentChatName"]);
+    id value = nil;
+    // Prefer the live picker/presenting hierarchy. An associated target can
+    // belong to a reused picker from the previous conversation.
+    id cursor = controller;
+    for (NSUInteger depth = 0; cursor && depth < 8; depth++) {
+        value = NeoWCTweakValueForSelectorNames(cursor, @[@"getCurrentChatName",
+            @"m_nsUserName", @"m_nsUsrName", @"sessionUserName", @"chatName", @"m_chatName",
+            @"m_sessionName", @"m_nsSessionName"]);
         if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
-        value = NeoWCChatUserName(candidate);
+        value = NeoWCChatUserName(cursor);
         if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
+        id related = NeoWCTweakValueForSelectorNames(cursor, @[@"delegate", @"m_delegate",
+            @"context", @"m_context", @"sessionInfo", @"m_sessionInfo"]);
+        value = NeoWCChatUserName(related);
+        if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
+        if ([cursor isKindOfClass:UIViewController.class]) {
+            UIViewController *viewController = cursor;
+            UINavigationController *navigationController = viewController.navigationController;
+            for (UIViewController *candidate in navigationController.viewControllers.reverseObjectEnumerator) {
+                value = NeoWCTweakValueForSelectorNames(candidate, @[@"getCurrentChatName"]);
+                if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
+                value = NeoWCChatUserName(candidate);
+                if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
+            }
+            cursor = viewController.presentingViewController ?: viewController.parentViewController;
+        } else {
+            break;
+        }
     }
+    value = objc_getAssociatedObject(controller, &NeoWCOfficialAlbumTargetKey);
+    if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
     value = NeoWCChatUserName(NeoWCVisibleChatController);
     return [value isKindOfClass:NSString.class] ? value : nil;
 }
@@ -2171,10 +2235,16 @@ static id NeoWCMessageWrapForCell(id cell) {
     id directMessage = NeoWCImageJokerMessageForObject(cell);
     if (directMessage) return directMessage;
     id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel", @"m_viewModel"]);
+    // Some WeChat builds expose the wrap directly as the view model rather
+    // than under messageWrap; accept it when the content ivar is present.
+    id directContent = NeoWCTweakSafeValue(viewModel, @"m_nsContent");
+    if ([directContent isKindOfClass:NSString.class]) return viewModel;
     id message = NeoWCTweakValueForSelectorNames(viewModel, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
     if (message) return message;
     id parentModel = NeoWCTweakSafeValue(viewModel, @"parentModel");
-    return NeoWCTweakValueForSelectorNames(parentModel, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
+    message = NeoWCTweakValueForSelectorNames(parentModel, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
+    if (message) return message;
+    return NeoWCTweakValueForSelectorNames(cell, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap", @"message"]);
 }
 
 static NSString *NeoWCImageJokerKeyForMessage(id message);
@@ -6957,6 +7027,14 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 
 - (void)viewDidLoad {
     %orig;
+    UIViewController *pickerController = (UIViewController *)self;
+    NSString *target = NeoWCOfficialAlbumTarget(pickerController.presentingViewController);
+    if (target.length > 0) {
+        objc_setAssociatedObject(self, &NeoWCOfficialAlbumTargetKey, target,
+                                 OBJC_ASSOCIATION_COPY_NONATOMIC);
+        objc_setAssociatedObject(NeoWCAlbumEncryptionStateOwner(self), &NeoWCOfficialAlbumTargetKey, target,
+                                 OBJC_ASSOCIATION_COPY_NONATOMIC);
+    }
     objc_setAssociatedObject(NeoWCAlbumEncryptionStateOwner(self),
                              &NeoWCAlbumEncryptionSelectedKey, @NO,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -6988,6 +7066,13 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 
 - (void)viewWillAppear:(BOOL)animated {
     %orig(animated);
+    NSString *target = NeoWCOfficialAlbumTarget((UIViewController *)self);
+    if (target.length == 0) target = NeoWCChatUserName(NeoWCVisibleChatController);
+    if (target.length > 0) {
+        objc_setAssociatedObject(self, &NeoWCOfficialAlbumTargetKey, target, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        objc_setAssociatedObject(NeoWCAlbumEncryptionStateOwner(self), &NeoWCOfficialAlbumTargetKey, target,
+                                 OBJC_ASSOCIATION_COPY_NONATOMIC);
+    }
     NeoWCLayoutAlbumEncryptionButton(self, @"m_originImageCheck");
 }
 
@@ -11793,31 +11878,12 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook TextMessageCellView
 
 - (NSString *)getTextString {
+    NSString *override = objc_getAssociatedObject(self, &NeoWCEncryptedTextDisplayOverrideKey);
+    if ([override isKindOfClass:NSString.class] && override.length > 0) return override;
     NSString *text = %orig;
     if (!NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey) ||
         ![text isKindOfClass:NSString.class] || !NeoWCIsEncryptedTextWireString(text)) return text;
     return NeoWCDecryptTextWireString(text, nil) ?: NeoWCEncryptedTextPlaceholder;
-}
-
-- (void)updateContent {
-    id message = NeoWCMessageWrapForCell(self);
-    NSString *wireText = NeoWCTweakSafeValue(message, @"m_nsContent");
-    NSString *plainText = nil;
-    if (NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey) &&
-        [wireText isKindOfClass:NSString.class] && NeoWCIsEncryptedTextWireString(wireText)) {
-        plainText = NeoWCDecryptTextWireString(wireText, nil);
-    }
-    if (plainText.length == 0) {
-        %orig;
-        return;
-    }
-    NeoWCTweakSetValue(message, @"m_nsContent", plainText);
-    @try {
-        %orig;
-    } @finally {
-        NeoWCTweakSetValue(message, @"m_nsContent", wireText);
-    }
-    NeoWCCompatibilityMarkTriggered(@"encrypted-text-display");
 }
 
 - (NSArray *)operationMenuItems {
@@ -12604,6 +12670,9 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
         [wireText isKindOfClass:NSString.class] && NeoWCIsEncryptedTextWireString(wireText)) {
         plainText = NeoWCDecryptTextWireString(wireText, nil);
     }
+    objc_setAssociatedObject(self, &NeoWCEncryptedTextDisplayOverrideKey,
+                             plainText.length > 0 ? plainText : nil,
+                             OBJC_ASSOCIATION_COPY_NONATOMIC);
     if (plainText.length > 0) {
         NeoWCTweakSetValue(message, @"m_nsContent", plainText);
         @try {

@@ -23,6 +23,12 @@ static NSString *const NeoWCTextPassword = @"kQ5m4H2cZ9sV7rN1xL8uF3aD6pT0jWbE";
 // Exact fixed password used by WeChatX 2.1-9. Unlike NeoWC text packets, the
 // WXC container passes this mixed-case Base64 string to PBKDF2 unchanged.
 static NSString *const NeoWCWXCPassword = @"tEXdNmORrxj6D1aFznvnIBKrWcS+cAbs1WmSP06h8xo=";
+static NSCache<NSString *, NSString *> *NeoWCEncryptedTextCache(void) {
+    static NSCache *cache;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ cache = [NSCache new]; cache.countLimit = 256; });
+    return cache;
+}
 
 static void NeoWCSetEncryptionError(NSError **error, NSInteger code, NSString *description) {
     if (!error) return;
@@ -200,6 +206,8 @@ BOOL NeoWCIsEncryptedTextWireString(NSString *wireText) {
 NSString *NeoWCDecryptTextWireString(NSString *wireText, NSError **error) {
     NSString *encoded = NeoWCEncryptedTextPayload(wireText);
     if (encoded.length == 0 || !NeoWCIsEncryptedTextWireString(wireText)) return nil;
+    NSString *cached = [NeoWCEncryptedTextCache() objectForKey:wireText];
+    if (cached.length > 0) return cached;
     NSData *packet = NeoWCDataFromBase64URLString(encoded);
     if (packet.length < NeoWCTextFixedHeaderLength + 16 + NeoWCHMACLength) {
         NeoWCSetEncryptionError(error, 11, @"密文消息已截断");
@@ -233,6 +241,7 @@ NSString *NeoWCDecryptTextWireString(NSString *wireText, NSError **error) {
     }
     NSString *plainText = [[NSString alloc] initWithData:plainData encoding:NSUTF8StringEncoding];
     if (!plainText) NeoWCSetEncryptionError(error, 12, @"解密结果不是 UTF-8 文本");
+    if (plainText.length > 0) [NeoWCEncryptedTextCache() setObject:plainText forKey:wireText];
     return plainText;
 }
 
