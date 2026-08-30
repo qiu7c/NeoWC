@@ -922,7 +922,6 @@ static id NeoWCAlbumEncryptionStateOwner(id controller) {
 // Matches WeChatX's compact native-looking picker control: a small check
 // glyph followed by a label, rather than a full-width system button.
 @interface NeoWCAlbumEncryptionButton : UIControl
-@property(nonatomic, assign, getter=isSelected) BOOL selected;
 @property(nonatomic, strong) UIImageView *checkImageView;
 @property(nonatomic, strong) UILabel *checkTitleLabel;
 @end
@@ -946,7 +945,7 @@ static id NeoWCAlbumEncryptionStateOwner(id controller) {
     return self;
 }
 - (void)setSelected:(BOOL)selected {
-    _selected = selected;
+    [super setSelected:selected];
     UIImage *image = [UIImage systemImageNamed:selected ? @"checkmark.circle.fill" : @"circle"];
     self.checkImageView.image = image;
     UIColor *color = selected ? [UIColor colorWithRed:0.10 green:0.72 blue:0.36 alpha:1.0]
