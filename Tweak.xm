@@ -359,6 +359,7 @@ static char NeoWCAlbumEncryptionButtonKey;
 static char NeoWCAlbumEncryptionSendingKey;
 static char NeoWCOfficialAlbumTargetKey;
 static char NeoWCEncryptedTextDisplayOverrideKey;
+static char NeoWCEncryptedTextRefreshWireKey;
 static char NeoWCWalletGestureRecognizerKey;
 static char NeoWCReplyPanRecognizerKey;
 static char NeoWCReplyPanDelegateKey;
@@ -12702,12 +12703,19 @@ static void NeoWCTriggerNativeTextRefresh(id cell) {
         // without permanently mutating the received message.
         @try {
             %orig;
-            NeoWCTriggerNativeTextRefresh(self);
+            NSString *lastRefreshWire = objc_getAssociatedObject(self, &NeoWCEncryptedTextRefreshWireKey);
+            if (![lastRefreshWire isEqualToString:wireText]) {
+                objc_setAssociatedObject(self, &NeoWCEncryptedTextRefreshWireKey, wireText,
+                                         OBJC_ASSOCIATION_COPY_NONATOMIC);
+                NeoWCTriggerNativeTextRefresh(self);
+            }
         } @finally {
             NeoWCTweakSetValue(message, @"m_nsContent", wireText);
         }
         NeoWCCompatibilityMarkTriggered(@"encrypted-text-display");
     } else {
+        objc_setAssociatedObject(self, &NeoWCEncryptedTextRefreshWireKey, nil,
+                                 OBJC_ASSOCIATION_COPY_NONATOMIC);
         %orig;
     }
     NeoWCHideMessageTimeLabels(self);
