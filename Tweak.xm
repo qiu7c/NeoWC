@@ -11887,12 +11887,23 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 %end
 
+static BOOL NeoWCSetNativeRichTextContent(id richTextView, NSString *plainText) {
+    if (!richTextView || ![plainText isKindOfClass:NSString.class] || plainText.length == 0) return NO;
+    SEL contentSelector = NSSelectorFromString(@"setContent:");
+    if (![richTextView respondsToSelector:contentSelector]) return NO;
+    ((void (*)(id, SEL, id))objc_msgSend)(richTextView, contentSelector, plainText);
+    if ([richTextView isKindOfClass:UIView.class]) {
+        ((UIView *)richTextView).hidden = NO;
+        ((UIView *)richTextView).alpha = 1.0;
+        [(UIView *)richTextView setNeedsDisplay];
+    }
+    return YES;
+}
+
 static BOOL NeoWCApplyDecryptedTextToTranslationView(id cell, NSString *plainText) {
     if (!cell || ![plainText isKindOfClass:NSString.class] || plainText.length == 0) return NO;
     id translateRichTextView = NeoWCTweakSafeValue(cell, @"m_translateRichTextView");
-    SEL contentSelector = NSSelectorFromString(@"setContent:");
-    if (![translateRichTextView respondsToSelector:contentSelector]) return NO;
-    ((void (*)(id, SEL, id))objc_msgSend)(translateRichTextView, contentSelector, plainText);
+    if (!NeoWCSetNativeRichTextContent(translateRichTextView, plainText)) return NO;
     if ([translateRichTextView isKindOfClass:UIView.class]) {
         ((UIView *)translateRichTextView).hidden = NO;
         ((UIView *)translateRichTextView).alpha = 1.0;
@@ -11907,6 +11918,20 @@ static BOOL NeoWCApplyDecryptedTextToTranslationView(id cell, NSString *plainTex
     }
     if ([cell isKindOfClass:UIView.class]) [(UIView *)cell setNeedsLayout];
     return YES;
+}
+
+static BOOL NeoWCApplyDecryptedTextToCurrentCellViews(id cell, NSString *plainText) {
+    BOOL applied = NO;
+    SEL richTextSelector = NSSelectorFromString(@"getRichTextViewForDelegate");
+    if ([cell respondsToSelector:richTextSelector]) {
+        id richTextView = ((id (*)(id, SEL))objc_msgSend)(cell, richTextSelector);
+        applied = NeoWCSetNativeRichTextContent(richTextView, plainText);
+    }
+    BOOL translated = NeoWCApplyDecryptedTextToTranslationView(cell, plainText);
+    if ((applied || translated) && [cell isKindOfClass:UIView.class]) {
+        [(UIView *)cell setNeedsLayout];
+    }
+    return translated || applied;
 }
 
 static NSArray *NeoWCOperationMenuItemsWithEncryptedTextDecrypt(id target, NSArray *originalItems) {
@@ -11944,6 +11969,7 @@ static NSArray *NeoWCOperationMenuItemsWithEncryptedTextDecrypt(id target, NSArr
     if ([plainText isKindOfClass:NSString.class] && plainText.length > 0) {
         // PKC uses this callback to re-establish encrypted-display state each
         // time WeChat rebuilds a recycled text cell.
+        NeoWCSetNativeRichTextContent(richTextView, plainText);
         NeoWCApplyDecryptedTextToTranslationView(self, plainText);
     }
     return richTextView;
@@ -12005,7 +12031,7 @@ static NSArray *NeoWCOperationMenuItemsWithEncryptedTextDecrypt(id target, NSArr
                              OBJC_ASSOCIATION_COPY_NONATOMIC);
     objc_setAssociatedObject(self, &NeoWCEncryptedTextRefreshInFlightKey, nil,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if (!NeoWCApplyDecryptedTextToTranslationView(self, plainText)) {
+    if (!NeoWCApplyDecryptedTextToCurrentCellViews(self, plainText)) {
         NeoWCTriggerNativeTextRefresh(self);
     }
     NeoWCCompatibilityMarkTriggered(@"encrypted-text-manual-decrypt");
@@ -12468,13 +12494,32 @@ static NSArray *NeoWCOperationMenuItemsWithEncryptedTextDecrypt(id target, NSArr
 %hook CMessageMgr
 
 - (void)AddMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap {
+    NSInteger messageType = [NeoWCTweakSafeValue(wrap, @"m_uiMessageType") integerValue];
+    if (messageType == 1 && NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey)) {
+        NSString *content = NeoWCTweakSafeValue(wrap, @"m_nsContent");
+        if ([content isKindOfClass:NSString.class] && [content hasPrefix:@"#加密"]) {
+            NSString *plainText = [[content substringFromIndex:@"#加密".length]
+                stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            if (plainText.length == 0) {
+                NeoWCShowTransientMessage(@"请在“#加密”后输入要发送的文字", NO);
+                return;
+            }
+            NSError *error = nil;
+            NSString *wireText = NeoWCEncryptedTextWireString(plainText, &error);
+            if (wireText.length == 0) {
+                NeoWCShowTransientMessage(error.localizedDescription ?: @"生成密文失败", NO);
+                return;
+            }
+            NeoWCTweakSetValue(wrap, @"m_nsContent", wireText);
+            NeoWCCompatibilityMarkTriggered(@"encrypted-text-send");
+        }
+    }
     if ([objc_getAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey) boolValue]) {
         objc_setAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey, nil,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig(target, wrap);
         return;
     }
-    NSInteger messageType = [NeoWCTweakSafeValue(wrap, @"m_uiMessageType") integerValue];
     BOOL appEmoticon = NeoWCSendConfirmationMessageIsAppEmoticon(wrap);
     if (![target isKindOfClass:NSString.class] || (messageType != 1 && !appEmoticon)) {
         %orig(target, wrap);
@@ -12807,7 +12852,7 @@ static void NeoWCTriggerNativeTextRefresh(id cell) {
                              OBJC_ASSOCIATION_COPY_NONATOMIC);
     if (plainText.length > 0) {
         %orig;
-        BOOL applied = NeoWCApplyDecryptedTextToTranslationView(self, plainText);
+        BOOL applied = NeoWCApplyDecryptedTextToCurrentCellViews(self, plainText);
         BOOL refreshing = [objc_getAssociatedObject(self, &NeoWCEncryptedTextRefreshInFlightKey) boolValue];
         if (!applied && !refreshing) {
             objc_setAssociatedObject(self, &NeoWCEncryptedTextRefreshInFlightKey, @YES,
