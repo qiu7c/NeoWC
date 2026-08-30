@@ -859,37 +859,47 @@ static BOOL NeoWCSendEncryptedMediaFile(NSString *path,
         return NO;
     }
     if (!wrap) return NO;
-    unsigned long long fileSize = [[NSFileManager.defaultManager attributesOfItemAtPath:path error:nil][NSFileSize]
-        unsignedLongLongValue];
     NSUInteger now = (NSUInteger)NSDate.date.timeIntervalSince1970;
-    NSDictionary<NSString *, id> *values = @{
-        @"m_nsFromUsr": NeoWCCurrentUserWXID() ?: @"",
-        @"m_nsToUsr": target,
-        @"m_nsTitle": fileName,
-        @"m_nsAppFileName": fileName,
-        @"m_nsAppFileExt": extensionName ?: @"",
-        @"m_uiAppMsgInnerType": @6,
-        @"m_uiAppDataSize": @(fileSize),
-        @"m_uiCreateTime": @(now),
-        @"m_uiStatus": @1,
-    };
-    for (NSString *key in values) NeoWCTweakSetValue(wrap, key, values[key]);
-    id extendInfo = NeoWCTweakSafeValue(wrap, @"m_extendInfoWithMsgType");
-    for (NSString *key in @[@"m_nsTitle", @"m_nsAppFileName", @"m_nsAppFileExt",
-                             @"m_uiAppMsgInnerType", @"m_uiAppDataSize"]) {
-        NeoWCTweakSetValue(extendInfo, key, values[key]);
-    }
+    // Match WeChatX's native file-message setter order. In particular, leave
+    // the inner app-message type and data size produced by ForwardMsgUtil
+    // untouched; rewriting those fields makes WeChat validate WXC bytes as
+    // ordinary image/video payloads.
+    NeoWCTweakSetValue(wrap, @"m_nsFromUsr", NeoWCCurrentUserWXID() ?: @"");
+    NeoWCTweakSetValue(wrap, @"m_nsToUsr", target);
+    NeoWCTweakSetValue(wrap, @"m_nsTitle", fileName);
+    NeoWCTweakSetValue(wrap, @"m_nsAppFileName", fileName);
+    NeoWCTweakSetValue(wrap, @"m_nsAppFileExt", extensionName ?: @"");
+    NeoWCTweakSetValue(wrap, @"m_uiCreateTime", @(now));
+    NeoWCTweakSetValue(wrap, @"m_uiStatus", @1);
     if (type == NeoWCWXCFileTypeVideo) NeoWCTweakSetValue(wrap, @"m_previewType", @0);
 
     id manager = NeoWCMessageManager();
-    SEL selector = sel_registerName("AddAppMsg:MsgWrap:DataPath:Scene:");
-    if (!manager || ![manager respondsToSelector:selector]) return NO;
+    if (!manager) return NO;
+    BOOL submitted = NO;
     @try {
-        ((id (*)(id, SEL, NSString *, id, NSString *, NSUInteger))objc_msgSend)(manager, selector,
-                                                                                target, wrap, path, 0);
+        SEL pathSelector = sel_registerName("AddAppMsg:MsgWrap:DataPath:Scene:");
+        if ([manager respondsToSelector:pathSelector]) {
+            ((void (*)(id, SEL, NSString *, id, NSString *, NSUInteger))objc_msgSend)(
+                manager, pathSelector, target, wrap, path, 0);
+            submitted = YES;
+        } else {
+            NSData *fileData = [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];
+            SEL dataSelector = sel_registerName("AddAppMsg:MsgWrap:Data:Scene:");
+            if (fileData.length > 0 && [manager respondsToSelector:dataSelector]) {
+                ((void (*)(id, SEL, NSString *, id, NSData *, NSUInteger))objc_msgSend)(
+                    manager, dataSelector, target, wrap, fileData, 0);
+                submitted = YES;
+            }
+        }
     } @catch (__unused NSException *exception) {
         return NO;
     }
+    if (!submitted) return NO;
+    NSString *cleanupPath = [path copy];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30.0 * 60.0 * NSEC_PER_SEC)),
+                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        [NSFileManager.defaultManager removeItemAtPath:cleanupPath error:nil];
+    });
     NeoWCCompatibilityMarkTriggered(@"encrypted-media-send");
     return YES;
 }
@@ -931,16 +941,21 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey, id> 
         return;
     }
 
-    NSString *prefix = video ? @"WXC_VIDEO" : @"WXC_IMAGE";
-    NSString *extensionName = video ? @"mp4" : @"jpg";
-    NSString *fileName = [NSString stringWithFormat:@"%@_%@.%@", prefix, NSUUID.UUID.UUIDString, extensionName];
-    NSString *outputPath = [NeoWCEncryptionTemporaryDirectory(@"Upload") stringByAppendingPathComponent:fileName];
+    NSString *plainExtension = inputPath.pathExtension.lowercaseString;
+    if (plainExtension.length == 0) plainExtension = video ? @"mp4" : @"jpg";
+    NSString *sourceName = inputPath.lastPathComponent.stringByDeletingPathExtension;
+    if (sourceName.length == 0) sourceName = video ? @"视频" : @"图片";
+    NSString *fileName = [sourceName stringByAppendingPathExtension:@"WeChatX"];
+    NSString *outputName = [NSString stringWithFormat:@"%@_%@.%@",
+        video ? @"WXC_VIDEO" : @"WXC_IMAGE", NSUUID.UUID.UUIDString, plainExtension];
+    NSString *outputPath = [NeoWCEncryptionTemporaryDirectory(@"Upload") stringByAppendingPathComponent:outputName];
+    NSString *metadata = [@"a:" stringByAppendingString:plainExtension];
     NSString *sourcePath = [inputPath copy];
     NeoWCEncryptedMediaPickerSession *retainedSession = self;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSError *error = nil;
         uint8_t type = video ? NeoWCWXCFileTypeVideo : NeoWCWXCFileTypeImage;
-        BOOL encrypted = NeoWCWXCEncryptFile(sourcePath, outputPath, (NeoWCWXCFileType)type, prefix, &error);
+        BOOL encrypted = NeoWCWXCEncryptFile(sourcePath, outputPath, (NeoWCWXCFileType)type, metadata, &error);
         if (removeInput) [NSFileManager.defaultManager removeItemAtPath:sourcePath error:nil];
         dispatch_async(dispatch_get_main_queue(), ^{
             BOOL sent = encrypted && NeoWCSendEncryptedMediaFile(outputPath, fileName, target, type);
@@ -5982,7 +5997,8 @@ static BOOL NeoWCMessageLooksLikeEncryptedMedia(id message) {
                                        @"m_nsAppFileName");
     }
     NSString *upper = fileName.uppercaseString;
-    return [upper hasPrefix:@"WXC_IMAGE_"] || [upper hasPrefix:@"WXCA_IMAGE_"] ||
+    return [fileName.pathExtension caseInsensitiveCompare:@"WeChatX"] == NSOrderedSame ||
+           [upper hasPrefix:@"WXC_IMAGE_"] || [upper hasPrefix:@"WXCA_IMAGE_"] ||
            [upper hasPrefix:@"WXC_VIDEO_"] || [upper hasPrefix:@"WXCA_VIDEO_"];
 }
 
@@ -6027,7 +6043,16 @@ static void NeoWCPresentEncryptedMediaPreview(id cell) {
         BOOL decrypted = NeoWCWXCDecryptFile(path, temporaryPath, &type, &metadata, &error);
         NSString *finalPath = temporaryPath;
         if (decrypted) {
-            NSString *extensionName = type == NeoWCWXCFileTypeVideo ? @"mp4" : @"jpg";
+            NSString *extensionName = metadata.lowercaseString;
+            if ([extensionName hasPrefix:@"a:"]) extensionName = [extensionName substringFromIndex:2];
+            NSCharacterSet *invalidExtensionCharacters =
+                [NSCharacterSet.alphanumericCharacterSet invertedSet];
+            extensionName = [[extensionName componentsSeparatedByCharactersInSet:invalidExtensionCharacters]
+                componentsJoinedByString:@""];
+            if (extensionName.length > 12) extensionName = [extensionName substringToIndex:12];
+            if (extensionName.length == 0) {
+                extensionName = type == NeoWCWXCFileTypeVideo ? @"mp4" : @"jpg";
+            }
             finalPath = [temporaryBase stringByAppendingPathExtension:extensionName];
             [NSFileManager.defaultManager removeItemAtPath:finalPath error:nil];
             if (![NSFileManager.defaultManager moveItemAtPath:temporaryPath toPath:finalPath error:&error]) {

@@ -20,7 +20,8 @@ static const NSUInteger NeoWCStreamChunkLength = 0x40000;
 // Shared by every NeoWC installation. This provides plugin interoperability,
 // not secrecy against somebody who reverse engineers the plugin binary.
 static NSString *const NeoWCTextPassword = @"kQ5m4H2cZ9sV7rN1xL8uF3aD6pT0jWbE";
-// Exact fixed password used by WeChatX 2.1-9; its KDF lowercases the string.
+// Exact fixed password used by WeChatX 2.1-9. Unlike NeoWC text packets, the
+// WXC container passes this mixed-case Base64 string to PBKDF2 unchanged.
 static NSString *const NeoWCWXCPassword = @"tEXdNmORrxj6D1aFznvnIBKrWcS+cAbs1WmSP06h8xo=";
 
 static void NeoWCSetEncryptionError(NSError **error, NSInteger code, NSString *description) {
@@ -70,9 +71,10 @@ static BOOL NeoWCRandomBytes(uint8_t *bytes, NSUInteger length, NSError **error)
 static BOOL NeoWCDeriveKeys(NSString *password,
                             const uint8_t salt[16],
                             uint32_t rounds,
+                            BOOL lowercasePassword,
                             uint8_t output[64],
                             NSError **error) {
-    NSString *normalized = password.lowercaseString;
+    NSString *normalized = lowercasePassword ? password.lowercaseString : password;
     NSData *passwordData = [normalized dataUsingEncoding:NSUTF8StringEncoding];
     if (!passwordData || rounds < 10000 || rounds > 2000000) {
         NeoWCSetEncryptionError(error, 3, @"密钥参数无效");
@@ -138,32 +140,6 @@ static NSData *NeoWCDataFromBase64URLString(NSString *value) {
     return [[NSData alloc] initWithBase64EncodedString:base64 options:0];
 }
 
-static NSString *NeoWCInvisibleEncodeASCII(NSString *ASCII) {
-    NSData *data = [ASCII dataUsingEncoding:NSASCIIStringEncoding];
-    if (!data) return nil;
-    const uint8_t *bytes = data.bytes;
-    NSMutableString *encoded = [NSMutableString stringWithCapacity:data.length * 2];
-    for (NSUInteger index = 0; index < data.length; index++) {
-        unichar pair[2] = {(unichar)(0xFE00 + (bytes[index] >> 4)),
-                           (unichar)(0xFE00 + (bytes[index] & 0x0F))};
-        [encoded appendString:[NSString stringWithCharacters:pair length:2]];
-    }
-    return encoded;
-}
-
-static NSString *NeoWCInvisibleDecodeASCII(NSString *encoded) {
-    if (encoded.length == 0 || encoded.length % 2 != 0) return nil;
-    NSMutableData *data = [NSMutableData dataWithCapacity:encoded.length / 2];
-    for (NSUInteger index = 0; index < encoded.length; index += 2) {
-        unichar high = [encoded characterAtIndex:index];
-        unichar low = [encoded characterAtIndex:index + 1];
-        if (high < 0xFE00 || high > 0xFE0F || low < 0xFE00 || low > 0xFE0F) return nil;
-        uint8_t byte = (uint8_t)(((high - 0xFE00) << 4) | (low - 0xFE00));
-        [data appendBytes:&byte length:1];
-    }
-    return [[NSString alloc] initWithData:data encoding:NSASCIIStringEncoding];
-}
-
 NSString *NeoWCEncryptedTextWireString(NSString *plainText, NSError **error) {
     NSData *plainData = [plainText dataUsingEncoding:NSUTF8StringEncoding];
     if (plainData.length == 0) {
@@ -178,7 +154,7 @@ NSString *NeoWCEncryptedTextWireString(NSString *plainText, NSError **error) {
     uint8_t salt[16] = {0}, iv[16] = {0}, keys[64] = {0};
     if (!NeoWCRandomBytes(salt, sizeof(salt), error) ||
         !NeoWCRandomBytes(iv, sizeof(iv), error) ||
-        !NeoWCDeriveKeys(NeoWCTextPassword, salt, NeoWCPBKDFRounds, keys, error)) return nil;
+        !NeoWCDeriveKeys(NeoWCTextPassword, salt, NeoWCPBKDFRounds, YES, keys, error)) return nil;
     NSData *ciphertext = NeoWCAESCryptData(plainData, kCCEncrypt, keys, iv, error);
     if (!ciphertext) return nil;
 
@@ -194,21 +170,24 @@ NSString *NeoWCEncryptedTextWireString(NSString *plainText, NSError **error) {
     [packet appendData:ciphertext];
     [packet appendData:NeoWCHMAC(packet, keys + 32)];
 
-    NSString *encoded = NeoWCInvisibleEncodeASCII(NeoWCBase64URLString(packet));
+    NSString *encoded = NeoWCBase64URLString(packet);
     return encoded ? [NeoWCEncryptedTextPlaceholder stringByAppendingString:encoded] : nil;
 }
 
 BOOL NeoWCIsEncryptedTextWireString(NSString *wireText) {
     if (![wireText isKindOfClass:NSString.class] || ![wireText hasPrefix:NeoWCEncryptedTextPlaceholder]) return NO;
-    NSString *hidden = [wireText substringFromIndex:NeoWCEncryptedTextPlaceholder.length];
-    return hidden.length >= 2 && hidden.length % 2 == 0;
+    NSString *encoded = [wireText substringFromIndex:NeoWCEncryptedTextPlaceholder.length];
+    if (encoded.length == 0) return NO;
+    NSData *packet = NeoWCDataFromBase64URLString(encoded);
+    if (packet.length < NeoWCTextFixedHeaderLength + 16 + NeoWCHMACLength) return NO;
+    const uint8_t *bytes = packet.bytes;
+    return memcmp(bytes, "NWCENC01", 8) == 0 && bytes[8] == 1 && bytes[9] == 1;
 }
 
 NSString *NeoWCDecryptTextWireString(NSString *wireText, NSError **error) {
     if (!NeoWCIsEncryptedTextWireString(wireText)) return nil;
-    NSString *hidden = [wireText substringFromIndex:NeoWCEncryptedTextPlaceholder.length];
-    NSString *base64URL = NeoWCInvisibleDecodeASCII(hidden);
-    NSData *packet = base64URL ? NeoWCDataFromBase64URLString(base64URL) : nil;
+    NSString *encoded = [wireText substringFromIndex:NeoWCEncryptedTextPlaceholder.length];
+    NSData *packet = NeoWCDataFromBase64URLString(encoded);
     if (packet.length < NeoWCTextFixedHeaderLength + 16 + NeoWCHMACLength) {
         NeoWCSetEncryptionError(error, 11, @"密文消息已截断");
         return nil;
@@ -225,7 +204,7 @@ NSString *NeoWCDecryptTextWireString(NSString *wireText, NSError **error) {
         return nil;
     }
     uint8_t keys[64] = {0};
-    if (!NeoWCDeriveKeys(NeoWCTextPassword, bytes + 20, rounds, keys, error)) return nil;
+    if (!NeoWCDeriveKeys(NeoWCTextPassword, bytes + 20, rounds, YES, keys, error)) return nil;
     NSData *authenticated = [packet subdataWithRange:NSMakeRange(0, packet.length - NeoWCHMACLength)];
     NSData *storedTag = [packet subdataWithRange:NSMakeRange(packet.length - NeoWCHMACLength, NeoWCHMACLength)];
     if (!NeoWCConstantTimeEqual(NeoWCHMAC(authenticated, keys + 32), storedTag)) {
@@ -307,7 +286,7 @@ BOOL NeoWCWXCEncryptFile(NSString *inputPath,
     NSDictionary *attributes = [NSFileManager.defaultManager attributesOfItemAtPath:inputPath error:error];
     uint64_t inputSize = [attributes[NSFileSize] unsignedLongLongValue];
     NSData *metadataData = [metadata.lowercaseString dataUsingEncoding:NSUTF8StringEncoding];
-    if (!attributes || inputSize == 0 || type < NeoWCWXCFileTypeImage || type > NeoWCWXCFileTypeVideo ||
+    if (!attributes || inputSize == 0 || type < NeoWCWXCFileTypeAuxiliaryImage || type > NeoWCWXCFileTypeVideo ||
         metadataData.length > 64) {
         NeoWCSetEncryptionError(error, 20, @"媒体加密参数无效");
         return NO;
@@ -315,7 +294,7 @@ BOOL NeoWCWXCEncryptFile(NSString *inputPath,
 
     uint8_t salt[16] = {0}, iv[16] = {0}, keys[64] = {0};
     if (!NeoWCRandomBytes(salt, 16, error) || !NeoWCRandomBytes(iv, 16, error) ||
-        !NeoWCDeriveKeys(NeoWCWXCPassword, salt, NeoWCPBKDFRounds, keys, error)) return NO;
+        !NeoWCDeriveKeys(NeoWCWXCPassword, salt, NeoWCPBKDFRounds, NO, keys, error)) return NO;
     NSMutableData *headerData = [NSMutableData dataWithLength:NeoWCWXCFixedHeaderLength];
     uint8_t *header = headerData.mutableBytes;
     memcpy(header, "WXCENC01", 8);
@@ -455,7 +434,7 @@ BOOL NeoWCWXCDecryptFile(NSString *inputPath,
     }
     const uint8_t *header = headerAndMetadata.bytes;
     uint8_t keys[64] = {0};
-    if (!NeoWCDeriveKeys(NeoWCWXCPassword, header + 24, rounds, keys, error)) {
+    if (!NeoWCDeriveKeys(NeoWCWXCPassword, header + 24, rounds, NO, keys, error)) {
         [input closeFile];
         return NO;
     }

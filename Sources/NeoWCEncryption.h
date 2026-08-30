@@ -6,7 +6,7 @@ FOUNDATION_EXPORT NSString *const NeoWCEncryptedMessageEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCMediaEncryptionEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCEncryptedTextPlaceholder;
 
-/// Builds a normal WeChat text message whose visible fallback is `【密文】`.
+/// Builds a normal visible text message as `【密文】` followed by Base64URL ciphertext.
 FOUNDATION_EXPORT NSString * _Nullable NeoWCEncryptedTextWireString(NSString *plainText,
                                                                     NSError **error);
 FOUNDATION_EXPORT BOOL NeoWCIsEncryptedTextWireString(NSString *wireText);
@@ -14,8 +14,8 @@ FOUNDATION_EXPORT NSString * _Nullable NeoWCDecryptTextWireString(NSString *wire
                                                                   NSError **error);
 
 typedef NS_ENUM(uint8_t, NeoWCWXCFileType) {
-    NeoWCWXCFileTypeImage = 1,
-    NeoWCWXCFileTypeLivePhotoImage = 2,
+    NeoWCWXCFileTypeAuxiliaryImage = 1,
+    NeoWCWXCFileTypeImage = 2,
     NeoWCWXCFileTypeVideo = 3,
 };
 
