@@ -208,6 +208,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCSendConfirmationUsersKey: @{},
         NeoWCSendConfirmationPauseSecondsKey: @60,
         NeoWCEncryptedMessageEnabledKey: @NO,
+        NeoWCEncryptedMessageAutoDecryptKey: @YES,
         NeoWCMediaEncryptionEnabledKey: @NO,
         NeoWCMomentsLikeHapticEnabledKey: @NO,
         NeoWCMomentsLikeHapticIntensityKey: @0.65,
@@ -344,8 +345,9 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
                     defaults,
                     collapsed);
     NeoWCAddFeature(protection,
-                    NeoWCItem(@"密文消息", @"长按发送按钮发送文字密文，未安装插件时仅显示【密文】", @"lock.fill", NeoWCSettingRowKindSwitch, NeoWCEncryptedMessageEnabledKey, nil, NeoWCSettingActionNone),
+                    NeoWCItem(@"密文消息", @"输入“#加密”前缀后正常发送；密文可在长按菜单中解密", @"lock.fill", NeoWCSettingRowKindSwitch, NeoWCEncryptedMessageEnabledKey, nil, NeoWCSettingActionNone),
                     @[
+                        NeoWCItem(@"自动解密密文", @"关闭后保留密文原文，可通过消息长按菜单手动解密", @"lock.open", NeoWCSettingRowKindSwitch, NeoWCEncryptedMessageAutoDecryptKey, nil, NeoWCSettingActionNone),
                         NeoWCItem(@"加密图片和视频", @"在微信相册“原图”右侧显示加密选项，兼容 WeChatX", @"photo.on.rectangle", NeoWCSettingRowKindSwitch, NeoWCMediaEncryptionEnabledKey, nil, NeoWCSettingActionNone),
                     ],
                     defaults,

@@ -3,6 +3,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSString *const NeoWCEncryptedMessageEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCEncryptedMessageAutoDecryptKey;
 FOUNDATION_EXPORT NSString *const NeoWCMediaEncryptionEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCEncryptedTextPlaceholder;
 

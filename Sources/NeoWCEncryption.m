@@ -6,6 +6,7 @@
 #import <Security/Security.h>
 
 NSString *const NeoWCEncryptedMessageEnabledKey = @"com.qiu7c.neowc.chat.encrypted-message";
+NSString *const NeoWCEncryptedMessageAutoDecryptKey = @"com.qiu7c.neowc.chat.encrypted-message.auto-decrypt";
 NSString *const NeoWCMediaEncryptionEnabledKey = @"com.qiu7c.neowc.chat.encrypted-message.media";
 NSString *const NeoWCEncryptedTextPlaceholder = @"【密文】";
 
