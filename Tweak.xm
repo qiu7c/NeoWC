@@ -1054,7 +1054,7 @@ static void NeoWCEncryptAndSendOfficialMedia(NSString *inputPath,
 }
 
 static NSString *NeoWCImageExtensionForData(NSData *data, NSString *originalFileName) {
-    const uint8_t *bytes = data.bytes;
+    const uint8_t *bytes = (const uint8_t *)data.bytes;
     if (data.length >= 8 && bytes[0] == 0x89 && memcmp(bytes + 1, "PNG\r\n\x1a\n", 7) == 0) return @"png";
     if (data.length >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff) return @"jpg";
     if (data.length >= 6 && memcmp(bytes, "GIF8", 4) == 0) return @"gif";
@@ -1080,7 +1080,10 @@ static void NeoWCProcessOfficialImageAsset(id asset, NSString *target, void (^co
         }
         NeoWCEncryptAndSendOfficialMedia(inputPath, originalName, target, NO, YES, completion);
     };
-    void (^failure)(id) = ^(__unused id error) { if (completion) completion(NO); };
+    void (^failure)(id) = ^(id error) {
+        (void)error;
+        if (completion) completion(NO);
+    };
     SEL sourceSelector = NSSelectorFromString(@"asyncImageOriginSourceData:errorBlock:");
     SEL originSelector = NSSelectorFromString(@"asyncImageOriginData:completion:errorBlock:");
     if ([asset respondsToSelector:sourceSelector]) {
@@ -1132,7 +1135,10 @@ static void NeoWCProcessOfficialVideoAsset(id asset, NSString *target, void (^co
             NeoWCEncryptAndSendOfficialMedia(inputPath, originalName, target, YES, YES, completion);
         }];
     };
-    void (^failure)(id) = ^(__unused id error) { if (completion) completion(NO); };
+    void (^failure)(id) = ^(id error) {
+        (void)error;
+        if (completion) completion(NO);
+    };
     SEL selector = NSSelectorFromString(@"asyncGetVideoAsset:successBlock:errorBlock:");
     if ([asset respondsToSelector:selector]) {
         ((void (*)(id, SEL, BOOL, id, id))objc_msgSend)(asset, selector, YES, success, failure);
@@ -6986,7 +6992,8 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 }
 
 %new
-- (void)neowc_toggleAlbumEncryption:(__unused id)sender {
+- (void)neowc_toggleAlbumEncryption:(id)sender {
+    (void)sender;
     NeoWCToggleAlbumEncryption(self);
 }
 
@@ -7108,7 +7115,8 @@ didFinishPickingWithAssetInfos:(id)assetInfos
 }
 
 %new
-- (void)neowc_toggleAlbumEncryption:(__unused id)sender {
+- (void)neowc_toggleAlbumEncryption:(id)sender {
+    (void)sender;
     NeoWCToggleAlbumEncryption(self);
 }
 
