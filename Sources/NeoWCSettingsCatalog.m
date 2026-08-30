@@ -10,6 +10,7 @@
 #import "NeoWCMomentsInteractionReminder.h"
 #import "NeoWCMomentsReminder.h"
 #import "NeoWCInAppNotification.h"
+#import "NeoWCEncryption.h"
 #import <stdlib.h>
 
 NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
@@ -206,6 +207,8 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCSendConfirmationEnabledKey: @NO,
         NeoWCSendConfirmationUsersKey: @{},
         NeoWCSendConfirmationPauseSecondsKey: @60,
+        NeoWCEncryptedMessageEnabledKey: @NO,
+        NeoWCMediaEncryptionEnabledKey: @NO,
         NeoWCMomentsLikeHapticEnabledKey: @NO,
         NeoWCMomentsLikeHapticIntensityKey: @0.65,
         NeoWCMomentsQuickPermissionsKey: @NO,
@@ -337,6 +340,13 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
                                   NeoWCSettingActionNone),
                         NeoWCItem(@"管理受保护会话", @"只保存 username，名称运行时读取", @"person.crop.circle.badge.checkmark", NeoWCSettingRowKindDetail, nil,
                                   NeoWCCountText(NeoWCSendConfirmationProtectedConversations().count), NeoWCSettingActionSendConfirmationConversations),
+                    ],
+                    defaults,
+                    collapsed);
+    NeoWCAddFeature(protection,
+                    NeoWCItem(@"密文消息", @"长按发送按钮发送文字密文，未安装插件时仅显示【密文】", @"lock.fill", NeoWCSettingRowKindSwitch, NeoWCEncryptedMessageEnabledKey, nil, NeoWCSettingActionNone),
+                    @[
+                        NeoWCItem(@"加密图片和视频", @"使用与 WeChatX 兼容的 WXCENC01 文件格式", @"photo.on.rectangle", NeoWCSettingRowKindSwitch, NeoWCMediaEncryptionEnabledKey, nil, NeoWCSettingActionNone),
                     ],
                     defaults,
                     collapsed);

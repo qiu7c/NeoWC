@@ -39,6 +39,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCInfoListViewController.h"
 #import "Sources/NeoWCSilkEncoder.h"
 #import "Sources/NeoWCInAppNotification.h"
+#import "Sources/NeoWCEncryption.h"
 
 @interface WCActionSheet : NSObject
 - (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
@@ -124,6 +125,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 - (id)GetContact;
 - (void)returnToOriginalMsg:(id)message;
 - (void)neowc_openChatSearch:(id)sender;
+- (void)neowc_handleChatSearchEdgePan:(UIScreenEdgePanGestureRecognizer *)recognizer;
 - (void)neowc_toggleSendConfirmation:(UILongPressGestureRecognizer *)recognizer;
 @end
 
@@ -217,6 +219,15 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 - (void)sendMsgWithText:(id)text;
 @end
 
+@interface AppFileMessageCellViewV2 : CommonMessageCellView
+- (void)neowc_previewEncryptedMedia:(id)sender;
+@end
+
+@interface TextMessageCellView : CommonMessageCellView
+- (void)setViewModel:(id)viewModel;
+- (NSString *)getTextString;
+@end
+
 @interface MMHeadImageView : UIView
 - (instancetype)initWithUsrName:(NSString *)userName
                      headImgUrl:(NSString *)headImageURL
@@ -250,6 +261,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
 @interface CMessageMgr : NSObject
 - (void)AddMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap;
+- (id)AddAppMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap DataPath:(NSString *)dataPath Scene:(NSUInteger)scene;
 - (id)AddVideoMsg:(id)message ToUsr:(NSString *)target VideoInfo:(id)videoInfo;
 - (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap;
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap;
@@ -378,7 +390,9 @@ static char NeoWCVoiceTranscriptionAttemptedKey;
 static char NeoWCChatTopProfileItemKey;
 static char NeoWCChatTopCapsuleItemKey;
 static char NeoWCChatSearchItemKey;
-static char NeoWCChatSearchHelperKey;
+static char NeoWCChatSearchActiveKey;
+static char NeoWCChatSearchCleanupKey;
+static char NeoWCChatSearchEdgePanKey;
 static char NeoWCChatTopOriginalLeftItemsKey;
 static char NeoWCChatTopOriginalRightItemsKey;
 static char NeoWCChatTopOriginalTitleViewKey;
@@ -466,7 +480,10 @@ static void NeoWCRestoreReplyTransforms(NSArray<NeoWCReplyTransformSnapshot *> *
 
 static id NeoWCTweakSafeValue(id object, NSString *key);
 static void NeoWCTweakSetValue(id object, NSString *key, id value);
+static id NeoWCMessageManager(void);
+static NSString *NeoWCCurrentUserWXID(void);
 static id NeoWCMessageWrapForCell(id cell);
+static id NeoWCMessageForCellViewModel(id viewModel);
 static id NeoWCImageJokerMessageForObject(id object);
 static id NeoWCContactForUserName(NSString *userName);
 static void NeoWCOpenHomeRemark(id owner, id contact, BOOL group);
@@ -744,9 +761,17 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
 
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
     MMInputToolView *toolView = self.toolView;
-    if (!toolView || !NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey)) return NO;
+    if (!toolView) return NO;
+    BOOL quickReplyEnabled = NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey);
+    BOOL encryptedTextEnabled = NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey);
+    BOOL encryptedMediaEnabled = encryptedTextEnabled && NeoWCEnhancementEnabled(NeoWCMediaEncryptionEnabledKey);
+    if (!quickReplyEnabled && !encryptedTextEnabled && !encryptedMediaEnabled) return NO;
     UIView *candidate = [toolView hitTest:[gestureRecognizer locationInView:toolView] withEvent:nil];
+    UIView *sendButton = NeoWCTweakValueForSelectorNames(toolView, @[@"sendButton", @"_sendButton"]);
+    UIView *attachmentButton = NeoWCTweakValueForSelectorNames(toolView, @[@"attachmentButton", @"_attachmentButton"]);
     while (candidate && candidate != toolView) {
+        if (candidate == sendButton) return encryptedTextEnabled;
+        if (candidate == attachmentButton) return quickReplyEnabled || encryptedMediaEnabled;
         if ([candidate isKindOfClass:UIControl.class]) {
             NSMutableString *semanticText = [NSMutableString string];
             for (NSString *value in @[candidate.accessibilityLabel ?: @"",
@@ -754,10 +779,14 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
                                       [candidate isKindOfClass:UIButton.class] ? [(UIButton *)candidate currentTitle] ?: @"" : @""]) {
                 if (value.length > 0) [semanticText appendFormat:@" %@", value.lowercaseString];
             }
-            if ([semanticText containsString:@"发送"] || [semanticText containsString:@"send"]) return NO;
+            if ([semanticText containsString:@"发送"] || [semanticText containsString:@"send"]) {
+                return encryptedTextEnabled;
+            }
             if ([semanticText containsString:@"更多"] || [semanticText containsString:@"添加"] ||
                 [semanticText containsString:@"加号"] || [semanticText containsString:@"more"] ||
-                [semanticText containsString:@"plus"] || [semanticText containsString:@"add"]) return YES;
+                [semanticText containsString:@"plus"] || [semanticText containsString:@"add"]) {
+                return quickReplyEnabled || encryptedMediaEnabled;
+            }
         }
         candidate = candidate.superview;
     }
@@ -765,6 +794,218 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
 }
 
 @end
+
+
+@interface NeoWCEncryptedMediaPickerSession : NSObject <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@property (nonatomic, weak) UIViewController *presenter;
+@property (nonatomic, copy) NSString *target;
+@end
+
+@interface NeoWCEncryptedImagePreviewController : UIViewController
+@property (nonatomic, strong) UIImage *image;
+@end
+
+@interface NeoWCEncryptedVideoPreviewController : AVPlayerViewController
+@property (nonatomic, copy) NSString *temporaryPath;
+@end
+
+static NSMutableSet<NeoWCEncryptedMediaPickerSession *> *NeoWCEncryptedMediaPickerSessions(void) {
+    static NSMutableSet *sessions;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ sessions = [NSMutableSet set]; });
+    return sessions;
+}
+
+static BOOL NeoWCMediaEncryptionActive(void) {
+    return NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey) &&
+           NeoWCEnhancementEnabled(NeoWCMediaEncryptionEnabledKey);
+}
+
+static NSString *NeoWCEncryptionTemporaryDirectory(NSString *component) {
+    NSString *root = [NSTemporaryDirectory() stringByAppendingPathComponent:@"NeoWCEncryption"];
+    NSString *directory = component.length > 0 ? [root stringByAppendingPathComponent:component] : root;
+    [NSFileManager.defaultManager createDirectoryAtPath:directory
+                             withIntermediateDirectories:YES attributes:nil error:nil];
+    return directory;
+}
+
+static BOOL NeoWCSendEncryptedMediaFile(NSString *path,
+                                        NSString *fileName,
+                                        NSString *target,
+                                        uint8_t type) {
+    if (path.length == 0 || fileName.length == 0 || target.length == 0) return NO;
+    Class wrapClass = objc_getClass("CMessageWrap");
+    if (!wrapClass) return NO;
+    NSString *extensionName = fileName.pathExtension.lowercaseString;
+    id wrap = nil;
+    @try {
+        Class forwardUtilClass = objc_getClass("ForwardMsgUtil");
+        SEL buildSelector = sel_registerName("buildFileMsgWithFileName:filePath:fileExt:");
+        if (forwardUtilClass && [forwardUtilClass respondsToSelector:buildSelector]) {
+            wrap = ((id (*)(id, SEL, NSString *, NSString *, NSString *))objc_msgSend)(
+                forwardUtilClass, buildSelector, fileName, path, extensionName ?: @"");
+        }
+        SEL generateSelector = sel_registerName("genFileAppMsgWithFileName:filePath:fileData:");
+        if (!wrap && [wrapClass respondsToSelector:generateSelector]) {
+            NSData *mappedData = [NSData dataWithContentsOfFile:path
+                                                       options:NSDataReadingMappedIfSafe error:nil];
+            if (mappedData) {
+                wrap = ((id (*)(id, SEL, NSString *, NSString *, NSData *))objc_msgSend)(
+                    wrapClass, generateSelector, fileName, path, mappedData);
+            }
+        }
+    } @catch (__unused NSException *exception) {
+        return NO;
+    }
+    if (!wrap) return NO;
+    unsigned long long fileSize = [[NSFileManager.defaultManager attributesOfItemAtPath:path error:nil][NSFileSize]
+        unsignedLongLongValue];
+    NSUInteger now = (NSUInteger)NSDate.date.timeIntervalSince1970;
+    NSDictionary<NSString *, id> *values = @{
+        @"m_nsFromUsr": NeoWCCurrentUserWXID() ?: @"",
+        @"m_nsToUsr": target,
+        @"m_nsTitle": fileName,
+        @"m_nsAppFileName": fileName,
+        @"m_nsAppFileExt": extensionName ?: @"",
+        @"m_uiAppMsgInnerType": @6,
+        @"m_uiAppDataSize": @(fileSize),
+        @"m_uiCreateTime": @(now),
+        @"m_uiStatus": @1,
+    };
+    for (NSString *key in values) NeoWCTweakSetValue(wrap, key, values[key]);
+    id extendInfo = NeoWCTweakSafeValue(wrap, @"m_extendInfoWithMsgType");
+    for (NSString *key in @[@"m_nsTitle", @"m_nsAppFileName", @"m_nsAppFileExt",
+                             @"m_uiAppMsgInnerType", @"m_uiAppDataSize"]) {
+        NeoWCTweakSetValue(extendInfo, key, values[key]);
+    }
+    if (type == NeoWCWXCFileTypeVideo) NeoWCTweakSetValue(wrap, @"m_previewType", @0);
+
+    id manager = NeoWCMessageManager();
+    SEL selector = sel_registerName("AddAppMsg:MsgWrap:DataPath:Scene:");
+    if (!manager || ![manager respondsToSelector:selector]) return NO;
+    @try {
+        ((id (*)(id, SEL, NSString *, id, NSString *, NSUInteger))objc_msgSend)(manager, selector,
+                                                                                target, wrap, path, 0);
+    } @catch (__unused NSException *exception) {
+        return NO;
+    }
+    NeoWCCompatibilityMarkTriggered(@"encrypted-media-send");
+    return YES;
+}
+
+@implementation NeoWCEncryptedMediaPickerSession
+
+- (void)finish {
+    [NeoWCEncryptedMediaPickerSessions() removeObject:self];
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:^{ [self finish]; }];
+}
+
+- (void)imagePickerController:(UIImagePickerController *)picker
+didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey, id> *)info {
+    NSString *mediaType = info[UIImagePickerControllerMediaType];
+    BOOL video = [mediaType isEqualToString:@"public.movie"] || [mediaType isEqualToString:@"public.video"];
+    NSString *inputPath = nil;
+    BOOL removeInput = NO;
+    if (video) {
+        NSURL *mediaURL = info[UIImagePickerControllerMediaURL];
+        inputPath = mediaURL.path;
+    } else {
+        UIImage *image = info[UIImagePickerControllerOriginalImage];
+        NSData *JPEGData = image ? [image jpegDataWithCompressionQuality:0.96] : nil;
+        if (JPEGData.length > 0) {
+            inputPath = [NeoWCEncryptionTemporaryDirectory(@"Input")
+                stringByAppendingPathComponent:[NSString stringWithFormat:@"image_%@.jpg", NSUUID.UUID.UUIDString]];
+            removeInput = [JPEGData writeToFile:inputPath options:NSDataWritingAtomic error:nil];
+        }
+    }
+    UIViewController *presenter = self.presenter;
+    NSString *target = [self.target copy];
+    [picker dismissViewControllerAnimated:YES completion:nil];
+    if (inputPath.length == 0 || target.length == 0) {
+        NeoWCShowTransientMessage(@"无法读取所选媒体", NO);
+        [self finish];
+        return;
+    }
+
+    NSString *prefix = video ? @"WXC_VIDEO" : @"WXC_IMAGE";
+    NSString *extensionName = video ? @"mp4" : @"jpg";
+    NSString *fileName = [NSString stringWithFormat:@"%@_%@.%@", prefix, NSUUID.UUID.UUIDString, extensionName];
+    NSString *outputPath = [NeoWCEncryptionTemporaryDirectory(@"Upload") stringByAppendingPathComponent:fileName];
+    NSString *sourcePath = [inputPath copy];
+    NeoWCEncryptedMediaPickerSession *retainedSession = self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSError *error = nil;
+        uint8_t type = video ? NeoWCWXCFileTypeVideo : NeoWCWXCFileTypeImage;
+        BOOL encrypted = NeoWCWXCEncryptFile(sourcePath, outputPath, (NeoWCWXCFileType)type, prefix, &error);
+        if (removeInput) [NSFileManager.defaultManager removeItemAtPath:sourcePath error:nil];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            BOOL sent = encrypted && NeoWCSendEncryptedMediaFile(outputPath, fileName, target, type);
+            if (!encrypted) {
+                NeoWCShowTransientMessage(error.localizedDescription ?: @"媒体加密失败", NO);
+            } else if (!sent) {
+                NeoWCShowTransientMessage(@"微信文件发送接口已变化，未发送", NO);
+            } else {
+                NeoWCShowTransientMessage(@"已提交加密媒体发送", YES);
+            }
+            (void)presenter;
+            [retainedSession finish];
+        });
+    });
+}
+
+@end
+
+@implementation NeoWCEncryptedImagePreviewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = UIColor.blackColor;
+    UIImageView *imageView = [[UIImageView alloc] initWithFrame:self.view.bounds];
+    imageView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    imageView.contentMode = UIViewContentModeScaleAspectFit;
+    imageView.image = self.image;
+    [self.view addSubview:imageView];
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(closePreview)];
+    [self.view addGestureRecognizer:tap];
+}
+
+- (void)closePreview { [self dismissViewControllerAnimated:YES completion:nil]; }
+- (BOOL)prefersStatusBarHidden { return YES; }
+
+@end
+
+@implementation NeoWCEncryptedVideoPreviewController
+
+- (void)viewDidDisappear:(BOOL)animated {
+    [super viewDidDisappear:animated];
+    if (self.isBeingDismissed || !self.presentingViewController) {
+        [self.player pause];
+        [NSFileManager.defaultManager removeItemAtPath:self.temporaryPath error:nil];
+        self.temporaryPath = nil;
+    }
+}
+
+@end
+
+static void NeoWCPresentEncryptedMediaPicker(UIViewController *presenter) {
+    if (!presenter.view.window ||
+        ![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) return;
+    NSString *target = NeoWCChatUserName(presenter);
+    if (target.length == 0) return;
+    NeoWCEncryptedMediaPickerSession *session = [NeoWCEncryptedMediaPickerSession new];
+    session.presenter = presenter;
+    session.target = target;
+    [NeoWCEncryptedMediaPickerSessions() addObject:session];
+    UIImagePickerController *picker = [UIImagePickerController new];
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    picker.mediaTypes = @[@"public.image", @"public.movie"];
+    picker.videoQuality = UIImagePickerControllerQualityTypeHigh;
+    picker.delegate = session;
+    [presenter presentViewController:picker animated:YES completion:nil];
+}
 
 @implementation NeoWCReplyPanGestureDelegate
 
@@ -2453,7 +2694,9 @@ static void NeoWCSynchronizeInputSwipeActions(MMGrowTextView *view) {
 static void NeoWCSynchronizeQuickReplyPlusGesture(MMInputToolView *view) {
     if (!view) return;
     UILongPressGestureRecognizer *recognizer = objc_getAssociatedObject(view, &NeoWCQuickReplyPlusRecognizerKey);
-    BOOL enabled = NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey) && view.window;
+    BOOL enabled = (NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey) ||
+                    NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey) ||
+                    NeoWCMediaEncryptionActive()) && view.window;
     if (enabled && !recognizer) {
         NeoWCQuickReplyPlusGestureDelegate *delegate = [NeoWCQuickReplyPlusGestureDelegate new];
         delegate.toolView = view;
@@ -5728,6 +5971,103 @@ static NSArray *NeoWCOperationMenuItemsWithMediaToVoice(id target,
     return items;
 }
 
+static BOOL NeoWCMessageLooksLikeEncryptedMedia(id message) {
+    if (!NeoWCMediaEncryptionActive() || !message) return NO;
+    NSString *path = NeoWCExistingQuickReplyAttachmentPath(message);
+    if (path.length > 0 && NeoWCWXCInspectFile(path, nil, nil)) return YES;
+    NSString *fileName = NeoWCTweakSafeValue(message, @"m_nsAppFileName");
+    if (fileName.length == 0) {
+        fileName = NeoWCTweakSafeValue(NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType"),
+                                       @"m_nsAppFileName");
+    }
+    NSString *upper = fileName.uppercaseString;
+    return [upper hasPrefix:@"WXC_IMAGE_"] || [upper hasPrefix:@"WXCA_IMAGE_"] ||
+           [upper hasPrefix:@"WXC_VIDEO_"] || [upper hasPrefix:@"WXCA_VIDEO_"];
+}
+
+static NSArray *NeoWCOperationMenuItemsWithEncryptedPreview(id target, NSArray *originalItems) {
+    if (![originalItems isKindOfClass:NSArray.class] ||
+        !NeoWCMessageLooksLikeEncryptedMedia(NeoWCMessageWrapForCell(target))) return originalItems;
+    for (id item in originalItems) {
+        if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"解密预览"]) return originalItems;
+    }
+    Class itemClass = objc_getClass("MMMenuItem");
+    if (!itemClass || ![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) {
+        return originalItems;
+    }
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:18.0
+                                                                                                  weight:UIImageSymbolWeightRegular];
+    UIImage *icon = [[UIImage systemImageNamed:@"lock.open" withConfiguration:configuration]
+        imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
+    MMMenuItem *item = [[itemClass alloc] initWithTitle:@"解密预览" icon:icon target:target
+                                                action:@selector(neowc_previewEncryptedMedia:)];
+    if (!item) return originalItems;
+    NSMutableArray *items = [originalItems mutableCopy];
+    [items insertObject:item atIndex:0];
+    return items;
+}
+
+static void NeoWCPresentEncryptedMediaPreview(id cell) {
+    id message = NeoWCMessageWrapForCell(cell);
+    NSString *path = NeoWCExistingQuickReplyAttachmentPath(message);
+    if (path.length == 0) {
+        NeoWCShowTransientMessage(@"请先下载加密文件后再预览", NO);
+        return;
+    }
+    UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
+    if (!presenter.view.window) return;
+    NSString *temporaryBase = [NeoWCEncryptionTemporaryDirectory(@"Preview")
+        stringByAppendingPathComponent:[NSString stringWithFormat:@"preview_%@", NSUUID.UUID.UUIDString]];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSError *error = nil;
+        uint8_t type = 0;
+        NSString *metadata = nil;
+        NSString *temporaryPath = [temporaryBase stringByAppendingPathExtension:@"tmp"];
+        BOOL decrypted = NeoWCWXCDecryptFile(path, temporaryPath, &type, &metadata, &error);
+        NSString *finalPath = temporaryPath;
+        if (decrypted) {
+            NSString *extensionName = type == NeoWCWXCFileTypeVideo ? @"mp4" : @"jpg";
+            finalPath = [temporaryBase stringByAppendingPathExtension:extensionName];
+            [NSFileManager.defaultManager removeItemAtPath:finalPath error:nil];
+            if (![NSFileManager.defaultManager moveItemAtPath:temporaryPath toPath:finalPath error:&error]) {
+                decrypted = NO;
+            }
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!decrypted) {
+                [NSFileManager.defaultManager removeItemAtPath:temporaryPath error:nil];
+                NeoWCShowTransientMessage(error.localizedDescription ?: @"解密预览失败", NO);
+                return;
+            }
+            UIViewController *visiblePresenter = NeoWCJokerPresenterForCell(cell);
+            if (!visiblePresenter.view.window) {
+                [NSFileManager.defaultManager removeItemAtPath:finalPath error:nil];
+                return;
+            }
+            if (type == NeoWCWXCFileTypeVideo) {
+                NeoWCEncryptedVideoPreviewController *controller = [NeoWCEncryptedVideoPreviewController new];
+                controller.temporaryPath = finalPath;
+                controller.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:finalPath]];
+                controller.modalPresentationStyle = UIModalPresentationFullScreen;
+                [visiblePresenter presentViewController:controller animated:YES completion:^{ [controller.player play]; }];
+            } else {
+                UIImage *image = [UIImage imageWithContentsOfFile:finalPath];
+                [NSFileManager.defaultManager removeItemAtPath:finalPath error:nil];
+                if (!image) {
+                    NeoWCShowTransientMessage(@"解密成功，但图片格式无法预览", NO);
+                    return;
+                }
+                NeoWCEncryptedImagePreviewController *controller = [NeoWCEncryptedImagePreviewController new];
+                controller.image = image;
+                controller.modalPresentationStyle = UIModalPresentationFullScreen;
+                [visiblePresenter presentViewController:controller animated:YES completion:nil];
+            }
+            (void)metadata;
+            NeoWCCompatibilityMarkTriggered(@"encrypted-media-preview");
+        });
+    });
+}
+
 static void NeoWCCommitMessageToQuickReply(id message, NeoWCQuickReplyType type, NSString *session,
                                            NSString *messageID, NSString *path, NSString *remark,
                                            NSString *folderIdentifier) {
@@ -7004,11 +7344,71 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
 
 %new
 - (void)neowc_handleQuickReplyPlusLongPress:(UILongPressGestureRecognizer *)recognizer {
-    if (recognizer.state != UIGestureRecognizerStateBegan ||
-        !NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey)) return;
+    if (recognizer.state != UIGestureRecognizerStateBegan) return;
+    UIView *candidate = [self hitTest:[recognizer locationInView:self] withEvent:nil];
+    UIView *sendButtonView = NeoWCTweakValueForSelectorNames(self, @[@"sendButton", @"_sendButton"]);
+    BOOL sendControl = NO;
+    while (candidate && candidate != self) {
+        if (candidate == sendButtonView) {
+            sendControl = YES;
+            break;
+        }
+        if ([candidate isKindOfClass:UIControl.class]) {
+            NSMutableString *semanticText = [NSMutableString string];
+            for (NSString *value in @[candidate.accessibilityLabel ?: @"",
+                                      candidate.accessibilityIdentifier ?: @"",
+                                      [candidate isKindOfClass:UIButton.class] ? [(UIButton *)candidate currentTitle] ?: @"" : @""]) {
+                if (value.length > 0) [semanticText appendFormat:@" %@", value.lowercaseString];
+            }
+            sendControl = [semanticText containsString:@"发送"] || [semanticText containsString:@"send"];
+            if (sendControl) break;
+        }
+        candidate = candidate.superview;
+    }
+    if (sendControl && NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey)) {
+        NSString *text = NeoWCTweakValueForSelectorNames(self, @[@"text", @"getText"]);
+        if (![text isKindOfClass:NSString.class] || text.length == 0) {
+            NeoWCShowTransientMessage(@"请先输入要加密的文字", NO);
+            return;
+        }
+        NSError *error = nil;
+        NSString *wireText = NeoWCEncryptedTextWireString(text, &error);
+        if (!wireText) {
+            NeoWCShowTransientMessage(error.localizedDescription ?: @"生成密文失败", NO);
+            return;
+        }
+        NeoWCCompatibilityMarkTriggered(@"encrypted-text-send");
+        [self sendMsgWithText:wireText];
+        NeoWCShowTransientMessage(@"已发送密文消息", YES);
+        return;
+    }
     BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
     if (!controller.view.window) return;
-    NeoWCPresentQuickReplyLibrary(controller);
+    BOOL quickReplyEnabled = NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey);
+    BOOL mediaEncryptionEnabled = NeoWCMediaEncryptionActive();
+    if (quickReplyEnabled && mediaEncryptionEnabled) {
+        UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil message:nil
+                                                               preferredStyle:UIAlertControllerStyleActionSheet];
+        [sheet addAction:[UIAlertAction actionWithTitle:@"加密图片或视频" style:UIAlertActionStyleDefault
+                                               handler:^(__unused UIAlertAction *action) {
+            NeoWCPresentEncryptedMediaPicker(controller);
+        }]];
+        [sheet addAction:[UIAlertAction actionWithTitle:@"快捷回复" style:UIAlertActionStyleDefault
+                                               handler:^(__unused UIAlertAction *action) {
+            NeoWCPresentQuickReplyLibrary(controller);
+        }]];
+        [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+        if (sheet.popoverPresentationController) {
+            sheet.popoverPresentationController.sourceView = self;
+            sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.bounds),
+                                                                          CGRectGetMidY(self.bounds), 1, 1);
+        }
+        [controller presentViewController:sheet animated:YES completion:nil];
+    } else if (mediaEncryptionEnabled) {
+        NeoWCPresentEncryptedMediaPicker(controller);
+    } else if (quickReplyEnabled) {
+        NeoWCPresentQuickReplyLibrary(controller);
+    }
 }
 
 %end
@@ -7815,80 +8215,81 @@ static id NeoWCOfficialChatSearchHost(BaseMsgContentViewController *controller) 
         ? controller : nil;
 }
 
-static NSString *NeoWCChatSearchSessionId(id controller) {
-    SEL currentChatSelector = NSSelectorFromString(@"getCurrentChatName");
-    if ([controller respondsToSelector:currentChatSelector]) {
-        id value = ((id (*)(id, SEL))objc_msgSend)(controller, currentChatSelector);
-        if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
+static id NeoWCNativeChatSearchHelper(BaseMsgContentViewController *controller,
+                                      BOOL createIfMissing) {
+    if (!controller) return nil;
+    id helper = NeoWCTweakSafeValue(controller, @"m_oMsgSearchHelper");
+    if (!helper) helper = NeoWCExactIvarValue(controller, @"m_oMsgSearchHelper");
+    if (helper || !createIfMissing) return helper;
+
+    SEL selector = NSSelectorFromString(@"initMsgSearchHelper:");
+    Method method = class_getInstanceMethod([controller class], selector);
+    if (![controller respondsToSelector:selector] ||
+        method_getNumberOfArguments(method) != 3 ||
+        !NeoWCMethodArgumentIsIntegerScalar(method, 2)) return nil;
+    @try {
+        ((void (*)(id, SEL, NSUInteger))objc_msgSend)(controller, selector, (NSUInteger)0);
+    } @catch (__unused NSException *exception) {
+        return nil;
     }
-    return NeoWCChatUserName(controller);
+    helper = NeoWCTweakSafeValue(controller, @"m_oMsgSearchHelper");
+    return helper ?: NeoWCExactIvarValue(controller, @"m_oMsgSearchHelper");
 }
 
-static id NeoWCChatSearchGetChatContact(id controller, __unused SEL selector) {
-    SEL getContactSelector = NSSelectorFromString(@"GetContact");
-    if ([controller respondsToSelector:getContactSelector]) {
-        id contact = ((id (*)(id, SEL))objc_msgSend)(controller, getContactSelector);
-        if (contact) return contact;
+static id NeoWCNativeChatSearcher(id helper) {
+    if (!helper) return nil;
+    id searcher = NeoWCTweakSafeValue(helper, @"searcher");
+    if (!searcher) {
+        SEL selector = NSSelectorFromString(@"getSearcher");
+        if ([helper respondsToSelector:selector]) {
+            searcher = ((id (*)(id, SEL))objc_msgSend)(helper, selector);
+        }
     }
-    SEL getCContactSelector = NSSelectorFromString(@"GetCContact");
-    if ([controller respondsToSelector:getCContactSelector]) {
-        return ((id (*)(id, SEL))objc_msgSend)(controller, getCContactSelector);
+    return searcher ?: NeoWCExactIvarValue(helper, @"_searcher");
+}
+
+static void NeoWCSetChatSearchInteractivePop(BaseMsgContentViewController *controller,
+                                             BOOL enabled) {
+    SEL selector = NSSelectorFromString(@"setM_bInteractivePopEnabled:");
+    Method method = class_getInstanceMethod([controller class], selector);
+    if (![controller respondsToSelector:selector] ||
+        method_getNumberOfArguments(method) != 3 ||
+        !NeoWCMethodArgumentIsIntegerScalar(method, 2)) return;
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, selector, enabled);
+}
+
+static void NeoWCRemoveChatSearchEdgePan(BaseMsgContentViewController *controller) {
+    UIGestureRecognizer *recognizer = objc_getAssociatedObject(controller, &NeoWCChatSearchEdgePanKey);
+    if (recognizer.view) [recognizer.view removeGestureRecognizer:recognizer];
+    objc_setAssociatedObject(controller, &NeoWCChatSearchEdgePanKey, nil,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+static void NeoWCCleanupOfficialChatSearch(BaseMsgContentViewController *controller) {
+    if (!controller || ![objc_getAssociatedObject(controller, &NeoWCChatSearchActiveKey) boolValue] ||
+        [objc_getAssociatedObject(controller, &NeoWCChatSearchCleanupKey) boolValue]) return;
+    objc_setAssociatedObject(controller, &NeoWCChatSearchCleanupKey, @YES,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NeoWCRemoveChatSearchEdgePan(controller);
+
+    id helper = NeoWCNativeChatSearchHelper(controller, NO);
+    id searcher = NeoWCNativeChatSearcher(helper);
+    UIView *searchBar = NeoWCTweakSafeValue(searcher, @"searchBar");
+    if ([searchBar isKindOfClass:UIView.class]) searchBar.superview.hidden = YES;
+    SEL finishSelector = NSSelectorFromString(@"finishSearch");
+    if ([helper respondsToSelector:finishSelector]) {
+        @try {
+            ((void (*)(id, SEL))objc_msgSend)(helper, finishSelector);
+        } @catch (__unused NSException *exception) {
+        }
     }
-    return nil;
-}
-
-static id NeoWCChatSearchGetSessionValue(id controller, __unused SEL selector) {
-    return NeoWCChatSearchSessionId(controller);
-}
-
-static id NeoWCChatSearchGetViewController(id controller, __unused SEL selector) {
-    return controller;
-}
-
-static CGFloat NeoWCChatSearchGetContentViewY(id controller, __unused SEL selector) {
-    if ([controller isKindOfClass:UIViewController.class]) {
-        return CGRectGetMinY(((UIViewController *)controller).view.frame);
-    }
-    return 0.0;
-}
-
-static BOOL NeoWCChatSearchShouldRestrictContentViewSize(__unused id controller,
-                                                        __unused SEL selector) {
-    return NO;
-}
-
-static void NeoWCChatSearchNoopCallback(__unused id controller, __unused SEL selector) {
-}
-
-static void NeoWCInstallChatSearchDelegateMethods(void) {
-    Class controllerClass = NSClassFromString(@"BaseMsgContentViewController");
-    if (!controllerClass) return;
-    class_addMethod(controllerClass, NSSelectorFromString(@"getChatContact"),
-                    (IMP)NeoWCChatSearchGetChatContact, "@@:");
-    class_addMethod(controllerClass, NSSelectorFromString(@"getChatName"),
-                    (IMP)NeoWCChatSearchGetSessionValue, "@@:");
-    class_addMethod(controllerClass, NSSelectorFromString(@"getSessionId"),
-                    (IMP)NeoWCChatSearchGetSessionValue, "@@:");
-    class_addMethod(controllerClass, NSSelectorFromString(@"reportSessionId"),
-                    (IMP)NeoWCChatSearchGetSessionValue, "@@:");
-    // MsgSearchHelper calls the complete contents-controller protocol during
-    // initialization and presentation. WeChat 8.0.72 already implements most
-    // members on BaseMsgContentViewController, so class_addMethod preserves
-    // those originals and supplies only selectors missing in this build.
-    class_addMethod(controllerClass, NSSelectorFromString(@"getViewController"),
-                    (IMP)NeoWCChatSearchGetViewController, "@@:");
-    class_addMethod(controllerClass, NSSelectorFromString(@"getShowTopViewController"),
-                    (IMP)NeoWCChatSearchGetViewController, "@@:");
-    class_addMethod(controllerClass, NSSelectorFromString(@"getContentViewY"),
-                    (IMP)NeoWCChatSearchGetContentViewY, "d@:");
-    class_addMethod(controllerClass, NSSelectorFromString(@"shouldRestrictContentViewSize"),
-                    (IMP)NeoWCChatSearchShouldRestrictContentViewSize, "B@:");
-    class_addMethod(controllerClass, NSSelectorFromString(@"msgSearchDidDismiss"),
-                    (IMP)NeoWCChatSearchNoopCallback, "v@:");
-    class_addMethod(controllerClass, NSSelectorFromString(@"msgSearchDidPresent"),
-                    (IMP)NeoWCChatSearchNoopCallback, "v@:");
-    class_addMethod(controllerClass, NSSelectorFromString(@"msgSearchBarDoSearch"),
-                    (IMP)NeoWCChatSearchNoopCallback, "v@:");
+    NeoWCSetChatSearchInteractivePop(controller, YES);
+    objc_setAssociatedObject(controller, &NeoWCChatSearchTransitionKey, nil,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &NeoWCChatSearchActiveKey, nil,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &NeoWCChatSearchCleanupKey, nil,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller, id sender) {
@@ -7896,59 +8297,16 @@ static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller
     id searchHost = NeoWCOfficialChatSearchHost(controller);
     if (!searchHost) return NO;
 
-    // WeChatX 2.1-9 creates a separate MsgSearchHelper with the contents
-    // controller. That initializer supplies the current session to FTS;
-    // entering only through onSearchButton: can show an empty search shell.
-    Class helperClass = NSClassFromString(@"MsgSearchHelper");
-    SEL initSelector = NSSelectorFromString(@"initWithContentsController:");
-    if (!helperClass || ![helperClass instancesRespondToSelector:initSelector]) return NO;
-
-    id helper = objc_getAssociatedObject(searchHost, &NeoWCChatSearchHelperKey);
-    if (helper && ![helper isKindOfClass:helperClass]) helper = nil;
-    if (!helper) {
-        helper = ((id (*)(id, SEL, id))objc_msgSend)([helperClass alloc], initSelector, searchHost);
-        if (!helper) return NO;
-        objc_setAssociatedObject(searchHost, &NeoWCChatSearchHelperKey,
-                                 helper, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-
-    SEL delegateSelector = NSSelectorFromString(@"setM_delegate:");
-    if ([helper respondsToSelector:delegateSelector]) {
-        ((void (*)(id, SEL, id))objc_msgSend)(helper, delegateSelector, searchHost);
-    }
-    SEL sceneSelector = NSSelectorFromString(@"setM_eMsgSearchHelperScene:");
-    if ([helper respondsToSelector:sceneSelector]) {
-        ((void (*)(id, SEL, NSUInteger))objc_msgSend)(helper, sceneSelector, (NSUInteger)0);
-    }
-
-    BOOL isGroupChat = [NeoWCChatSearchSessionId(searchHost) hasSuffix:@"@chatroom"];
-    SEL showNameSelector = NSSelectorFromString(@"setM_bShowSearchByName:");
-    if ([helper respondsToSelector:showNameSelector]) {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, showNameSelector, isGroupChat);
-    }
-    SEL showTimeSelector = NSSelectorFromString(@"setM_bShowSearchByTime:");
-    if ([helper respondsToSelector:showTimeSelector]) {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, showTimeSelector, YES);
-    }
+    // WCRefine reuses WeChat's controller-owned helper. Creating and retaining
+    // another helper leaves two independent delegate/dismiss lifecycles and is
+    // the source of the stale search bar and cancel-time crash.
+    id helper = NeoWCNativeChatSearchHelper(searchHost, YES);
+    if (!helper) return NO;
     SEL panCancelSelector = NSSelectorFromString(@"setBUsePanCancelGesture:");
     if ([helper respondsToSelector:panCancelSelector]) {
         ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, panCancelSelector, YES);
     }
-
-    NeoWCTweakSetValue(helper, @"m_searchParentVC", searchHost);
-    NSArray<NSNumber *> *buttonIndexes = isGroupChat
-        ? @[@1, @2, @6, @3, @4, @5, @7, @8, @9, @12, @14, @13, @10, @11, @15]
-        : @[@2, @6, @3, @4, @5, @7, @8, @9, @12, @14, @13, @10, @11, @15];
-    NeoWCTweakSetValue(helper, @"m_buttonIndexes", buttonIndexes);
-
-    id searcher = nil;
-    for (NSString *selectorName in @[@"getSearcher", @"searcher"]) {
-        SEL selector = NSSelectorFromString(selectorName);
-        if (![helper respondsToSelector:selector]) continue;
-        searcher = ((id (*)(id, SEL))objc_msgSend)(helper, selector);
-        if (searcher) break;
-    }
-    if (!searcher) searcher = NeoWCExactIvarValue(helper, @"_searcher");
+    id searcher = NeoWCNativeChatSearcher(helper);
 
     SEL pushSelector = NSSelectorFromString(@"pushSearchControllerWithCompletion:");
     SEL activeSelector = NSSelectorFromString(@"setActive:animated:completion:");
@@ -7959,11 +8317,25 @@ static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller
                                  @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         NeoWCRestoreChatTopBar(controller);
     }
-    if ([searcher respondsToSelector:pushSelector]) {
-        ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
-    } else {
-        ((void (*)(id, SEL, BOOL, BOOL, id))objc_msgSend)(searcher, activeSelector,
-                                                         YES, NO, nil);
+    NeoWCSetChatSearchInteractivePop(controller, NO);
+    objc_setAssociatedObject(controller, &NeoWCChatSearchActiveKey, @YES,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    UIScreenEdgePanGestureRecognizer *edgePan = [[UIScreenEdgePanGestureRecognizer alloc]
+        initWithTarget:controller action:@selector(neowc_handleChatSearchEdgePan:)];
+    edgePan.edges = UIRectEdgeLeft;
+    [controller.view addGestureRecognizer:edgePan];
+    objc_setAssociatedObject(controller, &NeoWCChatSearchEdgePanKey, edgePan,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    @try {
+        if ([searcher respondsToSelector:pushSelector]) {
+            ((void (*)(id, SEL, id))objc_msgSend)(searcher, pushSelector, nil);
+        } else {
+            ((void (*)(id, SEL, BOOL, BOOL, id))objc_msgSend)(searcher, activeSelector,
+                                                             YES, NO, nil);
+        }
+    } @catch (__unused NSException *exception) {
+        NeoWCCleanupOfficialChatSearch(controller);
+        return NO;
     }
     return YES;
 }
@@ -10564,6 +10936,26 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 %new
+- (void)neowc_handleChatSearchEdgePan:(UIScreenEdgePanGestureRecognizer *)recognizer {
+    if (recognizer.state != UIGestureRecognizerStateEnded ||
+        ![objc_getAssociatedObject(self, &NeoWCChatSearchActiveKey) boolValue]) return;
+    UIView *gestureView = recognizer.view ?: self.view;
+    CGPoint translation = [recognizer translationInView:gestureView];
+    CGPoint velocity = [recognizer velocityInView:gestureView];
+    if (translation.x > 44.0 || velocity.x > 260.0) {
+        NeoWCCleanupOfficialChatSearch(self);
+    }
+}
+
+- (void)msgSearchBarCancel {
+    if ([objc_getAssociatedObject(self, &NeoWCChatSearchActiveKey) boolValue]) {
+        NeoWCCleanupOfficialChatSearch(self);
+        return;
+    }
+    %orig;
+}
+
+%new
 - (void)neowc_toggleSendConfirmation:(UILongPressGestureRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateBegan) return;
     if (!NeoWCEnhancementEnabled(NeoWCSendConfirmationEnabledKey)) {
@@ -10603,6 +10995,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)viewWillAppear:(BOOL)animated {
     %orig(animated);
+    NeoWCCleanupOfficialChatSearch(self);
     objc_setAssociatedObject(self, &NeoWCChatSearchTransitionKey, nil,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     NeoWCVisibleChatController = self;
@@ -10711,6 +11104,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 - (void)dealloc {
+    NeoWCRemoveChatSearchEdgePan(self);
     if (NeoWCSendConfirmationChatController == self) NeoWCSendConfirmationChatController = nil;
     NeoWCClearImageJokerOverrides();
     %orig;
@@ -11119,6 +11513,33 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 %hook TextMessageCellView
 
+- (void)setViewModel:(id)viewModel {
+    id message = NeoWCMessageForCellViewModel(viewModel);
+    NSString *wireText = NeoWCTweakSafeValue(message, @"m_nsContent");
+    NSString *plainText = nil;
+    if (NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey) &&
+        [wireText isKindOfClass:NSString.class] && NeoWCIsEncryptedTextWireString(wireText)) {
+        plainText = NeoWCDecryptTextWireString(wireText, nil);
+    }
+    if (plainText.length == 0) {
+        %orig;
+        return;
+    }
+    // The persisted message remains ciphertext. Only swap the model content
+    // while WeChat builds this cell's rich-text presentation.
+    NeoWCTweakSetValue(message, @"m_nsContent", plainText);
+    %orig;
+    NeoWCTweakSetValue(message, @"m_nsContent", wireText);
+    NeoWCCompatibilityMarkTriggered(@"encrypted-text-display");
+}
+
+- (NSString *)getTextString {
+    NSString *text = %orig;
+    if (!NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey) ||
+        ![text isKindOfClass:NSString.class] || !NeoWCIsEncryptedTextWireString(text)) return text;
+    return NeoWCDecryptTextWireString(text, nil) ?: NeoWCEncryptedTextPlaceholder;
+}
+
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
     items = NeoWCOperationMenuItemsWithJoker(self, items, NO);
@@ -11215,11 +11636,15 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
     items = NeoWCOperationMenuItemsWithMediaToVoice(self, items, NeoWCMediaToVoiceKindAudioFile);
-    return NeoWCOperationMenuItemsWithQuickReply(self, items);
+    items = NeoWCOperationMenuItemsWithQuickReply(self, items);
+    return NeoWCOperationMenuItemsWithEncryptedPreview(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
     if (action == @selector(neowc_addToQuickReply:)) return NeoWCMessageCanAddToQuickReply(NeoWCMessageWrapForCell(self));
+    if (action == @selector(neowc_previewEncryptedMedia:)) {
+        return NeoWCMessageLooksLikeEncryptedMedia(NeoWCMessageWrapForCell(self));
+    }
     if (action == @selector(neowc_convertAudioFileToVoice:)) {
         return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindAudioFile) &&
                NeoWCMessageIsConvertibleAudioFile(NeoWCMessageWrapForCell(self));
@@ -11237,6 +11662,12 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)neowc_convertAudioFileToVoice:(id)sender {
     (void)sender;
     NeoWCPresentMediaToVoiceConfirmation(self, NeoWCMediaToVoiceKindAudioFile);
+}
+
+%new
+- (void)neowc_previewEncryptedMedia:(id)sender {
+    (void)sender;
+    NeoWCPresentEncryptedMediaPreview(self);
 }
 
 %end
@@ -13253,7 +13684,6 @@ static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
 
 %ctor {
     %init;
-    NeoWCInstallChatSearchDelegateMethods();
     NeoWCMomentsCommentAntiDeleteInstallHooks();
     NeoWCInstallExclusiveRedEnvelopeHooks();
     if ([CADisplayLink instancesRespondToSelector:@selector(setPreferredFrameRateRange:)]) {
