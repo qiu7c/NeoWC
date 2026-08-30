@@ -12639,7 +12639,30 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     return nil;
 }
 
+static void NeoWCTriggerNativeTextRefresh(id cell) {
+    if (!cell) return;
+    SEL translateSelector = NSSelectorFromString(@"translateMsg");
+    if (![cell respondsToSelector:translateSelector]) return;
+    @try {
+        ((void (*)(id, SEL))objc_msgSend)(cell, translateSelector);
+    } @catch (NSException *exception) {
+        (void)exception;
+    }
+}
+
 %hook CommonMessageCellView
+
+// A few WeChat releases moved the text implementation out of
+// TextMessageCellView while keeping the common cell as the render entry.
+// Keep a superclass fallback so encrypted text is not missed on those builds.
+- (NSString *)getTextString {
+    NSString *override = objc_getAssociatedObject(self, &NeoWCEncryptedTextDisplayOverrideKey);
+    if ([override isKindOfClass:NSString.class] && override.length > 0) return override;
+    NSString *text = %orig;
+    if (!NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey) ||
+        ![text isKindOfClass:NSString.class] || !NeoWCIsEncryptedTextWireString(text)) return text;
+    return NeoWCDecryptTextWireString(text, nil) ?: text;
+}
 
 - (void)onHeadImageLongPressed:(id)sender {
     if (NeoWCPerformingNativeAvatarLongPress) {
@@ -12674,8 +12697,12 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
                              OBJC_ASSOCIATION_COPY_NONATOMIC);
     if (plainText.length > 0) {
         NeoWCTweakSetValue(message, @"m_nsContent", plainText);
+        // Bind and refresh while the wrap contains plaintext, then restore
+        // the wire value. This mirrors PKC's real-cell translateMsg path
+        // without permanently mutating the received message.
         @try {
             %orig;
+            NeoWCTriggerNativeTextRefresh(self);
         } @finally {
             NeoWCTweakSetValue(message, @"m_nsContent", wireText);
         }
