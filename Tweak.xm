@@ -226,7 +226,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
 @interface TextMessageCellView : CommonMessageCellView
 - (void)setViewModel:(id)viewModel;
-- (NSString *)getTextString;
+- (void)updateTranslateSuccessView;
 @end
 
 @interface MMHeadImageView : UIView
@@ -11877,13 +11877,27 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 %hook TextMessageCellView
 
-- (NSString *)getTextString {
-    NSString *override = objc_getAssociatedObject(self, &NeoWCEncryptedTextDisplayOverrideKey);
-    if ([override isKindOfClass:NSString.class] && override.length > 0) return override;
-    NSString *text = %orig;
-    if (!NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey) ||
-        ![text isKindOfClass:NSString.class] || !NeoWCIsEncryptedTextWireString(text)) return text;
-    return NeoWCDecryptTextWireString(text, nil) ?: NeoWCEncryptedTextPlaceholder;
+- (void)updateTranslateSuccessView {
+    %orig;
+    NSString *plainText = objc_getAssociatedObject(self, &NeoWCEncryptedTextDisplayOverrideKey);
+    if (![plainText isKindOfClass:NSString.class] || plainText.length == 0) return;
+    __weak TextMessageCellView *weakCell = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        TextMessageCellView *cell = weakCell;
+        if (!cell) return;
+        NSString *currentPlainText = objc_getAssociatedObject(cell, &NeoWCEncryptedTextDisplayOverrideKey);
+        if (![currentPlainText isEqualToString:plainText]) return;
+        id translateRichTextView = NeoWCTweakSafeValue(cell, @"m_translateRichTextView");
+        SEL contentSelector = NSSelectorFromString(@"setContent:");
+        if ([translateRichTextView respondsToSelector:contentSelector]) {
+            ((void (*)(id, SEL, id))objc_msgSend)(translateRichTextView, contentSelector, currentPlainText);
+        }
+        id successLabel = NeoWCTweakSafeValue(cell, @"m_translateSuccessLabel");
+        if ([successLabel respondsToSelector:@selector(setText:)]) {
+            ((void (*)(id, SEL, id))objc_msgSend)(successLabel, @selector(setText:), @"NeoWC 解密");
+        }
+        NeoWCCompatibilityMarkTriggered(@"encrypted-text-display");
+    });
 }
 
 - (NSArray *)operationMenuItems {
@@ -12653,18 +12667,6 @@ static void NeoWCTriggerNativeTextRefresh(id cell) {
 
 %hook CommonMessageCellView
 
-// A few WeChat releases moved the text implementation out of
-// TextMessageCellView while keeping the common cell as the render entry.
-// Keep a superclass fallback so encrypted text is not missed on those builds.
-- (NSString *)getTextString {
-    NSString *override = objc_getAssociatedObject(self, &NeoWCEncryptedTextDisplayOverrideKey);
-    if ([override isKindOfClass:NSString.class] && override.length > 0) return override;
-    NSString *text = %orig;
-    if (!NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey) ||
-        ![text isKindOfClass:NSString.class] || !NeoWCIsEncryptedTextWireString(text)) return text;
-    return NeoWCDecryptTextWireString(text, nil) ?: text;
-}
-
 - (void)onHeadImageLongPressed:(id)sender {
     if (NeoWCPerformingNativeAvatarLongPress) {
         %orig(sender);
@@ -12697,20 +12699,12 @@ static void NeoWCTriggerNativeTextRefresh(id cell) {
                              plainText.length > 0 ? plainText : nil,
                              OBJC_ASSOCIATION_COPY_NONATOMIC);
     if (plainText.length > 0) {
-        NeoWCTweakSetValue(message, @"m_nsContent", plainText);
-        // Bind and refresh while the wrap contains plaintext, then restore
-        // the wire value. This mirrors PKC's real-cell translateMsg path
-        // without permanently mutating the received message.
-        @try {
-            %orig;
-            NSString *lastRefreshWire = objc_getAssociatedObject(self, &NeoWCEncryptedTextRefreshWireKey);
-            if (![lastRefreshWire isEqualToString:wireText]) {
-                objc_setAssociatedObject(self, &NeoWCEncryptedTextRefreshWireKey, wireText,
-                                         OBJC_ASSOCIATION_COPY_NONATOMIC);
-                NeoWCTriggerNativeTextRefresh(self);
-            }
-        } @finally {
-            NeoWCTweakSetValue(message, @"m_nsContent", wireText);
+        %orig;
+        NSString *lastRefreshWire = objc_getAssociatedObject(self, &NeoWCEncryptedTextRefreshWireKey);
+        if (![lastRefreshWire isEqualToString:wireText]) {
+            objc_setAssociatedObject(self, &NeoWCEncryptedTextRefreshWireKey, wireText,
+                                     OBJC_ASSOCIATION_COPY_NONATOMIC);
+            NeoWCTriggerNativeTextRefresh(self);
         }
         NeoWCCompatibilityMarkTriggered(@"encrypted-text-display");
     } else {
