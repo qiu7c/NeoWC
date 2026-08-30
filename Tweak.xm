@@ -7841,6 +7841,25 @@ static id NeoWCChatSearchGetSessionValue(id controller, __unused SEL selector) {
     return NeoWCChatSearchSessionId(controller);
 }
 
+static id NeoWCChatSearchGetViewController(id controller, __unused SEL selector) {
+    return controller;
+}
+
+static CGFloat NeoWCChatSearchGetContentViewY(id controller, __unused SEL selector) {
+    if ([controller isKindOfClass:UIViewController.class]) {
+        return CGRectGetMinY(((UIViewController *)controller).view.frame);
+    }
+    return 0.0;
+}
+
+static BOOL NeoWCChatSearchShouldRestrictContentViewSize(__unused id controller,
+                                                        __unused SEL selector) {
+    return NO;
+}
+
+static void NeoWCChatSearchNoopCallback(__unused id controller, __unused SEL selector) {
+}
+
 static void NeoWCInstallChatSearchDelegateMethods(void) {
     Class controllerClass = NSClassFromString(@"BaseMsgContentViewController");
     if (!controllerClass) return;
@@ -7852,6 +7871,24 @@ static void NeoWCInstallChatSearchDelegateMethods(void) {
                     (IMP)NeoWCChatSearchGetSessionValue, "@@:");
     class_addMethod(controllerClass, NSSelectorFromString(@"reportSessionId"),
                     (IMP)NeoWCChatSearchGetSessionValue, "@@:");
+    // MsgSearchHelper calls the complete contents-controller protocol during
+    // initialization and presentation. WeChat 8.0.72 already implements most
+    // members on BaseMsgContentViewController, so class_addMethod preserves
+    // those originals and supplies only selectors missing in this build.
+    class_addMethod(controllerClass, NSSelectorFromString(@"getViewController"),
+                    (IMP)NeoWCChatSearchGetViewController, "@@:");
+    class_addMethod(controllerClass, NSSelectorFromString(@"getShowTopViewController"),
+                    (IMP)NeoWCChatSearchGetViewController, "@@:");
+    class_addMethod(controllerClass, NSSelectorFromString(@"getContentViewY"),
+                    (IMP)NeoWCChatSearchGetContentViewY, "d@:");
+    class_addMethod(controllerClass, NSSelectorFromString(@"shouldRestrictContentViewSize"),
+                    (IMP)NeoWCChatSearchShouldRestrictContentViewSize, "B@:");
+    class_addMethod(controllerClass, NSSelectorFromString(@"msgSearchDidDismiss"),
+                    (IMP)NeoWCChatSearchNoopCallback, "v@:");
+    class_addMethod(controllerClass, NSSelectorFromString(@"msgSearchDidPresent"),
+                    (IMP)NeoWCChatSearchNoopCallback, "v@:");
+    class_addMethod(controllerClass, NSSelectorFromString(@"msgSearchBarDoSearch"),
+                    (IMP)NeoWCChatSearchNoopCallback, "v@:");
 }
 
 static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller, id sender) {
