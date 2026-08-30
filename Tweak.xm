@@ -226,6 +226,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
 @interface TextMessageCellView : CommonMessageCellView
 - (void)setViewModel:(id)viewModel;
+- (NSString *)getTextString;
 - (id)getRichTextViewForDelegate;
 - (void)updateTranslateSuccessView;
 @end
@@ -919,7 +920,13 @@ static BOOL NeoWCSendEncryptedMediaFile(NSString *path,
 
 static id NeoWCAlbumEncryptionStateOwner(id controller) {
     id controlCenter = NeoWCTweakValueForSelectorNames(controller, @[@"controlCenter"]);
-    return controlCenter ?: controller;
+    if (controlCenter) return controlCenter;
+    if ([controller isKindOfClass:UIViewController.class]) {
+        UINavigationController *navigationController =
+            ((UIViewController *)controller).navigationController;
+        if (navigationController) return navigationController;
+    }
+    return controller;
 }
 
 // Matches WeChatX's compact native-looking picker control: a small check
@@ -1019,11 +1026,20 @@ static void NeoWCLayoutAlbumEncryptionButton(id controller, NSString *originChec
     CGRect referenceFrame = originCheck.frame;
     CGFloat height = MAX(21.0, CGRectGetHeight(referenceFrame));
     CGFloat width = 58.0;
-    CGFloat x = CGRectGetMaxX(referenceFrame) + 10.0;
-    CGFloat maximumX = CGRectGetWidth(originCheck.superview.bounds) - width - 8.0;
-    if (maximumX > 0.0) x = MIN(x, maximumX);
+    CGFloat gap = 10.0;
+    CGFloat containerWidth = CGRectGetWidth(originCheck.superview.bounds);
+    CGFloat groupWidth = CGRectGetWidth(referenceFrame) + gap + width;
+    CGFloat groupX = floor((containerWidth - groupWidth) * 0.5);
+    groupX = MAX(8.0, groupX);
+
+    // WeChat centers “原图” by itself. Move it left so “原图 + 加密” is
+    // centered as one compact group, matching WeChatX instead of appending a
+    // second control to the right of an already-centered item.
+    referenceFrame.origin.x = groupX;
+    originCheck.frame = referenceFrame;
+    CGFloat x = CGRectGetMaxX(referenceFrame) + gap;
     button.frame = CGRectMake(x, CGRectGetMidY(referenceFrame) - height * 0.5, width, height);
-    button.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+    button.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
     button.hidden = NO;
     NeoWCUpdateAlbumEncryptionButton(controller);
 }
@@ -1217,10 +1233,44 @@ static void NeoWCProcessOfficialVideoAsset(id asset, NSString *target, void (^co
 }
 #pragma clang diagnostic pop
 
-static BOOL NeoWCHandleOfficialEncryptedMediaSend(id controller) {
-    if (!NeoWCMediaEncryptionActive() || !NeoWCAlbumEncryptionSelected(controller)) return NO;
+static NSArray *NeoWCOfficialAssetsFromPreviewInfos(id assetInfos) {
+    if (![assetInfos isKindOfClass:NSArray.class]) return @[];
+    NSMutableArray *assets = [NSMutableArray array];
+    for (id item in (NSArray *)assetInfos) {
+        id asset = nil;
+        if ([item respondsToSelector:NSSelectorFromString(@"asyncImageOriginSourceData:errorBlock:")] ||
+            [item respondsToSelector:NSSelectorFromString(@"asyncGetVideoAsset:successBlock:errorBlock:")]) {
+            asset = item;
+        } else if ([item isKindOfClass:NSDictionary.class]) {
+            for (NSString *key in @[@"asset", @"mmAsset", @"mediaAsset", @"originalAsset"]) {
+                id candidate = ((NSDictionary *)item)[key];
+                if (candidate) { asset = candidate; break; }
+            }
+        } else {
+            asset = NeoWCTweakValueForSelectorNames(item, @[@"asset", @"mmAsset", @"mediaAsset", @"originalAsset"]);
+        }
+        if (asset) [assets addObject:asset];
+    }
+    return assets;
+}
+
+static BOOL NeoWCAlbumEncryptionButtonIsExplicitlySelected(id controller) {
+    NeoWCAlbumEncryptionButton *button =
+        objc_getAssociatedObject(controller, &NeoWCAlbumEncryptionButtonKey);
+    return NeoWCAlbumEncryptionSelected(controller) &&
+           button && !button.hidden && button.isSelected;
+}
+
+static BOOL NeoWCHandleOfficialEncryptedMediaSend(id controller,
+                                                   id selectionController,
+                                                   NSArray *assetOverride) {
+    // Do not touch WeChat's send state unless the control visible on the exact
+    // sending surface is explicitly selected.  Picker and preview controllers
+    // can coexist and their callbacks are chained by WeChat.
+    if (!NeoWCMediaEncryptionActive() ||
+        !NeoWCAlbumEncryptionButtonIsExplicitlySelected(selectionController)) return NO;
     if ([objc_getAssociatedObject(controller, &NeoWCAlbumEncryptionSendingKey) boolValue]) return YES;
-    NSArray *assets = NeoWCOfficialSelectedAssets(controller);
+    NSArray *assets = assetOverride.count > 0 ? assetOverride : NeoWCOfficialSelectedAssets(controller);
     NSString *target = NeoWCOfficialAlbumTarget(controller);
     if (assets.count == 0 || target.length == 0) {
         NeoWCShowTransientMessage(assets.count == 0 ? @"请先选择图片或视频" : @"无法确定当前聊天", NO);
@@ -1248,13 +1298,26 @@ static BOOL NeoWCHandleOfficialEncryptedMediaSend(id controller) {
         });
     };
     for (id asset in assets) {
+        NSObject *completionGate = [NSObject new];
+        __block BOOL didFinish = NO;
+        void (^finishOnce)(BOOL) = ^(BOOL sent) {
+            @synchronized (completionGate) {
+                if (didFinish) return;
+                didFinish = YES;
+            }
+            finishedOne(sent);
+        };
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(45.0 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            finishOnce(NO);
+        });
         BOOL video = NO;
         SEL isVideoSelector = NSSelectorFromString(@"isVideo");
         if ([asset respondsToSelector:isVideoSelector]) {
             video = ((BOOL (*)(id, SEL))objc_msgSend)(asset, isVideoSelector);
         }
-        if (video) NeoWCProcessOfficialVideoAsset(asset, target, finishedOne);
-        else NeoWCProcessOfficialImageAsset(asset, target, finishedOne);
+        if (video) NeoWCProcessOfficialVideoAsset(asset, target, finishOnce);
+        else NeoWCProcessOfficialImageAsset(asset, target, finishOnce);
     }
     return YES;
 }
@@ -7084,29 +7147,46 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 }
 
 - (void)sendSelectedMedia {
-    if (NeoWCHandleOfficialEncryptedMediaSend(self)) return;
+    if (NeoWCHandleOfficialEncryptedMediaSend(self, self, nil)) return;
     %orig;
 }
 
 - (void)OnAssetSend:(id)asset {
-    if (NeoWCHandleOfficialEncryptedMediaSend(self)) return;
+    if (NeoWCHandleOfficialEncryptedMediaSend(self, self, asset ? @[asset] : nil)) return;
     %orig(asset);
 }
 
 - (void)sendImageFromScene:(id)scene {
-    if (NeoWCHandleOfficialEncryptedMediaSend(self)) return;
+    if (NeoWCHandleOfficialEncryptedMediaSend(self, self, nil)) return;
     %orig(scene);
 }
 
 - (void)sendVideoWithAsset:(id)asset {
-    if (NeoWCHandleOfficialEncryptedMediaSend(self)) return;
+    if (NeoWCHandleOfficialEncryptedMediaSend(self, self, asset ? @[asset] : nil)) return;
     %orig(asset);
 }
 
 - (void)previewBrowser:(id)browser
 didFinishPickingWithAssetInfos:(id)assetInfos
        isUsingTemplate:(BOOL)usingTemplate {
-    if (NeoWCHandleOfficialEncryptedMediaSend(self)) return;
+    // This is the only path where the visible selection control belongs to
+    // the preview controller while the delegate callback is received here.
+    NeoWCAlbumEncryptionButton *previewButton =
+        objc_getAssociatedObject(browser, &NeoWCAlbumEncryptionButtonKey);
+    if (previewButton) {
+        BOOL previewSelected = !previewButton.hidden && previewButton.isSelected;
+        objc_setAssociatedObject(NeoWCAlbumEncryptionStateOwner(self),
+                                 &NeoWCAlbumEncryptionSelectedKey, @(previewSelected),
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NeoWCUpdateAlbumEncryptionButton(self);
+    }
+    if (!NeoWCMediaEncryptionActive() ||
+        !NeoWCAlbumEncryptionButtonIsExplicitlySelected(browser)) {
+        %orig(browser, assetInfos, usingTemplate);
+        return;
+    }
+    NSArray *previewAssets = NeoWCOfficialAssetsFromPreviewInfos(assetInfos);
+    if (NeoWCHandleOfficialEncryptedMediaSend(self, browser, previewAssets)) return;
     %orig(browser, assetInfos, usingTemplate);
 }
 
@@ -11963,6 +12043,11 @@ static NSArray *NeoWCOperationMenuItemsWithEncryptedTextDecrypt(id target, NSArr
 
 %hook TextMessageCellView
 
+- (NSString *)getTextString {
+    NSString *plainText = objc_getAssociatedObject(self, &NeoWCEncryptedTextDisplayOverrideKey);
+    return ([plainText isKindOfClass:NSString.class] && plainText.length > 0) ? plainText : %orig;
+}
+
 - (id)getRichTextViewForDelegate {
     id richTextView = %orig;
     NSString *plainText = objc_getAssociatedObject(self, &NeoWCEncryptedTextDisplayOverrideKey);
@@ -12031,9 +12116,7 @@ static NSArray *NeoWCOperationMenuItemsWithEncryptedTextDecrypt(id target, NSArr
                              OBJC_ASSOCIATION_COPY_NONATOMIC);
     objc_setAssociatedObject(self, &NeoWCEncryptedTextRefreshInFlightKey, nil,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if (!NeoWCApplyDecryptedTextToCurrentCellViews(self, plainText)) {
-        NeoWCTriggerNativeTextRefresh(self);
-    }
+    NeoWCReloadJokerCell(self, message, NeoWCJokerPresenterForCell(self));
     NeoWCCompatibilityMarkTriggered(@"encrypted-text-manual-decrypt");
 }
 
@@ -12851,7 +12934,12 @@ static void NeoWCTriggerNativeTextRefresh(id cell) {
                              plainText.length > 0 ? plainText : nil,
                              OBJC_ASSOCIATION_COPY_NONATOMIC);
     if (plainText.length > 0) {
-        %orig;
+        NeoWCTweakSetValue(message, @"m_nsContent", plainText);
+        @try {
+            %orig;
+        } @finally {
+            NeoWCTweakSetValue(message, @"m_nsContent", wireText);
+        }
         BOOL applied = NeoWCApplyDecryptedTextToCurrentCellViews(self, plainText);
         BOOL refreshing = [objc_getAssociatedObject(self, &NeoWCEncryptedTextRefreshInFlightKey) boolValue];
         if (!applied && !refreshing) {
