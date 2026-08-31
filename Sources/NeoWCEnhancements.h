@@ -82,6 +82,7 @@ FOUNDATION_EXPORT NSString *const NeoWCRedEnvelopeDetailFontSizeKey;
 FOUNDATION_EXPORT NSString *const NeoWCCallConfirmEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQRCodeCameraSourceEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCAutoOriginalImageEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCAutoCombineSendEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCNotificationDirectChatEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCWalletBalanceEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCWalletBalanceFenKey;

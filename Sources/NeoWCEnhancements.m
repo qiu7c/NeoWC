@@ -83,6 +83,7 @@ NSString *const NeoWCRedEnvelopeDetailFontSizeKey = @"com.qiu7c.neowc.chat.red-e
 NSString *const NeoWCCallConfirmEnabledKey = @"com.qiu7c.neowc.chat.call-confirm";
 NSString *const NeoWCQRCodeCameraSourceEnabledKey = @"com.qiu7c.neowc.enhance.qrcode-camera-source";
 NSString *const NeoWCAutoOriginalImageEnabledKey = @"com.qiu7c.neowc.enhance.auto-original-image";
+NSString *const NeoWCAutoCombineSendEnabledKey = @"com.qiu7c.neowc.enhance.auto-combine-send";
 NSString *const NeoWCNotificationDirectChatEnabledKey = @"com.qiu7c.neowc.enhance.notification-direct-chat";
 NSString *const NeoWCWalletBalanceEnabledKey = @"com.qiu7c.neowc.enhance.wallet-balance";
 NSString *const NeoWCWalletBalanceFenKey = @"com.qiu7c.neowc.enhance.wallet-balance-fen";

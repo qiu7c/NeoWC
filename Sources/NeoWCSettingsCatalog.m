@@ -180,6 +180,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCCallConfirmEnabledKey: @NO,
         NeoWCQRCodeCameraSourceEnabledKey: @NO,
         NeoWCAutoOriginalImageEnabledKey: @NO,
+        NeoWCAutoCombineSendEnabledKey: @NO,
         NeoWCNotificationDirectChatEnabledKey: @NO,
         NeoWCWalletBalanceEnabledKey: @NO,
         NeoWCWalletBalanceFenKey: @0,
@@ -471,6 +472,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     NSMutableArray *media = [NSMutableArray arrayWithArray:@[
         NeoWCItem(@"图片编辑快捷发送", @"编辑图片后可发送到当前聊天", @"photo.badge.arrow.down", NeoWCSettingRowKindSwitch, NeoWCImageEditQuickSendEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"自动选择原图", @"选择和预览照片、视频时自动勾选原图", @"photo.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCAutoOriginalImageEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"自动勾选合并发送", @"开启自动选择原图后，多选达到要求时自动勾选", @"rectangle.3.group", NeoWCSettingRowKindSwitch, NeoWCAutoCombineSendEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"突破多选限制", @"放宽消息、转发目标与拍摄视频限制", @"checklist.unchecked", NeoWCSettingRowKindSwitch, NeoWCMultiSelectLimitEnabledKey, nil, NeoWCSettingActionNone),
     ]];
     NeoWCAddFeature(media, NeoWCItem(@"多选消息导出", @"控制复制、保存和分享功能", @"square.and.arrow.up.on.square", NeoWCSettingRowKindSwitch, NeoWCMultiSelectExportEnabledKey, nil, NeoWCSettingActionNone), @[
