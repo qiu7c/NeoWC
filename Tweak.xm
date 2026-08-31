@@ -8871,8 +8871,17 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
     NSInteger glassStyle = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCChatGlassStyleKey];
     if (glassStyle == 1) [glassView configurePseudoLiquidWithBlurIntensity:blurIntensity];
     else [glassView configureFrostedGlassWithBlurIntensity:blurIntensity];
-    glassView.frame = CGRectInset(tipsView.bounds, 8.0, 0.0);
-    glassView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    // MMMsgCommonTipsView expands its own bounds to host the pinned-message list.
+    // The glass belongs only to the fixed header row; following the full height
+    // makes the material spill over the conversation while that list is open.
+    CGRect tipsBounds = tipsView.bounds;
+    CGFloat glassHeight = MIN(CGRectGetHeight(tipsBounds), 40.0);
+    glassView.frame = CGRectMake(CGRectGetMinX(tipsBounds) + 8.0,
+                                CGRectGetMinY(tipsBounds),
+                                MAX(0.0, CGRectGetWidth(tipsBounds) - 16.0),
+                                glassHeight);
+    glassView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    glassView.clipsToBounds = YES;
     if (glassView.superview != tipsView) {
         [tipsView insertSubview:glassView atIndex:0];
     } else {

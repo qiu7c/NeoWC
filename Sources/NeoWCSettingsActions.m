@@ -14,6 +14,7 @@
 #import "NeoWCInAppNotificationSettingsViewController.h"
 #import "NeoWCReleaseNotes.h"
 #import "NeoWCQuickReplyViewController.h"
+#import "NeoWCFriendRelationCheckViewController.h"
 #import "NeoWCSendConfirmationViewController.h"
 #import "NeoWCMomentsReminder.h"
 #import <math.h>
@@ -647,6 +648,7 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
         case NeoWCSettingActionConfigManager: [self push:[NeoWCConfigManagerViewController new]]; break;
         case NeoWCSettingActionAuthorProfile: [self openAuthorProfile]; break;
         case NeoWCSettingActionFindFriend: [self presentFindFriend]; break;
+        case NeoWCSettingActionFriendRelationCheck: [self push:[NeoWCFriendRelationCheckViewController new]]; break;
         case NeoWCSettingActionReleaseNotes: [self push:[NeoWCReleaseNotesHistoryViewController new]]; break;
         case NeoWCSettingActionLogRecords: [self push:[NeoWCLogViewController new]]; break;
         case NeoWCSettingActionBlockUsers: [self push:[NeoWCMessageBlockViewController new]]; break;

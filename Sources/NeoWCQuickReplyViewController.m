@@ -518,7 +518,9 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
         longPress.minimumPressDuration = 0.55;
         [self.tableView addGestureRecognizer:longPress];
     }
-    if (self.selectionHandler && self.navigationController.presentingViewController) {
+    BOOL rootOfPresentedNavigation = self.navigationController.presentingViewController &&
+        self.navigationController.viewControllers.firstObject == self;
+    if (self.selectionHandler && rootOfPresentedNavigation) {
         self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"返回"
                                                                                  style:UIBarButtonItemStylePlain
                                                                                 target:self
@@ -550,6 +552,9 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    if (self.currentFolderIdentifier.length && self.navigationController.viewControllers.count > 1) {
+        self.navigationController.interactivePopGestureRecognizer.enabled = YES;
+    }
     [self reloadItems];
 }
 
@@ -570,6 +575,11 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 }
 
 - (void)close {
+    if (self.navigationController.viewControllers.count > 1 &&
+        self.navigationController.topViewController == self) {
+        [self.navigationController popViewControllerAnimated:YES];
+        return;
+    }
     [self dismissViewControllerAnimated:YES completion:nil];
 }
 

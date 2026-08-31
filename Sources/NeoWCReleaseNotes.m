@@ -45,14 +45,32 @@ NSArray<NeoWCReleaseNote *> *NeoWCReleaseNotes(void) {
     dispatch_once(&onceToken, ^{
         notes = @[
             [NeoWCReleaseNote noteWithVersion:@"0.1.7"
-                                     headline:@"聊天搜索稳定性与原生返回链路"
+                                     headline:@"通知、胶囊顶栏、好友检测与消息库重构"
                                         items:@[
+                [NeoWCReleaseNoteItem itemWithTitle:@"检测单删好友"
+                                               detail:@"复用微信支付转账前置校验，按好友串行检测并随机等待；显示当前好友、完成进度、正常、疑似单删和待复查数量，支持暂停、后台保护、断点恢复和结果复检。网络与解析异常不会误判为单删。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"微信风格应用内通知"
+                                               detail:@"朋友圈特别关注、点赞和评论在微信前台使用非阻塞横幅提醒；支持自定义左侧图标、56–90 pt 高度和背景模糊度，并复用于自动登录与游戏授权结果提示。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"聊天胶囊顶栏"
+                                               detail:@"隐藏微信整条顶栏背景，左右按钮改为独立玻璃胶囊；本次更新统一迁移为伪液态与 20% 强度，之后仍可自行调整，并修复返回手势、前后台切换、头像缩放偏移及置顶消息展开时的玻璃背景溢出。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"原生聊天记录搜索"
-                                               detail:@"通过微信官方 MsgSearchHelper/WCSearcher 链路打开聊天记录搜索，保留官方搜索结果和返回手势。"],
-                [NeoWCReleaseNoteItem itemWithTitle:@"返回与取消稳定性"
-                                               detail:@"按微信原生退出顺序处理取消、右滑和返回按钮，避免重复退出、搜索框残留与顶栏状态错乱。"],
-                [NeoWCReleaseNoteItem itemWithTitle:@"搜索框显示优化"
-                                               detail:@"预隐藏官方搜索框容器，减少聊天顶栏切换时的背景闪现。"],
+                                               detail:@"从聊天顶栏进入微信原生 MsgSearchHelper/WCSearcher 搜索链路，使用官方结果页；补齐取消、返回按钮、右滑退出和搜索框清理，减少残留顶栏与重复退出。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"非好友资料与精确添加时间"
+                                               detail:@"非好友详细资料页增加共同群聊，并可进入对应群聊列表；好友添加时间改用微信详细资料来源，显示更完整的精确时间。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"群成员历史聊天记录"
+                                               detail:@"在群聊中通过头像快捷手势打开指定成员的历史聊天记录，直接查看该成员在当前群里的既往消息。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"移出群成员"
+                                               detail:@"头像快捷菜单增加移出群聊操作；自己邀请入群的成员可直接移出，其他成员继续遵循微信原生群管理权限。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"消息库真实存储"
+                                               detail:@"快捷回复改为直接枚举 Documents 中的真实分类目录和条目文件，搜索索引仅作为可重建缓存；旧版数据首次无损迁移，并修复聊天快捷面板在文件夹内点击或右滑返回时误关闭整个面板。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"通话自动免提"
+                                               detail:@"新增独立开关，在微信通话音频设备启动并确认处于语音模式后自动切换扬声器；保留微信原始启动顺序。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"插件入口与分类样式"
+                                               detail:@"插件管理分类切换改为内容自适应胶囊，缩短无效留白；升级时自动清理旧版 NeoWC 调试快捷入口，同时保留其他插件、自定义分类、排序和快捷开关。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"媒体菜单与深色模式修复"
+                                               detail:@"音频文件转语音只对真实可转换音频显示，避免所有文件误出现入口；防撤回预览在深色模式使用黑色背景，并修复多处通知、模糊动画和界面生命周期问题。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"移除未稳定的加密发送"
+                                               detail:@"完整移除实验性的文字密文、图片和视频加密发送、解密预览及相关设置，恢复微信原生相册选择、预览和发送链路；该功能将在重新验证兼容性后再设计。"],
             ]],
             [NeoWCReleaseNote noteWithVersion:@"0.1.6"
                                      headline:@"朋友圈提醒、设置重组与稳定性更新"

@@ -17,6 +17,7 @@ NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-featu
 static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
 
 NSString *const NeoWCDisplayVersion = @"0.1.7";
+static NSString *const NeoWCChatGlassPseudoLiquid20MigrationKey = @"com.qiu7c.neowc.migration.chat-glass-pseudo-liquid-20-v1";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -111,8 +112,9 @@ void NeoWCSettingsHandleSwitchChange(NSString *key, BOOL enabled) {
 }
 
 void NeoWCSettingsRegisterDefaults(void) {
-    [NSUserDefaults.standardUserDefaults removeObjectForKey:@"com.qiu7c.neowc.chat.top-bar-capsule.effect-style"];
-    [NSUserDefaults.standardUserDefaults registerDefaults:@{
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    [defaults removeObjectForKey:@"com.qiu7c.neowc.chat.top-bar-capsule.effect-style"];
+    [defaults registerDefaults:@{
         NeoWCEnabledKey: @YES,
         NeoWCAntiRevokeKey: @YES,
         NeoWCAntiRevokeNotifySenderKey: @NO,
@@ -157,8 +159,8 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCQuoteJumpVideoEnabledKey: @YES,
         NeoWCChatSearchButtonEnabledKey: @NO,
         NeoWCChatTopBarCapsuleEnabledKey: @NO,
-        NeoWCChatGlassStyleKey: @0,
-        NeoWCChatGlassBlurIntensityKey: @100.0,
+        NeoWCChatGlassStyleKey: @1,
+        NeoWCChatGlassBlurIntensityKey: @20.0,
         NeoWCChatTopBarAvatarSizeKey: @30.0,
         NeoWCChatTopBarNicknameSizeKey: @15.0,
         NeoWCMessageBlockEnabledKey: @NO,
@@ -250,6 +252,11 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCExpandedCategoriesKey: @[@"messages"],
         NeoWCCollapsedFeaturesKey: @[],
     }];
+    if (![defaults boolForKey:NeoWCChatGlassPseudoLiquid20MigrationKey]) {
+        [defaults setInteger:1 forKey:NeoWCChatGlassStyleKey];
+        [defaults setDouble:20.0 forKey:NeoWCChatGlassBlurIntensityKey];
+        [defaults setBool:YES forKey:NeoWCChatGlassPseudoLiquid20MigrationKey];
+    }
 }
 
 static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
@@ -578,6 +585,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
 
     NSMutableArray *local = [NSMutableArray array];
     [local addObject:NeoWCItem(@"查找好友", @"输入微信号或原始号码打开指定账号资料", @"person.crop.circle.badge.magnifyingglass", NeoWCSettingRowKindDetail, nil, @"查找", NeoWCSettingActionFindFriend)];
+    [local addObject:NeoWCItem(@"检测单删好友", @"通过微信支付前置接口串行检测，并区分疑似单删与网络异常", @"person.crop.circle.badge.questionmark", NeoWCSettingRowKindDetail, nil, @"检测", NeoWCSettingActionFriendRelationCheck)];
     [local addObject:NeoWCItem(@"显示信息卡片", @"在好友、群聊和群成员资料中集中显示账号信息", @"person.text.rectangle", NeoWCSettingRowKindSwitch, NeoWCShowRawContactIDEnabledKey, nil, NeoWCSettingActionNone)];
     NeoWCStepMode stepMode = [defaults integerForKey:NeoWCStepModeKey] == NeoWCStepModeDailyRandom ? NeoWCStepModeDailyRandom : NeoWCStepModeDailyFixed;
     NSInteger configuredSteps = MIN(100000, MAX(0, [defaults integerForKey:NeoWCStepCountKey]));

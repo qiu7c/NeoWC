@@ -30,6 +30,7 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionConfigManager,
     NeoWCSettingActionAuthorProfile,
     NeoWCSettingActionFindFriend,
+    NeoWCSettingActionFriendRelationCheck,
     NeoWCSettingActionReleaseNotes,
     NeoWCSettingActionLogRecords,
     NeoWCSettingActionBlockUsers,
