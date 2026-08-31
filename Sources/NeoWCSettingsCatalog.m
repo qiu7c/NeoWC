@@ -10,7 +10,6 @@
 #import "NeoWCMomentsInteractionReminder.h"
 #import "NeoWCMomentsReminder.h"
 #import "NeoWCInAppNotification.h"
-#import "NeoWCEncryption.h"
 #import <stdlib.h>
 
 NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
@@ -178,6 +177,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCRedEnvelopeDetailCenterKey: @NO,
         NeoWCRedEnvelopeDetailFontSizeKey: @14.0,
         NeoWCCallConfirmEnabledKey: @NO,
+        NeoWCAutoSpeakerphoneEnabledKey: @NO,
         NeoWCQRCodeCameraSourceEnabledKey: @NO,
         NeoWCAutoOriginalImageEnabledKey: @NO,
         NeoWCAutoCombineSendEnabledKey: @NO,
@@ -208,9 +208,6 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCSendConfirmationEnabledKey: @NO,
         NeoWCSendConfirmationUsersKey: @{},
         NeoWCSendConfirmationPauseSecondsKey: @60,
-        NeoWCEncryptedMessageEnabledKey: @NO,
-        NeoWCEncryptedMessageAutoDecryptKey: @YES,
-        NeoWCMediaEncryptionEnabledKey: @NO,
         NeoWCMomentsLikeHapticEnabledKey: @NO,
         NeoWCMomentsLikeHapticIntensityKey: @0.65,
         NeoWCMomentsQuickPermissionsKey: @NO,
@@ -345,14 +342,6 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
                     ],
                     defaults,
                     collapsed);
-    NeoWCAddFeature(protection,
-                    NeoWCItem(@"密文消息", @"输入“#加密”前缀后正常发送；密文可在长按菜单中解密", @"lock.fill", NeoWCSettingRowKindSwitch, NeoWCEncryptedMessageEnabledKey, nil, NeoWCSettingActionNone),
-                    @[
-                        NeoWCItem(@"自动解密密文", @"关闭后保留密文原文，可通过消息长按菜单手动解密", @"lock.open", NeoWCSettingRowKindSwitch, NeoWCEncryptedMessageAutoDecryptKey, nil, NeoWCSettingActionNone),
-                        NeoWCItem(@"加密图片和视频", @"在微信相册“原图”右侧显示加密选项，兼容 WeChatX", @"photo.on.rectangle", NeoWCSettingRowKindSwitch, NeoWCMediaEncryptionEnabledKey, nil, NeoWCSettingActionNone),
-                    ],
-                    defaults,
-                    collapsed);
     NSMutableSet *menuTitles = [NSMutableSet setWithArray:[defaults arrayForKey:NeoWCLongPressMenuKnownTitlesKey] ?: @[]];
     [menuTitles addObjectsFromArray:[defaults arrayForKey:NeoWCLongPressMenuManualTitlesKey] ?: @[]];
     NeoWCAddFeature(protection, NeoWCItem(@"长按菜单管理", @"管理聊天消息的长按菜单", @"list.bullet.rectangle", NeoWCSettingRowKindSwitch, NeoWCLongPressMenuEnabledKey, nil, NeoWCSettingActionNone), @[
@@ -466,6 +455,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     ], defaults, collapsed);
     [reminders addObjectsFromArray:@[
         NeoWCItem(@"通话二次确认", @"发起语音或视频通话前确认", @"phone.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCCallConfirmEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"通话自动免提", @"通话音频设备启动成功后自动切换扬声器", @"speaker.wave.2", NeoWCSettingRowKindSwitch, NeoWCAutoSpeakerphoneEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"通知直达聊天", @"点击通知后进入对应会话", @"bubble.left.and.arrow.forward", NeoWCSettingRowKindSwitch, NeoWCNotificationDirectChatEnabledKey, nil, NeoWCSettingActionNone),
     ]];
 

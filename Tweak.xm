@@ -3,7 +3,6 @@
 #import <QuartzCore/QuartzCore.h>
 #import <Photos/Photos.h>
 #import <AVFoundation/AVFoundation.h>
-#import <AVKit/AVKit.h>
 #import <math.h>
 #import <stdlib.h>
 #import <objc/message.h>
@@ -40,7 +39,6 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCInfoListViewController.h"
 #import "Sources/NeoWCSilkEncoder.h"
 #import "Sources/NeoWCInAppNotification.h"
-#import "Sources/NeoWCEncryption.h"
 
 @interface WCActionSheet : NSObject
 - (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
@@ -221,17 +219,9 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 @end
 
 @interface AppFileMessageCellViewV2 : CommonMessageCellView
-- (void)neowc_previewEncryptedMedia:(id)sender;
 @end
 
 @interface TextMessageCellView : CommonMessageCellView
-- (void)setViewModel:(id)viewModel;
-- (id)getRichTextViewForDelegate;
-- (void)updateTranslateSuccessView;
-@end
-
-@interface TranslateMsgMgr : NSObject
-- (NSString *)getRealContentWithMsg:(id)message;
 @end
 
 @interface MMHeadImageView : UIView
@@ -359,13 +349,7 @@ static char NeoWCInputSwipeLeftRecognizerKey;
 static char NeoWCInputSwipeRightRecognizerKey;
 static char NeoWCQuickReplyPlusRecognizerKey;
 static char NeoWCQuickReplyPlusDelegateKey;
-static char NeoWCAlbumEncryptionSelectedKey;
-static char NeoWCAlbumEncryptionButtonKey;
-static char NeoWCAlbumEncryptionSendingKey;
-static char NeoWCOfficialAlbumTargetKey;
 static char NeoWCAutoCombineSendAppliedKey;
-static char NeoWCEncryptedTextManualPlainKey;
-static char NeoWCEncryptedTextTranslationWireKey;
 static char NeoWCWalletGestureRecognizerKey;
 static char NeoWCReplyPanRecognizerKey;
 static char NeoWCReplyPanDelegateKey;
@@ -807,613 +791,6 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
 @end
 
 
-@interface NeoWCEncryptedImagePreviewController : UIViewController
-@property (nonatomic, strong) UIImage *image;
-@end
-
-@interface NeoWCEncryptedVideoPreviewController : AVPlayerViewController
-@property (nonatomic, copy) NSString *temporaryPath;
-@end
-
-static BOOL NeoWCMediaEncryptionActive(void) {
-    return NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey) &&
-           NeoWCEnhancementEnabled(NeoWCMediaEncryptionEnabledKey);
-}
-
-static NSString *NeoWCEncryptionTemporaryDirectory(NSString *component) {
-    NSString *root = [NSTemporaryDirectory() stringByAppendingPathComponent:@"NeoWCEncryption"];
-    NSString *directory = component.length > 0 ? [root stringByAppendingPathComponent:component] : root;
-    [NSFileManager.defaultManager createDirectoryAtPath:directory
-                             withIntermediateDirectories:YES attributes:nil error:nil];
-    return directory;
-}
-
-static NSString *NeoWCEncryptedMediaSenderUserName(void) {
-    Class contextClass = objc_getClass("MMContext");
-    SEL currentUserNameSelector = sel_registerName("currentUserName");
-    if (contextClass && [contextClass respondsToSelector:currentUserNameSelector]) {
-        id value = ((id (*)(id, SEL))objc_msgSend)(contextClass, currentUserNameSelector);
-        if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
-    }
-    Class settingClass = objc_getClass("SettingUtil");
-    SEL localUserNameSelector = sel_registerName("getLocalUsrName");
-    if (settingClass && [settingClass respondsToSelector:localUserNameSelector]) {
-        id value = ((id (*)(id, SEL))objc_msgSend)(settingClass, localUserNameSelector);
-        if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
-    }
-    return NeoWCCurrentUserWXID();
-}
-
-static BOOL NeoWCSendEncryptedMediaFile(NSString *path,
-                                        NSString *fileName,
-                                        NSString *target,
-                                        uint8_t type) {
-    if (path.length == 0 || fileName.length == 0 || target.length == 0) return NO;
-    Class wrapClass = objc_getClass("CMessageWrap");
-    if (!wrapClass) return NO;
-    NSString *extensionName = fileName.pathExtension;
-    NSString *sender = NeoWCEncryptedMediaSenderUserName();
-    if (extensionName.length == 0 || sender.length == 0) return NO;
-    id wrap = nil;
-    @try {
-        Class forwardUtilClass = objc_getClass("ForwardMsgUtil");
-        SEL buildSelector = sel_registerName("buildFileMsgWithFileName:filePath:fileExt:");
-        if (forwardUtilClass && [forwardUtilClass respondsToSelector:buildSelector]) {
-            wrap = ((id (*)(id, SEL, NSString *, NSString *, NSString *))objc_msgSend)(
-                forwardUtilClass, buildSelector, fileName, path, extensionName ?: @"");
-        }
-        SEL generateSelector = sel_registerName("genFileAppMsgWithFileName:filePath:fileData:");
-        if (!wrap && [wrapClass respondsToSelector:generateSelector]) {
-            NSData *mappedData = [NSData dataWithContentsOfFile:path
-                                                       options:NSDataReadingMappedIfSafe error:nil];
-            if (mappedData) {
-                wrap = ((id (*)(id, SEL, NSString *, NSString *, NSData *))objc_msgSend)(
-                    wrapClass, generateSelector, fileName, path, mappedData);
-            }
-        }
-    } @catch (__unused NSException *exception) {
-        return NO;
-    }
-    if (!wrap) return NO;
-    NSUInteger now = (NSUInteger)NSDate.date.timeIntervalSince1970;
-    // Match WeChatX's native file-message setter order. In particular, leave
-    // the inner app-message type and data size produced by ForwardMsgUtil
-    // untouched; rewriting those fields makes WeChat validate WXC bytes as
-    // ordinary image/video payloads.
-    NeoWCTweakSetValue(wrap, @"m_nsFromUsr", sender);
-    NeoWCTweakSetValue(wrap, @"m_nsToUsr", target);
-    NeoWCTweakSetValue(wrap, @"m_nsTitle", fileName);
-    NeoWCTweakSetValue(wrap, @"m_nsAppFileName", fileName);
-    NeoWCTweakSetValue(wrap, @"m_nsAppFileExt", extensionName ?: @"");
-    NeoWCTweakSetValue(wrap, @"m_uiCreateTime", @(now));
-    NeoWCTweakSetValue(wrap, @"m_uiStatus", @1);
-    if (type == NeoWCWXCFileTypeVideo) NeoWCTweakSetValue(wrap, @"m_previewType", @0);
-
-    id manager = NeoWCMessageManager();
-    if (!manager) return NO;
-    BOOL submitted = NO;
-    @try {
-        SEL pathSelector = sel_registerName("AddAppMsg:MsgWrap:DataPath:Scene:");
-        if ([manager respondsToSelector:pathSelector]) {
-            ((void (*)(id, SEL, NSString *, id, NSString *, NSUInteger))objc_msgSend)(
-                manager, pathSelector, target, wrap, path, 0);
-            submitted = YES;
-        } else {
-            NSData *fileData = [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];
-            SEL dataSelector = sel_registerName("AddAppMsg:MsgWrap:Data:Scene:");
-            if (fileData.length > 0 && [manager respondsToSelector:dataSelector]) {
-                ((void (*)(id, SEL, NSString *, id, NSData *, NSUInteger))objc_msgSend)(
-                    manager, dataSelector, target, wrap, fileData, 0);
-                submitted = YES;
-            }
-        }
-    } @catch (__unused NSException *exception) {
-        return NO;
-    }
-    if (!submitted) return NO;
-    NSString *cleanupPath = [path copy];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30.0 * 60.0 * NSEC_PER_SEC)),
-                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        [NSFileManager.defaultManager removeItemAtPath:cleanupPath error:nil];
-    });
-    NeoWCCompatibilityMarkTriggered(@"encrypted-media-send");
-    return YES;
-}
-
-static id NeoWCAlbumEncryptionStateOwner(id controller) {
-    id controlCenter = NeoWCTweakValueForSelectorNames(controller, @[@"controlCenter"]);
-    if (controlCenter) return controlCenter;
-    if ([controller isKindOfClass:UIViewController.class]) {
-        UINavigationController *navigationController =
-            ((UIViewController *)controller).navigationController;
-        if (navigationController) return navigationController;
-    }
-    return controller;
-}
-
-// Matches WeChatX's compact native-looking picker control: a small check
-// glyph followed by a label, rather than a full-width system button.
-@interface NeoWCAlbumEncryptionButton : UIControl
-@property(nonatomic, strong) UIImageView *checkImageView;
-@property(nonatomic, strong) UILabel *checkTitleLabel;
-@end
-
-@implementation NeoWCAlbumEncryptionButton
-- (instancetype)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
-    if (!self) return nil;
-    _checkImageView = [[UIImageView alloc] initWithFrame:CGRectZero];
-    _checkImageView.contentMode = UIViewContentModeScaleAspectFit;
-    _checkImageView.userInteractionEnabled = NO;
-    [self addSubview:_checkImageView];
-    _checkTitleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-    _checkTitleLabel.text = @"加密";
-    _checkTitleLabel.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightRegular];
-    _checkTitleLabel.textAlignment = NSTextAlignmentLeft;
-    _checkTitleLabel.userInteractionEnabled = NO;
-    [self addSubview:_checkTitleLabel];
-    self.accessibilityLabel = @"加密";
-    self.selected = NO;
-    return self;
-}
-- (void)setSelected:(BOOL)selected {
-    [super setSelected:selected];
-    UIImage *image = [UIImage systemImageNamed:selected ? @"checkmark.circle.fill" : @"circle"];
-    self.checkImageView.image = image;
-    UIColor *color = selected ? [UIColor colorWithRed:0.10 green:0.72 blue:0.36 alpha:1.0]
-                              : UIColor.secondaryLabelColor;
-    self.checkImageView.tintColor = color;
-    self.checkTitleLabel.textColor = color;
-    self.accessibilityValue = selected ? @"已选中" : @"未选中";
-}
-- (void)layoutSubviews {
-    [super layoutSubviews];
-    CGFloat h = MIN(21.0, CGRectGetHeight(self.bounds));
-    CGFloat y = floor((CGRectGetHeight(self.bounds) - h) * 0.5);
-    self.checkImageView.frame = CGRectMake(0.0, y, h, h);
-    self.checkTitleLabel.frame = CGRectMake(27.0, y,
-                                             MAX(0.0, CGRectGetWidth(self.bounds) - 27.0), h);
-}
-@end
-
-static BOOL NeoWCAlbumEncryptionSelected(id controller) {
-    id owner = NeoWCAlbumEncryptionStateOwner(controller);
-    return [objc_getAssociatedObject(owner, &NeoWCAlbumEncryptionSelectedKey) boolValue];
-}
-
-static void NeoWCUpdateAlbumEncryptionButton(id controller) {
-    NeoWCAlbumEncryptionButton *button = objc_getAssociatedObject(controller, &NeoWCAlbumEncryptionButtonKey);
-    if (!button) return;
-    BOOL selected = NeoWCAlbumEncryptionSelected(controller);
-    button.selected = selected;
-}
-
-static void NeoWCToggleAlbumEncryption(id controller) {
-    id owner = NeoWCAlbumEncryptionStateOwner(controller);
-    BOOL selected = ![objc_getAssociatedObject(owner, &NeoWCAlbumEncryptionSelectedKey) boolValue];
-    objc_setAssociatedObject(owner, &NeoWCAlbumEncryptionSelectedKey, @(selected),
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCUpdateAlbumEncryptionButton(controller);
-}
-
-static UIView *NeoWCAlbumViewForSelectorNames(id controller, NSArray<NSString *> *selectorNames) {
-    id value = NeoWCTweakValueForSelectorNames(controller, selectorNames);
-    return [value isKindOfClass:UIView.class] ? value : nil;
-}
-
-static UILabel *NeoWCFirstLabelInView(UIView *view) {
-    if ([view isKindOfClass:UILabel.class]) return (UILabel *)view;
-    for (UIView *subview in view.subviews) {
-        UILabel *label = NeoWCFirstLabelInView(subview);
-        if (label) return label;
-    }
-    return nil;
-}
-
-static BOOL NeoWCAlbumViewContributesToLayout(UIView *view, UIView *container) {
-    return view && view != container && view.superview && !view.hidden && view.alpha > 0.01 &&
-           CGRectGetWidth(view.bounds) > 0.0 && CGRectGetHeight(view.bounds) > 0.0;
-}
-
-static CGRect NeoWCAlbumFrameInContainer(UIView *view, UIView *container) {
-    return [view.superview convertRect:view.frame toView:container];
-}
-
-static void NeoWCLayoutAlbumEncryptionButton(id controller, NSString *originCheckKey) {
-    if (!controller) return;
-    NeoWCAlbumEncryptionButton *button = objc_getAssociatedObject(controller, &NeoWCAlbumEncryptionButtonKey);
-    if (!NeoWCMediaEncryptionActive()) {
-        button.hidden = YES;
-        objc_setAssociatedObject(NeoWCAlbumEncryptionStateOwner(controller),
-                                 &NeoWCAlbumEncryptionSelectedKey, @NO,
-                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        return;
-    }
-    UIView *originCheck = NeoWCTweakSafeValue(controller, originCheckKey);
-    if (![originCheck isKindOfClass:UIView.class]) {
-        NSString *fallbackKey = [originCheckKey hasPrefix:@"_"]
-            ? [originCheckKey substringFromIndex:1]
-            : [@"_" stringByAppendingString:originCheckKey];
-        originCheck = NeoWCTweakSafeValue(controller, fallbackKey);
-    }
-    if (![originCheck isKindOfClass:UIView.class]) {
-        originCheck = NeoWCTweakSafeValue(controller, @"originImageCheck");
-    }
-    if (![originCheck isKindOfClass:UIView.class] || !originCheck.superview) return;
-    if (!button) {
-        button = [[NeoWCAlbumEncryptionButton alloc] initWithFrame:CGRectZero];
-        [button addTarget:controller action:NSSelectorFromString(@"neowc_toggleAlbumEncryption:")
-             forControlEvents:UIControlEventTouchUpInside];
-        [originCheck.superview addSubview:button];
-        objc_setAssociatedObject(controller, &NeoWCAlbumEncryptionButtonKey, button,
-                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    } else if (button.superview != originCheck.superview) {
-        [button removeFromSuperview];
-        [originCheck.superview addSubview:button];
-    }
-    UIView *container = originCheck.superview;
-    UIView *originLabel = NeoWCAlbumViewForSelectorNames(controller,
-        @[@"_originImageLabel", @"originImageLabel"]);
-    UIView *originIcon = NeoWCAlbumViewForSelectorNames(controller,
-        @[@"originSelectIconView", @"_originSelectIconView"]);
-    UIView *rawSizeLabel = NeoWCAlbumViewForSelectorNames(controller,
-        @[@"rawTotalSizeLabel", @"_rawTotalSizeLabel"]);
-    if (!originLabel) originLabel = NeoWCFirstLabelInView(originCheck);
-
-    NSMutableArray<UIView *> *originViews = [NSMutableArray array];
-    // Shift the native origin-image control as one unit. On current WeChat it
-    // is a 100pt hit container; moving only its inner label leaves that control
-    // centered and makes it overlap the encryption control.
-    if (NeoWCAlbumViewContributesToLayout(originCheck, container)) {
-        [originViews addObject:originCheck];
-    }
-    for (UIView *candidate in @[originLabel ?: (UIView *)NSNull.null,
-                                originIcon ?: (UIView *)NSNull.null,
-                                rawSizeLabel ?: (UIView *)NSNull.null]) {
-        if (![candidate isKindOfClass:UIView.class] || [originViews containsObject:candidate] ||
-            !NeoWCAlbumViewContributesToLayout(candidate, container)) continue;
-        [originViews addObject:candidate];
-    }
-
-    CGRect originUnion = CGRectNull;
-    for (UIView *view in originViews) {
-        if (!NeoWCAlbumViewContributesToLayout(view, container)) continue;
-        CGRect frame = NeoWCAlbumFrameInContainer(view, container);
-        originUnion = CGRectIsNull(originUnion) ? frame : CGRectUnion(originUnion, frame);
-    }
-    if (CGRectIsNull(originUnion) || CGRectIsEmpty(originUnion)) {
-        CGRect checkFrame = NeoWCAlbumFrameInContainer(originCheck, container);
-        originUnion = CGRectMake(CGRectGetMidX(checkFrame) - 32.0,
-                                 CGRectGetMidY(checkFrame) - 16.0, 64.0, 32.0);
-    }
-
-    // Never move WeChat's native origin/send controls. The preview controller
-    // owns send-state and hit-testing inside those views; changing their frame
-    // can break the untouched native send path. Fit NeoWC into the gap only.
-    CGFloat encryptionSlotWidth = 64.0;
-    CGFloat gap = 10.0;
-    UIView *sendButton = NeoWCAlbumViewForSelectorNames(controller,
-        @[@"m_sendButton", @"_sendButton", @"sendButton"]);
-    CGFloat availableRight = CGRectGetWidth(container.bounds) - gap;
-    if (NeoWCAlbumViewContributesToLayout(sendButton, container)) {
-        availableRight = CGRectGetMinX(NeoWCAlbumFrameInContainer(sendButton, container)) - gap;
-    }
-    CGFloat x = CGRectGetMaxX(originUnion) + gap;
-    x = MIN(x, availableRight - encryptionSlotWidth);
-    x = MAX(gap, x);
-    CGFloat height = 32.0;
-    CGFloat y = CGRectGetMidY(originUnion) - height * 0.5;
-    button.frame = CGRectIntegral(CGRectMake(x, y, encryptionSlotWidth, height));
-    button.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
-    button.hidden = NO;
-    NeoWCUpdateAlbumEncryptionButton(controller);
-}
-
-static NSString *NeoWCSanitizedMediaExtension(NSString *extensionName, BOOL video) {
-    NSString *value = extensionName.lowercaseString ?: @"";
-    NSCharacterSet *invalid = [NSCharacterSet.alphanumericCharacterSet invertedSet];
-    value = [[value componentsSeparatedByCharactersInSet:invalid] componentsJoinedByString:@""];
-    if (value.length > 12) value = [value substringToIndex:12];
-    return value.length > 0 ? value : (video ? @"mp4" : @"jpg");
-}
-
-static NSString *NeoWCOriginalAssetFileName(id asset, BOOL video) {
-    id value = NeoWCTweakValueForSelectorNames(asset, @[@"originalFilename", @"assetFileName", @"fileName"]);
-    if (![value isKindOfClass:NSString.class] || [value length] == 0) {
-        value = video ? @"视频.mp4" : @"图片.jpg";
-    }
-    return [value lastPathComponent];
-}
-
-static NSString *NeoWCOfficialAlbumTarget(id controller) {
-    id value = nil;
-    // Prefer the live picker/presenting hierarchy. An associated target can
-    // belong to a reused picker from the previous conversation.
-    id cursor = controller;
-    for (NSUInteger depth = 0; cursor && depth < 8; depth++) {
-        value = NeoWCTweakValueForSelectorNames(cursor, @[@"getCurrentChatName",
-            @"m_nsUserName", @"m_nsUsrName", @"sessionUserName", @"chatName", @"m_chatName",
-            @"m_sessionName", @"m_nsSessionName"]);
-        if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
-        value = NeoWCChatUserName(cursor);
-        if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
-        id related = NeoWCTweakValueForSelectorNames(cursor, @[@"delegate", @"m_delegate",
-            @"context", @"m_context", @"sessionInfo", @"m_sessionInfo"]);
-        value = NeoWCChatUserName(related);
-        if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
-        if ([cursor isKindOfClass:UIViewController.class]) {
-            UIViewController *viewController = cursor;
-            UINavigationController *navigationController = viewController.navigationController;
-            for (UIViewController *candidate in navigationController.viewControllers.reverseObjectEnumerator) {
-                value = NeoWCTweakValueForSelectorNames(candidate, @[@"getCurrentChatName"]);
-                if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
-                value = NeoWCChatUserName(candidate);
-                if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
-            }
-            cursor = viewController.presentingViewController ?: viewController.parentViewController;
-        } else {
-            break;
-        }
-    }
-    value = objc_getAssociatedObject(controller, &NeoWCOfficialAlbumTargetKey);
-    if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
-    value = NeoWCChatUserName(NeoWCVisibleChatController);
-    return [value isKindOfClass:NSString.class] ? value : nil;
-}
-
-static NSArray *NeoWCOfficialSelectedAssets(id controller) {
-    id value = NeoWCTweakValueForSelectorNames(controller, @[@"getSelectedAssets"]);
-    if (![value isKindOfClass:NSArray.class]) {
-        value = NeoWCTweakValueForSelectorNames(NeoWCAlbumEncryptionStateOwner(controller),
-                                                @[@"getSelectedAssets", @"selectedAssets"]);
-    }
-    return [value isKindOfClass:NSArray.class] ? value : @[];
-}
-
-static void NeoWCEncryptAndSendOfficialMedia(NSString *inputPath,
-                                             NSString *originalFileName,
-                                             NSString *target,
-                                             BOOL video,
-                                             BOOL removeInput,
-                                             void (^completion)(BOOL success)) {
-    NSString *plainExtension = NeoWCSanitizedMediaExtension(inputPath.pathExtension.length > 0
-        ? inputPath.pathExtension : originalFileName.pathExtension, video);
-    NSString *baseName = originalFileName.lastPathComponent.stringByDeletingPathExtension;
-    if (baseName.length == 0) baseName = video ? @"视频" : @"图片";
-    NSString *displayName = [baseName stringByAppendingPathExtension:@"WeChatX"];
-    NSString *outputName = [NSString stringWithFormat:@"%@_%@.%@",
-        video ? @"WXC_VIDEO" : @"WXC_IMAGE", NSUUID.UUID.UUIDString, plainExtension];
-    NSString *outputPath = [NeoWCEncryptionTemporaryDirectory(@"Upload")
-        stringByAppendingPathComponent:outputName];
-    NSString *metadata = [@"a:" stringByAppendingString:plainExtension];
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSError *error = nil;
-        NeoWCWXCFileType type = video ? NeoWCWXCFileTypeVideo : NeoWCWXCFileTypeImage;
-        BOOL encrypted = NeoWCWXCEncryptFile(inputPath, outputPath, type, metadata, &error);
-        if (removeInput) [NSFileManager.defaultManager removeItemAtPath:inputPath error:nil];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            BOOL sent = encrypted && NeoWCSendEncryptedMediaFile(outputPath, displayName, target, type);
-            if (!sent) [NSFileManager.defaultManager removeItemAtPath:outputPath error:nil];
-            if (!encrypted) NeoWCShowTransientMessage(error.localizedDescription ?: @"媒体加密失败", NO);
-            if (completion) completion(sent);
-        });
-    });
-}
-
-static NSString *NeoWCImageExtensionForData(NSData *data, NSString *originalFileName) {
-    const uint8_t *bytes = (const uint8_t *)data.bytes;
-    if (data.length >= 8 && bytes[0] == 0x89 && memcmp(bytes + 1, "PNG\r\n\x1a\n", 7) == 0) return @"png";
-    if (data.length >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff) return @"jpg";
-    if (data.length >= 6 && memcmp(bytes, "GIF8", 4) == 0) return @"gif";
-    return NeoWCSanitizedMediaExtension(originalFileName.pathExtension, NO);
-}
-
-static void NeoWCProcessOfficialImageAsset(id asset, NSString *target, void (^completion)(BOOL)) {
-    NSString *originalName = NeoWCOriginalAssetFileName(asset, NO);
-    void (^success)(id) = ^(id payload) {
-        NSData *data = [payload isKindOfClass:NSData.class] ? payload :
-            ([payload isKindOfClass:UIImage.class] ? UIImageJPEGRepresentation(payload, 1.0) : nil);
-        if (data.length == 0) { if (completion) completion(NO); return; }
-        NSString *extensionName = [payload isKindOfClass:UIImage.class] ? @"jpg" :
-            NeoWCImageExtensionForData(data, originalName);
-        NSString *inputName = [NSString stringWithFormat:@"image_%@.%@",
-            NSUUID.UUID.UUIDString, extensionName];
-        NSString *inputPath = [NeoWCEncryptionTemporaryDirectory(@"Album")
-            stringByAppendingPathComponent:inputName];
-        NSError *writeError = nil;
-        if (![data writeToFile:inputPath options:NSDataWritingAtomic error:&writeError]) {
-            if (completion) completion(NO);
-            return;
-        }
-        NeoWCEncryptAndSendOfficialMedia(inputPath, originalName, target, NO, YES, completion);
-    };
-    void (^failure)(id) = ^(id error) {
-        (void)error;
-        if (completion) completion(NO);
-    };
-    SEL sourceSelector = NSSelectorFromString(@"asyncImageOriginSourceData:errorBlock:");
-    SEL originSelector = NSSelectorFromString(@"asyncImageOriginData:completion:errorBlock:");
-    if ([asset respondsToSelector:sourceSelector]) {
-        ((void (*)(id, SEL, id, id))objc_msgSend)(asset, sourceSelector, success, failure);
-    } else if ([asset respondsToSelector:originSelector]) {
-        ((void (*)(id, SEL, BOOL, id, id))objc_msgSend)(asset, originSelector, NO, success, failure);
-    } else {
-        id URLValue = NeoWCTweakValueForSelectorNames(asset, @[@"assetUrl", @"mediaURL"]);
-        NSString *path = [URLValue isKindOfClass:NSURL.class] ? [URLValue path] :
-            ([URLValue isKindOfClass:NSString.class] ? URLValue : nil);
-        NSData *data = path.length > 0 ? [NSData dataWithContentsOfFile:path] : nil;
-        success(data);
-    }
-}
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-static void NeoWCProcessOfficialVideoAsset(id asset, NSString *target, void (^completion)(BOOL)) {
-    NSString *originalName = NeoWCOriginalAssetFileName(asset, YES);
-    void (^success)(id) = ^(id payload) {
-        AVAsset *AVAssetValue = [payload isKindOfClass:AVAsset.class] ? payload : nil;
-        if (!AVAssetValue) { if (completion) completion(NO); return; }
-        AVAssetExportSession *exporter = [[AVAssetExportSession alloc]
-            initWithAsset:AVAssetValue presetName:AVAssetExportPresetPassthrough];
-        if (!exporter) { if (completion) completion(NO); return; }
-        NSArray *supportedTypes = exporter.supportedFileTypes;
-        AVFileType fileType = nil;
-        if ([supportedTypes containsObject:AVFileTypeMPEG4]) {
-            fileType = AVFileTypeMPEG4;
-        } else if ([supportedTypes containsObject:AVFileTypeQuickTimeMovie]) {
-            fileType = AVFileTypeQuickTimeMovie;
-        }
-        if (fileType.length == 0) { if (completion) completion(NO); return; }
-        NSString *extensionName = [fileType isEqualToString:AVFileTypeMPEG4] ? @"mp4" : @"mov";
-        NSString *inputName = [NSString stringWithFormat:@"video_%@.%@",
-            NSUUID.UUID.UUIDString, extensionName];
-        NSString *inputPath = [NeoWCEncryptionTemporaryDirectory(@"Album")
-            stringByAppendingPathComponent:inputName];
-        [NSFileManager.defaultManager removeItemAtPath:inputPath error:nil];
-        exporter.outputURL = [NSURL fileURLWithPath:inputPath];
-        exporter.outputFileType = fileType;
-        exporter.shouldOptimizeForNetworkUse = NO;
-        [exporter exportAsynchronouslyWithCompletionHandler:^{
-            if (exporter.status != AVAssetExportSessionStatusCompleted) {
-                [NSFileManager.defaultManager removeItemAtPath:inputPath error:nil];
-                dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(NO); });
-                return;
-            }
-            NeoWCEncryptAndSendOfficialMedia(inputPath, originalName, target, YES, YES, completion);
-        }];
-    };
-    void (^failure)(id) = ^(id error) {
-        (void)error;
-        if (completion) completion(NO);
-    };
-    SEL selector = NSSelectorFromString(@"asyncGetVideoAsset:successBlock:errorBlock:");
-    if ([asset respondsToSelector:selector]) {
-        ((void (*)(id, SEL, BOOL, id, id))objc_msgSend)(asset, selector, YES, success, failure);
-    } else {
-        id URLValue = NeoWCTweakValueForSelectorNames(asset, @[@"assetUrl", @"mediaURL"]);
-        NSURL *URL = [URLValue isKindOfClass:NSURL.class] ? URLValue :
-            ([URLValue isKindOfClass:NSString.class] ? [NSURL fileURLWithPath:URLValue] : nil);
-        success(URL ? [AVURLAsset URLAssetWithURL:URL options:nil] : nil);
-    }
-}
-#pragma clang diagnostic pop
-
-static void NeoWCRestoreOfficialPreviewSendUI(id controller) {
-    if (!controller) return;
-    SEL sendStateSelector = NSSelectorFromString(@"setM_hasClickSendButton:");
-    if ([controller respondsToSelector:sendStateSelector]) {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, sendStateSelector, NO);
-    } else {
-        NeoWCTweakSetValue(controller, @"m_hasClickSendButton", @NO);
-    }
-    SEL reactiveSelector = NSSelectorFromString(@"reactiveSendButton");
-    if ([controller respondsToSelector:reactiveSelector]) {
-        ((void (*)(id, SEL))objc_msgSend)(controller, reactiveSelector);
-    }
-}
-
-static BOOL NeoWCHandleOfficialEncryptedMediaSend(id controller,
-                                                   id selectionController,
-                                                   NSArray *assetOverride) {
-    // WeChatX gates every send entry on the picker-owned shared selection
-    // state. Preview and picker controllers use the same controlCenter owner.
-    // If it is false, return before reading or changing any native send state.
-    if (!NeoWCMediaEncryptionActive() ||
-        !NeoWCAlbumEncryptionSelected(controller)) return NO;
-    if ([objc_getAssociatedObject(controller, &NeoWCAlbumEncryptionSendingKey) boolValue]) return YES;
-    NSArray *assets = assetOverride.count > 0 ? assetOverride : NeoWCOfficialSelectedAssets(controller);
-    NSString *target = NeoWCOfficialAlbumTarget(controller);
-    if (assets.count == 0 || target.length == 0) {
-        NeoWCRestoreOfficialPreviewSendUI(selectionController);
-        NeoWCShowTransientMessage(assets.count == 0 ? @"请先选择图片或视频" : @"无法确定当前聊天", NO);
-        return YES;
-    }
-    objc_setAssociatedObject(controller, &NeoWCAlbumEncryptionSendingKey, @YES,
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    // MMImagePreviewBrowserController sets m_hasClickSendButton before its
-    // delegate callback. We replace that callback for encrypted media, so its
-    // native spinner must be released immediately instead of remaining stuck
-    // until every export/encryption task finishes.
-    NeoWCRestoreOfficialPreviewSendUI(selectionController);
-    __block NSUInteger remaining = assets.count;
-    __block NSUInteger sentCount = 0;
-    void (^finishedOne)(BOOL) = ^(BOOL sent) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (sent) sentCount++;
-            if (remaining > 0) remaining--;
-            if (remaining != 0) return;
-            objc_setAssociatedObject(controller, &NeoWCAlbumEncryptionSendingKey, nil,
-                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            if (sentCount > 0) {
-                UIViewController *viewController = [controller isKindOfClass:UIViewController.class] ? controller : nil;
-                UIViewController *dismissTarget = viewController.navigationController ?: viewController;
-                [dismissTarget dismissViewControllerAnimated:YES completion:nil];
-            } else {
-                NeoWCRestoreOfficialPreviewSendUI(selectionController);
-            }
-            NeoWCShowTransientMessage(sentCount == assets.count
-                ? [NSString stringWithFormat:@"已发送 %lu 个加密媒体", (unsigned long)sentCount]
-                : [NSString stringWithFormat:@"已发送 %lu/%lu 个加密媒体",
-                   (unsigned long)sentCount, (unsigned long)assets.count], sentCount > 0);
-            if (sentCount > 0) NeoWCCompatibilityMarkTriggered(@"official-album-encrypted-send");
-        });
-    };
-    for (id asset in assets) {
-        NSObject *completionGate = [NSObject new];
-        __block BOOL didFinish = NO;
-        void (^finishOnce)(BOOL) = ^(BOOL sent) {
-            @synchronized (completionGate) {
-                if (didFinish) return;
-                didFinish = YES;
-            }
-            finishedOne(sent);
-        };
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(45.0 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            finishOnce(NO);
-        });
-        BOOL video = NO;
-        SEL isVideoSelector = NSSelectorFromString(@"isVideo");
-        if ([asset respondsToSelector:isVideoSelector]) {
-            video = ((BOOL (*)(id, SEL))objc_msgSend)(asset, isVideoSelector);
-        }
-        if (video) NeoWCProcessOfficialVideoAsset(asset, target, finishOnce);
-        else NeoWCProcessOfficialImageAsset(asset, target, finishOnce);
-    }
-    return YES;
-}
-
-@implementation NeoWCEncryptedImagePreviewController
-
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.view.backgroundColor = UIColor.blackColor;
-    UIImageView *imageView = [[UIImageView alloc] initWithFrame:self.view.bounds];
-    imageView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    imageView.contentMode = UIViewContentModeScaleAspectFit;
-    imageView.image = self.image;
-    [self.view addSubview:imageView];
-    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(closePreview)];
-    [self.view addGestureRecognizer:tap];
-}
-
-- (void)closePreview { [self dismissViewControllerAnimated:YES completion:nil]; }
-- (BOOL)prefersStatusBarHidden { return YES; }
-
-@end
-
-@implementation NeoWCEncryptedVideoPreviewController
-
-- (void)viewDidDisappear:(BOOL)animated {
-    [super viewDidDisappear:animated];
-    if (self.isBeingDismissed || !self.presentingViewController) {
-        [self.player pause];
-        [NSFileManager.defaultManager removeItemAtPath:self.temporaryPath error:nil];
-        self.temporaryPath = nil;
-    }
-}
-
-@end
 
 @implementation NeoWCReplyPanGestureDelegate
 
@@ -6430,112 +5807,6 @@ static NSArray *NeoWCOperationMenuItemsWithMediaToVoice(id target,
     return items;
 }
 
-static BOOL NeoWCMessageLooksLikeEncryptedMedia(id message) {
-    if (!NeoWCMediaEncryptionActive() || !message) return NO;
-    NSString *path = NeoWCExistingQuickReplyAttachmentPath(message);
-    if (path.length > 0 && NeoWCWXCInspectFile(path, nil, nil)) return YES;
-    NSString *fileName = NeoWCTweakSafeValue(message, @"m_nsAppFileName");
-    if (fileName.length == 0) {
-        fileName = NeoWCTweakSafeValue(NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType"),
-                                       @"m_nsAppFileName");
-    }
-    NSString *upper = fileName.uppercaseString;
-    return [fileName.pathExtension caseInsensitiveCompare:@"WeChatX"] == NSOrderedSame ||
-           [upper hasPrefix:@"WXC_IMAGE_"] || [upper hasPrefix:@"WXCA_IMAGE_"] ||
-           [upper hasPrefix:@"WXC_VIDEO_"] || [upper hasPrefix:@"WXCA_VIDEO_"];
-}
-
-static NSArray *NeoWCOperationMenuItemsWithEncryptedPreview(id target, NSArray *originalItems) {
-    if (![originalItems isKindOfClass:NSArray.class] ||
-        !NeoWCMessageLooksLikeEncryptedMedia(NeoWCMessageWrapForCell(target))) return originalItems;
-    for (id item in originalItems) {
-        if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"解密预览"]) return originalItems;
-    }
-    Class itemClass = objc_getClass("MMMenuItem");
-    if (!itemClass || ![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) {
-        return originalItems;
-    }
-    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:18.0
-                                                                                                  weight:UIImageSymbolWeightRegular];
-    UIImage *icon = [[UIImage systemImageNamed:@"lock.open" withConfiguration:configuration]
-        imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
-    MMMenuItem *item = [[itemClass alloc] initWithTitle:@"解密预览" icon:icon target:target
-                                                action:@selector(neowc_previewEncryptedMedia:)];
-    if (!item) return originalItems;
-    NSMutableArray *items = [originalItems mutableCopy];
-    [items insertObject:item atIndex:0];
-    return items;
-}
-
-static void NeoWCPresentEncryptedMediaPreview(id cell) {
-    id message = NeoWCMessageWrapForCell(cell);
-    NSString *path = NeoWCExistingQuickReplyAttachmentPath(message);
-    if (path.length == 0) {
-        NeoWCShowTransientMessage(@"请先下载加密文件后再预览", NO);
-        return;
-    }
-    UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
-    if (!presenter.view.window) return;
-    NSString *temporaryBase = [NeoWCEncryptionTemporaryDirectory(@"Preview")
-        stringByAppendingPathComponent:[NSString stringWithFormat:@"preview_%@", NSUUID.UUID.UUIDString]];
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSError *error = nil;
-        uint8_t type = 0;
-        NSString *metadata = nil;
-        NSString *temporaryPath = [temporaryBase stringByAppendingPathExtension:@"tmp"];
-        BOOL decrypted = NeoWCWXCDecryptFile(path, temporaryPath, &type, &metadata, &error);
-        NSString *finalPath = temporaryPath;
-        if (decrypted) {
-            NSString *extensionName = metadata.lowercaseString;
-            if ([extensionName hasPrefix:@"a:"]) extensionName = [extensionName substringFromIndex:2];
-            NSCharacterSet *invalidExtensionCharacters =
-                [NSCharacterSet.alphanumericCharacterSet invertedSet];
-            extensionName = [[extensionName componentsSeparatedByCharactersInSet:invalidExtensionCharacters]
-                componentsJoinedByString:@""];
-            if (extensionName.length > 12) extensionName = [extensionName substringToIndex:12];
-            if (extensionName.length == 0) {
-                extensionName = type == NeoWCWXCFileTypeVideo ? @"mp4" : @"jpg";
-            }
-            finalPath = [temporaryBase stringByAppendingPathExtension:extensionName];
-            [NSFileManager.defaultManager removeItemAtPath:finalPath error:nil];
-            if (![NSFileManager.defaultManager moveItemAtPath:temporaryPath toPath:finalPath error:&error]) {
-                decrypted = NO;
-            }
-        }
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (!decrypted) {
-                [NSFileManager.defaultManager removeItemAtPath:temporaryPath error:nil];
-                NeoWCShowTransientMessage(error.localizedDescription ?: @"解密预览失败", NO);
-                return;
-            }
-            UIViewController *visiblePresenter = NeoWCJokerPresenterForCell(cell);
-            if (!visiblePresenter.view.window) {
-                [NSFileManager.defaultManager removeItemAtPath:finalPath error:nil];
-                return;
-            }
-            if (type == NeoWCWXCFileTypeVideo) {
-                NeoWCEncryptedVideoPreviewController *controller = [NeoWCEncryptedVideoPreviewController new];
-                controller.temporaryPath = finalPath;
-                controller.player = [AVPlayer playerWithURL:[NSURL fileURLWithPath:finalPath]];
-                controller.modalPresentationStyle = UIModalPresentationFullScreen;
-                [visiblePresenter presentViewController:controller animated:YES completion:^{ [controller.player play]; }];
-            } else {
-                UIImage *image = [UIImage imageWithContentsOfFile:finalPath];
-                [NSFileManager.defaultManager removeItemAtPath:finalPath error:nil];
-                if (!image) {
-                    NeoWCShowTransientMessage(@"解密成功，但图片格式无法预览", NO);
-                    return;
-                }
-                NeoWCEncryptedImagePreviewController *controller = [NeoWCEncryptedImagePreviewController new];
-                controller.image = image;
-                controller.modalPresentationStyle = UIModalPresentationFullScreen;
-                [visiblePresenter presentViewController:controller animated:YES completion:nil];
-            }
-            (void)metadata;
-            NeoWCCompatibilityMarkTriggered(@"encrypted-media-preview");
-        });
-    });
-}
 
 static void NeoWCCommitMessageToQuickReply(id message, NeoWCQuickReplyType type, NSString *session,
                                            NSString *messageID, NSString *path, NSString *remark,
@@ -7205,92 +6476,25 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 
 - (void)viewDidLoad {
     %orig;
-    UIViewController *pickerController = (UIViewController *)self;
-    NSString *target = NeoWCOfficialAlbumTarget(pickerController.presentingViewController);
-    if (target.length > 0) {
-        objc_setAssociatedObject(self, &NeoWCOfficialAlbumTargetKey, target,
-                                 OBJC_ASSOCIATION_COPY_NONATOMIC);
-        objc_setAssociatedObject(NeoWCAlbumEncryptionStateOwner(self), &NeoWCOfficialAlbumTargetKey, target,
-                                 OBJC_ASSOCIATION_COPY_NONATOMIC);
-    }
-    objc_setAssociatedObject(NeoWCAlbumEncryptionStateOwner(self),
-                             &NeoWCAlbumEncryptionSelectedKey, @NO,
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     NeoWCApplyAutoOriginalSelection(self, @"m_originImageCheck");
     NeoWCApplyAutoCombineSendSelection(self);
-    NeoWCLayoutAlbumEncryptionButton(self, @"m_originImageCheck");
 }
 
 - (void)initBottomBar {
     %orig;
     NeoWCApplyAutoCombineSendSelection(self);
-    NeoWCLayoutAlbumEncryptionButton(self, @"m_originImageCheck");
 }
 
 - (void)initCombineSendViewIfNeeded {
     %orig;
     NeoWCApplyAutoOriginalSelection(self, @"m_originImageCheck");
     NeoWCApplyAutoCombineSendSelection(self);
-    NeoWCLayoutAlbumEncryptionButton(self, @"m_originImageCheck");
 }
 
 - (void)reloadBottomBar {
     %orig;
     NeoWCApplyAutoOriginalSelection(self, @"m_originImageCheck");
     NeoWCApplyAutoCombineSendSelection(self);
-    NeoWCLayoutAlbumEncryptionButton(self, @"m_originImageCheck");
-}
-
-- (void)viewDidLayoutSubviews {
-    %orig;
-    NeoWCLayoutAlbumEncryptionButton(self, @"m_originImageCheck");
-}
-
-- (void)viewWillAppear:(BOOL)animated {
-    %orig(animated);
-    NSString *target = NeoWCOfficialAlbumTarget((UIViewController *)self);
-    if (target.length == 0) target = NeoWCChatUserName(NeoWCVisibleChatController);
-    if (target.length > 0) {
-        objc_setAssociatedObject(self, &NeoWCOfficialAlbumTargetKey, target, OBJC_ASSOCIATION_COPY_NONATOMIC);
-        objc_setAssociatedObject(NeoWCAlbumEncryptionStateOwner(self), &NeoWCOfficialAlbumTargetKey, target,
-                                 OBJC_ASSOCIATION_COPY_NONATOMIC);
-    }
-    NeoWCLayoutAlbumEncryptionButton(self, @"m_originImageCheck");
-}
-
-%new
-- (void)neowc_toggleAlbumEncryption:(id)sender {
-    (void)sender;
-    NeoWCToggleAlbumEncryption(self);
-}
-
-- (void)sendSelectedMedia {
-    if (NeoWCHandleOfficialEncryptedMediaSend(self, self, nil)) return;
-    %orig;
-}
-
-- (void)OnAssetSend:(id)asset {
-    if (NeoWCHandleOfficialEncryptedMediaSend(self, self, asset ? @[asset] : nil)) return;
-    %orig(asset);
-}
-
-- (void)sendImageFromScene:(id)scene {
-    if (NeoWCHandleOfficialEncryptedMediaSend(self, self, nil)) return;
-    %orig(scene);
-}
-
-- (void)sendVideoWithAsset:(id)asset {
-    if (NeoWCHandleOfficialEncryptedMediaSend(self, self, asset ? @[asset] : nil)) return;
-    %orig(asset);
-}
-
-- (void)previewBrowser:(id)browser
-didFinishPickingWithAssetInfos:(id)assetInfos
-       isUsingTemplate:(BOOL)usingTemplate {
-    // Verified WeChatX ABI v40@0:8@16@24B32. Its replacement checks the
-    // MMAssetPickerController (`self`) state, not the preview browser object.
-    if (NeoWCHandleOfficialEncryptedMediaSend(self, browser, nil)) return;
-    %orig(browser, assetInfos, usingTemplate);
 }
 
 %end
@@ -7348,43 +6552,23 @@ didFinishPickingWithAssetInfos:(id)assetInfos
     %orig;
     NeoWCApplyAutoOriginalSelection(self, @"_originImageCheck");
     NeoWCApplyAutoCombineSendSelection(self);
-    NeoWCLayoutAlbumEncryptionButton(self, @"_originImageCheck");
 }
 
 - (void)initBottomBar {
     %orig;
     NeoWCApplyAutoCombineSendSelection(self);
-    NeoWCLayoutAlbumEncryptionButton(self, @"_originImageCheck");
 }
 
 - (void)initCombineSendViewIfNeeded {
     %orig;
     NeoWCApplyAutoOriginalSelection(self, @"_originImageCheck");
     NeoWCApplyAutoCombineSendSelection(self);
-    NeoWCLayoutAlbumEncryptionButton(self, @"_originImageCheck");
 }
 
 - (void)reloadSelectedCollectionView {
     %orig;
     NeoWCApplyAutoOriginalSelection(self, @"_originImageCheck");
     NeoWCApplyAutoCombineSendSelection(self);
-    NeoWCLayoutAlbumEncryptionButton(self, @"_originImageCheck");
-}
-
-- (void)viewDidLayoutSubviews {
-    %orig;
-    NeoWCLayoutAlbumEncryptionButton(self, @"_originImageCheck");
-}
-
-- (void)viewWillAppear:(BOOL)animated {
-    %orig(animated);
-    NeoWCLayoutAlbumEncryptionButton(self, @"_originImageCheck");
-}
-
-%new
-- (void)neowc_toggleAlbumEncryption:(id)sender {
-    (void)sender;
-    NeoWCToggleAlbumEncryption(self);
 }
 
 %end
@@ -7907,33 +7091,6 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
         NeoWCApplyChatInputRoundingToToolView(self);
     }
     NeoWCSynchronizeQuickReplyPlusGesture(self);
-}
-
-- (void)sendMsgWithText:(id)text {
-    if (!NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey) ||
-        ![text isKindOfClass:NSString.class]) {
-        %orig(text);
-        return;
-    }
-    NSString *sourceText = (NSString *)text;
-    if (![sourceText hasPrefix:@"#加密"]) {
-        %orig(text);
-        return;
-    }
-    NSString *plainText = [[sourceText substringFromIndex:@"#加密".length]
-        stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    if (plainText.length == 0) {
-        NeoWCShowTransientMessage(@"请在“#加密”后输入要发送的文字", NO);
-        return;
-    }
-    NSError *error = nil;
-    NSString *wireText = NeoWCEncryptedTextWireString(plainText, &error);
-    if (wireText.length == 0) {
-        NeoWCShowTransientMessage(error.localizedDescription ?: @"生成密文失败", NO);
-        return;
-    }
-    NeoWCCompatibilityMarkTriggered(@"encrypted-text-send");
-    %orig(wireText);
 }
 
 %new
@@ -12161,270 +11318,21 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 %end
 
-static BOOL NeoWCSetNativeRichTextContent(id richTextView, NSString *plainText) {
-    if (!richTextView || ![plainText isKindOfClass:NSString.class] || plainText.length == 0) return NO;
-    SEL contentSelector = NSSelectorFromString(@"setContent:");
-    if (![richTextView respondsToSelector:contentSelector]) return NO;
-    ((void (*)(id, SEL, id))objc_msgSend)(richTextView, contentSelector, plainText);
-    if ([richTextView isKindOfClass:UIView.class]) [(UIView *)richTextView setNeedsDisplay];
-    return YES;
-}
-
-static NSString *NeoWCEncryptedWireTextForMessage(id message) {
-    NSString *wireText = NeoWCTweakSafeValue(message, @"m_nsContent");
-    return ([wireText isKindOfClass:NSString.class] && NeoWCIsEncryptedTextWireString(wireText)) ? wireText : nil;
-}
-
-static NSString *NeoWCEncryptedTextTranslationProxy(NSString *wireText) {
-    if (![wireText isKindOfClass:NSString.class] || !NeoWCIsEncryptedTextWireString(wireText)) return nil;
-    NSString *payload = wireText;
-    if ([wireText hasPrefix:NeoWCEncryptedTextPlaceholder] &&
-        wireText.length > NeoWCEncryptedTextPlaceholder.length) {
-        payload = [wireText substringFromIndex:NeoWCEncryptedTextPlaceholder.length];
-    }
-    // Match the observed PKC translation input shape: `[密文]` followed by a
-    // percent-encoded standard Base64 payload. NeoWC's stored/sent wire remains
-    // its interoperable `【密文】` + Base64URL form.
-    payload = [[payload stringByReplacingOccurrencesOfString:@"-" withString:@"+"]
-        stringByReplacingOccurrencesOfString:@"_" withString:@"/"];
-    NSUInteger remainder = payload.length % 4;
-    if (remainder != 0) payload = [payload stringByPaddingToLength:payload.length + (4 - remainder)
-                                                        withString:@"=" startingAtIndex:0];
-    NSString *encodedPayload = [payload stringByAddingPercentEncodingWithAllowedCharacters:
-        NSCharacterSet.alphanumericCharacterSet] ?: payload;
-    NSString *suffix = encodedPayload ?: @"";
-    return [@"[密文]" stringByAppendingString:suffix];
-}
-
-static NSCache<NSString *, NSString *> *NeoWCEncryptedTextManualCache(void) {
-    static NSCache<NSString *, NSString *> *cache;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        cache = [NSCache new];
-        cache.countLimit = 256;
-    });
-    return cache;
-}
-
-static NSCache<NSString *, NSString *> *NeoWCEncryptedTextAutoCache(void) {
-    static NSCache<NSString *, NSString *> *cache;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        cache = [NSCache new];
-        cache.countLimit = 256;
-    });
-    return cache;
-}
-
-static NSString *NeoWCManualDecryptedTextForMessage(id message, NSString *wireText) {
-    NSString *plainText = objc_getAssociatedObject(message, &NeoWCEncryptedTextManualPlainKey);
-    if (plainText.length > 0) return plainText;
-    if (wireText.length == 0) return nil;
-    return [NeoWCEncryptedTextManualCache() objectForKey:wireText];
-}
-
-static void NeoWCRememberManualDecryptedText(id message, NSString *wireText, NSString *plainText) {
-    if (wireText.length == 0 || plainText.length == 0) return;
-    objc_setAssociatedObject(message, &NeoWCEncryptedTextManualPlainKey, plainText,
-                             OBJC_ASSOCIATION_COPY_NONATOMIC);
-    [NeoWCEncryptedTextManualCache() setObject:plainText forKey:wireText];
-}
-
-static NSString *NeoWCDecryptedPlainTextForCell(id cell) {
-    if (!cell || !NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey)) return nil;
-    id message = NeoWCMessageWrapForCell(cell);
-    NSString *wireText = NeoWCEncryptedWireTextForMessage(message);
-    if (wireText.length == 0) return nil;
-    NSString *plainText = NeoWCManualDecryptedTextForMessage(message, wireText);
-    if (plainText.length > 0) return plainText;
-    if (![NSUserDefaults.standardUserDefaults boolForKey:NeoWCEncryptedMessageAutoDecryptKey]) return nil;
-    plainText = [NeoWCEncryptedTextAutoCache() objectForKey:wireText];
-    if (plainText.length > 0) return plainText;
-    plainText = NeoWCDecryptTextWireString(wireText, nil);
-    if (plainText.length > 0) [NeoWCEncryptedTextAutoCache() setObject:plainText forKey:wireText];
-    return plainText;
-}
-
-static BOOL NeoWCApplyDecryptedTextToTranslationView(id cell, NSString *plainText) {
-    if (!cell || plainText.length == 0) return NO;
-    Ivar richTextIvar = class_getInstanceVariable([cell class], "m_translateRichTextView");
-    id translateRichTextView = richTextIvar ? object_getIvar(cell, richTextIvar) : nil;
-    if (!NeoWCSetNativeRichTextContent(translateRichTextView, plainText)) return NO;
-    Ivar successLabelIvar = class_getInstanceVariable([cell class], "m_translateSuccessLabel");
-    id successLabel = successLabelIvar ? object_getIvar(cell, successLabelIvar) : nil;
-    if ([successLabel respondsToSelector:@selector(setText:)]) {
-        ((void (*)(id, SEL, id))objc_msgSend)(successLabel, @selector(setText:), @"来自[NeoWC解密]");
-    }
-    return YES;
-}
-
-static void NeoWCRequestNativeEncryptedTextTranslation(id cell, NSString *wireText) {
-    if (!cell || wireText.length == 0) return;
-    NSString *requestedWire = objc_getAssociatedObject(cell, &NeoWCEncryptedTextTranslationWireKey);
-    if ([requestedWire isEqualToString:wireText]) {
-        NSString *plainText = NeoWCDecryptedPlainTextForCell(cell);
-        if (plainText.length > 0 && NeoWCApplyDecryptedTextToTranslationView(cell, plainText)) return;
-    }
-    SEL translateSelector = NSSelectorFromString(@"translateMsg");
-    if (![cell respondsToSelector:translateSelector]) return;
-    objc_setAssociatedObject(cell, &NeoWCEncryptedTextTranslationWireKey, wireText,
-                             OBJC_ASSOCIATION_COPY_NONATOMIC);
-    id message = NeoWCMessageWrapForCell(cell);
-    NSString *proxyText = NeoWCEncryptedTextTranslationProxy(wireText);
-    SEL setContentSelector = NSSelectorFromString(@"setM_nsContent:");
-    BOOL swappedContent = proxyText.length > 0 &&
-        [message respondsToSelector:setContentSelector] &&
-        [NeoWCTweakSafeValue(message, @"m_nsContent") isEqualToString:wireText];
-    @try {
-        // TextMessageCellView may run its same-language check synchronously
-        // before TranslateMsgMgr asks for the real content. Keep the proxy only
-        // for this native call; the message object is restored in @finally.
-        if (swappedContent) {
-            ((void (*)(id, SEL, id))objc_msgSend)(message, setContentSelector, proxyText);
-        }
-        ((void (*)(id, SEL))objc_msgSend)(cell, translateSelector);
-    } @catch (__unused NSException *exception) {
-        objc_setAssociatedObject(cell, &NeoWCEncryptedTextTranslationWireKey, nil,
-                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    } @finally {
-        if (swappedContent &&
-            [NeoWCTweakSafeValue(message, @"m_nsContent") isEqualToString:proxyText]) {
-            ((void (*)(id, SEL, id))objc_msgSend)(message, setContentSelector, wireText);
-        }
-    }
-}
-
-static void NeoWCScheduleEncryptedTextTranslationForCell(id cell) {
-    if (!cell || !NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey)) return;
-    id message = NeoWCMessageWrapForCell(cell);
-    NSString *wireText = NeoWCEncryptedWireTextForMessage(message);
-    NSString *plainText = NeoWCDecryptedPlainTextForCell(cell);
-    if (plainText.length == 0) {
-        objc_setAssociatedObject(cell, &NeoWCEncryptedTextTranslationWireKey, nil,
-                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        return;
-    }
-    __weak id weakCell = cell;
-    NSString *capturedWireText = [wireText copy];
-    dispatch_async(dispatch_get_main_queue(), ^{
-        id strongCell = weakCell;
-        if (!strongCell) return;
-        NSString *currentWireText = NeoWCEncryptedWireTextForMessage(NeoWCMessageWrapForCell(strongCell));
-        if (![currentWireText isEqualToString:capturedWireText]) return;
-        NeoWCRequestNativeEncryptedTextTranslation(strongCell, capturedWireText);
-    });
-}
-
-static NSArray *NeoWCOperationMenuItemsWithEncryptedTextDecrypt(id target, NSArray *originalItems) {
-    if (![originalItems isKindOfClass:NSArray.class] ||
-        !NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey)) return originalItems;
-    id message = NeoWCMessageWrapForCell(target);
-    NSString *wireText = NeoWCTweakSafeValue(message, @"m_nsContent");
-    if (![wireText isKindOfClass:NSString.class] || !NeoWCIsEncryptedTextWireString(wireText)) {
-        return originalItems;
-    }
-    for (id item in originalItems) {
-        if ([[NeoWCTweakSafeValue(item, @"title") description] isEqualToString:@"解密"]) return originalItems;
-    }
-    Class itemClass = NSClassFromString(@"MMMenuItem");
-    if (![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) {
-        return originalItems;
-    }
-    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration
-        configurationWithPointSize:18.0 weight:UIImageSymbolWeightRegular];
-    UIImage *icon = [UIImage systemImageNamed:@"lock.open.fill" withConfiguration:configuration];
-    icon = [icon imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
-    MMMenuItem *decryptItem = [[itemClass alloc] initWithTitle:@"解密" icon:icon
-                                                       target:target
-                                                       action:@selector(neowc_decryptEncryptedText:)];
-    NSMutableArray *items = [originalItems mutableCopy];
-    [items insertObject:decryptItem atIndex:0];
-    return items;
-}
-
-%hook TranslateMsgMgr
-
-- (NSString *)getRealContentWithMsg:(id)message {
-    NSString *wireText = NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey)
-        ? NeoWCEncryptedWireTextForMessage(message) : nil;
-    NSString *proxyText = NeoWCEncryptedTextTranslationProxy(wireText);
-    if (proxyText.length > 0) return proxyText;
-    return %orig;
-}
-
-%end
 
 %hook TextMessageCellView
 
-- (void)setViewModel:(id)viewModel {
-    %orig;
-    NeoWCScheduleEncryptedTextTranslationForCell(self);
-}
-
-- (void)layoutSubviews {
-    %orig;
-    NSString *wireText = NeoWCEncryptedWireTextForMessage(NeoWCMessageWrapForCell(self));
-    NSString *requestedWire = objc_getAssociatedObject(self, &NeoWCEncryptedTextTranslationWireKey);
-    if (wireText.length == 0 || ![requestedWire isEqualToString:wireText]) return;
-    NSString *plainText = NeoWCDecryptedPlainTextForCell(self);
-    if (plainText.length > 0) NeoWCApplyDecryptedTextToTranslationView(self, plainText);
-}
-
-- (id)getRichTextViewForDelegate {
-    id richTextView = %orig;
-    // PKC leaves WeChat's ordinary rich-text bubble untouched. Decrypted text
-    // is written only into m_translateRichTextView after translateMsg creates
-    // the native translation presentation.
-    return richTextView;
-}
-
-- (void)updateTranslateSuccessView {
-    %orig;
-    NSString *plainText = NeoWCDecryptedPlainTextForCell(self);
-    if (plainText.length > 0) {
-        NeoWCApplyDecryptedTextToTranslationView(self, plainText);
-        NeoWCCompatibilityMarkTriggered(@"encrypted-text-display");
-    }
-}
-
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    items = NeoWCOperationMenuItemsWithEncryptedTextDecrypt(self, items);
     items = NeoWCOperationMenuItemsWithJoker(self, items, NO);
     return NeoWCOperationMenuItemsWithQuickReply(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-    if (action == @selector(neowc_decryptEncryptedText:)) {
-        id message = NeoWCMessageWrapForCell(self);
-        NSString *wireText = NeoWCTweakSafeValue(message, @"m_nsContent");
-        return NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey) &&
-               [wireText isKindOfClass:NSString.class] && NeoWCIsEncryptedTextWireString(wireText);
-    }
     if (action == @selector(joker_handleMenuItem:)) {
         return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageCanJokerEdit(NeoWCMessageWrapForCell(self));
     }
     if (action == @selector(neowc_addToQuickReply:)) return NeoWCMessageCanAddToQuickReply(NeoWCMessageWrapForCell(self));
     return %orig;
-}
-
-%new
-- (void)neowc_decryptEncryptedText:(id)sender {
-    (void)sender;
-    id message = NeoWCMessageWrapForCell(self);
-    NSString *wireText = NeoWCEncryptedWireTextForMessage(message);
-    if (![wireText isKindOfClass:NSString.class] || !NeoWCIsEncryptedTextWireString(wireText)) return;
-    NSError *error = nil;
-    NSString *plainText = NeoWCDecryptTextWireString(wireText, &error);
-    if (plainText.length == 0) {
-        NeoWCShowTransientMessage(error.localizedDescription ?: @"密文解密失败", NO);
-        return;
-    }
-    NeoWCRememberManualDecryptedText(message, wireText, plainText);
-    objc_setAssociatedObject(self, &NeoWCEncryptedTextTranslationWireKey, nil,
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCRequestNativeEncryptedTextTranslation(self, wireText);
-    NeoWCCompatibilityMarkTriggered(@"encrypted-text-manual-decrypt");
 }
 
 %new
@@ -12509,15 +11417,11 @@ static NSArray *NeoWCOperationMenuItemsWithEncryptedTextDecrypt(id target, NSArr
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
     items = NeoWCOperationMenuItemsWithMediaToVoice(self, items, NeoWCMediaToVoiceKindAudioFile);
-    items = NeoWCOperationMenuItemsWithQuickReply(self, items);
-    return NeoWCOperationMenuItemsWithEncryptedPreview(self, items);
+    return NeoWCOperationMenuItemsWithQuickReply(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
     if (action == @selector(neowc_addToQuickReply:)) return NeoWCMessageCanAddToQuickReply(NeoWCMessageWrapForCell(self));
-    if (action == @selector(neowc_previewEncryptedMedia:)) {
-        return NeoWCMessageLooksLikeEncryptedMedia(NeoWCMessageWrapForCell(self));
-    }
     if (action == @selector(neowc_convertAudioFileToVoice:)) {
         return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindAudioFile) &&
                NeoWCMessageIsConvertibleAudioFile(NeoWCMessageWrapForCell(self));
@@ -12535,12 +11439,6 @@ static NSArray *NeoWCOperationMenuItemsWithEncryptedTextDecrypt(id target, NSArr
 - (void)neowc_convertAudioFileToVoice:(id)sender {
     (void)sender;
     NeoWCPresentMediaToVoiceConfirmation(self, NeoWCMediaToVoiceKindAudioFile);
-}
-
-%new
-- (void)neowc_previewEncryptedMedia:(id)sender {
-    (void)sender;
-    NeoWCPresentEncryptedMediaPreview(self);
 }
 
 %end
@@ -12885,25 +11783,6 @@ static NSArray *NeoWCOperationMenuItemsWithEncryptedTextDecrypt(id target, NSArr
 
 - (void)AddMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap {
     NSInteger messageType = [NeoWCTweakSafeValue(wrap, @"m_uiMessageType") integerValue];
-    if (messageType == 1 && NeoWCEnhancementEnabled(NeoWCEncryptedMessageEnabledKey)) {
-        NSString *content = NeoWCTweakSafeValue(wrap, @"m_nsContent");
-        if ([content isKindOfClass:NSString.class] && [content hasPrefix:@"#加密"]) {
-            NSString *plainText = [[content substringFromIndex:@"#加密".length]
-                stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-            if (plainText.length == 0) {
-                NeoWCShowTransientMessage(@"请在“#加密”后输入要发送的文字", NO);
-                return;
-            }
-            NSError *error = nil;
-            NSString *wireText = NeoWCEncryptedTextWireString(plainText, &error);
-            if (wireText.length == 0) {
-                NeoWCShowTransientMessage(error.localizedDescription ?: @"生成密文失败", NO);
-                return;
-            }
-            NeoWCTweakSetValue(wrap, @"m_nsContent", wireText);
-            NeoWCCompatibilityMarkTriggered(@"encrypted-text-send");
-        }
-    }
     if ([objc_getAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey) boolValue]) {
         objc_setAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey, nil,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -14496,6 +13375,34 @@ static BOOL NeoWCMethodArgumentIsInteger(Method method, unsigned int index) {
     return matches;
 }
 
+typedef void (*NeoWCAudioDeviceStartedSuccessIMP)(id, SEL, uintptr_t);
+static NeoWCAudioDeviceStartedSuccessIMP NeoWCOriginalAudioDeviceStartedSuccess;
+
+static void NeoWCAudioDeviceStartedSuccess(id self, SEL selector, uintptr_t value) {
+    if (NeoWCOriginalAudioDeviceStartedSuccess) {
+        NeoWCOriginalAudioDeviceStartedSuccess(self, selector, value);
+    }
+    if (!NeoWCEnhancementEnabled(NeoWCAutoSpeakerphoneEnabledKey)) return;
+    SEL audioModeSelector = NSSelectorFromString(@"isAudioMode");
+    if (![self respondsToSelector:audioModeSelector] ||
+        !((BOOL (*)(id, SEL))objc_msgSend)(self, audioModeSelector)) return;
+    SEL speakerSelector = NSSelectorFromString(@"SetSpeakerPhone:");
+    if (![self respondsToSelector:speakerSelector]) return;
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(self, speakerSelector, YES);
+    NeoWCCompatibilityMarkTriggered(@"auto-speakerphone");
+}
+
+static void NeoWCInstallAutoSpeakerphoneHook(void) {
+    Class managerClass = NSClassFromString(@"VoipUIManager");
+    SEL selector = NSSelectorFromString(@"audioDeviceStartedSuccess:");
+    Method method = managerClass ? class_getInstanceMethod(managerClass, selector) : NULL;
+    if (!method || method_getNumberOfArguments(method) != 3 || !NeoWCMethodReturnsVoid(method) ||
+        !NeoWCMethodArgumentIsObject(method, 2)) return;
+    IMP original = NULL;
+    MSHookMessageEx(managerClass, selector, (IMP)NeoWCAudioDeviceStartedSuccess, &original);
+    NeoWCOriginalAudioDeviceStartedSuccess = (NeoWCAudioDeviceStartedSuccessIMP)original;
+}
+
 static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
     Class logicClass = NSClassFromString(@"WCRedEnvelopesSendControlLogic");
     if (logicClass) {
@@ -14581,6 +13488,7 @@ static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
 %ctor {
     %init;
     NeoWCMomentsCommentAntiDeleteInstallHooks();
+    NeoWCInstallAutoSpeakerphoneHook();
     NeoWCInstallExclusiveRedEnvelopeHooks();
     if ([CADisplayLink instancesRespondToSelector:@selector(setPreferredFrameRateRange:)]) {
         %init(NeoWCHighRefreshRateRange);

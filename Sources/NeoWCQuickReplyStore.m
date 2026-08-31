@@ -19,6 +19,12 @@ static NSString *const NeoWCQuickReplyFoldersIndexName = @"folders.json";
 static NSString *const NeoWCQuickReplyFoldersBackupName = @"folders.backup.json";
 static NSString *const NeoWCQuickReplyRecoveryDirectoryName = @"QuickReplyRecovery";
 static NSString *const NeoWCQuickReplyRecordsDirectoryName = @"records";
+static NSString *const NeoWCQuickReplyLibraryDirectoryName = @"Library";
+static NSString *const NeoWCQuickReplyRootDirectoryName = @"_root";
+static NSString *const NeoWCQuickReplyFolderMetadataName = @".folder.json";
+static NSString *const NeoWCQuickReplySearchIndexName = @"search-index.json";
+static NSString *const NeoWCQuickReplyItemsMigrationMarkerName = @".items-v2";
+static NSString *const NeoWCQuickReplyFoldersMigrationMarkerName = @".folders-v2";
 
 static NSError *NeoWCQuickReplyError(NeoWCQuickReplyErrorCode code, NSString *description) {
     return [NSError errorWithDomain:NeoWCQuickReplyErrorDomain
@@ -36,6 +42,13 @@ static void NeoWCQuickReplySetIndexReadError(NSError **error) {
 static NSString *NeoWCQuickReplyTrimmedString(id value) {
     if (![value isKindOfClass:NSString.class]) return @"";
     return [(NSString *)value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+}
+
+static BOOL NeoWCQuickReplyIsSafePathComponent(NSString *value) {
+    return value.length > 0 && [value isEqualToString:value.lastPathComponent] &&
+           ![value isEqualToString:@"."] && ![value isEqualToString:@".."] &&
+           [value rangeOfString:@"/"].location == NSNotFound &&
+           [value rangeOfString:@"\\"].location == NSNotFound;
 }
 
 static void NeoWCQuickReplyTarWriteOctal(char *field, size_t length, unsigned long long value) {
@@ -128,8 +141,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
 }
 
 - (BOOL)isAvailable {
-    return [self sharedDirectoryCreatingIfNeeded:YES error:nil] != nil &&
-           [self recoveryDirectoryCreatingIfNeeded:YES error:nil] != nil;
+    return [self sharedDirectoryCreatingIfNeeded:YES error:nil] != nil;
 }
 
 - (NSURL *)quickRepliesRootURL {
@@ -224,7 +236,8 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     NSURL *directory = [root URLByAppendingPathComponent:@"Shared" isDirectory:YES];
     if (!create) return directory;
     NSFileManager *manager = NSFileManager.defaultManager;
-    for (NSString *component in @[@"media", @"thumbnails", NeoWCQuickReplyRecordsDirectoryName]) {
+    for (NSString *component in @[@"media", @"thumbnails", NeoWCQuickReplyLibraryDirectoryName,
+                                  [NeoWCQuickReplyLibraryDirectoryName stringByAppendingPathComponent:NeoWCQuickReplyRootDirectoryName]]) {
         NSURL *child = [directory URLByAppendingPathComponent:component isDirectory:YES];
         NSError *directoryError = nil;
         if (![manager createDirectoryAtURL:child withIntermediateDirectories:YES attributes:nil error:&directoryError]) {
@@ -232,10 +245,6 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
             return nil;
         }
     }
-    NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:YES error:nil];
-    [self migratePreviousPersistentLibrariesIntoDirectory:directory recoveryDirectory:recoveryDirectory];
-    NSURL *legacyRoot = [self legacyQuickRepliesRootURL];
-    if (legacyRoot) [self migrateLegacyLibrariesIntoDirectory:directory root:legacyRoot];
     return directory;
 }
 
@@ -463,6 +472,80 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     return dictionary;
 }
 
+- (NSURL *)libraryDirectoryInSharedDirectory:(NSURL *)sharedDirectory {
+    return [sharedDirectory URLByAppendingPathComponent:NeoWCQuickReplyLibraryDirectoryName isDirectory:YES];
+}
+
+- (NSURL *)canonicalDirectoryForFolderIdentifier:(NSString *)folderIdentifier
+                                  sharedDirectory:(NSURL *)sharedDirectory {
+    NSString *component = NeoWCQuickReplyTrimmedString(folderIdentifier);
+    if (!NeoWCQuickReplyIsSafePathComponent(component)) component = NeoWCQuickReplyRootDirectoryName;
+    return [[self libraryDirectoryInSharedDirectory:sharedDirectory]
+            URLByAppendingPathComponent:component isDirectory:YES];
+}
+
+- (NSArray<NSDictionary *> *)canonicalItemDictionariesInSharedDirectory:(NSURL *)sharedDirectory {
+    NSURL *libraryDirectory = [self libraryDirectoryInSharedDirectory:sharedDirectory];
+    NSDirectoryEnumerator<NSURL *> *enumerator = [NSFileManager.defaultManager
+        enumeratorAtURL:libraryDirectory includingPropertiesForKeys:@[NSURLIsDirectoryKey]
+        options:NSDirectoryEnumerationSkipsHiddenFiles errorHandler:nil];
+    if (!enumerator) return nil;
+    NSMutableArray<NSDictionary *> *records = [NSMutableArray array];
+    for (NSURL *URL in enumerator) {
+        NSNumber *isDirectory = nil;
+        [URL getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
+        if (isDirectory.boolValue || ![URL.pathExtension.lowercaseString isEqualToString:@"json"]) continue;
+        NSData *data = [NSData dataWithContentsOfURL:URL options:0 error:nil];
+        id object = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        if (![object isKindOfClass:NSDictionary.class]) return nil;
+        NSMutableDictionary *dictionary = [object mutableCopy];
+        NSString *directoryName = URL.URLByDeletingLastPathComponent.lastPathComponent;
+        if ([directoryName isEqualToString:NeoWCQuickReplyRootDirectoryName]) [dictionary removeObjectForKey:@"folder"];
+        else if (directoryName.length > 0) dictionary[@"folder"] = directoryName;
+        [records addObject:dictionary];
+    }
+    return records;
+}
+
+- (BOOL)writeCanonicalItemRecordsLocked:(NSArray<NeoWCQuickReplyItem *> *)items
+                         sharedDirectory:(NSURL *)sharedDirectory
+                                   error:(NSError **)error {
+    NSFileManager *manager = NSFileManager.defaultManager;
+    NSMutableSet<NSString *> *desiredPaths = [NSMutableSet setWithCapacity:items.count];
+    NSMutableArray *searchValues = [NSMutableArray arrayWithCapacity:items.count];
+    for (NeoWCQuickReplyItem *item in items) {
+        if (!NeoWCQuickReplyIsSafePathComponent(item.identifier)) {
+            if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"消息标识无效，已停止写入");
+            return NO;
+        }
+        NSURL *folderDirectory = [self canonicalDirectoryForFolderIdentifier:item.folderIdentifier sharedDirectory:sharedDirectory];
+        if (![manager createDirectoryAtURL:folderDirectory withIntermediateDirectories:YES attributes:nil error:error]) return NO;
+        NSURL *recordURL = [folderDirectory URLByAppendingPathComponent:[item.identifier stringByAppendingPathExtension:@"json"]];
+        NSDictionary *dictionary = [self dictionaryForItem:item];
+        NSData *data = [NSJSONSerialization dataWithJSONObject:dictionary options:0 error:error];
+        if (!data || ![data writeToURL:recordURL options:NSDataWritingAtomic error:error]) return NO;
+        [desiredPaths addObject:recordURL.URLByStandardizingPath.path];
+        [searchValues addObject:@{@"id": item.identifier, @"folder": item.folderIdentifier ?: @"",
+                                  @"title": item.title ?: @"", @"text": item.text ?: @"", @"type": @(item.type)}];
+    }
+    NSURL *libraryDirectory = [self libraryDirectoryInSharedDirectory:sharedDirectory];
+    NSDirectoryEnumerator<NSURL *> *enumerator = [manager enumeratorAtURL:libraryDirectory
+                                                includingPropertiesForKeys:@[NSURLIsDirectoryKey]
+                                                                   options:NSDirectoryEnumerationSkipsHiddenFiles
+                                                              errorHandler:nil];
+    for (NSURL *URL in enumerator) {
+        NSNumber *isDirectory = nil;
+        [URL getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
+        if (isDirectory.boolValue || ![URL.pathExtension.lowercaseString isEqualToString:@"json"]) continue;
+        if ([URL.lastPathComponent isEqualToString:NeoWCQuickReplyFolderMetadataName]) continue;
+        if (![desiredPaths containsObject:URL.URLByStandardizingPath.path]) [manager removeItemAtURL:URL error:nil];
+    }
+    NSData *searchData = [NSJSONSerialization dataWithJSONObject:searchValues options:0 error:nil];
+    if (searchData) [searchData writeToURL:[sharedDirectory URLByAppendingPathComponent:NeoWCQuickReplySearchIndexName]
+                                  options:NSDataWritingAtomic error:nil];
+    return YES;
+}
+
 - (NSArray<NSDictionary *> *)recordDictionariesInDirectory:(NSURL *)directory {
     NSURL *recordsDirectory = [directory URLByAppendingPathComponent:NeoWCQuickReplyRecordsDirectoryName isDirectory:YES];
     NSArray<NSURL *> *URLs = [NSFileManager.defaultManager contentsOfDirectoryAtURL:recordsDirectory
@@ -629,80 +712,79 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
 
 - (NSMutableArray<NeoWCQuickReplyItem *> *)loadItemsLocked {
     NSURL *directory = [self sharedDirectoryCreatingIfNeeded:YES error:nil];
-    NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:YES error:nil];
-    if (!directory || !recoveryDirectory) return nil;
-    NSArray *object = [self loadJSONArrayAtURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
-                                     backupURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsBackupName]
-                                   recoveryURL:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
-                                         error:nil];
-    if (!object) return nil;
+    if (!directory) return nil;
+    NSURL *migrationMarker = [[self libraryDirectoryInSharedDirectory:directory]
+                              URLByAppendingPathComponent:NeoWCQuickReplyItemsMigrationMarkerName];
+    BOOL migrated = [NSFileManager.defaultManager fileExistsAtPath:migrationMarker.path];
+    NSArray *canonicalRecords = [self canonicalItemDictionariesInSharedDirectory:directory];
+    if (migrated) {
+        if (!canonicalRecords) return nil;
+        NSMutableArray *canonicalItems = [NSMutableArray arrayWithCapacity:canonicalRecords.count];
+        for (NSDictionary *dictionary in canonicalRecords) {
+            NeoWCQuickReplyItem *item = [self itemFromDictionary:dictionary];
+            if (!item) return nil;
+            [canonicalItems addObject:item];
+        }
+        return canonicalItems;
+    }
+
+    // One-time, copy-only compatibility import. The old locations are never
+    // deleted and are not consulted again after the canonical marker exists.
+    NSURL *legacyRoot = [self legacyQuickRepliesRootURL];
+    if (legacyRoot) {
+        [self copyMissingContentsFromDirectory:[legacyRoot URLByAppendingPathComponent:@"Shared" isDirectory:YES]
+                                    toDirectory:directory];
+    }
+
+    NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:NO error:nil];
+    NSArray *object = recoveryDirectory ? [self loadJSONArrayAtURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
+                                       backupURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsBackupName]
+                                     recoveryURL:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
+                                           error:nil] : @[];
+    if (!recoveryDirectory) {
+        for (NSString *name in @[NeoWCQuickReplyItemsIndexName, NeoWCQuickReplyItemsBackupName]) {
+            NSData *legacyData = [NSData dataWithContentsOfURL:[directory URLByAppendingPathComponent:name] options:0 error:nil];
+            id legacyObject = legacyData.length ? [NSJSONSerialization JSONObjectWithData:legacyData options:0 error:nil] : nil;
+            if ([legacyObject isKindOfClass:NSArray.class]) { object = legacyObject; break; }
+        }
+    }
+    if (!object) object = @[];
     NSMutableArray *items = [NSMutableArray array];
     NSMutableSet<NSString *> *knownIdentifiers = [NSMutableSet set];
     for (NSDictionary *dictionary in object) {
         NeoWCQuickReplyItem *item = [self itemFromDictionary:dictionary];
         if (!item) return nil;
-        [self synchronizeRecoveryFileForRelativePath:item.mediaRelativePath
-                                     sharedDirectory:directory
-                                   recoveryDirectory:recoveryDirectory];
-        [self synchronizeRecoveryFileForRelativePath:item.thumbnailRelativePath
-                                     sharedDirectory:directory
-                                   recoveryDirectory:recoveryDirectory];
         [items addObject:item];
         [knownIdentifiers addObject:item.identifier.lowercaseString];
     }
-    for (NSURL *recordDirectory in @[directory, recoveryDirectory]) {
+    for (NSURL *recordDirectory in recoveryDirectory ? @[directory, recoveryDirectory] : @[directory]) {
         for (NSDictionary *dictionary in [self recordDictionariesInDirectory:recordDirectory]) {
             NeoWCQuickReplyItem *item = [self itemFromDictionary:dictionary];
             if (!item || [knownIdentifiers containsObject:item.identifier.lowercaseString]) continue;
-            [self synchronizeRecoveryFileForRelativePath:item.mediaRelativePath
-                                         sharedDirectory:directory
-                                       recoveryDirectory:recoveryDirectory];
-            [self synchronizeRecoveryFileForRelativePath:item.thumbnailRelativePath
-                                         sharedDirectory:directory
-                                       recoveryDirectory:recoveryDirectory];
             [items addObject:item];
             [knownIdentifiers addObject:item.identifier.lowercaseString];
         }
     }
     [self appendOrphanedMediaFromDirectory:directory sharedDirectory:directory recoveryDirectory:recoveryDirectory
                           knownIdentifiers:knownIdentifiers items:items];
-    [self appendOrphanedMediaFromDirectory:recoveryDirectory sharedDirectory:directory recoveryDirectory:recoveryDirectory
-                          knownIdentifiers:knownIdentifiers items:items];
-    if (items.count != object.count) {
-        NSMutableArray *repaired = [NSMutableArray arrayWithCapacity:items.count];
-        for (NeoWCQuickReplyItem *item in items) [repaired addObject:[self dictionaryForItem:item]];
-        NSData *data = [NSJSONSerialization dataWithJSONObject:repaired options:0 error:nil];
-        if (data) [self writeJSONArrayData:data
-                               primaryURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
-                                backupURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsBackupName]
-                              recoveryURL:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
-                                    error:nil];
+    if (recoveryDirectory) {
+        [self appendOrphanedMediaFromDirectory:recoveryDirectory sharedDirectory:directory recoveryDirectory:recoveryDirectory
+                              knownIdentifiers:knownIdentifiers items:items];
     }
-    [self writeItemRecordsLocked:items sharedDirectory:directory recoveryDirectory:recoveryDirectory error:nil];
+    if ([self writeCanonicalItemRecordsLocked:items sharedDirectory:directory error:nil]) {
+        [[NSData data] writeToURL:migrationMarker options:NSDataWritingAtomic error:nil];
+    }
     return items;
 }
 
 - (BOOL)saveItemsLocked:(NSArray<NeoWCQuickReplyItem *> *)items error:(NSError **)error {
     NSURL *directory = [self sharedDirectoryCreatingIfNeeded:YES error:error];
-    NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:YES error:error];
-    if (!directory || !recoveryDirectory) return NO;
-    NSMutableArray *dictionaries = [NSMutableArray arrayWithCapacity:items.count];
-    for (NeoWCQuickReplyItem *item in items) [dictionaries addObject:[self dictionaryForItem:item]];
-    NSError *serializationError = nil;
-    NSData *data = [NSJSONSerialization dataWithJSONObject:dictionaries options:0 error:&serializationError];
-    if (!data) {
-        if (error) *error = serializationError;
-        return NO;
-    }
-    if (![self writeItemRecordsLocked:items sharedDirectory:directory recoveryDirectory:recoveryDirectory error:error]) return NO;
-    NSError *writeError = nil;
-    BOOL written = [self writeJSONArrayData:data
-                                 primaryURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
-                                  backupURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsBackupName]
-                                recoveryURL:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
-                                      error:&writeError];
-    if (!written && error) *error = writeError;
-    return written;
+    if (!directory) return NO;
+    if (![self writeCanonicalItemRecordsLocked:items sharedDirectory:directory error:error]) return NO;
+    NSURL *migrationMarker = [[self libraryDirectoryInSharedDirectory:directory]
+                              URLByAppendingPathComponent:NeoWCQuickReplyItemsMigrationMarkerName];
+    [[NSData data] writeToURL:migrationMarker options:NSDataWritingAtomic error:nil];
+    return YES;
 }
 
 - (NSArray<NeoWCQuickReplyItem *> *)items {
@@ -727,14 +809,41 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
 
 - (NSMutableArray<NeoWCQuickReplyFolder *> *)loadFoldersLocked {
     NSURL *directory = [self sharedDirectoryCreatingIfNeeded:YES error:nil];
-    NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:YES error:nil];
-    if (!directory || !recoveryDirectory) return nil;
-    NSArray *object = [self loadJSONArrayAtURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
-                                     backupURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersBackupName]
-                                   recoveryURL:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
-                                         error:nil];
-    if (!object) return nil;
+    if (!directory) return nil;
+    NSURL *libraryDirectory = [self libraryDirectoryInSharedDirectory:directory];
+    NSURL *migrationMarker = [libraryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersMigrationMarkerName];
+    BOOL migrated = [NSFileManager.defaultManager fileExistsAtPath:migrationMarker.path];
     NSMutableArray<NeoWCQuickReplyFolder *> *folders = [NSMutableArray array];
+    NSArray<NSURL *> *children = [NSFileManager.defaultManager contentsOfDirectoryAtURL:libraryDirectory
+                                                              includingPropertiesForKeys:@[NSURLIsDirectoryKey]
+                                                                                 options:NSDirectoryEnumerationSkipsHiddenFiles
+                                                                                   error:nil];
+    if (!children) return nil;
+    for (NSURL *child in children) {
+        NSNumber *isDirectory = nil;
+        [child getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
+        if (!isDirectory.boolValue || [child.lastPathComponent isEqualToString:NeoWCQuickReplyRootDirectoryName]) continue;
+        NSData *data = [NSData dataWithContentsOfURL:[child URLByAppendingPathComponent:NeoWCQuickReplyFolderMetadataName]
+                                             options:0 error:nil];
+        id dictionary = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        NSString *name = [dictionary isKindOfClass:NSDictionary.class]
+            ? NeoWCQuickReplyTrimmedString(dictionary[@"name"]) : @"";
+        if (name.length == 0) name = [NSString stringWithFormat:@"恢复的分类 %@", [child.lastPathComponent substringToIndex:MIN((NSUInteger)8, child.lastPathComponent.length)]];
+        NeoWCQuickReplyFolder *folder = [NeoWCQuickReplyFolder new];
+        folder.identifier = child.lastPathComponent;
+        folder.name = name;
+        folder.sortIndex = [dictionary[@"sort"] respondsToSelector:@selector(integerValue)]
+            ? [dictionary[@"sort"] integerValue] : folders.count;
+        [folders addObject:folder];
+    }
+    if (migrated) return folders;
+
+    NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:NO error:nil];
+    NSArray *object = recoveryDirectory ? [self loadJSONArrayAtURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
+                                      backupURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersBackupName]
+                                    recoveryURL:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
+                                          error:nil] : @[];
+    if (!object) object = @[];
     for (NSDictionary *dictionary in object) {
         if (![dictionary isKindOfClass:NSDictionary.class]) return nil;
         NSString *identifier = NeoWCQuickReplyTrimmedString(dictionary[@"id"]);
@@ -744,25 +853,56 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         folder.identifier = identifier;
         folder.name = name;
         folder.sortIndex = [dictionary[@"sort"] respondsToSelector:@selector(integerValue)] ? [dictionary[@"sort"] integerValue] : folders.count;
-        [folders addObject:folder];
+        NSUInteger duplicateIndex = [folders indexOfObjectPassingTest:^BOOL(NeoWCQuickReplyFolder *candidate, NSUInteger idx, BOOL *stop) {
+            (void)idx; (void)stop; return [candidate.identifier isEqualToString:folder.identifier];
+        }];
+        if (duplicateIndex == NSNotFound) [folders addObject:folder];
+        else {
+            NeoWCQuickReplyFolder *existing = folders[duplicateIndex];
+            existing.name = folder.name;
+            existing.sortIndex = folder.sortIndex;
+        }
     }
+    [self saveFoldersLocked:folders error:nil];
     return folders;
 }
 
 - (BOOL)saveFoldersLocked:(NSArray<NeoWCQuickReplyFolder *> *)folders error:(NSError **)error {
     NSURL *directory = [self sharedDirectoryCreatingIfNeeded:YES error:error];
-    NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:YES error:error];
-    if (!directory || !recoveryDirectory) return NO;
-    NSMutableArray *values = [NSMutableArray arrayWithCapacity:folders.count];
+    if (!directory) return NO;
+    NSURL *libraryDirectory = [self libraryDirectoryInSharedDirectory:directory];
+    NSFileManager *manager = NSFileManager.defaultManager;
+    NSMutableSet<NSString *> *identifiers = [NSMutableSet setWithCapacity:folders.count];
     for (NeoWCQuickReplyFolder *folder in folders) {
-        [values addObject:@{@"id": folder.identifier ?: @"", @"name": folder.name ?: @"", @"sort": @(folder.sortIndex)}];
+        if (!NeoWCQuickReplyIsSafePathComponent(folder.identifier) || folder.name.length == 0) {
+            if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"文件夹标识无效，已停止写入");
+            return NO;
+        }
+        [identifiers addObject:folder.identifier];
+        NSURL *folderDirectory = [libraryDirectory URLByAppendingPathComponent:folder.identifier isDirectory:YES];
+        if (![manager createDirectoryAtURL:folderDirectory withIntermediateDirectories:YES attributes:nil error:error]) return NO;
+        NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"id": folder.identifier,
+                                                                  @"name": folder.name,
+                                                                  @"sort": @(folder.sortIndex)}
+                                                       options:0 error:error];
+        if (!data || ![data writeToURL:[folderDirectory URLByAppendingPathComponent:NeoWCQuickReplyFolderMetadataName]
+                               options:NSDataWritingAtomic error:error]) return NO;
     }
-    NSData *data = [NSJSONSerialization dataWithJSONObject:values options:0 error:error];
-    return data && [self writeJSONArrayData:data
-                                  primaryURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
-                                   backupURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersBackupName]
-                                 recoveryURL:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
-                                       error:error];
+    NSArray<NSURL *> *children = [manager contentsOfDirectoryAtURL:libraryDirectory
+                                         includingPropertiesForKeys:@[NSURLIsDirectoryKey]
+                                                            options:NSDirectoryEnumerationSkipsHiddenFiles error:nil];
+    for (NSURL *child in children) {
+        NSNumber *isDirectory = nil;
+        [child getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
+        if (!isDirectory.boolValue || [child.lastPathComponent isEqualToString:NeoWCQuickReplyRootDirectoryName] ||
+            [identifiers containsObject:child.lastPathComponent]) continue;
+        [manager removeItemAtURL:[child URLByAppendingPathComponent:NeoWCQuickReplyFolderMetadataName] error:nil];
+        NSArray *remaining = [manager contentsOfDirectoryAtPath:child.path error:nil];
+        if (remaining.count == 0) [manager removeItemAtURL:child error:nil];
+    }
+    [[NSData data] writeToURL:[libraryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersMigrationMarkerName]
+                    options:NSDataWritingAtomic error:nil];
+    return YES;
 }
 
 - (NSArray<NeoWCQuickReplyFolder *> *)folders {
@@ -985,16 +1125,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         item.sourceAccountIdentifier = NeoWCQuickReplyTrimmedString(NeoWCCurrentUserWXID()).length ? NeoWCCurrentUserWXID() : nil;
         item.metadata = @{};
         [items addObject:item];
-        if ([self saveItemsLocked:items error:error]) {
-            NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:YES error:nil];
-            [self synchronizeRecoveryFileForRelativePath:mediaRelativePath
-                                         sharedDirectory:directory
-                                       recoveryDirectory:recoveryDirectory];
-            [self synchronizeRecoveryFileForRelativePath:thumbnailRelativePath
-                                         sharedDirectory:directory
-                                       recoveryDirectory:recoveryDirectory];
-            return item.copy;
-        }
+        if ([self saveItemsLocked:items error:error]) return item.copy;
         [NSFileManager.defaultManager removeItemAtURL:destinationURL error:nil];
         if (thumbnailRelativePath) [NSFileManager.defaultManager removeItemAtURL:[directory URLByAppendingPathComponent:thumbnailRelativePath] error:nil];
         return nil;
