@@ -321,7 +321,7 @@ static void NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
     }
     __weak typeof(self) weakSelf = self;
     UIViewController *picker = NeoWCCreateFriendPicker(@"选择检测好友",
-        @"仅选择真实好友；每次勾选都会立即保存检测范围。",
+        @"仅选择真实好友；支持全选和反选，每次变更都会立即保存检测范围。",
         ^BOOL(NSString *userName) {
             return [NeoWCFriendRelationChecker.sharedChecker.pendingUserNames containsObject:userName];
         }, ^(NSString *userName) {
@@ -332,6 +332,22 @@ static void NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
             [strongChecker setPendingUserNames:selection.array sourceTitle:@"自选好友"];
             [weakSelf.tableView reloadData];
         });
+    NeoWCConfigureConversationPickerBulkActions(picker, ^{
+        NeoWCFriendRelationChecker *strongChecker = NeoWCFriendRelationChecker.sharedChecker;
+        NSArray *allUserNames = [[strongChecker allFriendCandidates] valueForKey:@"userName"];
+        [strongChecker setPendingUserNames:allUserNames sourceTitle:@"全部好友"];
+        [weakSelf.tableView reloadData];
+    }, ^{
+        NeoWCFriendRelationChecker *strongChecker = NeoWCFriendRelationChecker.sharedChecker;
+        NSSet<NSString *> *selected = [NSSet setWithArray:strongChecker.pendingUserNames];
+        NSMutableArray<NSString *> *inverted = [NSMutableArray array];
+        for (NSDictionary *candidate in [strongChecker allFriendCandidates]) {
+            NSString *userName = candidate[@"userName"];
+            if (userName.length > 0 && ![selected containsObject:userName]) [inverted addObject:userName];
+        }
+        [strongChecker setPendingUserNames:inverted sourceTitle:@"反选好友"];
+        [weakSelf.tableView reloadData];
+    });
     [self.navigationController pushViewController:picker animated:YES];
 }
 

@@ -686,7 +686,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
     }
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"display" title:@"显示" footer:@"关闭后恢复微信原始样式。" items:display],
-        [NeoWCSettingSection sectionWithIdentifier:@"chat-capsules" title:@"聊天顶栏" footer:@"胶囊顶栏与置顶消息同步使用所选玻璃样式；普通磨砂只保留模糊强度。" items:chatCapsules],
+        [NeoWCSettingSection sectionWithIdentifier:@"chat-capsules" title:@"聊天顶栏" footer:@"左右顶栏使用所选玻璃样式；置顶消息固定使用磨砂玻璃并跟随模糊强度，避免展开时背景溢出。" items:chatCapsules],
         [NeoWCSettingSection sectionWithIdentifier:@"input" title:@"输入栏" footer:nil items:input],
     ];
 }

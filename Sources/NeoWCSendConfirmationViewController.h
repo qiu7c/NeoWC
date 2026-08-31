@@ -18,3 +18,6 @@ FOUNDATION_EXPORT UIViewController *NeoWCCreateFriendPicker(NSString *title,
                                                             NSString *footer,
                                                             NeoWCConversationPickerSelectedBlock selected,
                                                             NeoWCConversationPickerToggleBlock toggle);
+FOUNDATION_EXPORT void NeoWCConfigureConversationPickerBulkActions(UIViewController *picker,
+                                                                   dispatch_block_t selectAll,
+                                                                   dispatch_block_t invertSelection);

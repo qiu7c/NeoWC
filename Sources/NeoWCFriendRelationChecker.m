@@ -1,4 +1,5 @@
 #import "NeoWCFriendRelationChecker.h"
+#import "NeoWCLogging.h"
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -20,22 +21,18 @@ static NSString *const NeoWCFriendRelationPauseBackground = @"background";
 static NSString *const NeoWCFriendRelationPauseInterrupted = @"interrupted";
 static NSString *const NeoWCFriendRelationPauseNetwork = @"network";
 
-static BOOL NeoWCFriendRelationMethodReturnsObject(Method method);
-static BOOL NeoWCFriendRelationMethodArgumentIsObject(Method method, unsigned int index);
-
 static id NeoWCFriendRelationServiceForClass(Class serviceClass) {
     Class centerClass = NSClassFromString(@"MMServiceCenter");
     SEL centerSelector = NSSelectorFromString(@"defaultCenter");
     SEL serviceSelector = NSSelectorFromString(@"getService:");
-    Method centerMethod = centerClass ? class_getClassMethod(centerClass, centerSelector) : NULL;
-    if (!serviceClass || !centerMethod || method_getNumberOfArguments(centerMethod) != 2 ||
-        !NeoWCFriendRelationMethodReturnsObject(centerMethod)) return nil;
-    id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, centerSelector);
-    Method serviceMethod = center ? class_getInstanceMethod(object_getClass(center), serviceSelector) : NULL;
-    if (!serviceMethod || method_getNumberOfArguments(serviceMethod) != 3 ||
-        !NeoWCFriendRelationMethodReturnsObject(serviceMethod) ||
-        !NeoWCFriendRelationMethodArgumentIsObject(serviceMethod, 2)) return nil;
-    return ((id (*)(id, SEL, Class))objc_msgSend)(center, serviceSelector, serviceClass);
+    if (!serviceClass || ![centerClass respondsToSelector:centerSelector]) return nil;
+    @try {
+        id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, centerSelector);
+        if (![center respondsToSelector:serviceSelector]) return nil;
+        return ((id (*)(id, SEL, Class))objc_msgSend)(center, serviceSelector, serviceClass);
+    } @catch (__unused NSException *exception) {
+        return nil;
+    }
 }
 
 static BOOL NeoWCFriendRelationMethodReturnsObject(Method method) {
@@ -43,34 +40,6 @@ static BOOL NeoWCFriendRelationMethodReturnsObject(Method method) {
     char type[16] = {0};
     method_getReturnType(method, type, sizeof(type));
     return type[0] == '@' || type[0] == '#';
-}
-
-static BOOL NeoWCFriendRelationMethodReturnsInteger(Method method) {
-    if (!method) return NO;
-    char type[16] = {0};
-    method_getReturnType(method, type, sizeof(type));
-    return strchr("cCsSiIlLqQB", type[0]) != NULL;
-}
-
-static BOOL NeoWCFriendRelationMethodReturnsVoid(Method method) {
-    if (!method) return NO;
-    char type[16] = {0};
-    method_getReturnType(method, type, sizeof(type));
-    return type[0] == 'v';
-}
-
-static BOOL NeoWCFriendRelationMethodArgumentIsObject(Method method, unsigned int index) {
-    if (!method || index >= method_getNumberOfArguments(method)) return NO;
-    char type[16] = {0};
-    method_getArgumentType(method, index, type, sizeof(type));
-    return type[0] == '@' || type[0] == '#';
-}
-
-static BOOL NeoWCFriendRelationMethodArgumentIsInteger(Method method, unsigned int index) {
-    if (!method || index >= method_getNumberOfArguments(method)) return NO;
-    char type[16] = {0};
-    method_getArgumentType(method, index, type, sizeof(type));
-    return strchr("cCsSiIlLqQB", type[0]) != NULL;
 }
 
 static id NeoWCFriendRelationObjectValue(id object, NSArray<NSString *> *names) {
@@ -136,12 +105,13 @@ static NSString *NeoWCFriendRelationString(id value) {
 
 static NSString *NeoWCFriendRelationContactUserName(id contact) {
     return NeoWCFriendRelationString(NeoWCFriendRelationObjectValue(contact,
-        @[@"m_nsUsrName", @"m_nsUserName", @"userName", @"username"]));
+        @[@"m_nsUsrName", @"getUsrName", @"m_nsUserName", @"userName", @"username"]));
 }
 
 static NSString *NeoWCFriendRelationContactDisplayName(id contact, NSString *fallback) {
     NSString *name = NeoWCFriendRelationString(NeoWCFriendRelationObjectValue(contact,
-        @[@"getContactDisplayName", @"m_nsRemark", @"m_nsNickName", @"displayName", @"nickName"]));
+        @[@"getContactDisplayName", @"getDisplayName", @"m_nsRemark", @"m_nsNickName",
+          @"displayName", @"nickName"]));
     return name.length > 0 ? name : (fallback ?: @"");
 }
 
@@ -153,6 +123,14 @@ static BOOL NeoWCFriendRelationBoolSelector(id object, NSString *name, BOOL fall
     method_getReturnType(method, type, sizeof(type));
     if (!strchr("cCsSiIlLqQB", type[0])) return fallback;
     return ((BOOL (*)(id, SEL))objc_msgSend)(object, selector);
+}
+
+static void NeoWCFriendRelationInvokeObjectArgument(id target, SEL selector, id argument) {
+    ((void (*)(id, SEL, id))objc_msgSend)(target, selector, argument);
+}
+
+static void NeoWCFriendRelationInvokeNoArgument(id target, SEL selector) {
+    ((void (*)(id, SEL))objc_msgSend)(target, selector);
 }
 
 static BOOL NeoWCFriendRelationExcludedUserName(NSString *userName) {
@@ -328,32 +306,35 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
 - (NSArray<NSDictionary<NSString *, NSString *> *> *)allFriendCandidates {
     id manager = NeoWCFriendRelationServiceForClass(NSClassFromString(@"CContactMgr"));
     SEL listSelector = NSSelectorFromString(@"getContactList:contactType:");
-    Method listMethod = manager ? class_getInstanceMethod(object_getClass(manager), listSelector) : NULL;
-    if (!listMethod || method_getNumberOfArguments(listMethod) != 4 ||
-        !NeoWCFriendRelationMethodReturnsObject(listMethod) ||
-        !NeoWCFriendRelationMethodArgumentIsInteger(listMethod, 2) ||
-        !NeoWCFriendRelationMethodArgumentIsInteger(listMethod, 3)) return @[];
-    id rawContacts = ((id (*)(id, SEL, NSUInteger, NSUInteger))objc_msgSend)(manager, listSelector, 1, 0);
+    if (![manager respondsToSelector:listSelector]) {
+        NeoWCLog(@"单删检测无法取得联系人服务或列表接口");
+        return @[];
+    }
+    id rawContacts = nil;
+    @try {
+        rawContacts = ((id (*)(id, SEL, NSUInteger, NSUInteger))objc_msgSend)(manager,
+                                                                              listSelector, 1, 0);
+    } @catch (NSException *exception) {
+        NeoWCLog(@"单删检测读取联系人列表失败：%@", exception.reason ?: exception.name);
+        return @[];
+    }
     if (![rawContacts isKindOfClass:NSArray.class]) return @[];
 
     SEL contactSelector = NSSelectorFromString(@"getContactByName:");
-    Method contactMethod = class_getInstanceMethod(object_getClass(manager), contactSelector);
-    BOOL canResolveContact = contactMethod && method_getNumberOfArguments(contactMethod) == 3 &&
-        NeoWCFriendRelationMethodReturnsObject(contactMethod) &&
-        NeoWCFriendRelationMethodArgumentIsObject(contactMethod, 2);
+    BOOL canResolveContact = [manager respondsToSelector:contactSelector];
     SEL membershipSelector = NSSelectorFromString(@"isInContactList:");
-    Method membershipMethod = class_getInstanceMethod(object_getClass(manager), membershipSelector);
-    BOOL canCheckMembership = membershipMethod && method_getNumberOfArguments(membershipMethod) == 3 &&
-        NeoWCFriendRelationMethodReturnsInteger(membershipMethod) &&
-        NeoWCFriendRelationMethodArgumentIsObject(membershipMethod, 2);
+    BOOL canCheckMembership = [manager respondsToSelector:membershipSelector];
 
     NSMutableArray *candidates = [NSMutableArray array];
     NSMutableSet *seen = [NSMutableSet set];
     for (id rawContact in (NSArray *)rawContacts) {
         NSString *userName = NeoWCFriendRelationContactUserName(rawContact);
         if (NeoWCFriendRelationExcludedUserName(userName) || [seen containsObject:userName]) continue;
-        id contact = canResolveContact
-            ? ((id (*)(id, SEL, id))objc_msgSend)(manager, contactSelector, userName) : rawContact;
+        id contact = rawContact;
+        if (canResolveContact) {
+            @try { contact = ((id (*)(id, SEL, id))objc_msgSend)(manager, contactSelector, userName); }
+            @catch (__unused NSException *exception) { contact = nil; }
+        }
         if (!contact || !NeoWCFriendRelationBoolSelector(contact, @"isMMContact", YES)) continue;
         if (NeoWCFriendRelationBoolSelector(contact, @"isBrandContact", NO) ||
             NeoWCFriendRelationBoolSelector(contact, @"isChatRoom", NO) ||
@@ -361,10 +342,19 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
             NeoWCFriendRelationBoolSelector(contact, @"isBrandSessionHolder", NO) ||
             NeoWCFriendRelationBoolSelector(contact, @"isBrandServiceBoxSession", NO) ||
             NeoWCFriendRelationBoolSelector(contact, @"isTemplateMsgHolder", NO)) continue;
-        id friendScene = NeoWCFriendRelationObjectValue(contact, @[@"m_uiFriendScene"]);
-        if (![friendScene respondsToSelector:@selector(longLongValue)] || [friendScene longLongValue] == 0) continue;
-        if (canCheckMembership &&
-            !((BOOL (*)(id, SEL, id))objc_msgSend)(manager, membershipSelector, userName)) continue;
+        BOOL friendSceneFound = NO;
+        long long friendScene = NeoWCFriendRelationIntegerValue(contact,
+            @[@"m_uiFriendScene"], &friendSceneFound);
+        if (!friendSceneFound || friendScene == 0) continue;
+        if (canCheckMembership) {
+            BOOL inContactList = NO;
+            @try {
+                inContactList = ((BOOL (*)(id, SEL, id))objc_msgSend)(manager,
+                                                                     membershipSelector,
+                                                                     userName);
+            } @catch (__unused NSException *exception) {}
+            if (!inContactList) continue;
+        }
         [seen addObject:userName];
         [candidates addObject:@{
             @"userName": userName,
@@ -411,6 +401,8 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
         self.sourceTitle = @"全部好友";
     }
     if (queue.count == 0) return NO;
+    NeoWCLog(@"单删检测准备启动：候选 %lu 人，来源 %@",
+             (unsigned long)queue.count, self.sourceTitle ?: @"");
     [self cancelPendingWork];
     self.activeQueue = [queue copy];
     self.cursor = 0;
@@ -503,12 +495,11 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
     id manager = NeoWCFriendRelationServiceForClass(NSClassFromString(@"CContactMgr"));
     for (NSString *name in @[@"getContactByName:", @"getContactByNameFromCache:"]) {
         SEL selector = NSSelectorFromString(name);
-        Method method = manager ? class_getInstanceMethod(object_getClass(manager), selector) : NULL;
-        if (!method || method_getNumberOfArguments(method) != 3 ||
-            !NeoWCFriendRelationMethodReturnsObject(method) ||
-            !NeoWCFriendRelationMethodArgumentIsObject(method, 2)) continue;
-        id contact = ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
-        if (contact) return contact;
+        if (![manager respondsToSelector:selector]) continue;
+        @try {
+            id contact = ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
+            if (contact) return contact;
+        } @catch (__unused NSException *exception) {}
     }
     return nil;
 }
@@ -517,24 +508,32 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
     if (NeoWCFriendRelationExcludedUserName(userName)) return NO;
     id manager = NeoWCFriendRelationServiceForClass(NSClassFromString(@"CContactMgr"));
     SEL selector = NSSelectorFromString(@"isInContactList:");
-    Method method = manager ? class_getInstanceMethod(object_getClass(manager), selector) : NULL;
-    if (method && method_getNumberOfArguments(method) == 3 &&
-        NeoWCFriendRelationMethodReturnsInteger(method) &&
-        NeoWCFriendRelationMethodArgumentIsObject(method, 2)) {
-        return ((BOOL (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
+    if ([manager respondsToSelector:selector]) {
+        @try { return ((BOOL (*)(id, SEL, id))objc_msgSend)(manager, selector, userName); }
+        @catch (__unused NSException *exception) {}
     }
     return [self contactForUserName:userName] != nil;
 }
 
 - (void)startNext {
     if (![self.status isEqualToString:NeoWCFriendRelationStatusRunning]) return;
+    NSUInteger skipped = 0;
     while (self.cursor < self.activeQueue.count) {
         NSString *userName = self.activeQueue[self.cursor];
         if ([self isStillFriendCandidate:userName]) {
+            if (skipped > 0) {
+                NeoWCLog(@"单删检测跳过 %lu 个已不在通讯录的账号",
+                         (unsigned long)skipped);
+            }
             [self fireCgiForUserName:userName];
             return;
         }
         self.cursor += 1;
+        skipped += 1;
+    }
+    if (skipped > 0) {
+        NeoWCLog(@"单删检测没有剩余可调用账号：本轮跳过 %lu 个",
+                 (unsigned long)skipped);
     }
     [self cancelPendingWork];
     self.status = NeoWCFriendRelationStatusCompleted;
@@ -549,19 +548,22 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
     SEL usernameSelector = NSSelectorFromString(@"setUsername:");
     SEL delegateSelector = NSSelectorFromString(@"setDelegate:");
     SEL startSelector = NSSelectorFromString(@"startRequest");
-    id cgi = cgiClass ? [cgiClass new] : nil;
+    id cgi = nil;
+    @try { cgi = cgiClass ? [cgiClass new] : nil; }
+    @catch (NSException *exception) {
+        NeoWCLog(@"单删检测创建支付 CGI 失败：%@", exception.reason ?: exception.name);
+    }
     Method usernameMethod = cgi ? class_getInstanceMethod(object_getClass(cgi), usernameSelector) : NULL;
     Method delegateMethod = cgi ? class_getInstanceMethod(object_getClass(cgi), delegateSelector) : NULL;
     Method startMethod = cgi ? class_getInstanceMethod(object_getClass(cgi), startSelector) : NULL;
-    BOOL compatible = usernameMethod && method_getNumberOfArguments(usernameMethod) == 3 &&
-        NeoWCFriendRelationMethodReturnsVoid(usernameMethod) &&
-        NeoWCFriendRelationMethodArgumentIsObject(usernameMethod, 2) &&
-        delegateMethod && method_getNumberOfArguments(delegateMethod) == 3 &&
-        NeoWCFriendRelationMethodReturnsVoid(delegateMethod) &&
-        NeoWCFriendRelationMethodArgumentIsObject(delegateMethod, 2) &&
-        startMethod && method_getNumberOfArguments(startMethod) == 2 &&
-        NeoWCFriendRelationMethodReturnsVoid(startMethod);
+    BOOL compatible = cgi && [cgi respondsToSelector:usernameSelector] &&
+        [cgi respondsToSelector:delegateSelector] && [cgi respondsToSelector:startSelector];
     if (!cgi || !compatible) {
+        NeoWCLog(@"单删检测支付 CGI 不兼容：class=%@ username=%@ delegate=%@ start=%@",
+                 cgiClass ? NSStringFromClass(cgiClass) : @"nil",
+                 usernameMethod ? @"YES" : @"NO",
+                 delegateMethod ? @"YES" : @"NO",
+                 startMethod ? @"YES" : @"NO");
         [self completeCurrentUser:userName
                          display:NeoWCFriendRelationContactDisplayName([self contactForUserName:userName], userName)
                          verdict:NeoWCFriendRelationVerdictUncertain
@@ -589,10 +591,17 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
     };
     self.currentCgi = cgi;
     self.currentBridge = bridge;
-    ((void (*)(id, SEL, id))objc_msgSend)(cgi, usernameSelector, userName);
-    ((void (*)(id, SEL, id))objc_msgSend)(cgi, delegateSelector, bridge);
-    [self saveAndNotify];
-    ((void (*)(id, SEL))objc_msgSend)(cgi, startSelector);
+    @try {
+        NeoWCFriendRelationInvokeObjectArgument(cgi, usernameSelector, userName);
+        NeoWCFriendRelationInvokeObjectArgument(cgi, delegateSelector, bridge);
+        [self saveAndNotify];
+        NeoWCFriendRelationInvokeNoArgument(cgi, startSelector);
+        NeoWCLog(@"单删检测已启动支付 CGI：%@", userName);
+    } @catch (NSException *exception) {
+        NeoWCLog(@"单删检测调用支付 CGI 失败：%@", exception.reason ?: exception.name);
+        [self handleCgiResponse:nil error:exception userName:userName displayName:displayName];
+        return;
+    }
 
     dispatch_block_t timeout = dispatch_block_create(0, ^{
         __strong typeof(weakSelf) self = weakSelf;
@@ -651,7 +660,7 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
     for (id object in @[response ?: NSNull.null, error ?: NSNull.null]) {
         if (object == NSNull.null) continue;
         NSString *message = NeoWCFriendRelationString(NeoWCFriendRelationObjectValue(object,
-            @[@"retmsg", @"errorDesc", @"m_nsErrorDesc", @"localizedDescription"]));
+            @[@"retmsg", @"errorDesc", @"m_nsErrorDesc", @"localizedDescription", @"reason"]));
         if (message.length > 0 && ![messages containsObject:message]) [messages addObject:message];
     }
     NSString *message = [messages componentsJoinedByString:@" · "];

@@ -8859,8 +8859,11 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
 
     if (!glassView) {
         glassView = [NeoWCGlassCapsuleView new];
+        // This backdrop is positioned from MMMsgCommonTipsView's runtime bounds.
+        // Keep it out of Auto Layout so an ambiguous constraint pass cannot
+        // stretch it to the expanded pinned-message container.
+        glassView.translatesAutoresizingMaskIntoConstraints = YES;
         glassView.userInteractionEnabled = NO;
-        glassView.capsuleCornerRadius = 14.0;
         objc_setAssociatedObject(glassView, &NeoWCChatTopGlassEffectMarkerKey,
                                  @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey,
@@ -8868,9 +8871,10 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
     }
     CGFloat blurIntensity = NeoWCChatGlassPercent(NeoWCChatGlassBlurIntensityKey,
                                                   100.0, 20.0, 100.0) / 100.0;
-    NSInteger glassStyle = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCChatGlassStyleKey];
-    if (glassStyle == 1) [glassView configurePseudoLiquidWithBlurIntensity:blurIntensity];
-    else [glassView configureFrostedGlassWithBlurIntensity:blurIntensity];
+    // The pinned row has an expanding host view. Liquid highlight/rim layers
+    // visually leak when that host changes height, so this row deliberately
+    // stays on the stable frosted material regardless of the top-bar style.
+    [glassView configureFrostedGlassWithBlurIntensity:blurIntensity];
     // MMMsgCommonTipsView expands its own bounds to host the pinned-message list.
     // The glass belongs only to the fixed header row; following the full height
     // makes the material spill over the conversation while that list is open.
@@ -8880,8 +8884,12 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
                                 CGRectGetMinY(tipsBounds),
                                 MAX(0.0, CGRectGetWidth(tipsBounds) - 16.0),
                                 glassHeight);
+    glassView.capsuleCornerRadius = glassHeight * 0.5;
     glassView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     glassView.clipsToBounds = YES;
+    glassView.layer.masksToBounds = YES;
+    [glassView setNeedsLayout];
+    [glassView layoutIfNeeded];
     if (glassView.superview != tipsView) {
         [tipsView insertSubview:glassView atIndex:0];
     } else {

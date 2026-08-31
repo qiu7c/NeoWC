@@ -97,9 +97,9 @@ static NSArray *NeoWCSendConfirmationCollection(id target, NSArray<NSString *> *
 
 static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager, BOOL groupHint) {
     NSString *username = [candidate isKindOfClass:NSString.class] ? candidate :
-        NeoWCSendConfirmationContactString(candidate, @[@"m_nsUserName", @"m_nsUsrName", @"userName"]);
+        NeoWCSendConfirmationContactString(candidate, @[@"m_nsUserName", @"m_nsUsrName", @"getUsrName", @"userName"]);
     id contact = [candidate isKindOfClass:NSString.class] ? NeoWCSendConfirmationContactForName(manager, username) : candidate;
-    if (username.length == 0) username = NeoWCSendConfirmationContactString(contact, @[@"m_nsUserName", @"m_nsUsrName", @"userName"]);
+    if (username.length == 0) username = NeoWCSendConfirmationContactString(contact, @[@"m_nsUserName", @"m_nsUsrName", @"getUsrName", @"userName"]);
     if (username.length == 0 || [username isEqualToString:NeoWCCurrentUserWXID()] || [username isEqualToString:@"filehelper"]) return nil;
     BOOL group = groupHint || [username hasSuffix:@"@chatroom"];
     BOOL chatroomCheckAvailable = NO;
@@ -110,7 +110,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
         BOOL isSingleContact = NeoWCSendConfirmationBooleanValue(contact, @"isWeixinSingleConatct", &singleCheckAvailable);
         if (singleCheckAvailable && !isSingleContact) return nil;
     }
-    NSString *displayName = NeoWCSendConfirmationContactString(contact, @[@"getContactDisplayName", @"m_nsRemark", @"m_nsNickName", @"m_nsUsrName"]);
+    NSString *displayName = NeoWCSendConfirmationContactString(contact, @[@"getContactDisplayName", @"getDisplayName", @"m_nsRemark", @"m_nsNickName", @"m_nsUsrName"]);
     if (displayName.length == 0) displayName = username;
     return @{ @"username": username, @"name": displayName, @"group": @(group) };
 }
@@ -183,6 +183,8 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 @property (nonatomic, copy) NSString *pickerFooter;
 @property (nonatomic, copy) NeoWCConversationPickerSelectedBlock selectedBlock;
 @property (nonatomic, copy) NeoWCConversationPickerToggleBlock toggleBlock;
+@property (nonatomic, copy, nullable) dispatch_block_t selectAllBlock;
+@property (nonatomic, copy, nullable) dispatch_block_t invertSelectionBlock;
 @property (nonatomic, assign) BOOL groupsOnly;
 @property (nonatomic, assign) BOOL friendsOnly;
 - (instancetype)initWithTitle:(NSString *)title
@@ -213,7 +215,25 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
         (self.groupsOnly ? @"选择群聊" : (self.friendsOnly ? @"选择好友" : @"选择好友或群聊"));
     self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.tableView.rowHeight = 60.0;
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(done)];
+    if (self.selectAllBlock || self.invertSelectionBlock) {
+        NSMutableArray<UIBarButtonItem *> *bulkItems = [NSMutableArray array];
+        if (self.selectAllBlock) {
+            [bulkItems addObject:[[UIBarButtonItem alloc] initWithTitle:@"全选"
+                                                                  style:UIBarButtonItemStylePlain
+                                                                 target:self
+                                                                 action:@selector(selectAllTapped)]];
+        }
+        if (self.invertSelectionBlock) {
+            [bulkItems addObject:[[UIBarButtonItem alloc] initWithTitle:@"反选"
+                                                                  style:UIBarButtonItemStylePlain
+                                                                 target:self
+                                                                 action:@selector(invertSelectionTapped)]];
+        }
+        self.navigationItem.rightBarButtonItems = bulkItems;
+    } else {
+        self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
+            initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(done)];
+    }
     self.searchBar = [UISearchBar new];
     self.searchBar.delegate = self;
     self.searchBar.placeholder = self.groupsOnly ? @"搜索群聊或 username" :
@@ -223,6 +243,16 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 }
 
 - (void)done { [self.navigationController popViewControllerAnimated:YES]; }
+
+- (void)selectAllTapped {
+    if (self.selectAllBlock) self.selectAllBlock();
+    [self.tableView reloadData];
+}
+
+- (void)invertSelectionTapped {
+    if (self.invertSelectionBlock) self.invertSelectionBlock();
+    [self.tableView reloadData];
+}
 
 - (void)loadConversations {
     id contactManager = NeoWCSendConfirmationService(NSClassFromString(@"CContactMgr"));
@@ -347,6 +377,16 @@ UIViewController *NeoWCCreateFriendPicker(NSString *title,
                                                                                                                  toggle:toggle];
     picker.friendsOnly = YES;
     return picker;
+}
+
+void NeoWCConfigureConversationPickerBulkActions(UIViewController *picker,
+                                                  dispatch_block_t selectAll,
+                                                  dispatch_block_t invertSelection) {
+    if (![picker isKindOfClass:NeoWCSendConfirmationConversationPicker.class]) return;
+    NeoWCSendConfirmationConversationPicker *conversationPicker =
+        (NeoWCSendConfirmationConversationPicker *)picker;
+    conversationPicker.selectAllBlock = selectAll;
+    conversationPicker.invertSelectionBlock = invertSelection;
 }
 
 @interface NeoWCSendConfirmationViewController ()
