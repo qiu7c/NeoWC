@@ -12144,6 +12144,9 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 - (void)prepareForReuse {
     %orig;
     NeoWCHideMessageTimeLabels(self);
+    UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
+    label.hidden = YES;
+    label.text = nil;
 }
 
 - (void)layoutSubviews {
@@ -12404,13 +12407,6 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     CGRect targetFrame = CGRectIntegral(CGRectMake(x, y, labelWidth, labelHeight));
     if (!CGRectEqualToRect(label.frame, targetFrame)) label.frame = targetFrame;
     [self bringSubviewToFront:label];
-}
-
-- (void)prepareForReuse {
-    %orig;
-    UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
-    label.hidden = YES;
-    label.text = nil;
 }
 
 %end
