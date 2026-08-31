@@ -68,6 +68,7 @@ NSString *const NeoWCMessageBlockKeywordsKey = @"com.qiu7c.neowc.message.block.k
 NSString *const NeoWCMessageBlockRulesKey = @"com.qiu7c.neowc.message.block.rules";
 NSString *const NeoWCMessageBlockProfileSwitchEnabledKey = @"com.qiu7c.neowc.message.block.profile-switch";
 NSString *const NeoWCSendConfirmationProfileSwitchEnabledKey = @"com.qiu7c.neowc.send-confirmation.profile-switch";
+NSString *const NeoWCMessageRepeatMenuEnabledKey = @"com.qiu7c.neowc.chat.message-repeat-menu";
 NSString *const NeoWCLongPressMenuEnabledKey = @"com.qiu7c.neowc.chat.long-press-menu";
 NSString *const NeoWCLongPressMenuHiddenTitlesKey = @"com.qiu7c.neowc.chat.long-press-menu.hidden";
 NSString *const NeoWCLongPressMenuPreferredOrderKey = @"com.qiu7c.neowc.chat.long-press-menu.order";

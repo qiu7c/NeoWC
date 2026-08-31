@@ -169,6 +169,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCMessageBlockRulesKey: @{},
         NeoWCMessageBlockProfileSwitchEnabledKey: @YES,
         NeoWCSendConfirmationProfileSwitchEnabledKey: @YES,
+        NeoWCMessageRepeatMenuEnabledKey: @NO,
         NeoWCLongPressMenuEnabledKey: @NO,
         NeoWCLongPressMenuHiddenTitlesKey: @[],
         NeoWCLongPressMenuPreferredOrderKey: @[],
@@ -359,6 +360,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"聊天记录搜索", @"在聊天顶栏打开微信原生聊天记录搜索", @"magnifyingglass", NeoWCSettingRowKindSwitch, NeoWCChatSearchButtonEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"小游戏结果选择", @"支持骰子与猜拳跨类型彩蛋", @"die.face.5", NeoWCSettingRowKindSwitch, NeoWCGameSelectorKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"聊天记录小丑", @"长按消息，仅修改当前页面本机显示", @"square.and.pencil", NeoWCSettingRowKindSwitch, NeoWCChatJokerEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"消息 +1", @"在可复读消息的长按菜单中加入 +1", @"plus.message", NeoWCSettingRowKindSwitch, NeoWCMessageRepeatMenuEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"表情存入自拍", @"在表情菜单中存入自拍表情", @"camera", NeoWCSettingRowKindSwitch, NeoWCEmoticonToSelfieEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"语音转发", @"在语音长按菜单中显示转发", @"waveform.badge.plus", NeoWCSettingRowKindSwitch, NeoWCVoiceForwardEnabledKey, nil, NeoWCSettingActionNone),
     ]];

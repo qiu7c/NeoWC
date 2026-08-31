@@ -48,11 +48,17 @@ NSArray<NeoWCReleaseNote *> *NeoWCReleaseNotes(void) {
                                      headline:@"通知、胶囊顶栏、好友检测与消息库重构"
                                         items:@[
                 [NeoWCReleaseNoteItem itemWithTitle:@"检测单删好友"
-                                               detail:@"复用微信支付转账前置校验，按好友串行检测并随机等待；选择页支持全选和反选，检测时显示当前好友、完成进度、正常、疑似单删和待复查数量，并支持暂停、后台保护、断点恢复和结果复检。修复兼容判断导致请求未发出却立即显示完成的问题；网络与解析异常不会误判为单删。"],
+                                               detail:@"复用微信支付转账前置校验，按好友串行检测并随机等待；选择页支持全选和反选，检测时显示当前好友、完成进度、正常、疑似单删和待核查数量，并支持暂停、后台保护、断点恢复和结果复检。修复兼容判断导致请求未发出却立即显示完成的问题；网络与解析异常不会误判为单删。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"微信风格应用内通知"
                                                detail:@"朋友圈特别关注、点赞和评论在微信前台使用非阻塞横幅提醒；支持自定义左侧图标、56–90 pt 高度和背景模糊度，并复用于自动登录与游戏授权结果提示。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"聊天胶囊顶栏"
                                                detail:@"隐藏微信整条顶栏背景，左右按钮改为独立玻璃胶囊；本次更新统一迁移为伪液态与 20% 强度，之后仍可自行调整。置顶消息独立锁定磨砂玻璃并严格裁入固定胶囊边界，同时修复返回手势、前后台切换、头像缩放偏移及展开时的背景溢出。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"消息时间稳定性"
+                                               detail:@"消息时间改为绑定当前真实消息 Cell，并在微信完成布局后同步对齐头像或气泡；失效复用前一条消息的延迟任务，修复快速滑动时错位、跳动和消失。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"好友检测结果"
+                                               detail:@"结果页补充微信原生头像与安全资料页入口，疑似单删支持多选、全选、复检、移出结果及确认后批量删除；检测期间用单个顶部进度胶囊持续更新，完成后精简提示，并说明未实名等待核查原因。"],
+                [NeoWCReleaseNoteItem itemWithTitle:@"消息 +1"
+                                               detail:@"新增独立开关，在可复读消息的长按菜单中显示“+1”；点击后复用微信原生转发与语音上传链发送到当前会话，并继续遵守发送前确认。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"原生聊天记录搜索"
                                                detail:@"从聊天顶栏进入微信原生 MsgSearchHelper/WCSearcher 搜索链路，使用官方结果页；补齐取消、返回按钮、右滑退出和搜索框清理，减少残留顶栏与重复退出。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"非好友资料与精确添加时间"

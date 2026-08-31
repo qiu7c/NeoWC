@@ -1,4 +1,5 @@
 #import "NeoWCFriendRelationChecker.h"
+#import "NeoWCInAppNotification.h"
 #import "NeoWCLogging.h"
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
@@ -40,6 +41,12 @@ static BOOL NeoWCFriendRelationMethodReturnsObject(Method method) {
     char type[16] = {0};
     method_getReturnType(method, type, sizeof(type));
     return type[0] == '@' || type[0] == '#';
+}
+
+static BOOL NeoWCFriendRelationCanInvoke(id receiver, SEL selector, unsigned int argumentCount) {
+    if (!receiver || !selector || ![receiver respondsToSelector:selector]) return NO;
+    Method method = class_getInstanceMethod(object_getClass(receiver), selector);
+    return method && method_getNumberOfArguments(method) == argumentCount;
 }
 
 static id NeoWCFriendRelationObjectValue(id object, NSArray<NSString *> *names) {
@@ -212,6 +219,7 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
 @property(nonatomic, copy, nullable) dispatch_block_t gapBlock;
 @property(nonatomic, assign) NSInteger requestToken;
 @property(nonatomic, assign) NSUInteger transportRetryCount;
+@property(nonatomic, copy) NSString *lastProgressCapsuleStatus;
 @end
 
 @implementation NeoWCFriendRelationChecker
@@ -301,6 +309,28 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
     if (data) [data writeToFile:NeoWCFriendRelationStoragePath() options:NSDataWritingAtomic error:nil];
     [NSNotificationCenter.defaultCenter postNotificationName:NeoWCFriendRelationCheckDidUpdateNotification
                                                        object:self];
+    NSString *previousStatus = self.lastProgressCapsuleStatus;
+    if ([self.status isEqualToString:NeoWCFriendRelationStatusRunning]) {
+        NSString *name = self.currentDisplayName.length > 0 ? self.currentDisplayName : @"好友";
+        NeoWCShowProgressCapsule(
+            [NSString stringWithFormat:@"检测 %@ · %lu/%lu", name,
+             (unsigned long)self.completedCount, (unsigned long)self.totalCount],
+            self.progress, @"person.2.fill");
+    } else if ([self.status isEqualToString:NeoWCFriendRelationStatusCompleted] &&
+               ![previousStatus isEqualToString:NeoWCFriendRelationStatusCompleted]) {
+        NeoWCCompleteProgressCapsule(
+            [NSString stringWithFormat:@"检测完成 · 正常 %lu · 疑似 %lu · 待核查 %lu",
+             (unsigned long)self.normalCount, (unsigned long)self.suspectedCount,
+             (unsigned long)self.uncertainCount], YES);
+    } else if ([self.status isEqualToString:NeoWCFriendRelationStatusPaused] &&
+               [previousStatus isEqualToString:NeoWCFriendRelationStatusRunning]) {
+        NeoWCCompleteProgressCapsule(
+            [NSString stringWithFormat:@"检测已暂停 · %lu/%lu",
+             (unsigned long)self.completedCount, (unsigned long)self.totalCount], NO);
+    } else if ([self.status isEqualToString:NeoWCFriendRelationStatusIdle]) {
+        NeoWCDismissProgressCapsule();
+    }
+    self.lastProgressCapsuleStatus = self.status;
 }
 
 - (NSArray<NSDictionary<NSString *, NSString *> *> *)allFriendCandidates {
@@ -796,6 +826,77 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
         [self.results removeObjectsForKeys:userNames];
         [self saveAndNotify];
     }];
+}
+
+- (NSDictionary<NSString *, NSArray<NSString *> *> *)deleteUserNames:(NSArray<NSString *> *)userNames
+                                                   retainChatHistory:(BOOL)retainChatHistory {
+    NSAssert(NSThread.isMainThread, @"Contact deletion must run on the main thread");
+    NSMutableArray<NSString *> *deleted = [NSMutableArray array];
+    NSMutableArray<NSString *> *failed = [NSMutableArray array];
+    id contactManager = NeoWCFriendRelationServiceForClass(NSClassFromString(@"CContactMgr"));
+    id contactOPLog = retainChatHistory
+        ? NeoWCFriendRelationServiceForClass(NSClassFromString(@"CContactOPLog")) : nil;
+    SEL retainSelector = NSSelectorFromString(@"add_DeleteContact:isRetainChatHistory:delScene:sync:");
+    SEL fullDeleteSelector = NSSelectorFromString(@"deleteContact:listType:andScene:sync:local:");
+    SEL basicDeleteSelector = NSSelectorFromString(@"deleteContact:listType:");
+    SEL localDeleteSelector = NSSelectorFromString(@"deleteContactLocal:listType:");
+    SEL membershipSelector = NSSelectorFromString(@"isInContactList:");
+
+    for (id candidate in userNames) {
+        NSString *userName = [candidate isKindOfClass:NSString.class] ? candidate : nil;
+        if (userName.length == 0 || !contactManager) {
+            if (userName.length > 0) [failed addObject:userName];
+            continue;
+        }
+        id contact = [self contactForUserName:userName];
+        if (!contact) {
+            [failed addObject:userName];
+            continue;
+        }
+
+        @try {
+            if (retainChatHistory && NeoWCFriendRelationCanInvoke(contactOPLog, retainSelector, 6)) {
+                ((void (*)(id, SEL, id, BOOL, NSUInteger, BOOL))objc_msgSend)(
+                    contactOPLog, retainSelector, userName, YES, 0, YES);
+            }
+            if (NeoWCFriendRelationCanInvoke(contactManager, fullDeleteSelector, 7)) {
+                ((void (*)(id, SEL, id, NSUInteger, NSUInteger, BOOL, BOOL))objc_msgSend)(
+                    contactManager, fullDeleteSelector, contact, 1, 0, YES, YES);
+            } else if (NeoWCFriendRelationCanInvoke(contactManager, basicDeleteSelector, 4)) {
+                ((void (*)(id, SEL, id, NSUInteger))objc_msgSend)(
+                    contactManager, basicDeleteSelector, contact, 1);
+            } else {
+                [failed addObject:userName];
+                continue;
+            }
+
+            BOOL canReadMembership = NeoWCFriendRelationCanInvoke(contactManager, membershipSelector, 3);
+            BOOL stillInContactList = canReadMembership
+                ? ((BOOL (*)(id, SEL, id))objc_msgSend)(contactManager, membershipSelector, userName)
+                : [self contactForUserName:userName] != nil;
+            if (stillInContactList && NeoWCFriendRelationCanInvoke(contactManager, localDeleteSelector, 4)) {
+                ((void (*)(id, SEL, id, NSUInteger))objc_msgSend)(
+                    contactManager, localDeleteSelector, contact, 1);
+                stillInContactList = canReadMembership
+                    ? ((BOOL (*)(id, SEL, id))objc_msgSend)(contactManager, membershipSelector, userName)
+                    : NO;
+            }
+            if (stillInContactList) [failed addObject:userName];
+            else [deleted addObject:userName];
+        } @catch (NSException *exception) {
+            NeoWCLog(@"删除好友 %@ 失败：%@", userName, exception.reason ?: exception.name);
+            [failed addObject:userName];
+        }
+    }
+
+    if (deleted.count > 0) {
+        [self.results removeObjectsForKeys:deleted];
+        NSMutableArray *pending = [self.pendingUserNames mutableCopy] ?: [NSMutableArray array];
+        [pending removeObjectsInArray:deleted];
+        self.pendingUserNames = [pending copy];
+        [self saveAndNotify];
+    }
+    return @{ @"deleted": [deleted copy], @"failed": [failed copy] };
 }
 
 @end

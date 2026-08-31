@@ -67,6 +67,7 @@ FOUNDATION_EXPORT NSString *const NeoWCMessageBlockKeywordsKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageBlockRulesKey;
 FOUNDATION_EXPORT NSString *const NeoWCMessageBlockProfileSwitchEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCSendConfirmationProfileSwitchEnabledKey;
+FOUNDATION_EXPORT NSString *const NeoWCMessageRepeatMenuEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCLongPressMenuEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCLongPressMenuHiddenTitlesKey;
 FOUNDATION_EXPORT NSString *const NeoWCLongPressMenuPreferredOrderKey;

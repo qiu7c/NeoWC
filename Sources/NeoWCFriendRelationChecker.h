@@ -40,6 +40,10 @@ FOUNDATION_EXPORT NSString *const NeoWCFriendRelationVerdictUncertain;
 
 - (NSArray<NSDictionary<NSString *, id> *> *)itemsWithVerdict:(NSString *)verdict;
 - (void)removeResultUserNames:(NSArray<NSString *> *)userNames;
+/// Deletes contacts through WeChat's native contact operation chain. The
+/// returned dictionary contains `deleted` and `failed` username arrays.
+- (NSDictionary<NSString *, NSArray<NSString *> *> *)deleteUserNames:(NSArray<NSString *> *)userNames
+                                                   retainChatHistory:(BOOL)retainChatHistory;
 
 @end
 

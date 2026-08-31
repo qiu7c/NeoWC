@@ -19,6 +19,12 @@ FOUNDATION_EXPORT void NeoWCShowInAppNotification(NSString *title,
                                                    dispatch_block_t _Nullable action);
 FOUNDATION_EXPORT void NeoWCShowTransientHUD(NSString *message,
                                              NSString *symbolName);
+FOUNDATION_EXPORT void NeoWCShowProgressCapsule(NSString *message,
+                                                float progress,
+                                                NSString *symbolName);
+FOUNDATION_EXPORT void NeoWCCompleteProgressCapsule(NSString *message,
+                                                    BOOL success);
+FOUNDATION_EXPORT void NeoWCDismissProgressCapsule(void);
 FOUNDATION_EXPORT void NeoWCDismissInAppNotifications(void);
 
 NS_ASSUME_NONNULL_END

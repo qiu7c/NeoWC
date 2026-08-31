@@ -2,10 +2,20 @@
 #import "NeoWCFriendRelationChecker.h"
 #import "NeoWCSendConfirmationViewController.h"
 #import <objc/message.h>
+#import <objc/runtime.h>
 
 static UIColor *NeoWCFriendRelationSecondaryColor(void) {
     if (@available(iOS 13.0, *)) return UIColor.secondaryLabelColor;
     return UIColor.grayColor;
+}
+
+static BOOL NeoWCFriendRelationObjectMethod(id receiver, SEL selector, unsigned int argumentCount) {
+    if (!receiver || !selector || ![receiver respondsToSelector:selector]) return NO;
+    Method method = class_getInstanceMethod(object_getClass(receiver), selector);
+    if (!method || method_getNumberOfArguments(method) != argumentCount) return NO;
+    char returnType[8] = {0};
+    method_getReturnType(method, returnType, sizeof(returnType));
+    return returnType[0] == '@' || returnType[0] == '#';
 }
 
 static id NeoWCFriendRelationUIServiceForClass(Class serviceClass) {
@@ -18,36 +28,145 @@ static id NeoWCFriendRelationUIServiceForClass(Class serviceClass) {
         ? ((id (*)(id, SEL, Class))objc_msgSend)(center, serviceSelector, serviceClass) : nil;
 }
 
-static void NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *userName) {
-    if (!source || userName.length == 0) return;
+static id NeoWCFriendRelationContactForUserName(NSString *userName) {
+    if (userName.length == 0) return nil;
     id manager = NeoWCFriendRelationUIServiceForClass(NSClassFromString(@"CContactMgr"));
-    id contact = nil;
     for (NSString *name in @[@"getContactByName:", @"getContactByNameFromCache:"]) {
         SEL selector = NSSelectorFromString(name);
-        if (![manager respondsToSelector:selector]) continue;
-        contact = ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
-        if (contact) break;
+        if (!NeoWCFriendRelationObjectMethod(manager, selector, 3)) continue;
+        @try {
+            id contact = ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
+            if (contact) return contact;
+        } @catch (__unused NSException *exception) {}
     }
-    Class handlerClass = NSClassFromString(@"MMURLHandler");
-    SEL sharedSelector = NSSelectorFromString(@"sharedInstance");
-    SEL constructSelector = NSSelectorFromString(@"constructContactInfoView:withUserName:");
-    id handler = [handlerClass respondsToSelector:sharedSelector]
-        ? ((id (*)(id, SEL))objc_msgSend)(handlerClass, sharedSelector) : nil;
-    if (contact && [handler respondsToSelector:constructSelector]) {
-        id controller = ((id (*)(id, SEL, id, id))objc_msgSend)(handler,
-                                                                constructSelector,
-                                                                contact,
-                                                                userName);
-        if ([controller isKindOfClass:UIViewController.class]) {
+    return nil;
+}
+
+static id NeoWCFriendRelationContactValue(id contact, NSArray<NSString *> *names) {
+    for (NSString *name in names) {
+        SEL selector = NSSelectorFromString(name);
+        @try {
+            id value = [contact respondsToSelector:selector]
+                ? ((id (*)(id, SEL))objc_msgSend)(contact, selector)
+                : [contact valueForKey:name];
+            if (value && value != NSNull.null) return value;
+        } @catch (__unused NSException *exception) {}
+    }
+    return nil;
+}
+
+static UIView *NeoWCFriendRelationAvatarView(NSString *userName) {
+    Class helperClass = NSClassFromString(@"MMHeadImageHelper");
+    if (!helperClass || userName.length == 0) return nil;
+    id contact = NeoWCFriendRelationContactForUserName(userName);
+    id URL = NeoWCFriendRelationContactValue(contact,
+        @[@"m_nsHeadHDImgUrl", @"m_nsHeadImgUrl", @"headImgUrl", @"headImageURL"]);
+    for (NSString *name in @[
+        @"getMainFrameHeadImageViewWithUsrName:headImgUrl:bAutoUpdate:bRoundCorner:",
+        @"getProfileHeadImageViewWithUsrName:headImgUrl:bAutoUpdate:bRoundCorner:"
+    ]) {
+        SEL selector = NSSelectorFromString(name);
+        if (!NeoWCFriendRelationObjectMethod(helperClass, selector, 6)) continue;
+        @try {
+            id view = ((id (*)(id, SEL, id, id, BOOL, BOOL))objc_msgSend)(
+                helperClass, selector, userName, URL, YES, NO);
+            if (![view isKindOfClass:UIView.class]) continue;
+            UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, 40.0, 40.0)];
+            container.userInteractionEnabled = NO;
+            container.clipsToBounds = YES;
+            container.layer.cornerRadius = 20.0;
+            container.backgroundColor = UIColor.tertiarySystemFillColor;
+            UIView *avatar = view;
+            avatar.frame = container.bounds;
+            avatar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            [container addSubview:avatar];
+            return container;
+        } @catch (__unused NSException *exception) {}
+    }
+    return nil;
+}
+
+static BOOL NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *userName) {
+    if (!source || userName.length == 0 || !source.navigationController) return NO;
+    id contact = NeoWCFriendRelationContactForUserName(userName);
+    Class controllerClass = NSClassFromString(@"ContactInfoViewController");
+    SEL setContactSelector = NSSelectorFromString(@"setM_contact:");
+    Method setContactMethod = controllerClass ? class_getInstanceMethod(controllerClass, setContactSelector) : NULL;
+    if (!contact || !controllerClass || !setContactMethod ||
+        method_getNumberOfArguments(setContactMethod) != 3) return NO;
+    @try {
+        UIViewController *controller = [[controllerClass alloc] init];
+        ((void (*)(id, SEL, id))objc_msgSend)(controller, setContactSelector, contact);
+        SEL wrappedPushSelector = NSSelectorFromString(@"PushViewController:animated:");
+        Method wrappedPushMethod = class_getInstanceMethod(object_getClass(source.navigationController),
+                                                           wrappedPushSelector);
+        if ([source.navigationController respondsToSelector:wrappedPushSelector] &&
+            wrappedPushMethod && method_getNumberOfArguments(wrappedPushMethod) == 4) {
+            ((void (*)(id, SEL, id, BOOL))objc_msgSend)(
+                source.navigationController, wrappedPushSelector, controller, YES);
+        } else {
             [source.navigationController pushViewController:controller animated:YES];
         }
+        return YES;
+    } @catch (__unused NSException *exception) {
+        return NO;
     }
 }
+
+@interface NeoWCFriendRelationResultCell : UITableViewCell
+@property(nonatomic, strong) UIView *nativeAvatarView;
+@property(nonatomic, copy) NSString *avatarUserName;
+- (void)configureAvatarForUserName:(NSString *)userName;
+@end
+
+@implementation NeoWCFriendRelationResultCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        self.imageView.image = [UIImage systemImageNamed:@"person.crop.circle.fill"];
+        self.imageView.tintColor = NeoWCFriendRelationSecondaryColor();
+    }
+    return self;
+}
+
+- (void)configureAvatarForUserName:(NSString *)userName {
+    if ([self.avatarUserName isEqualToString:userName] && self.nativeAvatarView) return;
+    [self.nativeAvatarView removeFromSuperview];
+    self.nativeAvatarView = NeoWCFriendRelationAvatarView(userName);
+    self.avatarUserName = [userName copy];
+    if (self.nativeAvatarView) [self.contentView addSubview:self.nativeAvatarView];
+    [self setNeedsLayout];
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGRect frame = self.imageView.frame;
+    CGFloat side = MIN(40.0, MIN(CGRectGetWidth(frame), CGRectGetHeight(frame)));
+    if (side <= 1.0) side = 40.0;
+    frame.size = CGSizeMake(side, side);
+    frame.origin.y = floor((CGRectGetHeight(self.contentView.bounds) - side) * 0.5);
+    self.nativeAvatarView.frame = frame;
+    self.nativeAvatarView.layer.cornerRadius = side * 0.5;
+    self.imageView.hidden = self.nativeAvatarView != nil;
+}
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    [self.nativeAvatarView removeFromSuperview];
+    self.nativeAvatarView = nil;
+    self.avatarUserName = nil;
+    self.imageView.hidden = NO;
+}
+
+@end
 
 @interface NeoWCFriendRelationResultViewController : UITableViewController
 @property(nonatomic, copy) NSString *verdict;
 @property(nonatomic, copy) NSString *pageTitle;
 @property(nonatomic, copy) NSArray<NSDictionary<NSString *, id> *> *items;
+@property(nonatomic, strong) NSMutableSet<NSString *> *selectedUserNames;
+@property(nonatomic, assign) BOOL openedToolbar;
 @end
 
 @implementation NeoWCFriendRelationResultViewController
@@ -58,6 +177,7 @@ static void NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
         _verdict = [verdict copy];
         _pageTitle = [title copy];
         _items = @[];
+        _selectedUserNames = [NSMutableSet set];
     }
     return self;
 }
@@ -66,9 +186,8 @@ static void NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
     [super viewDidLoad];
     self.title = self.pageTitle;
     self.tableView.rowHeight = 62.0;
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
-        initWithTitle:@"全部复检" style:UIBarButtonItemStylePlain
-        target:self action:@selector(recheckAll)];
+    self.tableView.allowsMultipleSelectionDuringEditing = YES;
+    [self updateNavigationButtons];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(reloadItems)
                                                name:NeoWCFriendRelationCheckDidUpdateNotification object:nil];
     [self reloadItems];
@@ -78,10 +197,114 @@ static void NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
     [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    if (self.tableView.isEditing && self.navigationController.toolbarHidden) {
+        self.openedToolbar = YES;
+        [self.navigationController setToolbarHidden:NO animated:NO];
+    }
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    if (self.openedToolbar) {
+        [self.navigationController setToolbarHidden:YES animated:NO];
+        self.openedToolbar = NO;
+    }
+}
+
 - (void)reloadItems {
     self.items = [[NeoWCFriendRelationChecker sharedChecker] itemsWithVerdict:self.verdict];
-    self.navigationItem.rightBarButtonItem.enabled = self.items.count > 0;
+    NSSet *available = [NSSet setWithArray:[self.items valueForKey:@"userName"]];
+    [self.selectedUserNames intersectSet:available];
+    [self updateNavigationButtons];
     [self.tableView reloadData];
+}
+
+- (NSArray<NSString *> *)selectedNames {
+    if (self.selectedUserNames.count == 0) return @[];
+    NSMutableArray *names = [NSMutableArray array];
+    for (NSDictionary *item in self.items) {
+        NSString *userName = item[@"userName"];
+        if ([self.selectedUserNames containsObject:userName]) [names addObject:userName];
+    }
+    return names;
+}
+
+- (void)updateNavigationButtons {
+    if (!self.tableView.isEditing) {
+        UIBarButtonItem *recheck = [[UIBarButtonItem alloc] initWithTitle:@"全部复检"
+            style:UIBarButtonItemStylePlain target:self action:@selector(recheckAll)];
+        UIBarButtonItem *select = [[UIBarButtonItem alloc] initWithTitle:@"选择"
+            style:UIBarButtonItemStylePlain target:self action:@selector(toggleEditing)];
+        recheck.enabled = self.items.count > 0;
+        select.enabled = self.items.count > 0;
+        self.navigationItem.rightBarButtonItems = @[select, recheck];
+        return;
+    }
+    NSString *selectTitle = self.selectedUserNames.count == self.items.count ? @"取消全选" : @"全选";
+    self.navigationItem.rightBarButtonItems = @[
+        [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+            target:self action:@selector(toggleEditing)],
+        [[UIBarButtonItem alloc] initWithTitle:selectTitle style:UIBarButtonItemStylePlain
+            target:self action:@selector(toggleSelectAll)]
+    ];
+    [self refreshToolbar];
+}
+
+- (void)toggleEditing {
+    BOOL editing = !self.tableView.isEditing;
+    [self.tableView setEditing:editing animated:YES];
+    if (editing) {
+        self.openedToolbar = self.navigationController.toolbarHidden;
+        [self.navigationController setToolbarHidden:NO animated:YES];
+    } else {
+        [self.selectedUserNames removeAllObjects];
+        if (self.openedToolbar) [self.navigationController setToolbarHidden:YES animated:YES];
+        self.openedToolbar = NO;
+    }
+    [self.tableView reloadData];
+    [self updateNavigationButtons];
+}
+
+- (void)toggleSelectAll {
+    if (self.selectedUserNames.count == self.items.count) {
+        [self.selectedUserNames removeAllObjects];
+        for (NSIndexPath *path in self.tableView.indexPathsForSelectedRows ?: @[]) {
+            [self.tableView deselectRowAtIndexPath:path animated:NO];
+        }
+    } else {
+        [self.selectedUserNames removeAllObjects];
+        for (NSUInteger row = 0; row < self.items.count; row++) {
+            NSString *userName = self.items[row][@"userName"];
+            if (userName.length > 0) [self.selectedUserNames addObject:userName];
+            [self.tableView selectRowAtIndexPath:[NSIndexPath indexPathForRow:row inSection:0]
+                                        animated:NO scrollPosition:UITableViewScrollPositionNone];
+        }
+    }
+    [self updateNavigationButtons];
+}
+
+- (void)refreshToolbar {
+    BOOL enabled = self.selectedUserNames.count > 0;
+    UIBarButtonItem *recheck = [[UIBarButtonItem alloc] initWithTitle:@"复检" style:UIBarButtonItemStylePlain
+        target:self action:@selector(recheckSelected)];
+    UIBarButtonItem *remove = [[UIBarButtonItem alloc] initWithTitle:@"移出结果" style:UIBarButtonItemStylePlain
+        target:self action:@selector(removeSelected)];
+    recheck.enabled = enabled;
+    remove.enabled = enabled;
+    NSMutableArray *items = [NSMutableArray arrayWithObjects:recheck,
+        [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil],
+        remove, nil];
+    if ([self.verdict isEqualToString:NeoWCFriendRelationVerdictSuspected]) {
+        UIBarButtonItem *delete = [[UIBarButtonItem alloc] initWithTitle:@"删除好友"
+            style:UIBarButtonItemStylePlain target:self action:@selector(deleteSelected)];
+        delete.tintColor = UIColor.systemRedColor;
+        delete.enabled = enabled;
+        [items addObject:[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil]];
+        [items addObject:delete];
+    }
+    self.toolbarItems = items;
 }
 
 - (void)recheckAll {
@@ -100,20 +323,76 @@ static void NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)recheckSelected {
+    NSArray *names = [self selectedNames];
+    if (names.count == 0) return;
+    [[NeoWCFriendRelationChecker sharedChecker] startRecheckWithUserNames:names];
+    [self.navigationController popViewControllerAnimated:YES];
+}
+
+- (void)removeSelected {
+    NSArray *names = [self selectedNames];
+    if (names.count == 0) return;
+    [[NeoWCFriendRelationChecker sharedChecker] removeResultUserNames:names];
+    [self.selectedUserNames removeAllObjects];
+    [self reloadItems];
+}
+
+- (void)deleteSelected {
+    NSArray *names = [self selectedNames];
+    if (names.count == 0) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"删除好友"
+        message:[NSString stringWithFormat:@"将从通讯录永久删除所选 %lu 位疑似单删好友，聊天记录会保留。",
+                 (unsigned long)names.count]
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    void (^deleteHandler)(void) = ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        NSDictionary *result = [[NeoWCFriendRelationChecker sharedChecker]
+            deleteUserNames:names retainChatHistory:YES];
+        NSUInteger deleted = [result[@"deleted"] count];
+        NSUInteger failed = [result[@"failed"] count];
+        [self.selectedUserNames removeAllObjects];
+        [self reloadItems];
+        UIAlertController *summary = [UIAlertController alertControllerWithTitle:@"删除完成"
+            message:[NSString stringWithFormat:@"成功 %lu 位，失败 %lu 位。",
+                     (unsigned long)deleted, (unsigned long)failed]
+            preferredStyle:UIAlertControllerStyleAlert];
+        [summary addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:summary animated:YES completion:nil];
+    };
+    [alert addAction:[UIAlertAction actionWithTitle:@"确认删除"
+        style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) { deleteHandler(); }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 - (NSInteger)tableView:(__unused UITableView *)tableView numberOfRowsInSection:(__unused NSInteger)section {
     return self.items.count;
 }
 
+- (NSString *)tableView:(__unused UITableView *)tableView titleForFooterInSection:(__unused NSInteger)section {
+    if ([self.verdict isEqualToString:NeoWCFriendRelationVerdictUncertain]) {
+        return @"待核查不代表对方已删除你；对方未实名、未开通相关支付能力、网络异常或接口无完整结果，都可能进入此页。";
+    }
+    if ([self.verdict isEqualToString:NeoWCFriendRelationVerdictSuspected]) {
+        return @"删除好友会真实修改微信通讯录，请核对资料后再使用批量删除。";
+    }
+    return nil;
+}
+
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     static NSString *identifier = @"NeoWCFriendRelationResultCell";
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
-    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:identifier];
+    NeoWCFriendRelationResultCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
+    if (!cell) cell = [[NeoWCFriendRelationResultCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:identifier];
     NSDictionary *item = self.items[indexPath.row];
     cell.textLabel.text = item[@"displayName"] ?: item[@"userName"];
     NSString *message = item[@"retmsg"];
     cell.detailTextLabel.text = message.length > 0 ? message : item[@"userName"];
     cell.detailTextLabel.textColor = NeoWCFriendRelationSecondaryColor();
-    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+    cell.accessoryType = self.tableView.isEditing ? UITableViewCellAccessoryNone : UITableViewCellAccessoryDisclosureIndicator;
+    [cell configureAvatarForUserName:item[@"userName"]];
     return cell;
 }
 
@@ -131,8 +410,26 @@ static void NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
 }
 
 - (void)tableView:(__unused UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    NSString *userName = self.items[indexPath.row][@"userName"];
+    if (tableView.isEditing) {
+        if (userName.length > 0) [self.selectedUserNames addObject:userName];
+        [self updateNavigationButtons];
+        return;
+    }
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    NeoWCFriendRelationOpenProfile(self, self.items[indexPath.row][@"userName"]);
+    if (!NeoWCFriendRelationOpenProfile(self, userName)) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"无法打开资料页"
+            message:@"当前微信版本不支持该资料页入口。" preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+    }
+}
+
+- (void)tableView:(UITableView *)tableView didDeselectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (!tableView.isEditing) return;
+    NSString *userName = self.items[indexPath.row][@"userName"];
+    if (userName.length > 0) [self.selectedUserNames removeObject:userName];
+    [self updateNavigationButtons];
 }
 
 @end
@@ -213,7 +510,7 @@ static void NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
     NeoWCFriendRelationChecker *checker = NeoWCFriendRelationChecker.sharedChecker;
     self.progressNameLabel.text = checker.progressTitle;
     [self.progressBar setProgress:checker.progress animated:YES];
-    self.progressCountLabel.text = [NSString stringWithFormat:@"正常 %lu · 疑似 %lu · 待复查 %lu",
+    self.progressCountLabel.text = [NSString stringWithFormat:@"正常 %lu · 疑似 %lu · 待核查 %lu",
         (unsigned long)checker.normalCount, (unsigned long)checker.suspectedCount,
         (unsigned long)checker.uncertainCount];
 }
@@ -236,7 +533,7 @@ static void NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
 
 - (NSString *)tableView:(__unused UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     if (section == 0) return @"检测开始后范围会固定；暂停后可继续未完成部分。";
-    if (section == 2) return @"“疑似单删”来自支付接口的明确非好友响应；网络和解析异常只进入待复查。";
+    if (section == 2) return @"“疑似单删”来自支付接口的明确非好友响应；网络、解析异常，以及对方可能未实名或未开通相关支付能力，只进入待核查。";
     return nil;
 }
 
@@ -274,7 +571,7 @@ static void NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
         return cell;
     }
     if (indexPath.section == 2) {
-        NSArray *titles = @[@"正常好友", @"疑似单删", @"待复查"];
+        NSArray *titles = @[@"正常好友", @"疑似单删", @"待核查"];
         NSArray *counts = @[@(checker.normalCount), @(checker.suspectedCount), @(checker.uncertainCount)];
         return [self cellWithTitle:titles[indexPath.row]
                             detail:[NSString stringWithFormat:@"%@ 人", counts[indexPath.row]] accessory:YES];
@@ -304,7 +601,7 @@ static void NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
         NSArray *verdicts = @[NeoWCFriendRelationVerdictNormal,
                               NeoWCFriendRelationVerdictSuspected,
                               NeoWCFriendRelationVerdictUncertain];
-        NSArray *titles = @[@"正常好友", @"疑似单删", @"待复查"];
+        NSArray *titles = @[@"正常好友", @"疑似单删", @"待核查"];
         NeoWCFriendRelationResultViewController *controller =
             [[NeoWCFriendRelationResultViewController alloc] initWithVerdict:verdicts[indexPath.row]
                                                                         title:titles[indexPath.row]];

@@ -162,6 +162,164 @@ static UIWindow *NeoWCInAppActiveWindow(void) {
 
 @end
 
+@interface NeoWCProgressCapsuleCenter : NSObject
+@property(nonatomic, strong, nullable) UIView *capsule;
+@property(nonatomic, strong, nullable) UILabel *label;
+@property(nonatomic, strong, nullable) UIImageView *symbolView;
+@property(nonatomic, strong, nullable) UIProgressView *progressView;
+@property(nonatomic, assign) NSUInteger dismissalToken;
++ (instancetype)sharedCenter;
+- (void)showMessage:(NSString *)message progress:(float)progress symbolName:(NSString *)symbolName;
+- (void)completeMessage:(NSString *)message success:(BOOL)success;
+- (void)dismissAnimated:(BOOL)animated;
+@end
+
+@implementation NeoWCProgressCapsuleCenter
+
++ (instancetype)sharedCenter {
+    static NeoWCProgressCapsuleCenter *center;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        center = [NeoWCProgressCapsuleCenter new];
+        [NSNotificationCenter.defaultCenter addObserver:center selector:@selector(applicationDidEnterBackground:)
+            name:UIApplicationDidEnterBackgroundNotification object:nil];
+    });
+    return center;
+}
+
+- (void)applicationDidEnterBackground:(__unused NSNotification *)notification {
+    [self dismissAnimated:NO];
+}
+
+- (void)buildCapsuleInWindow:(UIWindow *)window {
+    UIView *capsule = [UIView new];
+    capsule.translatesAutoresizingMaskIntoConstraints = NO;
+    capsule.userInteractionEnabled = NO;
+    capsule.layer.cornerRadius = 19.0;
+    capsule.layer.cornerCurve = kCACornerCurveContinuous;
+    capsule.layer.shadowColor = UIColor.blackColor.CGColor;
+    capsule.layer.shadowOpacity = 0.14;
+    capsule.layer.shadowRadius = 9.0;
+    capsule.layer.shadowOffset = CGSizeMake(0.0, 3.0);
+
+    UIVisualEffectView *blur = [[UIVisualEffectView alloc]
+        initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
+    blur.translatesAutoresizingMaskIntoConstraints = NO;
+    blur.userInteractionEnabled = NO;
+    blur.layer.cornerRadius = 19.0;
+    blur.layer.cornerCurve = kCACornerCurveContinuous;
+    blur.clipsToBounds = YES;
+    blur.contentView.backgroundColor = [UIColor.systemBackgroundColor colorWithAlphaComponent:0.08];
+    [capsule addSubview:blur];
+
+    UIImageView *symbolView = [UIImageView new];
+    symbolView.translatesAutoresizingMaskIntoConstraints = NO;
+    symbolView.contentMode = UIViewContentModeScaleAspectFit;
+    symbolView.tintColor = [UIColor colorWithRed:0.10 green:0.70 blue:0.29 alpha:1.0];
+    [blur.contentView addSubview:symbolView];
+
+    UILabel *label = [UILabel new];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    label.textColor = UIColor.labelColor;
+    label.numberOfLines = 1;
+    label.lineBreakMode = NSLineBreakByTruncatingMiddle;
+    [blur.contentView addSubview:label];
+
+    UIProgressView *progressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
+    progressView.translatesAutoresizingMaskIntoConstraints = NO;
+    progressView.progressTintColor = symbolView.tintColor;
+    progressView.trackTintColor = [UIColor.secondaryLabelColor colorWithAlphaComponent:0.18];
+    [blur.contentView addSubview:progressView];
+
+    [window addSubview:capsule];
+    [NSLayoutConstraint activateConstraints:@[
+        [capsule.centerXAnchor constraintEqualToAnchor:window.centerXAnchor],
+        [capsule.topAnchor constraintEqualToAnchor:window.safeAreaLayoutGuide.topAnchor constant:6.0],
+        [capsule.heightAnchor constraintEqualToConstant:38.0],
+        [capsule.widthAnchor constraintGreaterThanOrEqualToConstant:188.0],
+        [capsule.widthAnchor constraintLessThanOrEqualToAnchor:window.widthAnchor constant:-40.0],
+        [blur.leadingAnchor constraintEqualToAnchor:capsule.leadingAnchor],
+        [blur.trailingAnchor constraintEqualToAnchor:capsule.trailingAnchor],
+        [blur.topAnchor constraintEqualToAnchor:capsule.topAnchor],
+        [blur.bottomAnchor constraintEqualToAnchor:capsule.bottomAnchor],
+        [symbolView.leadingAnchor constraintEqualToAnchor:blur.contentView.leadingAnchor constant:12.0],
+        [symbolView.centerYAnchor constraintEqualToAnchor:blur.contentView.centerYAnchor constant:-1.5],
+        [symbolView.widthAnchor constraintEqualToConstant:17.0],
+        [symbolView.heightAnchor constraintEqualToConstant:17.0],
+        [label.leadingAnchor constraintEqualToAnchor:symbolView.trailingAnchor constant:7.0],
+        [label.trailingAnchor constraintEqualToAnchor:blur.contentView.trailingAnchor constant:-12.0],
+        [label.centerYAnchor constraintEqualToAnchor:blur.contentView.centerYAnchor constant:-2.0],
+        [progressView.leadingAnchor constraintEqualToAnchor:label.leadingAnchor],
+        [progressView.trailingAnchor constraintEqualToAnchor:label.trailingAnchor],
+        [progressView.bottomAnchor constraintEqualToAnchor:blur.contentView.bottomAnchor constant:-4.0],
+    ]];
+    self.capsule = capsule;
+    self.label = label;
+    self.symbolView = symbolView;
+    self.progressView = progressView;
+    [window layoutIfNeeded];
+    capsule.alpha = 0.0;
+    capsule.transform = CGAffineTransformMakeTranslation(0.0, -12.0);
+    [UIView animateWithDuration:0.24 animations:^{
+        capsule.alpha = 1.0;
+        capsule.transform = CGAffineTransformIdentity;
+    }];
+}
+
+- (void)showMessage:(NSString *)message progress:(float)progress symbolName:(NSString *)symbolName {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self showMessage:message progress:progress symbolName:symbolName]; });
+        return;
+    }
+    if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return;
+    UIWindow *window = NeoWCInAppActiveWindow();
+    if (!window) return;
+    self.dismissalToken++;
+    if (!self.capsule || self.capsule.window != window) {
+        [self.capsule removeFromSuperview];
+        [self buildCapsuleInWindow:window];
+    }
+    self.label.text = message;
+    self.symbolView.image = [UIImage systemImageNamed:symbolName.length > 0 ? symbolName : @"person.2.fill"];
+    self.symbolView.tintColor = [UIColor colorWithRed:0.10 green:0.70 blue:0.29 alpha:1.0];
+    self.progressView.hidden = NO;
+    self.progressView.progressTintColor = self.symbolView.tintColor;
+    [self.progressView setProgress:MIN(1.0f, MAX(0.0f, progress)) animated:YES];
+}
+
+- (void)completeMessage:(NSString *)message success:(BOOL)success {
+    [self showMessage:message progress:1.0 symbolName:success ? @"checkmark.circle.fill" : @"exclamationmark.circle.fill"];
+    self.symbolView.tintColor = success ? [UIColor colorWithRed:0.10 green:0.70 blue:0.29 alpha:1.0]
+                                       : UIColor.systemOrangeColor;
+    self.progressView.hidden = YES;
+    NSUInteger token = ++self.dismissalToken;
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (self && self.dismissalToken == token) [self dismissAnimated:YES];
+    });
+}
+
+- (void)dismissAnimated:(BOOL)animated {
+    self.dismissalToken++;
+    UIView *capsule = self.capsule;
+    self.capsule = nil;
+    self.label = nil;
+    self.symbolView = nil;
+    self.progressView = nil;
+    if (!animated) {
+        [capsule removeFromSuperview];
+        return;
+    }
+    [UIView animateWithDuration:0.20 animations:^{
+        capsule.alpha = 0.0;
+        capsule.transform = CGAffineTransformMakeTranslation(0.0, -10.0);
+    } completion:^(__unused BOOL finished) { [capsule removeFromSuperview]; }];
+}
+
+@end
+
 @interface NeoWCTransientHUDCenter : NSObject
 @property (nonatomic, strong, nullable) UIView *currentHUD;
 @property (nonatomic, assign) NSUInteger presentationToken;
@@ -487,6 +645,20 @@ void NeoWCShowTransientHUD(NSString *message, NSString *symbolName) {
     [[NeoWCTransientHUDCenter sharedCenter]
         showMessage:message
          symbolName:symbolName.length > 0 ? symbolName : @"checkmark.circle.fill"];
+}
+
+void NeoWCShowProgressCapsule(NSString *message, float progress, NSString *symbolName) {
+    if (message.length == 0) return;
+    [[NeoWCProgressCapsuleCenter sharedCenter] showMessage:message progress:progress symbolName:symbolName];
+}
+
+void NeoWCCompleteProgressCapsule(NSString *message, BOOL success) {
+    if (message.length == 0) return;
+    [[NeoWCProgressCapsuleCenter sharedCenter] completeMessage:message success:success];
+}
+
+void NeoWCDismissProgressCapsule(void) {
+    [[NeoWCProgressCapsuleCenter sharedCenter] dismissAnimated:YES];
 }
 
 void NeoWCDismissInAppNotifications(void) {

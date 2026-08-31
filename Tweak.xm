@@ -1324,6 +1324,47 @@ static BOOL NeoWCRepeatMessageWithConfirmation(CommonMessageCellView *cell) {
     return held ? YES : NeoWCRepeatMessage(cell);
 }
 
+static BOOL NeoWCMessageCanRepeat(CommonMessageCellView *cell) {
+    if (!NeoWCEnhancementEnabled(NeoWCMessageRepeatMenuEnabledKey) || !cell) return NO;
+    id message = NeoWCMessageWrapForCell(cell);
+    if (!message || NeoWCSessionForMessage(message).length == 0) return NO;
+    NSInteger messageType = [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue];
+    if (messageType == 34) {
+        SEL voicePathSelector = sel_registerName("getVoicePath");
+        if (![message respondsToSelector:voicePathSelector]) return NO;
+        id path = ((id (*)(id, SEL))objc_msgSend)(message, voicePathSelector);
+        return [path isKindOfClass:[NSString class]] && [path length] > 0 &&
+               [[NSFileManager defaultManager] fileExistsAtPath:path];
+    }
+    Class utilityClass = objc_getClass("ForwardMsgUtil");
+    SEL canForwardSelector = sel_registerName("canBeForwardWithMsg:");
+    if ([utilityClass respondsToSelector:canForwardSelector]) {
+        return ((BOOL (*)(id, SEL, id))objc_msgSend)(utilityClass, canForwardSelector, message);
+    }
+    return messageType == 1 && [NeoWCTweakSafeValue(message, @"m_nsContent") length] > 0;
+}
+
+static NSArray *NeoWCOperationMenuItemsWithRepeat(CommonMessageCellView *target, NSArray *originalItems) {
+    if (![originalItems isKindOfClass:[NSArray class]] || !NeoWCMessageCanRepeat(target)) return originalItems;
+    for (id item in originalItems) {
+        if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"+1"]) return originalItems;
+    }
+    Class itemClass = objc_getClass("MMMenuItem");
+    SEL initializer = @selector(initWithTitle:icon:target:action:);
+    if (!itemClass || ![itemClass instancesRespondToSelector:initializer]) return originalItems;
+    UIImageSymbolConfiguration *configuration =
+        [UIImageSymbolConfiguration configurationWithPointSize:19.0 weight:UIImageSymbolWeightMedium];
+    UIImage *icon = [UIImage systemImageNamed:@"plus.message" withConfiguration:configuration] ?:
+                    [UIImage systemImageNamed:@"plus" withConfiguration:configuration];
+    icon = [icon imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
+    MMMenuItem *repeatItem = [[itemClass alloc] initWithTitle:@"+1" icon:icon
+                                                       target:target action:@selector(neowc_repeatMessage:)];
+    if (!repeatItem) return originalItems;
+    NSMutableArray *items = [originalItems mutableCopy];
+    [items insertObject:repeatItem atIndex:0];
+    return items;
+}
+
 static BOOL NeoWCPerformMessageGestureAction(CommonMessageCellView *cell, NeoWCReplySwipeAction action) {
     if (!cell.window || action == NeoWCReplySwipeActionNone) return NO;
     BOOL performed = NO;
@@ -10981,6 +11022,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (NSArray *)filteredMenuItems:(NSArray *)items {
     NSArray *filteredItems = %orig(items);
+    filteredItems = NeoWCOperationMenuItemsWithRepeat((CommonMessageCellView *)self, filteredItems);
     id message = NeoWCMessageWrapForCell(self);
     if (NeoWCMessageIsMusicCard(message)) {
         filteredItems = NeoWCOperationMenuItemsWithMediaToVoice(self, filteredItems, NeoWCMediaToVoiceKindMusic);
@@ -10994,6 +11036,9 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+    if (action == @selector(neowc_repeatMessage:)) {
+        return NeoWCMessageCanRepeat((CommonMessageCellView *)self);
+    }
     if (action == @selector(neowc_convertMusicToVoice:)) {
         return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindMusic) &&
                NeoWCMessageIsMusicCard(NeoWCMessageWrapForCell(self));
@@ -11003,6 +11048,14 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
                NeoWCMessageIsConvertibleAudioFile(NeoWCMessageWrapForCell(self));
     }
     return %orig;
+}
+
+%new
+- (void)neowc_repeatMessage:(id)sender {
+    (void)sender;
+    if (!NeoWCRepeatMessageWithConfirmation((CommonMessageCellView *)self)) {
+        NeoWCShowTransientMessage(@"这条消息暂时无法复读", NO);
+    }
 }
 
 %new
@@ -12087,6 +12140,16 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 }
 
 %hook CommonMessageCellView
+
+- (void)prepareForReuse {
+    %orig;
+    NeoWCHideMessageTimeLabels(self);
+}
+
+- (void)layoutSubviews {
+    %orig;
+    NeoWCLayoutMessageTimeLabels(self);
+}
 
 - (void)onHeadImageLongPressed:(id)sender {
     if (NeoWCPerformingNativeAvatarLongPress) {

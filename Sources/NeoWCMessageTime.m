@@ -3,20 +3,12 @@
 #import "NeoWCEnhancements.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
-#import <float.h>
 #import <math.h>
 
 static const void *NeoWCMessageTimeAvatarLabelKey = &NeoWCMessageTimeAvatarLabelKey;
 static const void *NeoWCMessageTimeBubbleLabelKey = &NeoWCMessageTimeBubbleLabelKey;
 static const void *NeoWCMessageTimeRefreshPendingKey = &NeoWCMessageTimeRefreshPendingKey;
-static const void *NeoWCMessageTimeIdentityKey = &NeoWCMessageTimeIdentityKey;
-
-static NSMutableDictionary<NSString *, NSHashTable<UIView *> *> *NeoWCMessageTimeVisibleCells(void) {
-    static NSMutableDictionary *cells;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{ cells = [NSMutableDictionary dictionary]; });
-    return cells;
-}
+static const void *NeoWCMessageTimeRefreshGenerationKey = &NeoWCMessageTimeRefreshGenerationKey;
 
 static id NeoWCMessageTimeValue(id object, NSString *key) {
     if (!object || key.length == 0) return nil;
@@ -44,37 +36,6 @@ static id NeoWCMessageTimeMessage(id viewModel) {
     if (message) return message;
     id parent = NeoWCMessageTimeValue(viewModel, @"parentModel");
     return NeoWCMessageTimeFirstValue(parent, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
-}
-
-static NSString *NeoWCMessageTimeIdentity(id message) {
-    if (!message) return nil;
-    SEL combinedSelector = NSSelectorFromString(@"combineChatNameWithLocalId");
-    if ([message respondsToSelector:combinedSelector]) {
-        id combined = ((id (*)(id, SEL))objc_msgSend)(message, combinedSelector);
-        if ([combined isKindOfClass:NSString.class] && [combined length] > 0) {
-            return [@"combined:" stringByAppendingString:combined];
-        }
-    }
-
-    id localValue = NeoWCMessageTimeValue(message, @"m_uiMesLocalID");
-    unsigned long long localID = [localValue respondsToSelector:@selector(unsignedLongLongValue)]
-        ? [localValue unsignedLongLongValue] : 0;
-    id serverValue = NeoWCMessageTimeValue(message, @"m_n64MesSvrID");
-    long long serverID = [serverValue respondsToSelector:@selector(longLongValue)]
-        ? [serverValue longLongValue] : 0;
-    NSString *chatName = nil;
-    SEL chatSelector = NSSelectorFromString(@"GetChatName");
-    if ([message respondsToSelector:chatSelector]) {
-        id value = ((id (*)(id, SEL))objc_msgSend)(message, chatSelector);
-        if ([value isKindOfClass:NSString.class]) chatName = value;
-    }
-    if (chatName.length > 0 && localID > 0) {
-        return [NSString stringWithFormat:@"local:%@:%llu", chatName, localID];
-    }
-    if (chatName.length > 0 && serverID != 0) {
-        return [NSString stringWithFormat:@"server:%@:%lld", chatName, serverID];
-    }
-    return [NSString stringWithFormat:@"object:%p", message];
 }
 
 static NSTimeInterval NeoWCMessageTimeCreateTime(id message, id viewModel) {
@@ -169,76 +130,13 @@ static void NeoWCSetMessageTimeLabelsHidden(UIView *cell) {
     bubble.hidden = YES;
 }
 
-static void NeoWCMessageTimeUnregisterCell(UIView *cell) {
-    NSString *identity = objc_getAssociatedObject(cell, NeoWCMessageTimeIdentityKey);
-    if (identity.length == 0) return;
-    NSHashTable<UIView *> *group = NeoWCMessageTimeVisibleCells()[identity];
-    [group removeObject:cell];
-    NSArray<UIView *> *remaining = group.allObjects;
-    if (remaining.count == 0) {
-        [NeoWCMessageTimeVisibleCells() removeObjectForKey:identity];
-    } else if (NeoWCEnhancementEnabled(NeoWCChatMessageTimeEnabledKey)) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            for (UIView *candidate in remaining) NeoWCScheduleMessageTimeRefresh(candidate);
-        });
-    }
-    objc_setAssociatedObject(cell, NeoWCMessageTimeIdentityKey, nil, OBJC_ASSOCIATION_COPY_NONATOMIC);
-}
-
 void NeoWCHideMessageTimeLabels(UIView *cell) {
     NeoWCSetMessageTimeLabelsHidden(cell);
-    NeoWCMessageTimeUnregisterCell(cell);
-}
-
-static NSArray<UIView *> *NeoWCMessageTimeRegisterCell(UIView *cell, NSString *identity) {
-    NSString *previousIdentity = objc_getAssociatedObject(cell, NeoWCMessageTimeIdentityKey);
-    if (previousIdentity.length > 0 && ![previousIdentity isEqualToString:identity]) {
-        NeoWCMessageTimeUnregisterCell(cell);
-    }
-    NSHashTable<UIView *> *group = NeoWCMessageTimeVisibleCells()[identity];
-    if (!group) {
-        group = [NSHashTable weakObjectsHashTable];
-        NeoWCMessageTimeVisibleCells()[identity] = group;
-    }
-    [group addObject:cell];
-    objc_setAssociatedObject(cell, NeoWCMessageTimeIdentityKey, identity, OBJC_ASSOCIATION_COPY_NONATOMIC);
-    NSMutableArray<UIView *> *visible = [NSMutableArray array];
-    for (UIView *candidate in group.allObjects) {
-        if (candidate.window && candidate.window == cell.window &&
-            [objc_getAssociatedObject(candidate, NeoWCMessageTimeIdentityKey) isEqualToString:identity]) {
-            [visible addObject:candidate];
-        }
-    }
-    return visible;
-}
-
-static UIView *NeoWCMessageTimeOwner(NSArray<UIView *> *cells, BOOL bubbleSide) {
-    UIView *owner = nil;
-    BOOL ownerHasAnchor = NO;
-    CGFloat ownerArea = -1.0;
-    CGFloat ownerY = CGFLOAT_MAX;
-    for (UIView *candidate in cells) {
-        UIWindow *window = candidate.window;
-        if (!window) continue;
-        CGRect frame = [candidate convertRect:candidate.bounds toView:window];
-        CGRect visibleFrame = CGRectIntersection(frame, window.bounds);
-        CGFloat area = CGRectIsNull(visibleFrame) ? 0.0 : CGRectGetWidth(visibleFrame) * CGRectGetHeight(visibleFrame);
-        if (area <= 1.0) continue;
-        BOOL hasAnchor = bubbleSide ? NeoWCMessageSideAnchorView(candidate) != nil
-                                    : NeoWCMessageTimeAvatarView(candidate) != nil;
-        CGFloat y = CGRectGetMinY(visibleFrame);
-        BOOL better = !owner ||
-                      (hasAnchor && !ownerHasAnchor) ||
-                      (hasAnchor == ownerHasAnchor && area > ownerArea + 1.0) ||
-                      (hasAnchor == ownerHasAnchor && fabs(area - ownerArea) <= 1.0 && y < ownerY);
-        if (better) {
-            owner = candidate;
-            ownerHasAnchor = hasAnchor;
-            ownerArea = area;
-            ownerY = y;
-        }
-    }
-    return owner;
+    NSUInteger generation = [objc_getAssociatedObject(cell, NeoWCMessageTimeRefreshGenerationKey) unsignedIntegerValue];
+    objc_setAssociatedObject(cell, NeoWCMessageTimeRefreshGenerationKey,
+                             @(generation + 1), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(cell, NeoWCMessageTimeRefreshPendingKey,
+                             nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 static NSString *NeoWCMessageTimeText(NSTimeInterval time, NSString *format) {
@@ -276,21 +174,6 @@ static void NeoWCRefreshMessageTimeLabels(UIView *cell) {
     NSTimeInterval time = NeoWCMessageTimeCreateTime(message, viewModel);
     if (time <= 0) {
         NeoWCHideMessageTimeLabels(cell);
-        return;
-    }
-
-    NSString *identity = NeoWCMessageTimeIdentity(message);
-    if (identity.length == 0) {
-        NeoWCHideMessageTimeLabels(cell);
-        return;
-    }
-    NSArray<UIView *> *messageCells = NeoWCMessageTimeRegisterCell(cell, identity);
-    UIView *owner = NeoWCMessageTimeOwner(messageCells, bubbleSide);
-    for (UIView *candidate in messageCells) {
-        if (candidate != owner) NeoWCSetMessageTimeLabelsHidden(candidate);
-    }
-    if (owner != cell) {
-        NeoWCSetMessageTimeLabelsHidden(cell);
         return;
     }
 
@@ -371,6 +254,14 @@ static void NeoWCRefreshMessageTimeLabels(UIView *cell) {
     NeoWCCompatibilityMarkTriggered(@"chat-message-time");
 }
 
+void NeoWCLayoutMessageTimeLabels(UIView *cell) {
+    if (!cell || !cell.window ||
+        !NeoWCEnhancementEnabled(NeoWCChatMessageTimeEnabledKey)) return;
+    [UIView performWithoutAnimation:^{
+        NeoWCRefreshMessageTimeLabels(cell);
+    }];
+}
+
 void NeoWCScheduleMessageTimeRefresh(UIView *cell) {
     if (!cell) return;
     if (!NeoWCEnhancementEnabled(NeoWCChatMessageTimeEnabledKey)) {
@@ -379,18 +270,22 @@ void NeoWCScheduleMessageTimeRefresh(UIView *cell) {
     }
     if ([objc_getAssociatedObject(cell, NeoWCMessageTimeRefreshPendingKey) boolValue]) return;
     objc_setAssociatedObject(cell, NeoWCMessageTimeRefreshPendingKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSUInteger generation = [objc_getAssociatedObject(cell, NeoWCMessageTimeRefreshGenerationKey) unsignedIntegerValue];
     __weak UIView *weakCell = cell;
     dispatch_async(dispatch_get_main_queue(), ^{
         UIView *strongCell = weakCell;
-        if (!strongCell) return;
+        if (!strongCell ||
+            [objc_getAssociatedObject(strongCell, NeoWCMessageTimeRefreshGenerationKey) unsignedIntegerValue] != generation) return;
         NeoWCRefreshMessageTimeLabels(strongCell);
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.08 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIView *delayedCell = weakCell;
-            if (!delayedCell) return;
+            if (!delayedCell ||
+                [objc_getAssociatedObject(delayedCell, NeoWCMessageTimeRefreshGenerationKey) unsignedIntegerValue] != generation) return;
             NeoWCRefreshMessageTimeLabels(delayedCell);
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.18 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 UIView *finalCell = weakCell;
-                if (!finalCell) return;
+                if (!finalCell ||
+                    [objc_getAssociatedObject(finalCell, NeoWCMessageTimeRefreshGenerationKey) unsignedIntegerValue] != generation) return;
                 objc_setAssociatedObject(finalCell, NeoWCMessageTimeRefreshPendingKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                 NeoWCRefreshMessageTimeLabels(finalCell);
             });
