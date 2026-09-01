@@ -465,7 +465,8 @@ BOOL NeoWCPushPrivateChat(UIViewController *source, NSString *userName, BOOL ani
     UINavigationController *navigationController = NeoWCPrivateNavigationController(source);
     if (!navigationController) return NO;
     UIViewController *visibleController = navigationController.visibleViewController;
-    if ([[NeoWCPrivateChatUserName(visibleController) ?: @""] isEqualToString:resolvedUserName]) {
+    NSString *visibleUserName = NeoWCPrivateChatUserName(visibleController) ?: @"";
+    if ([visibleUserName isEqualToString:resolvedUserName]) {
         return YES;
     }
 
