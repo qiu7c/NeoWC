@@ -199,7 +199,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     [manager createDirectoryAtURL:destinationDirectory withIntermediateDirectories:YES attributes:nil error:nil];
     NSDirectoryEnumerator<NSURL *> *enumerator = [manager enumeratorAtURL:sourceDirectory
                                                 includingPropertiesForKeys:@[NSURLIsDirectoryKey]
-                                                                   options:NSDirectoryEnumerationSkipsHiddenFiles
+                                                                   options:0
                                                               errorHandler:nil];
     for (NSURL *sourceURL in enumerator) {
         NSString *relativePath = [sourceURL.path substringFromIndex:sourceDirectory.path.length];
@@ -888,6 +888,40 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     NSURL *stableRecoveryMarker = [libraryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersStableRecoveryMarkerName];
     BOOL stableRecoveryFinished = [NSFileManager.defaultManager fileExistsAtPath:stableRecoveryMarker.path];
     NSMutableArray<NeoWCQuickReplyFolder *> *folders = [NSMutableArray array];
+    id defaultsValue = [NSUserDefaults.standardUserDefaults objectForKey:NeoWCQuickReplyFoldersDefaultsKey];
+    NSMutableArray<NSDictionary *> *rememberedFolders = [NSMutableArray array];
+    if ([defaultsValue isKindOfClass:NSArray.class]) {
+        for (id value in (NSArray *)defaultsValue) {
+            if ([value isKindOfClass:NSDictionary.class]) [rememberedFolders addObject:value];
+        }
+    }
+    NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:NO error:nil];
+    NSMutableArray<NSURL *> *folderIndexURLs = [NSMutableArray arrayWithObjects:
+        [directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName],
+        [directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersBackupName], nil];
+    if (recoveryDirectory) {
+        [folderIndexURLs addObject:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]];
+        [folderIndexURLs addObject:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersBackupName]];
+    }
+    for (NSURL *URL in folderIndexURLs) {
+        NSData *data = [NSData dataWithContentsOfURL:URL options:0 error:nil];
+        id object = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        if (![object isKindOfClass:NSArray.class]) continue;
+        for (id value in (NSArray *)object) {
+            if ([value isKindOfClass:NSDictionary.class]) [rememberedFolders addObject:value];
+        }
+    }
+    NSString *(^rememberedName)(NSString *) = ^NSString *(NSString *identifier) {
+        NSString *bestName = @"";
+        for (NSDictionary *dictionary in rememberedFolders) {
+            if (![NeoWCQuickReplyTrimmedString(dictionary[@"id"]) isEqualToString:identifier]) continue;
+            NSString *candidate = NeoWCQuickReplyTrimmedString(dictionary[@"name"]);
+            if (!candidate.length) continue;
+            if (!bestName.length || ([bestName hasPrefix:@"恢复的分类 "] &&
+                ![candidate hasPrefix:@"恢复的分类 "])) bestName = candidate;
+        }
+        return bestName;
+    };
     NSArray<NSURL *> *children = [NSFileManager.defaultManager contentsOfDirectoryAtURL:libraryDirectory
                                                               includingPropertiesForKeys:@[NSURLIsDirectoryKey]
                                                                                  options:NSDirectoryEnumerationSkipsHiddenFiles
@@ -902,6 +936,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         id dictionary = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
         NSString *name = [dictionary isKindOfClass:NSDictionary.class]
             ? NeoWCQuickReplyTrimmedString(dictionary[@"name"]) : @"";
+        if (name.length == 0) name = rememberedName(child.lastPathComponent);
         if (name.length == 0) name = [NSString stringWithFormat:@"恢复的分类 %@", [child.lastPathComponent substringToIndex:MIN((NSUInteger)8, child.lastPathComponent.length)]];
         NeoWCQuickReplyFolder *folder = [NeoWCQuickReplyFolder new];
         folder.identifier = child.lastPathComponent;
@@ -910,8 +945,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
             ? [dictionary[@"sort"] integerValue] : folders.count;
         [folders addObject:folder];
     }
-    id defaultsValue = [NSUserDefaults.standardUserDefaults objectForKey:NeoWCQuickReplyFoldersDefaultsKey];
-    NSArray *defaultsFolders = [defaultsValue isKindOfClass:NSArray.class] ? defaultsValue : @[];
+    NSArray *defaultsFolders = rememberedFolders;
     if (migrated && !stableRecoveryFinished) {
         NSData *legacyData = [NSData dataWithContentsOfURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
                                                    options:0 error:nil];
@@ -931,7 +965,16 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
             (void)idx; (void)stop;
             return [candidate.identifier isEqualToString:identifier];
         }];
-        if (existingIndex != NSNotFound) continue;
+        if (existingIndex != NSNotFound) {
+            NeoWCQuickReplyFolder *existing = folders[existingIndex];
+            if ([existing.name hasPrefix:@"恢复的分类 "] &&
+                ![name hasPrefix:@"恢复的分类 "]) {
+                existing.name = name;
+                existing.sortIndex = [dictionary[@"sort"] respondsToSelector:@selector(integerValue)]
+                    ? [dictionary[@"sort"] integerValue] : existing.sortIndex;
+            }
+            continue;
+        }
         NeoWCQuickReplyFolder *folder = [NeoWCQuickReplyFolder new];
         folder.identifier = identifier;
         folder.name = name;
@@ -940,19 +983,12 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         [folders addObject:folder];
     }
     if (migrated) {
-        NSMutableArray *mirroredFolders = [NSMutableArray arrayWithCapacity:folders.count];
-        for (NeoWCQuickReplyFolder *folder in folders) {
-            [mirroredFolders addObject:@{ @"id": folder.identifier,
-                                          @"name": folder.name,
-                                          @"sort": @(folder.sortIndex) }];
+        if ([self saveFoldersLocked:folders error:nil]) {
+            [[NSData data] writeToURL:stableRecoveryMarker options:NSDataWritingAtomic error:nil];
         }
-        [NSUserDefaults.standardUserDefaults setObject:mirroredFolders forKey:NeoWCQuickReplyFoldersDefaultsKey];
-        [NSUserDefaults.standardUserDefaults synchronize];
-        [[NSData data] writeToURL:stableRecoveryMarker options:NSDataWritingAtomic error:nil];
         return folders;
     }
 
-    NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:NO error:nil];
     NSArray *object = recoveryDirectory ? [self loadJSONArrayAtURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
                                       backupURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersBackupName]
                                     recoveryURL:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
@@ -1008,6 +1044,14 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
                                       @"name": folder.name,
                                       @"sort": @(folder.sortIndex) }];
     }
+    NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:YES error:error];
+    NSData *foldersData = [NSJSONSerialization dataWithJSONObject:defaultsFolders options:0 error:error];
+    if (!recoveryDirectory || !foldersData ||
+        ![self writeJSONArrayData:foldersData
+                       primaryURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
+                        backupURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersBackupName]
+                      recoveryURL:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
+                            error:error]) return NO;
     [NSUserDefaults.standardUserDefaults setObject:defaultsFolders forKey:NeoWCQuickReplyFoldersDefaultsKey];
     [NSUserDefaults.standardUserDefaults synchronize];
     NSArray<NSURL *> *children = [manager contentsOfDirectoryAtURL:libraryDirectory

@@ -46,7 +46,8 @@ id NeoWCPrivateContact(NSString *userName) {
     if (userName.length == 0) return nil;
     id manager = NeoWCPrivateService(@"CContactMgr");
     for (NSString *selectorName in @[
-        @"getContactByName:", @"getContactByNameFromCache:", @"getContact:"
+        @"getContactByName:", @"getContactForSearchByName:",
+        @"getContactByNameFromCache:", @"getContact:"
     ]) {
         SEL selector = NSSelectorFromString(selectorName);
         NSMethodSignature *signature = NeoWCPrivateSignature(manager, selector, 3);
@@ -65,43 +66,9 @@ id NeoWCPrivateContact(NSString *userName) {
 
 static UIViewController *NeoWCPrivateProfileController(id contact,
                                                         NSString *userName) {
-    Class handlerClass = NSClassFromString(@"MMURLHandler");
-    SEL sharedSelector = NSSelectorFromString(@"sharedInstance");
-    id handler = nil;
-    NSMethodSignature *sharedSignature = NeoWCPrivateSignature(handlerClass, sharedSelector, 2);
-    if (sharedSignature && NeoWCPrivateTypeIsObject(sharedSignature.methodReturnType)) {
-        @try { handler = ((id (*)(id, SEL))objc_msgSend)(handlerClass, sharedSelector); }
-        @catch (__unused NSException *exception) {}
-    }
-
-    SEL constructSelector = NSSelectorFromString(@"constructContactInfoView:withUserName:");
-    NSMethodSignature *constructSignature = NeoWCPrivateSignature(handler, constructSelector, 4);
-    if (NeoWCPrivateObjectArguments(constructSignature, NSMakeRange(2, 2)) &&
-        NeoWCPrivateTypeIsObject(constructSignature.methodReturnType)) {
-        @try {
-            id controller = ((id (*)(id, SEL, id, id))objc_msgSend)(
-                handler, constructSelector, contact, userName);
-            if ([controller isKindOfClass:UIViewController.class]) return controller;
-        } @catch (NSException *exception) {
-            NeoWCLog(@"官方资料页构造失败：%@", exception.reason ?: exception.name);
-        }
-    }
-
     Class controllerClass = NSClassFromString(@"ContactInfoViewController");
     if (!controllerClass) return nil;
-    UIViewController *controller = nil;
-    SEL initializer = NSSelectorFromString(@"initWithContact:");
-    id allocatedController = [controllerClass alloc];
-    NSMethodSignature *initializerSignature = [allocatedController methodSignatureForSelector:initializer];
-    if (initializerSignature.numberOfArguments == 3 &&
-        NeoWCPrivateObjectArguments(initializerSignature, NSMakeRange(2, 1)) &&
-        NeoWCPrivateTypeIsObject(initializerSignature.methodReturnType)) {
-        @try {
-            controller = ((id (*)(id, SEL, id))objc_msgSend)(
-                allocatedController, initializer, contact);
-        } @catch (__unused NSException *exception) {}
-    }
-    if (!controller) controller = [[controllerClass alloc] init];
+    UIViewController *controller = [[controllerClass alloc] init];
     if (!controller) return nil;
 
     SEL setter = NSSelectorFromString(@"setM_contact:");
@@ -116,7 +83,8 @@ static UIViewController *NeoWCPrivateProfileController(id contact,
         [controller setValue:contact forKey:@"m_contact"];
         return controller;
     } @catch (NSException *exception) {
-        NeoWCLog(@"资料页联系人注入失败：%@", exception.reason ?: exception.name);
+        NeoWCLog(@"资料页联系人注入失败 %@：%@", userName,
+                 exception.reason ?: exception.name);
         return nil;
     }
 }
@@ -180,6 +148,44 @@ NeoWCPrivateInvokeGroupInvitation(id manager,
     return NeoWCPrivateGroupInvitationResultUnsupported;
 }
 
+static NeoWCPrivateGroupInvitationResult
+NeoWCPrivateInvokeExtendedGroupInvitation(id manager,
+                                          NSString *groupUserName,
+                                          NSArray<NSString *> *memberList) {
+    NSString *selectorName = @"InviteGroupMember:withMemberList:withInviterScene:withTicket:withUserData:withMsgHistoryInfo:";
+    SEL selector = NSSelectorFromString(selectorName);
+    NSMethodSignature *signature = NeoWCPrivateSignature(manager, selector, 8);
+    if (!signature ||
+        !NeoWCPrivateObjectArguments(signature, NSMakeRange(2, 2)) ||
+        !NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:4]) ||
+        !NeoWCPrivateObjectArguments(signature, NSMakeRange(5, 3))) {
+        return NeoWCPrivateGroupInvitationResultUnsupported;
+    }
+    const char *returnType = NeoWCPrivateUnqualifiedType(signature.methodReturnType);
+    @try {
+        if (strcmp(returnType, @encode(void)) == 0) {
+            ((void (*)(id, SEL, id, id, NSInteger, id, id, id))objc_msgSend)(
+                manager, selector, groupUserName, memberList, 0, nil, nil, nil);
+            return NeoWCPrivateGroupInvitationResultSubmitted;
+        }
+        if (NeoWCPrivateTypeIsObject(returnType)) {
+            (void)((id (*)(id, SEL, id, id, NSInteger, id, id, id))objc_msgSend)(
+                manager, selector, groupUserName, memberList, 0, nil, nil, nil);
+            return NeoWCPrivateGroupInvitationResultSubmitted;
+        }
+        if (NeoWCPrivateTypeIsInteger(returnType)) {
+            (void)((NSInteger (*)(id, SEL, id, id, NSInteger, id, id, id))objc_msgSend)(
+                manager, selector, groupUserName, memberList, 0, nil, nil, nil);
+            return NeoWCPrivateGroupInvitationResultSubmitted;
+        }
+    } @catch (NSException *exception) {
+        NeoWCLog(@"群邀请适配 %@ 调用失败：%@", selectorName,
+                 exception.reason ?: exception.name);
+        return NeoWCPrivateGroupInvitationResultRejected;
+    }
+    return NeoWCPrivateGroupInvitationResultUnsupported;
+}
+
 NeoWCPrivateGroupInvitationResult
 NeoWCPrivateInviteGroupMember(NSString *groupUserName, NSString *memberUserName) {
     if (![groupUserName hasSuffix:@"@chatroom"] || memberUserName.length == 0 ||
@@ -188,12 +194,17 @@ NeoWCPrivateInviteGroupMember(NSString *groupUserName, NSString *memberUserName)
         [memberUserName isEqualToString:NeoWCCurrentUserWXID()]) {
         return NeoWCPrivateGroupInvitationResultRejected;
     }
-    id manager = NeoWCPrivateService(@"CContactMgr");
+    id manager = NeoWCPrivateService(@"CGroupMgr");
     if (!manager) return NeoWCPrivateGroupInvitationResultUnsupported;
     NSArray<NSString *> *members = @[memberUserName];
 
-    // MiYou/微信助手 3.9-5 uses this exact CContactMgr call and object ABI.
-    NeoWCPrivateGroupInvitationResult result = NeoWCPrivateInvokeGroupInvitation(
+    // WeChatX 2.2-2 prefers the current six-argument CGroupMgr API.
+    NeoWCPrivateGroupInvitationResult result = NeoWCPrivateInvokeExtendedGroupInvitation(
+        manager, groupUserName, members);
+    if (result != NeoWCPrivateGroupInvitationResultUnsupported) return result;
+
+    // Older WeChat builds expose the same CGroupMgr operation with two objects.
+    result = NeoWCPrivateInvokeGroupInvitation(
         manager, @"InviteGroupMember:withMemberList:", groupUserName, members);
     if (result != NeoWCPrivateGroupInvitationResultUnsupported) return result;
 

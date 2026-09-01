@@ -108,10 +108,10 @@ static NSString *const NeoWCAuthorUserName = @"ic7ouo";
 
 - (void)presentFindFriend {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"查找好友"
-                                                                   message:@"输入微信号或 wxid，将使用微信的原生联系人搜索链路。"
+                                                                   message:@"输入微信号或 wxid（初始账号），将使用微信原生联系人搜索链路。"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
-        field.placeholder = @"微信号 / wxid";
+        field.placeholder = @"微信号 / wxid（初始账号）";
         field.autocapitalizationType = UITextAutocapitalizationTypeNone;
         field.autocorrectionType = UITextAutocorrectionTypeNo;
         field.clearButtonMode = UITextFieldViewModeWhileEditing;

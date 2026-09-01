@@ -19,7 +19,7 @@ FOUNDATION_EXPORT id _Nullable NeoWCPrivateContact(NSString *userName);
 FOUNDATION_EXPORT BOOL NeoWCPushPrivateContactProfile(UIViewController *source,
                                                       NSString *userName);
 
-/// Invites one contact into a saved group through WeChat's native contact manager.
+/// Invites one contact into a saved group through WeChat's native group manager.
 FOUNDATION_EXPORT NeoWCPrivateGroupInvitationResult
 NeoWCPrivateInviteGroupMember(NSString *groupUserName, NSString *memberUserName);
 
