@@ -15,6 +15,7 @@ FOUNDATION_EXPORT void NeoWCPresentAvatarQuickPanel(UIViewController *presenter,
                                                      UIImage * _Nullable avatar,
                                                      NSString *displayName,
                                                      NSString *userName,
+                                                     NSString * _Nullable maskedRealName,
                                                      NSArray<NeoWCAvatarQuickAction *> *actions,
                                                      void (^profileHandler)(void));
 

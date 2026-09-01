@@ -6,6 +6,7 @@
 #import "NeoWCInterfaceTweaks.h"
 #import "NeoWCSendConfirmation.h"
 #import "NeoWCSendConfirmationViewController.h"
+#import "NeoWCPrivateAPI.h"
 #import <AVFoundation/AVFoundation.h>
 #import <AVKit/AVKit.h>
 #import <objc/message.h>
@@ -26,32 +27,14 @@ static UIImage *NeoWCQuickReplyGroupAvatar(NSString *groupUserName) {
     dispatch_once(&onceToken, ^{ avatarCache = [NSCache new]; avatarCache.countLimit = 80; });
     UIImage *cached = [avatarCache objectForKey:groupUserName];
     if (cached) return cached;
-    Class centerClass = NSClassFromString(@"MMServiceCenter");
-    Class managerClass = NSClassFromString(@"CContactMgr");
-    SEL centerSelector = NSSelectorFromString(@"defaultCenter");
-    SEL serviceSelector = NSSelectorFromString(@"getService:");
-    if (!centerClass || !managerClass || ![centerClass respondsToSelector:centerSelector]) return nil;
-    id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, centerSelector);
-    id manager = [center respondsToSelector:serviceSelector]
-        ? ((id (*)(id, SEL, Class))objc_msgSend)(center, serviceSelector, managerClass) : nil;
-    id contact = nil;
-    for (NSString *selectorName in @[@"getContactByName:", @"getContactByNameFromCache:", @"getContact:"]) {
-        SEL selector = NSSelectorFromString(selectorName);
-        if (![manager respondsToSelector:selector]) continue;
-        @try { contact = ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, groupUserName); }
-        @catch (__unused NSException *exception) { contact = nil; }
-        if (contact) break;
-    }
-    SEL imageSelector = NSSelectorFromString(@"getContactHeadImage");
-    if (![contact respondsToSelector:imageSelector]) return nil;
+    UIImage *image = NeoWCPrivateContactAvatarImage(NeoWCPrivateContact(groupUserName));
+    if (!image) return nil;
     @try {
-        id image = ((id (*)(id, SEL))objc_msgSend)(contact, imageSelector);
-        if (![image isKindOfClass:UIImage.class]) return nil;
         UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc]
             initWithSize:CGSizeMake(36.0, 36.0)];
         UIImage *rendered = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
             (void)context;
-            [(UIImage *)image drawInRect:CGRectMake(0.0, 0.0, 36.0, 36.0)];
+            [image drawInRect:CGRectMake(0.0, 0.0, 36.0, 36.0)];
         }];
         if (rendered) [avatarCache setObject:rendered forKey:groupUserName];
         return rendered;

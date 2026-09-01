@@ -2,82 +2,25 @@
 #import "NeoWCFriendRelationChecker.h"
 #import "NeoWCPrivateAPI.h"
 #import "NeoWCSendConfirmationViewController.h"
-#import <objc/message.h>
-#import <objc/runtime.h>
 
 static UIColor *NeoWCFriendRelationSecondaryColor(void) {
     if (@available(iOS 13.0, *)) return UIColor.secondaryLabelColor;
     return UIColor.grayColor;
 }
 
-static BOOL NeoWCFriendRelationObjectMethod(id receiver, SEL selector, unsigned int argumentCount) {
-    if (!receiver || !selector || ![receiver respondsToSelector:selector]) return NO;
-    Class runtimeClass = object_getClass(receiver);
-    Method method = class_isMetaClass(runtimeClass)
-        ? class_getClassMethod((Class)receiver, selector)
-        : class_getInstanceMethod([receiver class], selector);
-    if (!method || method_getNumberOfArguments(method) != argumentCount) return NO;
-    char returnType[8] = {0};
-    method_getReturnType(method, returnType, sizeof(returnType));
-    return returnType[0] == '@' || returnType[0] == '#';
-}
-
-static id NeoWCFriendRelationContactForUserName(NSString *userName) {
-    return NeoWCPrivateContact(userName);
-}
-
-static id NeoWCFriendRelationContactValue(id contact, NSArray<NSString *> *names) {
-    for (NSString *name in names) {
-        SEL selector = NSSelectorFromString(name);
-        @try {
-            id value = [contact respondsToSelector:selector]
-                ? ((id (*)(id, SEL))objc_msgSend)(contact, selector)
-                : [contact valueForKey:name];
-            if (value && value != NSNull.null) return value;
-        } @catch (__unused NSException *exception) {}
-    }
-    return nil;
-}
-
 static UIView *NeoWCFriendRelationAvatarView(NSString *userName) {
     if (userName.length == 0) return nil;
-    id contact = NeoWCFriendRelationContactForUserName(userName);
-    id imageValue = NeoWCFriendRelationContactValue(contact, @[@"getContactHeadImage"]);
-    if ([imageValue isKindOfClass:UIImage.class]) {
-        UIImageView *imageView = [[UIImageView alloc] initWithImage:imageValue];
-        imageView.contentMode = UIViewContentModeScaleAspectFill;
-        imageView.userInteractionEnabled = NO;
-        imageView.clipsToBounds = YES;
-        return imageView;
-    }
-
-    Class helperClass = NSClassFromString(@"MMHeadImageHelper");
-    if (!helperClass) return nil;
-    id URL = NeoWCFriendRelationContactValue(contact,
-        @[@"m_nsHeadHDImgUrl", @"m_nsHeadImgUrl", @"headImgUrl", @"headImageURL"]);
-    for (NSString *name in @[
-        @"getMainFrameHeadImageViewWithUsrName:headImgUrl:bAutoUpdate:bRoundCorner:",
-        @"getProfileHeadImageViewWithUsrName:headImgUrl:bAutoUpdate:bRoundCorner:"
-    ]) {
-        SEL selector = NSSelectorFromString(name);
-        if (!NeoWCFriendRelationObjectMethod(helperClass, selector, 6)) continue;
-        @try {
-            id view = ((id (*)(id, SEL, id, id, BOOL, BOOL))objc_msgSend)(
-                helperClass, selector, userName, URL, YES, NO);
-            if (![view isKindOfClass:UIView.class]) continue;
-            UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, 40.0, 40.0)];
-            container.userInteractionEnabled = NO;
-            container.clipsToBounds = YES;
-            container.layer.cornerRadius = 20.0;
-            container.backgroundColor = UIColor.tertiarySystemFillColor;
-            UIView *avatar = view;
-            avatar.frame = container.bounds;
-            avatar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-            [container addSubview:avatar];
-            return container;
-        } @catch (__unused NSException *exception) {}
-    }
-    return nil;
+    UIView *avatar = NeoWCPrivateContactAvatarView(NeoWCPrivateContact(userName), userName, NO);
+    if (!avatar) return nil;
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, 40.0, 40.0)];
+    container.userInteractionEnabled = NO;
+    container.clipsToBounds = YES;
+    container.layer.cornerRadius = 20.0;
+    container.backgroundColor = UIColor.tertiarySystemFillColor;
+    avatar.frame = container.bounds;
+    avatar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [container addSubview:avatar];
+    return container;
 }
 
 static BOOL NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *userName) {
@@ -372,7 +315,14 @@ static BOOL NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
     NSDictionary *item = self.items[indexPath.row];
     cell.textLabel.text = item[@"displayName"] ?: item[@"userName"];
     NSString *message = item[@"retmsg"];
-    cell.detailTextLabel.text = message.length > 0 ? message : item[@"userName"];
+    NSString *maskedName = [[NeoWCFriendRelationChecker sharedChecker]
+        maskedRealNameForUserName:item[@"userName"]];
+    if (maskedName.length > 0) {
+        cell.detailTextLabel.text = [NSString stringWithFormat:@"脱敏姓名 %@ · %@",
+                                     maskedName, item[@"userName"] ?: @""];
+    } else {
+        cell.detailTextLabel.text = message.length > 0 ? message : item[@"userName"];
+    }
     cell.detailTextLabel.textColor = NeoWCFriendRelationSecondaryColor();
     cell.accessoryType = self.tableView.isEditing ? UITableViewCellAccessoryNone : UITableViewCellAccessoryDisclosureIndicator;
     [cell configureAvatarForUserName:item[@"userName"]];

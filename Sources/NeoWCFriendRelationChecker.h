@@ -39,6 +39,9 @@ FOUNDATION_EXPORT NSString *const NeoWCFriendRelationVerdictUncertain;
 - (BOOL)startRecheckWithUserNames:(NSArray<NSString *> *)userNames;
 
 - (NSArray<NSDictionary<NSString *, id> *> *)itemsWithVerdict:(NSString *)verdict;
+/// Returns the last validated official masked transfer name saved for this username.
+/// Call on the main thread. Nil means no masked value has been received.
+- (nullable NSString *)maskedRealNameForUserName:(NSString *)userName;
 - (void)removeResultUserNames:(NSArray<NSString *> *)userNames;
 /// Deletes contacts through WeChat's native contact operation chain. The
 /// returned dictionary contains `deleted` and `failed` username arrays.

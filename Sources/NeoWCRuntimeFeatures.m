@@ -5,6 +5,7 @@
 #import "NeoWCCompatibility.h"
 #import "NeoWCLogging.h"
 #import "NeoWCEnhancements.h"
+#import "NeoWCPrivateAPI.h"
 
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -179,17 +180,12 @@ static NSString *NeoWCMessageDisplayContent(id message, NSString *sessionUserNam
 }
 
 static id NeoWCContactForUserNameWithManager(id manager, NSString *userName) {
-    SEL selector = sel_registerName("getContactByName:");
-    if (!manager || userName.length == 0 || ![manager respondsToSelector:selector]) return nil;
-    return ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
+    (void)manager;
+    return NeoWCPrivateContact(userName);
 }
 
 static NSString *NeoWCContactDisplayName(id contact, NSString *fallback) {
-    for (NSString *key in @[@"m_nsRemark", @"m_nsNickName", @"m_nsUsrName"]) {
-        NSString *value = NeoWCRuntimeStringValue(contact, key);
-        if (value.length > 0) return value;
-    }
-    return fallback ?: @"未知用户";
+    return NeoWCPrivateContactDisplayName(contact, fallback) ?: @"未知用户";
 }
 
 BOOL NeoWCShouldBlockIncomingMessage(NSString *sessionUserName, id message) {
@@ -264,7 +260,7 @@ static NSSet<NSString *> *NeoWCMemberSetFromList(NSString *memberList) {
 
 id NeoWCCaptureGroupMemberChange(id newContact, id oldContact) {
     if (!NeoWCEnhancementEnabled(NeoWCGroupMemberReminderEnabledKey)) return nil;
-    NSString *session = NeoWCRuntimeStringValue(newContact, @"m_nsUsrName");
+    NSString *session = NeoWCPrivateContactUserName(newContact);
     if (![session hasSuffix:@"@chatroom"]) return nil;
 
     NSString *beforeList = NeoWCRuntimeStringValue(oldContact, @"m_nsChatRoomMemList");
@@ -365,51 +361,8 @@ void NeoWCCompleteGroupMemberChange(id value, id contactManager, id newContact) 
     }
 }
 
-static UINavigationController *NeoWCCurrentNavigationController(void) {
-    Class managerClass = objc_getClass("CAppViewControllerManager");
-    SEL selector = sel_registerName("getCurrentNavigationController");
-    if (!managerClass || ![managerClass respondsToSelector:selector]) return nil;
-    id controller = ((id (*)(id, SEL))objc_msgSend)(managerClass, selector);
-    return [controller isKindOfClass:[UINavigationController class]] ? controller : nil;
-}
-
-static id NeoWCServiceFromCurrentContext(Class serviceClass) {
-    Class contextClass = objc_getClass("MMContext");
-    SEL currentSelector = sel_registerName("currentContext");
-    SEL serviceSelector = sel_registerName("getService:");
-    if (!contextClass || !serviceClass || ![contextClass respondsToSelector:currentSelector]) return nil;
-    id context = ((id (*)(id, SEL))objc_msgSend)(contextClass, currentSelector);
-    if (!context || ![context respondsToSelector:serviceSelector]) return nil;
-    return ((id (*)(id, SEL, Class))objc_msgSend)(context, serviceSelector, serviceClass);
-}
-
 void NeoWCOpenChatForUserName(NSString *userName) {
-    if (userName.length == 0) return;
-    UINavigationController *navigationController = NeoWCCurrentNavigationController();
-    if (!navigationController) return;
-
-    UIViewController *visibleController = navigationController.visibleViewController;
-    Class chatControllerClass = objc_getClass("BaseMsgContentViewController");
-    SEL getContactSelector = sel_registerName("GetCContact");
-    if (chatControllerClass && [visibleController isKindOfClass:chatControllerClass] &&
-        [visibleController respondsToSelector:getContactSelector]) {
-        id currentContact = ((id (*)(id, SEL))objc_msgSend)(visibleController, getContactSelector);
-        NSString *currentUserName = NeoWCRuntimeStringValue(currentContact, @"m_nsUsrName");
-        if ([currentUserName isEqualToString:userName]) return;
-    }
-
-    Class contactManagerClass = objc_getClass("CContactMgr");
-    Class messageLogicClass = objc_getClass("MMMsgLogicManager");
-    id contactManager = NeoWCServiceFromCurrentContext(contactManagerClass);
-    id contact = NeoWCContactForUserNameWithManager(contactManager, userName);
-    id messageLogic = NeoWCServiceFromCurrentContext(messageLogicClass);
-    SEL pushSelector = sel_registerName("PushOtherBaseMsgControllerByContact:navigationController:animated:");
-    if (!contact || !messageLogic || ![messageLogic respondsToSelector:pushSelector]) return;
-    ((void (*)(id, SEL, id, id, BOOL))objc_msgSend)(messageLogic,
-                                                    pushSelector,
-                                                    contact,
-                                                    navigationController,
-                                                    YES);
+    (void)NeoWCPushPrivateChat(nil, userName, YES);
 }
 
 static UIViewController *NeoWCFindControllerOfClass(UIViewController *controller, Class targetClass) {

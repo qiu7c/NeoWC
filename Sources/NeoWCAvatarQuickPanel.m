@@ -22,6 +22,7 @@ static char NeoWCAvatarQuickPanelActionKey;
 @property (nonatomic, strong) UIImage *avatar;
 @property (nonatomic, copy) NSString *displayName;
 @property (nonatomic, copy) NSString *userName;
+@property (nonatomic, copy) NSString *maskedRealName;
 @property (nonatomic, copy) NSArray<NeoWCAvatarQuickAction *> *actions;
 @property (nonatomic, copy) void (^profileHandler)(void);
 @end
@@ -69,7 +70,9 @@ static char NeoWCAvatarQuickPanelActionKey;
 
     UILabel *userLabel = [UILabel new];
     userLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    userLabel.text = self.userName;
+    userLabel.text = self.maskedRealName.length > 0
+        ? [NSString stringWithFormat:@"脱敏姓名 %@ · %@", self.maskedRealName, self.userName]
+        : self.userName;
     userLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
     userLabel.textColor = UIColor.secondaryLabelColor;
     userLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
@@ -198,6 +201,7 @@ void NeoWCPresentAvatarQuickPanel(UIViewController *presenter,
                                   UIImage *avatar,
                                   NSString *displayName,
                                   NSString *userName,
+                                  NSString *maskedRealName,
                                   NSArray<NeoWCAvatarQuickAction *> *actions,
                                   void (^profileHandler)(void)) {
     if (!presenter || presenter.presentedViewController || actions.count == 0) return;
@@ -205,6 +209,7 @@ void NeoWCPresentAvatarQuickPanel(UIViewController *presenter,
     panel.avatar = avatar;
     panel.displayName = displayName ?: @"";
     panel.userName = userName ?: @"";
+    panel.maskedRealName = maskedRealName ?: @"";
     panel.actions = actions;
     panel.profileHandler = profileHandler ?: ^{};
     panel.modalPresentationStyle = UIModalPresentationOverFullScreen;

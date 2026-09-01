@@ -1,6 +1,7 @@
 #import "NeoWCFriendRelationChecker.h"
 #import "NeoWCInAppNotification.h"
 #import "NeoWCLogging.h"
+#import "NeoWCPrivateAPI.h"
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -111,15 +112,11 @@ static NSString *NeoWCFriendRelationString(id value) {
 }
 
 static NSString *NeoWCFriendRelationContactUserName(id contact) {
-    return NeoWCFriendRelationString(NeoWCFriendRelationObjectValue(contact,
-        @[@"m_nsUsrName", @"getUsrName", @"m_nsUserName", @"userName", @"username"]));
+    return NeoWCPrivateContactUserName(contact);
 }
 
 static NSString *NeoWCFriendRelationContactDisplayName(id contact, NSString *fallback) {
-    NSString *name = NeoWCFriendRelationString(NeoWCFriendRelationObjectValue(contact,
-        @[@"getContactDisplayName", @"getDisplayName", @"m_nsRemark", @"m_nsNickName",
-          @"displayName", @"nickName"]));
-    return name.length > 0 ? name : (fallback ?: @"");
+    return NeoWCPrivateContactDisplayName(contact, fallback) ?: @"";
 }
 
 static BOOL NeoWCFriendRelationBoolSelector(id object, NSString *name, BOOL fallback) {
@@ -335,36 +332,17 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
 
 - (NSArray<NSDictionary<NSString *, NSString *> *> *)allFriendCandidates {
     id manager = NeoWCFriendRelationServiceForClass(NSClassFromString(@"CContactMgr"));
-    SEL listSelector = NSSelectorFromString(@"getContactList:contactType:");
-    if (![manager respondsToSelector:listSelector]) {
-        NeoWCLog(@"单删检测无法取得联系人服务或列表接口");
-        return @[];
-    }
-    id rawContacts = nil;
-    @try {
-        rawContacts = ((id (*)(id, SEL, NSUInteger, NSUInteger))objc_msgSend)(manager,
-                                                                              listSelector, 1, 0);
-    } @catch (NSException *exception) {
-        NeoWCLog(@"单删检测读取联系人列表失败：%@", exception.reason ?: exception.name);
-        return @[];
-    }
-    if (![rawContacts isKindOfClass:NSArray.class]) return @[];
-
-    SEL contactSelector = NSSelectorFromString(@"getContactByName:");
-    BOOL canResolveContact = [manager respondsToSelector:contactSelector];
+    NSArray *rawContacts = NeoWCPrivateContactList();
+    if (rawContacts.count == 0) NeoWCLog(@"单删检测未取得联系人列表");
     SEL membershipSelector = NSSelectorFromString(@"isInContactList:");
     BOOL canCheckMembership = [manager respondsToSelector:membershipSelector];
 
     NSMutableArray *candidates = [NSMutableArray array];
     NSMutableSet *seen = [NSMutableSet set];
-    for (id rawContact in (NSArray *)rawContacts) {
+    for (id rawContact in rawContacts) {
         NSString *userName = NeoWCFriendRelationContactUserName(rawContact);
         if (NeoWCFriendRelationExcludedUserName(userName) || [seen containsObject:userName]) continue;
-        id contact = rawContact;
-        if (canResolveContact) {
-            @try { contact = ((id (*)(id, SEL, id))objc_msgSend)(manager, contactSelector, userName); }
-            @catch (__unused NSException *exception) { contact = nil; }
-        }
+        id contact = NeoWCPrivateContact(userName) ?: rawContact;
         if (!contact || !NeoWCFriendRelationBoolSelector(contact, @"isMMContact", YES)) continue;
         if (NeoWCFriendRelationBoolSelector(contact, @"isBrandContact", NO) ||
             NeoWCFriendRelationBoolSelector(contact, @"isChatRoom", NO) ||
@@ -522,16 +500,7 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
 }
 
 - (id)contactForUserName:(NSString *)userName {
-    id manager = NeoWCFriendRelationServiceForClass(NSClassFromString(@"CContactMgr"));
-    for (NSString *name in @[@"getContactByName:", @"getContactByNameFromCache:"]) {
-        SEL selector = NSSelectorFromString(name);
-        if (![manager respondsToSelector:selector]) continue;
-        @try {
-            id contact = ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
-            if (contact) return contact;
-        } @catch (__unused NSException *exception) {}
-    }
-    return nil;
+    return NeoWCPrivateContact(userName);
 }
 
 - (BOOL)isStillFriendCandidate:(NSString *)userName {
@@ -694,8 +663,7 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
         if (message.length > 0 && ![messages containsObject:message]) [messages addObject:message];
     }
     NSString *message = [messages componentsJoinedByString:@" · "];
-    NSString *mask = NeoWCFriendRelationString(NeoWCFriendRelationObjectValue(response,
-        @[@"maskTruename", @"maskTrueName", @"receiverMaskTrueName"]));
+    NSString *mask = NeoWCPrivateMaskedTransferName(response);
 
     if ([self isTransportErrorCode:code message:message]) {
         if (self.transportRetryCount < 2 &&
@@ -748,6 +716,7 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
         @"displayName": displayName.length > 0 ? displayName : userName,
         @"verdict": verdict ?: NeoWCFriendRelationVerdictUncertain,
         @"mask": mask ?: @"",
+        @"maskLastChar": NeoWCPrivateMaskedTransferNameSuffix(mask) ?: @"",
         @"retcode": @(retcode),
         @"retmsg": retmsg ?: @"",
         @"checkedAt": @([NSDate.date timeIntervalSince1970]),
@@ -819,6 +788,12 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
         return [left[@"displayName"] localizedStandardCompare:right[@"displayName"]];
     }];
     return items;
+}
+
+- (NSString *)maskedRealNameForUserName:(NSString *)userName {
+    if (userName.length == 0) return nil;
+    NSString *maskedName = NeoWCFriendRelationString(self.results[userName][@"mask"]);
+    return NeoWCPrivateMaskedTransferName(maskedName);
 }
 
 - (void)removeResultUserNames:(NSArray<NSString *> *)userNames {

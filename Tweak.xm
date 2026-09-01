@@ -38,6 +38,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCMessageBlock.h"
 #import "Sources/NeoWCAvatarQuickPanel.h"
 #import "Sources/NeoWCContactInfoCard.h"
+#import "Sources/NeoWCFriendRelationChecker.h"
 #import "Sources/NeoWCInfoListViewController.h"
 #import "Sources/NeoWCSilkEncoder.h"
 #import "Sources/NeoWCInAppNotification.h"
@@ -1174,11 +1175,7 @@ static BOOL NeoWCRepeatVoiceMessage(id source, NSString *session) {
 static NSString *NeoWCVoiceForwardSessionForContact(id contact) {
     if (!contact) return nil;
     if ([contact isKindOfClass:[NSString class]] && [contact length] > 0) return contact;
-    for (NSString *key in @[@"m_nsUsrName", @"userName", @"username"]) {
-        id value = NeoWCTweakSafeValue(contact, key);
-        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
-    }
-    return nil;
+    return NeoWCPrivateContactUserName(contact);
 }
 
 // WeChat's stock forward controller accepts voice messages into its local
@@ -2548,13 +2545,7 @@ static void NeoWCSynchronizeQuickReplyPlusGesture(MMInputToolView *view) {
 }
 
 static id NeoWCContactForUserName(NSString *userName) {
-    if (userName.length == 0) return nil;
-    Class contactManagerClass = objc_getClass("CContactMgr");
-    if (!contactManagerClass) return nil;
-    id manager = NeoWCServiceForClass(contactManagerClass);
-    SEL selector = sel_registerName("getContactByName:");
-    if (!manager || ![manager respondsToSelector:selector]) return nil;
-    return ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
+    return NeoWCPrivateContact(userName);
 }
 
 static id NeoWCMessageChatContact(id message) {
@@ -2659,12 +2650,7 @@ static UIImage *NeoWCAvatarSnapshot(UIView *view) {
 }
 
 static NSString *NeoWCAvatarDisplayName(id contact, NSString *fallback) {
-    for (NSString *selectorName in @[@"getContactDisplayName", @"getRemark", @"m_nsRemark", @"m_nsNickName", @"nickname"]) {
-        id value = NeoWCTweakValueForSelectorNames(contact, @[selectorName]);
-        if (!value) value = NeoWCTweakSafeValue(contact, selectorName);
-        if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
-    }
-    return fallback ?: @"";
+    return NeoWCPrivateContactDisplayName(contact, fallback) ?: @"";
 }
 
 static NSString *NeoWCAvatarTargetUserName(CommonMessageCellView *cell, NSString *chatUserName) {
@@ -2711,24 +2697,11 @@ static void NeoWCInvokeNativeAvatarLongPress(CommonMessageCellView *cell, UIView
 }
 
 static void NeoWCOpenAvatarProfile(UIViewController *chatController, UIView *headView, id contact) {
-    SEL selector = NSSelectorFromString(@"onHeadImageClicked:");
-    if ([chatController respondsToSelector:selector] && headView) {
-        ((void (*)(id, SEL, id))objc_msgSend)(chatController, selector, headView);
-        return;
-    }
-    NSString *userName = NeoWCTweakValueForSelectorNames(
-        contact, @[@"m_nsUsrName", @"getUsrName", @"m_nsUserName", @"userName"]);
-    if ([userName isKindOfClass:NSString.class] && userName.length > 0 &&
-        NeoWCPushPrivateContactProfile(chatController, userName)) return;
-    Class controllerClass = NSClassFromString(@"ContactInfoViewController");
-    UIViewController *profile = controllerClass ? [controllerClass new] : nil;
-    if (!profile) {
+    (void)headView;
+    NSString *userName = NeoWCPrivateContactUserName(contact);
+    if (userName.length == 0 || !NeoWCPushPrivateContactProfile(chatController, userName)) {
         NeoWCShowTransientMessage(@"当前微信版本无法打开资料页", NO);
-        return;
     }
-    NeoWCTweakSetValue(profile, @"m_contact", contact);
-    if (chatController.navigationController) [chatController.navigationController pushViewController:profile animated:YES];
-    else [chatController presentViewController:profile animated:YES completion:nil];
 }
 
 static void NeoWCClearPendingExclusiveRedEnvelope(void) {
@@ -2739,12 +2712,7 @@ static void NeoWCClearPendingExclusiveRedEnvelope(void) {
 
 static NSString *NeoWCContactUserName(id contact) {
     if ([contact isKindOfClass:NSString.class]) return contact;
-    for (NSString *name in @[@"m_nsUsrName", @"userName", @"username"]) {
-        id value = NeoWCTweakValueForSelectorNames(contact, @[name]);
-        if (!value) value = NeoWCTweakSafeValue(contact, name);
-        if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
-    }
-    return nil;
+    return NeoWCPrivateContactUserName(contact);
 }
 
 static void NeoWCPrepareExclusiveRedEnvelopeData(id data) {
@@ -2963,6 +2931,8 @@ static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
     NSInteger removalScene = (group && !isSelf)
         ? NeoWCGroupMemberRemovalScene(groupContact, contact, targetUserName) : 0;
     NSString *displayName = NeoWCAvatarDisplayName(contact, targetUserName);
+    NSString *maskedRealName = [[NeoWCFriendRelationChecker sharedChecker]
+        maskedRealNameForUserName:targetUserName];
     UIImage *avatar = NeoWCAvatarSnapshot(headView);
     __weak UIViewController *weakController = chatController;
     __weak CommonMessageCellView *weakCell = cell;
@@ -3027,6 +2997,7 @@ static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
                                  avatar,
                                  displayName,
                                  targetUserName,
+                                 maskedRealName,
                                  actions,
                                  ^{ NeoWCOpenAvatarProfile(weakController, weakHeadView, retainedContact); });
     return YES;
@@ -3345,8 +3316,7 @@ static BOOL NeoWCSendEditedImageToCurrentConversation(id logic, NSString **failu
     }
     if (userName.length == 0) { if (failureReason) *failureReason = @"当前编辑页不属于聊天会话"; return NO; }
     if (!contact) { if (failureReason) *failureReason = @"当前聊天联系人已失效"; return NO; }
-    id contactNameValue = NeoWCTweakSafeValue(contact, @"m_nsUsrName");
-    NSString *contactName = [contactNameValue isKindOfClass:[NSString class]] ? contactNameValue : nil;
+    NSString *contactName = NeoWCPrivateContactUserName(contact);
     if (contactName.length > 0 && ![contactName isEqualToString:userName]) { if (failureReason) *failureReason = @"会话校验失败，已阻止串会话发送"; return NO; }
     if (!providerClass || ![providerClass respondsToSelector:makeMessageSelector]) { if (failureReason) *failureReason = @"微信图片消息接口已变化"; return NO; }
     if (!forwardClass) { if (failureReason) *failureReason = @"微信确认发送组件不存在"; return NO; }
@@ -5122,56 +5092,14 @@ static UIWindow *NeoWCActiveApplicationWindow(void) {
     return UIApplication.sharedApplication.windows.firstObject;
 }
 
-static BaseMsgContentViewController *NeoWCChatControllerInControllerTree(UIViewController *controller) {
-    if (!controller) return nil;
-    BaseMsgContentViewController *match = nil;
-    if (controller.presentedViewController) {
-        match = NeoWCChatControllerInControllerTree(controller.presentedViewController);
-        if (match) return match;
-    }
-    if ([controller isKindOfClass:UINavigationController.class]) {
-        match = NeoWCChatControllerInControllerTree(((UINavigationController *)controller).visibleViewController);
-        if (match) return match;
-    }
-    if ([controller isKindOfClass:UITabBarController.class]) {
-        match = NeoWCChatControllerInControllerTree(((UITabBarController *)controller).selectedViewController);
-        if (match) return match;
-    }
-    if ([controller isKindOfClass:NSClassFromString(@"BaseMsgContentViewController")] &&
-        controller.isViewLoaded && controller.view.window &&
-        (!controller.navigationController || controller.navigationController.topViewController == controller)) {
-        return (BaseMsgContentViewController *)controller;
-    }
-    for (UIViewController *child in controller.childViewControllers.reverseObjectEnumerator) {
-        match = NeoWCChatControllerInControllerTree(child);
-        if (match) return match;
-    }
-    return nil;
-}
-
 static BaseMsgContentViewController *NeoWCResolveVisibleChatController(void) {
     BaseMsgContentViewController *cached = NeoWCVisibleChatController;
     if (cached.isViewLoaded && cached.view.window &&
         (!cached.navigationController || cached.navigationController.topViewController == cached)) return cached;
-
-    NSMutableOrderedSet<UIWindow *> *windows = [NSMutableOrderedSet orderedSet];
-    if (@available(iOS 13.0, *)) {
-        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (![scene isKindOfClass:UIWindowScene.class]) continue;
-            [windows addObjectsFromArray:((UIWindowScene *)scene).windows];
-        }
-    }
-    [windows addObjectsFromArray:UIApplication.sharedApplication.windows ?: @[]];
-    for (UIWindow *window in windows.reverseObjectEnumerator) {
-        if (window.hidden || window.alpha <= 0.0) continue;
-        BaseMsgContentViewController *controller =
-            NeoWCChatControllerInControllerTree(window.rootViewController);
-        if (controller) {
-            NeoWCVisibleChatController = controller;
-            return controller;
-        }
-    }
-    return nil;
+    BaseMsgContentViewController *controller =
+        (BaseMsgContentViewController *)NeoWCPrivateCurrentChatController();
+    if (controller) NeoWCVisibleChatController = controller;
+    return controller;
 }
 
 static void NeoWCRefreshPinnedMessageGlassInView(UIView *view) {
@@ -7350,19 +7278,7 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
 %end
 
 static NSString *NeoWCChatUserName(id controller) {
-    NSString *directUserName = NeoWCTweakValueForSelectorNames(controller, @[@"getChatUserName"]);
-    if ([directUserName isKindOfClass:NSString.class] && directUserName.length > 0) return directUserName;
-    id contact = NeoWCTweakValueForSelectorNames(controller, @[@"m_contact", @"chatContact", @"contact"]);
-    if (!contact && [controller respondsToSelector:@selector(GetContact)]) {
-        contact = ((id (*)(id, SEL))objc_msgSend)(controller, @selector(GetContact));
-    }
-    SEL getCContactSelector = sel_registerName("GetCContact");
-    if (!contact && [controller respondsToSelector:getCContactSelector]) {
-        contact = ((id (*)(id, SEL))objc_msgSend)(controller, getCContactSelector);
-    }
-    NSString *userName = NeoWCTweakValueForSelectorNames(contact, @[@"m_nsUserName", @"m_nsUsrName", @"userName"]);
-    if (userName.length == 0) userName = NeoWCTweakValueForSelectorNames(controller, @[@"m_nsUserName", @"m_nsUsrName", @"sessionUserName"]);
-    return userName;
+    return NeoWCPrivateChatUserName(controller);
 }
 
 static MMGrowTextView *NeoWCFindGrowTextView(UIView *view) {
@@ -7944,34 +7860,19 @@ static UIView *NeoWCChatTopAvatarView(id contact, NSString *userName) {
     // Do not embed MMHeadImageView when the contact image is already available:
     // that host view applies its own crop while being resized and makes square
     // avatars look optically zoomed inside our second circular viewport.
-    id contactImage = NeoWCTweakValueForSelectorNames(contact, @[@"getContactHeadImage"]);
+    UIImage *contactImage = NeoWCPrivateContactAvatarImage(contact);
     UIImageView *plainImageView = NeoWCChatTopPlainAvatarImageView(contactImage);
     if (plainImageView) return plainImageView;
 
-    NSString *headURL = NeoWCTweakSafeValue(contact, @"m_nsHeadImgUrl");
-    if (![headURL isKindOfClass:[NSString class]] || headURL.length == 0) {
-        headURL = NeoWCTweakSafeValue(contact, @"m_nsHeadImgUrlHD");
-    }
-    Class helperClass = NSClassFromString(@"MMHeadImageHelper");
-    SEL selector = NSSelectorFromString(@"getContactHeadImageViewWithUsrName:headImgUrl:bAutoUpdate:bRoundCorner:");
-    if (helperClass && [helperClass respondsToSelector:selector] && userName.length > 0) {
-        id view = ((id (*)(id, SEL, id, id, BOOL, BOOL))objc_msgSend)(helperClass,
-                                                                      selector,
-                                                                      userName,
-                                                                      headURL ?: @"",
-                                                                      YES,
-                                                                      NO);
-        if ([view isKindOfClass:[UIView class]]) {
-            id hostedImageView = [view isKindOfClass:UIImageView.class]
-                ? view : NeoWCTweakValueForSelectorNames(view, @[@"headImageView", @"imageView"]);
-            UIImage *hostedImage = [hostedImageView isKindOfClass:UIImageView.class]
-                ? ((UIImageView *)hostedImageView).image : nil;
-            plainImageView = NeoWCChatTopPlainAvatarImageView(hostedImage);
-            if (plainImageView) return plainImageView;
-            // The helper may still be loading asynchronously. Preserve it only
-            // as a last-resort path so an uncached avatar can eventually appear.
-            return view;
-        }
+    UIView *view = NeoWCPrivateContactAvatarView(contact, userName, NO);
+    if (view) {
+        id hostedImageView = [view isKindOfClass:UIImageView.class]
+            ? view : NeoWCTweakValueForSelectorNames(view, @[@"headImageView", @"imageView"]);
+        UIImage *hostedImage = [hostedImageView isKindOfClass:UIImageView.class]
+            ? ((UIImageView *)hostedImageView).image : nil;
+        plainImageView = NeoWCChatTopPlainAvatarImageView(hostedImage);
+        if (plainImageView) return plainImageView;
+        return view;
     }
     UIImageView *fallback = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"person.crop.circle.fill"]];
     fallback.tintColor = UIColor.tertiaryLabelColor;
@@ -7980,9 +7881,12 @@ static UIView *NeoWCChatTopAvatarView(id contact, NSString *userName) {
 }
 
 static NSString *NeoWCChatTopDisplayName(BaseMsgContentViewController *controller, id contact) {
-    for (NSString *key in @[@"m_nsRemark", @"m_nsNickName", @"m_nsAlias"]) {
-        NSString *value = NeoWCTweakSafeValue(contact, key);
-        if ([value isKindOfClass:[NSString class]] && value.length > 0) {
+    for (NSString *value in @[
+        NeoWCPrivateContactRemark(contact) ?: @"",
+        NeoWCPrivateContactNickname(contact) ?: @"",
+        NeoWCPrivateContactAlias(contact) ?: @""
+    ]) {
+        if (value.length > 0) {
             objc_setAssociatedObject(controller, &NeoWCChatTopStableDisplayNameKey,
                                      value, OBJC_ASSOCIATION_COPY_NONATOMIC);
             return value;
@@ -8050,10 +7954,7 @@ static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIView **content
 
 static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *controller,
                                                 UIBarButtonItem *backItem) {
-    id contact = NeoWCTweakValueForSelectorNames(controller, @[@"m_contact", @"chatContact", @"contact"]);
-    if (!contact && [controller respondsToSelector:@selector(GetContact)]) {
-        contact = ((id (*)(id, SEL))objc_msgSend)(controller, @selector(GetContact));
-    }
+    id contact = NeoWCPrivateChatContact(controller);
     NSString *userName = NeoWCChatUserName(controller);
     NSString *displayName = NeoWCChatTopDisplayName(controller, contact);
     CGFloat availableWidth = MIN(205.0, CGRectGetWidth(UIScreen.mainScreen.bounds) - 130.0);
@@ -9492,7 +9393,7 @@ static void NeoWCRefreshInfoCardFromOfficialController(id officialController) {
         [card updateRows:NeoWCMergeInfoCardRows(baseRows,
             NeoWCOfficialSocialInformationRows(officialController))];
         id contact = objc_getAssociatedObject(officialController, &NeoWCProfileContactKey);
-        NSString *username = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+        NSString *username = NeoWCPrivateContactUserName(contact);
         NeoWCConfigureInfoCardDetailActions(card, contact, nil, username, officialController);
     }
 }
@@ -9635,7 +9536,7 @@ static void NeoWCInjectProfileConversationSwitches(id controller, BOOL group) {
         @[@"m_chatRoomContact", @"chatRoomContact", @"contact", @"m_contact"] :
         @[@"m_contact", @"contact", @"contactInfo", @"m_contactInfo"];
     id contact = NeoWCRawProfileValue(controller, contactNames);
-    NSString *username = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+    NSString *username = NeoWCPrivateContactUserName(contact);
     if (![username isKindOfClass:NSString.class] || username.length == 0) return;
     objc_setAssociatedObject(controller, &NeoWCRawContactIDKey, username, OBJC_ASSOCIATION_COPY_NONATOMIC);
 
@@ -9786,7 +9687,7 @@ static void NeoWCAddProfileMemberNamesFromValue(id value, NSMutableSet<NSString 
         for (id item in value) {
             NSString *name = [item isKindOfClass:NSString.class]
                 ? [item stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
-                : NeoWCRawProfileValue(item, @[@"m_nsUsrName", @"m_nsUserName", @"userName", @"username", @"wxid"]);
+                : NeoWCPrivateContactUserName(item);
             if (name.length > 0) [names addObject:name];
         }
     } @catch (__unused NSException *exception) {}
@@ -9802,86 +9703,8 @@ static NSSet<NSString *> *NeoWCGroupMemberUserNames(id groupContact) {
     return (directValue || nestedValue) ? names : nil;
 }
 
-static NSArray *NeoWCProfileObjectCollection(id target, NSArray<NSString *> *selectorNames) {
-    for (NSString *selectorName in selectorNames) {
-        id value = NeoWCCallCompatibleObjectGetter(target, selectorName);
-        if (!value || [value isKindOfClass:NSString.class] ||
-            ![value conformsToProtocol:@protocol(NSFastEnumeration)]) continue;
-        NSMutableArray *items = [NSMutableArray array];
-        @try {
-            for (id item in value) if (item) [items addObject:item];
-        } @catch (__unused NSException *exception) {
-            continue;
-        }
-        return items;
-    }
-    return nil;
-}
-
 static NSArray *NeoWCAllChatRoomContacts(void) {
-    NSMutableArray *groups = [NSMutableArray array];
-    NSMutableSet<NSString *> *groupNames = [NSMutableSet set];
-    void (^appendGroup)(id) = ^(id contact) {
-        if (!contact) return;
-        NSString *name = NeoWCRawProfileValue(contact,
-            @[@"m_nsUsrName", @"m_nsUserName", @"userName", @"username"]);
-        if (name.length == 0 || [groupNames containsObject:name]) return;
-        BOOL isChatRoom = [name hasSuffix:@"@chatroom"];
-        SEL chatRoomSelector = NSSelectorFromString(@"isChatroom");
-        Method chatRoomMethod = class_getInstanceMethod([contact class], chatRoomSelector);
-        if (chatRoomMethod && method_getNumberOfArguments(chatRoomMethod) == 2) {
-            char returnType[8] = {0};
-            method_getReturnType(chatRoomMethod, returnType, sizeof(returnType));
-            if (returnType[0] == 'B' || returnType[0] == 'c') {
-                @try {
-                    isChatRoom = ((BOOL (*)(id, SEL))objc_msgSend)(contact, chatRoomSelector);
-                } @catch (__unused NSException *exception) {}
-            }
-        }
-        if (!isChatRoom) return;
-        [groupNames addObject:name];
-        [groups addObject:contact];
-    };
-
-    // WCPulse 1.7-2 first walks MMNewSessionMgr.SessionNewArray. This is
-    // important for non-friends because some active groups are absent from
-    // ContactsDataLogic's cached chat-room collection.
-    Class sessionManagerClass = objc_getClass("MMNewSessionMgr");
-    id sessionManager = sessionManagerClass ? NeoWCServiceForClass(sessionManagerClass) : nil;
-    NSArray *sessions = NeoWCProfileObjectCollection(sessionManager, @[@"SessionNewArray"]);
-    for (id session in sessions ?: @[]) {
-        NSString *name = NeoWCRawProfileValue(session,
-            @[@"m_nsUserName", @"m_nsUsrName", @"userName", @"username"]);
-        if (name.length == 0 || [groupNames containsObject:name]) continue;
-        appendGroup(NeoWCContactForUserName(name));
-    }
-
-    Class contactManagerClass = objc_getClass("CContactMgr");
-    id contactManager = contactManagerClass ? NeoWCServiceForClass(contactManagerClass) : nil;
-    SEL contactListSelector = NSSelectorFromString(@"getContactList:contactType:");
-    Method contactListMethod = contactManager
-        ? class_getInstanceMethod([contactManager class], contactListSelector) : NULL;
-    if (contactListMethod && method_getNumberOfArguments(contactListMethod) == 4 &&
-        NeoWCMethodReturnsObject(contactListMethod) &&
-        NeoWCMethodArgumentIsIntegerScalar(contactListMethod, 2) &&
-        NeoWCMethodArgumentIsIntegerScalar(contactListMethod, 3)) {
-        @try {
-            id value = ((id (*)(id, SEL, NSInteger, NSInteger))objc_msgSend)(
-                contactManager, contactListSelector, 1, 0);
-            if ([value conformsToProtocol:@protocol(NSFastEnumeration)]) {
-                for (id contact in value) appendGroup(contact);
-            }
-        } @catch (__unused NSException *exception) {}
-    }
-
-    // Retain the older source as a compatibility fallback and merge it rather
-    // than returning early; WeChat versions differ in which cache is complete.
-    Class dataLogicClass = objc_getClass("ContactsDataLogic");
-    id dataLogic = dataLogicClass ? NeoWCServiceForClass(dataLogicClass) : nil;
-    for (id contact in NeoWCProfileObjectCollection(dataLogic, @[@"getChatRoomContacts"]) ?: @[]) {
-        appendGroup(contact);
-    }
-    return groups;
+    return NeoWCPrivateGroupContactList();
 }
 
 static BOOL NeoWCContactListMethodIsCompatible(id manager, SEL selector) {
@@ -9970,14 +9793,14 @@ static NSArray<NSDictionary<NSString *, id> *> *NeoWCInfoListRowsForContacts(NSA
     NSMutableArray<NSDictionary<NSString *, id> *> *rows = [NSMutableArray array];
     NSMutableSet<NSString *> *identifiers = [NSMutableSet set];
     for (id contact in contacts) {
-        NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+        NSString *userName = NeoWCPrivateContactUserName(contact);
         if (userName.length == 0 || [identifiers containsObject:userName]) continue;
         [identifiers addObject:userName];
         NSString *name = NeoWCAvatarDisplayName(contact, userName);
         NSMutableDictionary<NSString *, id> *row = [@{ @"title": name.length > 0 ? name : userName,
                                                         @"value": userName } mutableCopy];
-        id imageValue = NeoWCRawProfileValue(contact, @[@"getContactHeadImage"]);
-        if ([imageValue isKindOfClass:UIImage.class]) row[@"image"] = imageValue;
+        UIImage *image = NeoWCPrivateContactAvatarImage(contact);
+        if (image) row[@"image"] = image;
         [rows addObject:row];
     }
     [rows sortUsingComparator:^NSComparisonResult(NSDictionary *left, NSDictionary *right) {
@@ -9990,7 +9813,7 @@ static NSArray *NeoWCMergedContactCollections(NSArray *primary, NSArray *seconda
     NSMutableArray *merged = [NSMutableArray array];
     NSMutableSet<NSString *> *identifiers = [NSMutableSet set];
     for (id contact in [(primary ?: @[]) arrayByAddingObjectsFromArray:secondary ?: @[]]) {
-        NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+        NSString *userName = NeoWCPrivateContactUserName(contact);
         if (userName.length == 0 || [identifiers containsObject:userName]) continue;
         [identifiers addObject:userName];
         [merged addObject:contact];
@@ -10005,7 +9828,7 @@ static void NeoWCConfigureInfoCardDetailActions(NeoWCContactInfoCardViewControll
                                                 id officialController) {
     if (!card) return;
     id resolvedGroupContact = groupContact;
-    NSString *contactUserName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+    NSString *contactUserName = NeoWCPrivateContactUserName(contact);
     if (!resolvedGroupContact && [contactUserName hasSuffix:@"@chatroom"]) resolvedGroupContact = contact;
     NSArray *friends = NeoWCGroupFriendContacts(resolvedGroupContact);
     NSArray *friendRows = NeoWCInfoListRowsForContacts(friends);
@@ -10045,10 +9868,10 @@ static void NeoWCConfigureInfoCardDetailActions(NeoWCContactInfoCardViewControll
 static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id contact, BOOL group) {
     NSMutableArray *rows = [NSMutableArray array];
     NeoWCAddInfoCardRow(rows, group ? @"原始群号码" : @"原始号码",
-                       NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]));
+                       NeoWCPrivateContactUserName(contact));
     if (group) {
         NeoWCAddInfoCardRow(rows, @"群聊名称",
-                           NeoWCRawProfileValue(contact, @[@"getContactDisplayName", @"m_nsNickName"]));
+                           NeoWCPrivateContactDisplayName(contact, nil));
         NSSet<NSString *> *memberNames = NeoWCGroupMemberUserNames(contact);
         if (memberNames.count > 0) NeoWCAddInfoCardRow(rows, @"群成员",
                                                         [NSString stringWithFormat:@"%lu 人",
@@ -10064,12 +9887,14 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id 
         NeoWCAddInfoCardRow(rows, @"群简介", NeoWCRawProfileValue(contact, @[@"groupSummary"]));
         NeoWCAddInfoCardRow(rows, @"群链接", NeoWCRawProfileValue(contact, @[@"groupURL"]));
     } else {
-        NeoWCAddInfoCardRow(rows, @"昵称", NeoWCRawProfileValue(contact, @[@"m_nsNickName"]));
-        NeoWCAddInfoCardRow(rows, @"备注", NeoWCRawProfileValue(contact, @[@"m_nsRemark"]));
-        NeoWCAddInfoCardRow(rows, @"微信号", NeoWCRawProfileValue(contact, @[@"m_nsAliasName", @"m_nsAlias"]));
+        NeoWCAddInfoCardRow(rows, @"昵称", NeoWCPrivateContactNickname(contact));
+        NeoWCAddInfoCardRow(rows, @"备注", NeoWCPrivateContactRemark(contact));
+        NeoWCAddInfoCardRow(rows, @"微信号", NeoWCPrivateContactAlias(contact));
+        NSString *userName = NeoWCPrivateContactUserName(contact);
+        NeoWCAddInfoCardRow(rows, @"脱敏姓名",
+            [[NeoWCFriendRelationChecker sharedChecker] maskedRealNameForUserName:userName]);
         NeoWCAddInfoCardRow(rows, @"添加时间", NeoWCContactAddTimeValue(contact));
         NeoWCAddInfoCardRow(rows, @"添加天数", NeoWCContactAddDaysValue(contact));
-        NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
         // The native related-group search exits early for non-friends. Seed the
         // row from the WCPulse-compatible session/contact scan, then merge any
         // official result that becomes available asynchronously.
@@ -10090,7 +9915,7 @@ static UIViewController *NeoWCCreateOfficialSocialInformation(id contact) {
         return nil;
     }
     ((void (*)(id, SEL, id))objc_msgSend)(controller, setter, contact);
-    NSString *rawID = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+    NSString *rawID = NeoWCPrivateContactUserName(contact);
     objc_setAssociatedObject(controller, &NeoWCProfileContactKey, contact, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(controller, &NeoWCProfileIsGroupKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(controller, &NeoWCRawContactIDKey, rawID, OBJC_ASSOCIATION_COPY_NONATOMIC);
@@ -10306,14 +10131,13 @@ static void NeoWCConfirmRemoveGroupMember(UIViewController *presenter,
 static void NeoWCOpenProfileInfoCard(id controller) {
     id contact = objc_getAssociatedObject(controller, &NeoWCProfileContactKey);
     BOOL group = [objc_getAssociatedObject(controller, &NeoWCProfileIsGroupKey) boolValue];
-    NSString *userName = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+    NSString *userName = NeoWCPrivateContactUserName(contact);
     if (userName.length == 0) userName = objc_getAssociatedObject(controller, &NeoWCRawContactIDKey);
     if (userName.length == 0) return;
     UIViewController *owner = NeoWCProfileOwnerViewController(controller);
     UIViewController *officialController = !group ? NeoWCCreateOfficialSocialInformation(contact) : nil;
-    NSString *name = NeoWCRawProfileValue(contact, @[@"getContactDisplayName", @"m_nsRemark", @"m_nsNickName"]);
-    id imageValue = NeoWCRawProfileValue(contact, @[@"getContactHeadImage"]);
-    UIImage *avatar = [imageValue isKindOfClass:UIImage.class] ? imageValue : nil;
+    NSString *name = NeoWCPrivateContactDisplayName(contact, nil);
+    UIImage *avatar = NeoWCPrivateContactAvatarImage(contact);
     NSString *chatRoomUserName = objc_getAssociatedObject(controller, &NeoWCProfileChatRoomKey);
     NSMutableArray *rows = [NeoWCProfileInfoRows(contact, group) mutableCopy];
     if (!group && [chatRoomUserName hasSuffix:@"@chatroom"]) {
@@ -10357,7 +10181,7 @@ static void NeoWCInjectRawIDCell(id controller, BOOL group) {
         @[@"m_chatRoomContact", @"chatRoomContact", @"contact", @"m_contact"] :
         @[@"m_contact", @"contact", @"contactInfo", @"m_contactInfo"];
     id contact = NeoWCRawProfileValue(controller, contactNames);
-    NSString *rawID = NeoWCRawProfileValue(contact, @[@"m_nsUsrName", @"userName", @"username"]);
+    NSString *rawID = NeoWCPrivateContactUserName(contact);
     if (![rawID isKindOfClass:NSString.class] || rawID.length == 0) return;
 
     id tableInfo = NeoWCRawProfileValue(controller,
@@ -10451,10 +10275,10 @@ static id NeoWCHomeSessionCellData(id owner, UITableView *tableView, NSIndexPath
 }
 
 static NSString *NeoWCHomeSessionUserName(id data) {
-    NSString *userName = NeoWCTweakValueForSelectorNames(data, @[@"m_nsUsrName", @"m_nsUserName", @"userName"]);
+    NSString *userName = NeoWCPrivateContactUserName(data);
     if (userName.length == 0) {
         id sessionInfo = NeoWCTweakValueForSelectorNames(data, @[@"m_sessionInfo", @"sessionInfo"]);
-        userName = NeoWCTweakValueForSelectorNames(sessionInfo, @[@"m_nsUsrName", @"m_nsUserName", @"userName"]);
+        userName = NeoWCPrivateContactUserName(sessionInfo);
     }
     return userName;
 }

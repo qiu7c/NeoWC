@@ -2,8 +2,8 @@
 
 #import <objc/message.h>
 
-#import "NeoWCAccount.h"
 #import "NeoWCEnhancements.h"
+#import "NeoWCPrivateAPI.h"
 #import "NeoWCQuickReplyStore.h"
 
 static NSString *const NeoWCExportTextAction = @"com.qiu7c.neowc.chat-export.text";
@@ -37,15 +37,7 @@ static NSArray *NeoWCSelectedMessages(UIViewController *controller) {
 }
 
 static NSString *NeoWCExportConversationUsername(UIViewController *controller) {
-    id contact = NeoWCExportCall(controller, @"getContact");
-    if (!contact) contact = NeoWCExportCall(controller, @"GetContact");
-    if (!contact) contact = NeoWCExportCall(controller, @"GetCContact");
-    if (!contact) contact = NeoWCExportSafeValue(controller, @"m_contact");
-    id value = NeoWCExportSafeValue(contact, @"m_nsUsrName");
-    if (![value isKindOfClass:NSString.class] || [value length] == 0) {
-        value = NeoWCExportSafeValue(controller, @"m_nsUsrName");
-    }
-    return [value isKindOfClass:NSString.class] ? value : nil;
+    return NeoWCPrivateChatUserName(controller);
 }
 
 static BOOL NeoWCExportOptionEnabled(NSString *key) {
@@ -183,26 +175,11 @@ static NSString *NeoWCMessageBody(id wrap) {
 }
 
 static id NeoWCContactForUsername(NSString *username) {
-    if (username.length == 0) return nil;
-    Class managerClass = NSClassFromString(@"CContactMgr");
-    SEL contactSelector = NSSelectorFromString(@"getContactByName:");
-    if (!managerClass) return nil;
-    id manager = NeoWCServiceForClass(managerClass);
-    if (!manager || ![manager respondsToSelector:contactSelector]) return nil;
-    return ((id (*)(id, SEL, id))objc_msgSend)(manager, contactSelector, username);
+    return NeoWCPrivateContact(username);
 }
 
 static NSString *NeoWCContactDisplayName(id contact) {
-    if (!contact) return nil;
-    for (NSString *selectorName in @[@"getContactDisplayName", @"displayName", @"getRemarkOrNickName"]) {
-        id value = NeoWCExportCall(contact, selectorName);
-        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
-    }
-    for (NSString *key in @[@"m_nsRemark", @"m_nsNickName", @"m_nsAliasName"]) {
-        id value = NeoWCExportSafeValue(contact, key);
-        if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
-    }
-    return nil;
+    return NeoWCPrivateContactDisplayName(contact, nil);
 }
 
 static NSString *NeoWCSenderName(id wrap) {
@@ -222,9 +199,7 @@ static NSString *NeoWCSenderName(id wrap) {
 }
 
 static NSString *NeoWCConversationTitle(UIViewController *controller) {
-    id contact = NeoWCExportCall(controller, @"getContact");
-    if (!contact) contact = NeoWCExportCall(controller, @"GetContact");
-    if (!contact) contact = NeoWCExportSafeValue(controller, @"m_contact");
+    id contact = NeoWCPrivateChatContact(controller);
     NSString *displayName = NeoWCContactDisplayName(contact);
     if (displayName.length > 0) return displayName;
     NSString *title = controller.navigationItem.title ?: controller.title;

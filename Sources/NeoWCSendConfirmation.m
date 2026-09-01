@@ -1,6 +1,7 @@
 #import "NeoWCSendConfirmation.h"
 #import "NeoWCAccount.h"
 #import "NeoWCEnhancements.h"
+#import "NeoWCPrivateAPI.h"
 #import <QuartzCore/QuartzCore.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -119,27 +120,6 @@ void NeoWCSendConfirmationSetProtected(NSString *username, BOOL protectedConvers
                                                        object:NeoWCSendConfirmationUsersKey];
 }
 
-static id NeoWCSendConfirmationContact(NSString *username) {
-    Class managerClass = objc_getClass("CContactMgr");
-    id manager = NeoWCServiceForClass(managerClass);
-    SEL selector = sel_registerName("getContactByName:");
-    if (!manager || ![manager respondsToSelector:selector]) return nil;
-    return ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, username);
-}
-
-static NSString *NeoWCSendConfirmationStringForSelector(id object, const char *selectorName) {
-    SEL selector = sel_registerName(selectorName);
-    if (!object) return nil;
-    id value = nil;
-    if ([object respondsToSelector:selector]) {
-        value = ((id (*)(id, SEL))objc_msgSend)(object, selector);
-    } else {
-        @try { value = [object valueForKey:[NSString stringWithUTF8String:selectorName]]; }
-        @catch (__unused NSException *exception) { return nil; }
-    }
-    return [value isKindOfClass:NSString.class] ? NeoWCSendConfirmationTrimmed(value) : nil;
-}
-
 @implementation NeoWCSendConfirmationAlertController {
     NSString *_username;
     NSString *_displayName;
@@ -159,15 +139,9 @@ static NSString *NeoWCSendConfirmationStringForSelector(id object, const char *s
 }
 
 - (UIView *)avatarView {
-    id contact = NeoWCSendConfirmationContact(_username);
-    NSString *headURL = NeoWCSendConfirmationStringForSelector(contact, "m_nsHeadImgUrl");
-    Class helperClass = NSClassFromString(@"MMHeadImageHelper");
-    SEL selector = NSSelectorFromString(@"getContactHeadImageViewWithUsrName:headImgUrl:bAutoUpdate:bRoundCorner:");
-    if (helperClass && [helperClass respondsToSelector:selector]) {
-        id view = ((id (*)(id, SEL, id, id, BOOL, BOOL))objc_msgSend)(helperClass, selector,
-                                                                      _username, headURL ?: @"", YES, YES);
-        if ([view isKindOfClass:UIView.class]) return view;
-    }
+    id contact = NeoWCPrivateContact(_username);
+    UIView *nativeAvatar = NeoWCPrivateContactAvatarView(contact, _username, YES);
+    if (nativeAvatar) return nativeAvatar;
     UIImageView *fallback = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"person.crop.circle.fill"]];
     fallback.tintColor = UIColor.tertiaryLabelColor;
     fallback.contentMode = UIViewContentModeScaleAspectFit;
@@ -287,9 +261,8 @@ static NSString *NeoWCSendConfirmationStringForSelector(id object, const char *s
 NSString *NeoWCSendConfirmationDisplayName(NSString *username) {
     NSString *normalized = NeoWCSendConfirmationTrimmed(username);
     if (normalized.length == 0) return @"未知会话";
-    id contact = NeoWCSendConfirmationContact(normalized);
-    NSString *name = NeoWCSendConfirmationStringForSelector(contact, "m_nsRemark");
-    if (name.length == 0) name = NeoWCSendConfirmationStringForSelector(contact, "m_nsNickName");
+    id contact = NeoWCPrivateContact(normalized);
+    NSString *name = NeoWCPrivateContactDisplayName(contact, normalized);
     return name.length > 0 ? name : normalized;
 }
 

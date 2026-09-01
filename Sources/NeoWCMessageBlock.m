@@ -2,6 +2,7 @@
 #import "NeoWCAccount.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCInterfaceTweaks.h"
+#import "NeoWCPrivateAPI.h"
 #import "NeoWCSendConfirmation.h"
 #import "NeoWCSendConfirmationViewController.h"
 #import <objc/message.h>
@@ -102,34 +103,10 @@ NSString *NeoWCMessageBlockSummaryForConversation(NSString *username) {
     return titles.count > 0 ? [titles componentsJoinedByString:@"、"] : @"未启用";
 }
 
-static id NeoWCMessageBlockService(Class serviceClass) {
-    Class centerClass = NSClassFromString(@"MMServiceCenter");
-    SEL centerSelector = NSSelectorFromString(@"defaultCenter");
-    SEL serviceSelector = NSSelectorFromString(@"getService:");
-    if (!serviceClass || !centerClass || ![centerClass respondsToSelector:centerSelector]) return nil;
-    id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, centerSelector);
-    return [center respondsToSelector:serviceSelector]
-        ? ((id (*)(id, SEL, Class))objc_msgSend)(center, serviceSelector, serviceClass) : nil;
-}
-
-static id NeoWCMessageBlockContact(NSString *username) {
-    id manager = NeoWCMessageBlockService(NSClassFromString(@"CContactMgr"));
-    SEL selector = NSSelectorFromString(@"getContactByName:");
-    return manager && [manager respondsToSelector:selector]
-        ? ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, username) : nil;
-}
-
 static UIView *NeoWCMessageBlockAvatar(NSString *username) {
-    id contact = NeoWCMessageBlockContact(username);
-    NSString *headURL = nil;
-    @try { headURL = [contact valueForKey:@"m_nsHeadImgUrl"]; } @catch (__unused NSException *exception) {}
-    Class helperClass = NSClassFromString(@"MMHeadImageHelper");
-    SEL selector = NSSelectorFromString(@"getContactHeadImageViewWithUsrName:headImgUrl:bAutoUpdate:bRoundCorner:");
-    if (helperClass && [helperClass respondsToSelector:selector]) {
-        id view = ((id (*)(id, SEL, id, id, BOOL, BOOL))objc_msgSend)(helperClass, selector,
-                                                                      username, headURL ?: @"", YES, YES);
-        if ([view isKindOfClass:UIView.class]) return view;
-    }
+    id contact = NeoWCPrivateContact(username);
+    UIView *nativeAvatar = NeoWCPrivateContactAvatarView(contact, username, YES);
+    if (nativeAvatar) return nativeAvatar;
     UIImageView *fallback = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:
         [username hasSuffix:@"@chatroom"] ? @"person.3.fill" : @"person.crop.circle.fill"]];
     fallback.tintColor = UIColor.tertiaryLabelColor;
