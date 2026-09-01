@@ -1165,6 +1165,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
                                                      localID:(unsigned long long)localID
                                                     serverID:(long long)serverID
                                                  messageType:(NSInteger)messageType
+                                                   innerType:(NSInteger)innerType
                                                      preview:(NSString *)preview
                                                        title:(NSString *)title
                                            folderIdentifier:(NSString *)folderIdentifier
@@ -1201,14 +1202,15 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
             ? NeoWCCurrentUserWXID() : nil;
         item.metadata = @{ @"localID": @(localID),
                            @"serverID": @(serverID),
-                           @"messageType": @(messageType) };
+                           @"messageType": @(messageType),
+                           @"innerType": @(innerType) };
         [items addObject:item];
         return [self saveItemsLocked:items error:error] ? item.copy : nil;
     }
 }
 
 - (NeoWCQuickReplyItem *)addGroupInvitationForGroupUserName:(NSString *)groupUserName
-                                                      title:(NSString *)title
+                                                  groupName:(NSString *)groupName
                                           folderIdentifier:(NSString *)folderIdentifier
                                                       error:(NSError **)error {
     NSString *group = NeoWCQuickReplyTrimmedString(groupUserName);
@@ -1220,9 +1222,11 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         NSMutableArray *items = [self loadItemsLocked];
         if (!items) { NeoWCQuickReplySetIndexReadError(error); return nil; }
         NeoWCQuickReplyItem *item = [NeoWCQuickReplyItem new];
+        NSString *name = NeoWCQuickReplyTrimmedString(groupName);
+        if (name.length == 0) name = group;
         item.identifier = NSUUID.UUID.UUIDString.lowercaseString;
         item.type = NeoWCQuickReplyTypeGroupInvitation;
-        item.title = NeoWCQuickReplyTrimmedString(title);
+        item.title = [NSString stringWithFormat:@"群邀请 · %@", name];
         item.text = group;
         item.folderIdentifier = NeoWCQuickReplyTrimmedString(folderIdentifier).length ? folderIdentifier : nil;
         item.sortIndex = [self nextSortIndexForItems:items];
@@ -1230,7 +1234,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         item.createdAt = NSDate.date;
         item.sourceAccountIdentifier = NeoWCQuickReplyTrimmedString(NeoWCCurrentUserWXID()).length
             ? NeoWCCurrentUserWXID() : nil;
-        item.metadata = @{ @"groupUserName": group };
+        item.metadata = @{ @"groupUserName": group, @"groupName": name };
         [items addObject:item];
         return [self saveItemsLocked:items error:error] ? item.copy : nil;
     }

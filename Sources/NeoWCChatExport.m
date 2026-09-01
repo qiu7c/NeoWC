@@ -80,6 +80,11 @@ static void NeoWCImportSelectedQuickRepliesWithMetadata(UIViewController *contro
     NSUInteger imported = 0, alreadyPresent = 0, unavailable = 0;
     for (id wrap in messages) {
         NSInteger type = [NeoWCExportSafeValue(wrap, @"m_uiMessageType") integerValue];
+        NSInteger innerType = [NeoWCExportSafeValue(wrap, @"m_uiAppMsgInnerType") integerValue];
+        if (innerType == 0) {
+            innerType = [NeoWCExportSafeValue(NeoWCExportSafeValue(wrap, @"m_extendInfoWithMsgType"),
+                                               @"m_uiAppMsgInnerType") integerValue];
+        }
         unsigned long long localID = [NeoWCExportSafeValue(wrap, @"m_uiMesLocalID") unsignedLongLongValue];
         long long serverID = [NeoWCExportSafeValue(wrap, @"m_n64MesSvrID") longLongValue];
         if (conversation.length == 0 || (localID == 0 && serverID == 0)) { unavailable++; continue; }
@@ -90,6 +95,7 @@ static void NeoWCImportSelectedQuickRepliesWithMetadata(UIViewController *contro
                                         localID:localID
                                        serverID:serverID
                                     messageType:type
+                                      innerType:innerType
                                         preview:NeoWCMessageBody(wrap)
                                           title:trimmedRemark
                               folderIdentifier:folderIdentifier

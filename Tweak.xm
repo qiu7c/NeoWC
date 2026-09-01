@@ -5881,11 +5881,17 @@ static void NeoWCCommitMessageToQuickReply(id message, NeoWCQuickReplyType type,
     NSError *error = nil;
     NeoWCQuickReplyItem *item = nil;
     if (type == NeoWCQuickReplyTypeMessageReference) {
+        NSInteger innerType = [NeoWCTweakSafeValue(message, @"m_uiAppMsgInnerType") integerValue];
+        if (innerType == 0) {
+            innerType = [NeoWCTweakSafeValue(NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType"),
+                                              @"m_uiAppMsgInnerType") integerValue];
+        }
         item = [NeoWCQuickReplyStore.sharedStore
             addMessageReferenceForConversation:session
                                         localID:[NeoWCTweakSafeValue(message, @"m_uiMesLocalID") unsignedLongLongValue]
                                        serverID:[NeoWCTweakSafeValue(message, @"m_n64MesSvrID") longLongValue]
                                     messageType:[NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue]
+                                      innerType:innerType
                                         preview:NeoWCQuickReplyMessagePreview(message)
                                           title:trimmedRemark
                               folderIdentifier:folderIdentifier

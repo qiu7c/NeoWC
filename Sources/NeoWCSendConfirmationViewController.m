@@ -4,6 +4,7 @@
 #import "NeoWCInterfaceTweaks.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
+#include <string.h>
 
 static id NeoWCSendConfirmationService(Class serviceClass) {
     Class centerClass = NSClassFromString(@"MMServiceCenter");
@@ -52,7 +53,7 @@ static NSString *NeoWCSendConfirmationContactString(id contact, NSArray<NSString
 }
 
 static id NeoWCSendConfirmationContactForName(id manager, NSString *username) {
-    for (NSString *selectorName in @[@"getContactByName:", @"getContact:"]) {
+    for (NSString *selectorName in @[@"getContactByName:", @"getContactByNameFromCache:", @"getContact:"]) {
         SEL selector = NSSelectorFromString(selectorName);
         if (!NeoWCSendConfirmationObjectReturnMethod(manager, selector, 3)) continue;
         @try {
@@ -93,6 +94,60 @@ static NSArray *NeoWCSendConfirmationCollection(id target, NSArray<NSString *> *
         }
     }
     return @[];
+}
+
+static BOOL NeoWCSendConfirmationIntegerArgument(Method method, unsigned int index) {
+    if (!method || index >= method_getNumberOfArguments(method)) return NO;
+    char type[16] = {0};
+    method_getArgumentType(method, index, type, sizeof(type));
+    const char *cursor = type;
+    while (*cursor == 'r' || *cursor == 'n' || *cursor == 'N' || *cursor == 'o' ||
+           *cursor == 'O' || *cursor == 'R' || *cursor == 'V') cursor++;
+    return strchr("cCsSiIlLqQB", *cursor) != NULL;
+}
+
+static NSArray *NeoWCSendConfirmationAllGroupCandidates(id contactManager, id dataLogic) {
+    NSMutableArray *groups = [NSMutableArray array];
+    NSMutableSet<NSString *> *userNames = [NSMutableSet set];
+    void (^appendCandidate)(id) = ^(id candidate) {
+        NSString *userName = [candidate isKindOfClass:NSString.class] ? candidate :
+            NeoWCSendConfirmationContactString(candidate,
+                @[@"m_nsUserName", @"m_nsUsrName", @"getUsrName", @"userName"]);
+        if (![userName hasSuffix:@"@chatroom"] || [userNames containsObject:userName]) return;
+        id contact = [candidate isKindOfClass:NSString.class]
+            ? NeoWCSendConfirmationContactForName(contactManager, userName) : candidate;
+        if (!contact) contact = NeoWCSendConfirmationContactForName(contactManager, userName);
+        if (!contact) return;
+        [userNames addObject:userName];
+        [groups addObject:contact];
+    };
+
+    id sessionManager = NeoWCSendConfirmationService(NSClassFromString(@"MMNewSessionMgr"));
+    for (id session in NeoWCSendConfirmationCollection(sessionManager, @[@"SessionNewArray"])) {
+        NSString *userName = NeoWCSendConfirmationContactString(session,
+            @[@"m_nsUserName", @"m_nsUsrName", @"userName", @"username"]);
+        appendCandidate(userName);
+    }
+
+    SEL listSelector = NSSelectorFromString(@"getContactList:contactType:");
+    Method listMethod = contactManager ? class_getInstanceMethod([contactManager class], listSelector) : NULL;
+    if (listMethod && method_getNumberOfArguments(listMethod) == 4 &&
+        NeoWCSendConfirmationObjectReturnMethod(contactManager, listSelector, 4) &&
+        NeoWCSendConfirmationIntegerArgument(listMethod, 2) &&
+        NeoWCSendConfirmationIntegerArgument(listMethod, 3)) {
+        @try {
+            id value = ((id (*)(id, SEL, NSInteger, NSInteger))objc_msgSend)(
+                contactManager, listSelector, 1, 0);
+            if ([value conformsToProtocol:@protocol(NSFastEnumeration)]) {
+                for (id contact in value) appendCandidate(contact);
+            }
+        } @catch (__unused NSException *exception) {}
+    }
+
+    for (id contact in NeoWCSendConfirmationCollection(dataLogic, @[@"getChatRoomContacts"])) {
+        appendCandidate(contact);
+    }
+    return groups;
 }
 
 static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager, BOOL groupHint) {
@@ -263,7 +318,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
     id dataLogic = NeoWCSendConfirmationService(NSClassFromString(@"ContactsDataLogic"));
     NSArray *friends = NeoWCSendConfirmationCollection(dataLogic, @[@"getAllNormalContact"]);
     if (friends.count == 0) friends = NeoWCSendConfirmationCollection(contactManager, @[@"getAllContactUserNameFromCache", @"getAllContactUserName"]);
-    NSArray *groups = NeoWCSendConfirmationCollection(dataLogic, @[@"getChatRoomContacts"]);
+    NSArray *groups = NeoWCSendConfirmationAllGroupCandidates(contactManager, dataLogic);
     NSMutableDictionary<NSString *, NSDictionary *> *deduplicated = [NSMutableDictionary dictionary];
     if (!self.groupsOnly) {
         for (id candidate in friends) {

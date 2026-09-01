@@ -4,9 +4,11 @@
 #import "NeoWCEnhancements.h"
 #import "NeoWCRuntimeFeatures.h"
 #import "NeoWCInterfaceTweaks.h"
+#import "NeoWCSendConfirmation.h"
 #import "NeoWCSendConfirmationViewController.h"
 #import <AVFoundation/AVFoundation.h>
 #import <AVKit/AVKit.h>
+#import <objc/message.h>
 #import <math.h>
 
 typedef NS_ENUM(NSInteger, NeoWCQuickReplySortMode) {
@@ -16,6 +18,77 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplySortMode) {
 };
 
 static NSString *const NeoWCQuickReplySortModeKey = @"com.qiu7c.neowc.quick-reply.sort-mode";
+
+static UIImage *NeoWCQuickReplyGroupAvatar(NSString *groupUserName) {
+    if (![groupUserName hasSuffix:@"@chatroom"]) return nil;
+    static NSCache<NSString *, UIImage *> *avatarCache;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ avatarCache = [NSCache new]; avatarCache.countLimit = 80; });
+    UIImage *cached = [avatarCache objectForKey:groupUserName];
+    if (cached) return cached;
+    Class centerClass = NSClassFromString(@"MMServiceCenter");
+    Class managerClass = NSClassFromString(@"CContactMgr");
+    SEL centerSelector = NSSelectorFromString(@"defaultCenter");
+    SEL serviceSelector = NSSelectorFromString(@"getService:");
+    if (!centerClass || !managerClass || ![centerClass respondsToSelector:centerSelector]) return nil;
+    id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, centerSelector);
+    id manager = [center respondsToSelector:serviceSelector]
+        ? ((id (*)(id, SEL, Class))objc_msgSend)(center, serviceSelector, managerClass) : nil;
+    id contact = nil;
+    for (NSString *selectorName in @[@"getContactByName:", @"getContactByNameFromCache:", @"getContact:"]) {
+        SEL selector = NSSelectorFromString(selectorName);
+        if (![manager respondsToSelector:selector]) continue;
+        @try { contact = ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, groupUserName); }
+        @catch (__unused NSException *exception) { contact = nil; }
+        if (contact) break;
+    }
+    SEL imageSelector = NSSelectorFromString(@"getContactHeadImage");
+    if (![contact respondsToSelector:imageSelector]) return nil;
+    @try {
+        id image = ((id (*)(id, SEL))objc_msgSend)(contact, imageSelector);
+        if (![image isKindOfClass:UIImage.class]) return nil;
+        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc]
+            initWithSize:CGSizeMake(36.0, 36.0)];
+        UIImage *rendered = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+            (void)context;
+            [(UIImage *)image drawInRect:CGRectMake(0.0, 0.0, 36.0, 36.0)];
+        }];
+        if (rendered) [avatarCache setObject:rendered forKey:groupUserName];
+        return rendered;
+    } @catch (__unused NSException *exception) {
+        return nil;
+    }
+}
+
+static NSString *NeoWCQuickReplyReferenceSymbol(NeoWCQuickReplyItem *item) {
+    NSInteger messageType = [item.metadata[@"messageType"] integerValue];
+    NSInteger innerType = [item.metadata[@"innerType"] integerValue];
+    if (messageType == 1) return @"text.bubble";
+    if (messageType == 3) return @"photo";
+    if (messageType == 34) return @"waveform";
+    if (messageType == 43 || messageType == 62) return @"video";
+    if (messageType == 47) return @"face.smiling";
+    if (messageType == 48) return @"map";
+    if (messageType == 49) {
+        if (innerType == 6) return @"doc.fill";
+        if (innerType == 33 || innerType == 36 || innerType == 44) return @"square.grid.2x2.fill";
+        if (innerType == 19) return @"bubble.left.and.bubble.right.fill";
+        if (innerType == 5) return @"link";
+        if (innerType == 3) return @"music.note";
+        return @"app.badge";
+    }
+    return @"doc.text";
+}
+
+static NSString *NeoWCQuickReplyReferenceTypeName(NeoWCQuickReplyItem *item) {
+    NSInteger messageType = [item.metadata[@"messageType"] integerValue];
+    NSInteger innerType = [item.metadata[@"innerType"] integerValue];
+    if (messageType == 49 && innerType == 6) return @"文件";
+    if (messageType == 49 && (innerType == 33 || innerType == 36 || innerType == 44)) return @"小程序";
+    if (messageType == 49 && innerType == 19) return @"聊天记录";
+    if (messageType == 48) return @"位置";
+    return @"原消息";
+}
 
 @interface NeoWCQuickReplyTextEditorViewController : UIViewController
 @property (nonatomic, strong) UITextField *titleField;
@@ -856,9 +929,10 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
             return;
         }
         NSError *error = nil;
+        NSString *groupName = NeoWCSendConfirmationDisplayName(selectedGroup);
         NeoWCQuickReplyItem *item = [NeoWCQuickReplyStore.sharedStore
             addGroupInvitationForGroupUserName:selectedGroup
-                                         title:@"群聊邀请"
+                                     groupName:groupName
                              folderIdentifier:weakSelf.currentFolderIdentifier
                                          error:&error];
         if (!item) {
@@ -1022,25 +1096,40 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
         cell.imageView.image = [[UIImage systemImageNamed:@"folder" withConfiguration:configuration]
             imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
         cell.imageView.tintColor = UIColor.labelColor;
+        cell.imageView.contentMode = UIViewContentModeCenter;
+        cell.imageView.clipsToBounds = NO;
+        cell.imageView.layer.cornerRadius = 0.0;
         return cell;
     }
     NeoWCQuickReplyItem *item = [self itemAtIndexPath:indexPath];
     if (!item) return cell;
+    NSString *groupUserName = [item.metadata[@"groupUserName"] isKindOfClass:NSString.class]
+        ? item.metadata[@"groupUserName"] : item.text;
+    NSString *groupName = [item.metadata[@"groupName"] isKindOfClass:NSString.class]
+        ? item.metadata[@"groupName"] : nil;
+    if (item.type == NeoWCQuickReplyTypeGroupInvitation && groupName.length == 0) {
+        groupName = NeoWCSendConfirmationDisplayName(groupUserName);
+    }
     NSString *fallbackTitle = item.type == NeoWCQuickReplyTypeText ? item.text :
         (item.type == NeoWCQuickReplyTypeImage ? @"图片素材" :
          (item.type == NeoWCQuickReplyTypeVideo ? @"视频素材" :
           (item.type == NeoWCQuickReplyTypeVoice ? @"语音素材" :
-           (item.type == NeoWCQuickReplyTypeGroupInvitation ? @"群聊邀请" : (item.text.length ? item.text : @"原消息")))));
-    cell.textLabel.text = item.title.length > 0 ? item.title : fallbackTitle;
+           (item.type == NeoWCQuickReplyTypeGroupInvitation
+                ? [NSString stringWithFormat:@"群邀请 · %@", groupName.length ? groupName : @"未知群聊"]
+                : (item.text.length ? item.text : @"原消息")))));
+    BOOL genericGroupTitle = item.type == NeoWCQuickReplyTypeGroupInvitation &&
+        ([item.title isEqualToString:@"群聊邀请"] || [item.title isEqualToString:@"群邀请"]);
+    cell.textLabel.text = item.title.length > 0 && !genericGroupTitle ? item.title : fallbackTitle;
     cell.textLabel.numberOfLines = 1;
     NSString *typeName = item.type == NeoWCQuickReplyTypeText ? @"文字" :
         (item.type == NeoWCQuickReplyTypeImage ? @"图片" :
          (item.type == NeoWCQuickReplyTypeVideo ? @"视频" :
           (item.type == NeoWCQuickReplyTypeVoice ? @"语音" :
-           (item.type == NeoWCQuickReplyTypeGroupInvitation ? @"群邀请" : @"原消息"))));
+           (item.type == NeoWCQuickReplyTypeGroupInvitation ? @"群邀请" : NeoWCQuickReplyReferenceTypeName(item)))));
     NSMutableArray<NSString *> *details = [NSMutableArray arrayWithObject:typeName];
-    if (item.type == NeoWCQuickReplyTypeGroupInvitation && item.text.length > 0) {
-        [details addObject:item.text];
+    if (item.type == NeoWCQuickReplyTypeGroupInvitation) {
+        if (groupName.length > 0) [details addObject:groupName];
+        if (groupUserName.length > 0 && ![groupUserName isEqualToString:groupName]) [details addObject:groupUserName];
     }
     if (item.isPinned) [details addObject:@"已置顶"];
     cell.detailTextLabel.text = [details componentsJoinedByString:@" · "];
@@ -1049,14 +1138,19 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
         (item.type == NeoWCQuickReplyTypeImage ? @"photo" :
          (item.type == NeoWCQuickReplyTypeVideo ? @"video" :
           (item.type == NeoWCQuickReplyTypeVoice ? @"waveform" :
-           (item.type == NeoWCQuickReplyTypeGroupInvitation ? @"person.badge.plus" : @"bubble.left.and.text.bubble.right"))));
+           (item.type == NeoWCQuickReplyTypeGroupInvitation ? @"person.badge.plus" : NeoWCQuickReplyReferenceSymbol(item)))));
     UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:20.0
                                                                                                    weight:UIImageSymbolWeightRegular];
-    cell.imageView.image = [[UIImage systemImageNamed:symbol withConfiguration:configuration]
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    UIImage *groupAvatar = item.type == NeoWCQuickReplyTypeGroupInvitation
+        ? NeoWCQuickReplyGroupAvatar(groupUserName) : nil;
+    UIImage *icon = groupAvatar ?: [UIImage systemImageNamed:symbol withConfiguration:configuration];
+    if (!icon) icon = [UIImage systemImageNamed:@"doc.text" withConfiguration:configuration];
+    cell.imageView.image = [icon imageWithRenderingMode:groupAvatar
+        ? UIImageRenderingModeAlwaysOriginal : UIImageRenderingModeAlwaysTemplate];
     cell.imageView.tintColor = UIColor.labelColor;
-    cell.imageView.contentMode = UIViewContentModeCenter;
-    cell.imageView.clipsToBounds = NO;
+    cell.imageView.contentMode = groupAvatar ? UIViewContentModeScaleAspectFill : UIViewContentModeCenter;
+    cell.imageView.clipsToBounds = groupAvatar != nil;
+    cell.imageView.layer.cornerRadius = groupAvatar ? 8.0 : 0.0;
     return cell;
 }
 

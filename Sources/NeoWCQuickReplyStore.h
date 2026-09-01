@@ -61,12 +61,13 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
                                                               localID:(unsigned long long)localID
                                                              serverID:(long long)serverID
                                                           messageType:(NSInteger)messageType
+                                                            innerType:(NSInteger)innerType
                                                               preview:(nullable NSString *)preview
                                                                 title:(nullable NSString *)title
                                                     folderIdentifier:(nullable NSString *)folderIdentifier
                                                                 error:(NSError **)error;
 - (nullable NeoWCQuickReplyItem *)addGroupInvitationForGroupUserName:(NSString *)groupUserName
-                                                               title:(nullable NSString *)title
+                                                           groupName:(nullable NSString *)groupName
                                                    folderIdentifier:(nullable NSString *)folderIdentifier
                                                                error:(NSError **)error;
 - (BOOL)updateItem:(NeoWCQuickReplyItem *)item error:(NSError **)error;

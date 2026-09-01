@@ -31,7 +31,7 @@ static id NeoWCFriendRelationUIServiceForClass(Class serviceClass) {
 static id NeoWCFriendRelationContactForUserName(NSString *userName) {
     if (userName.length == 0) return nil;
     id manager = NeoWCFriendRelationUIServiceForClass(NSClassFromString(@"CContactMgr"));
-    for (NSString *name in @[@"getContactByName:", @"getContactByNameFromCache:"]) {
+    for (NSString *name in @[@"getContactByName:", @"getContactByNameFromCache:", @"getContact:"]) {
         SEL selector = NSSelectorFromString(name);
         if (!NeoWCFriendRelationObjectMethod(manager, selector, 3)) continue;
         @try {
@@ -99,40 +99,12 @@ static UIView *NeoWCFriendRelationAvatarView(NSString *userName) {
 static BOOL NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *userName) {
     if (!source || userName.length == 0 || !source.navigationController) return NO;
     id contact = NeoWCFriendRelationContactForUserName(userName);
-    Class handlerClass = NSClassFromString(@"MMURLHandler");
-    SEL sharedSelector = NSSelectorFromString(@"sharedInstance");
-    SEL constructSelector = NSSelectorFromString(@"constructContactInfoView:withUserName:");
-    id handler = NeoWCFriendRelationObjectMethod(handlerClass, sharedSelector, 2)
-        ? ((id (*)(id, SEL))objc_msgSend)(handlerClass, sharedSelector) : nil;
-    if (contact && NeoWCFriendRelationObjectMethod(handler, constructSelector, 4)) {
-        @try {
-            id controller = ((id (*)(id, SEL, id, id))objc_msgSend)(
-                handler, constructSelector, contact, userName);
-            if ([controller isKindOfClass:UIViewController.class]) {
-                [source.navigationController pushViewController:controller animated:YES];
-                return YES;
-            }
-        } @catch (__unused NSException *exception) {}
-    }
-
     Class controllerClass = NSClassFromString(@"ContactInfoViewController");
-    SEL setContactSelector = NSSelectorFromString(@"setM_contact:");
-    Method setContactMethod = controllerClass ? class_getInstanceMethod(controllerClass, setContactSelector) : NULL;
-    if (!contact || !controllerClass || !setContactMethod ||
-        method_getNumberOfArguments(setContactMethod) != 3) return NO;
+    if (!contact || !controllerClass) return NO;
     @try {
         UIViewController *controller = [[controllerClass alloc] init];
-        ((void (*)(id, SEL, id))objc_msgSend)(controller, setContactSelector, contact);
-        SEL wrappedPushSelector = NSSelectorFromString(@"PushViewController:animated:");
-        Method wrappedPushMethod = class_getInstanceMethod(object_getClass(source.navigationController),
-                                                           wrappedPushSelector);
-        if ([source.navigationController respondsToSelector:wrappedPushSelector] &&
-            wrappedPushMethod && method_getNumberOfArguments(wrappedPushMethod) == 4) {
-            ((void (*)(id, SEL, id, BOOL))objc_msgSend)(
-                source.navigationController, wrappedPushSelector, controller, YES);
-        } else {
-            [source.navigationController pushViewController:controller animated:YES];
-        }
+        [controller setValue:contact forKey:@"m_contact"];
+        [source.navigationController pushViewController:controller animated:YES];
         return YES;
     } @catch (__unused NSException *exception) {
         return NO;
