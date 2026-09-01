@@ -1,5 +1,6 @@
 #import "NeoWCFriendRelationCheckViewController.h"
 #import "NeoWCFriendRelationChecker.h"
+#import "NeoWCPrivateAPI.h"
 #import "NeoWCSendConfirmationViewController.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -11,35 +12,18 @@ static UIColor *NeoWCFriendRelationSecondaryColor(void) {
 
 static BOOL NeoWCFriendRelationObjectMethod(id receiver, SEL selector, unsigned int argumentCount) {
     if (!receiver || !selector || ![receiver respondsToSelector:selector]) return NO;
-    Method method = class_getInstanceMethod(object_getClass(receiver), selector);
+    Class runtimeClass = object_getClass(receiver);
+    Method method = class_isMetaClass(runtimeClass)
+        ? class_getClassMethod((Class)receiver, selector)
+        : class_getInstanceMethod([receiver class], selector);
     if (!method || method_getNumberOfArguments(method) != argumentCount) return NO;
     char returnType[8] = {0};
     method_getReturnType(method, returnType, sizeof(returnType));
     return returnType[0] == '@' || returnType[0] == '#';
 }
 
-static id NeoWCFriendRelationUIServiceForClass(Class serviceClass) {
-    Class centerClass = NSClassFromString(@"MMServiceCenter");
-    SEL centerSelector = NSSelectorFromString(@"defaultCenter");
-    SEL serviceSelector = NSSelectorFromString(@"getService:");
-    if (!centerClass || !serviceClass || ![centerClass respondsToSelector:centerSelector]) return nil;
-    id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, centerSelector);
-    return [center respondsToSelector:serviceSelector]
-        ? ((id (*)(id, SEL, Class))objc_msgSend)(center, serviceSelector, serviceClass) : nil;
-}
-
 static id NeoWCFriendRelationContactForUserName(NSString *userName) {
-    if (userName.length == 0) return nil;
-    id manager = NeoWCFriendRelationUIServiceForClass(NSClassFromString(@"CContactMgr"));
-    for (NSString *name in @[@"getContactByName:", @"getContactByNameFromCache:", @"getContact:"]) {
-        SEL selector = NSSelectorFromString(name);
-        if (!NeoWCFriendRelationObjectMethod(manager, selector, 3)) continue;
-        @try {
-            id contact = ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
-            if (contact) return contact;
-        } @catch (__unused NSException *exception) {}
-    }
-    return nil;
+    return NeoWCPrivateContact(userName);
 }
 
 static id NeoWCFriendRelationContactValue(id contact, NSArray<NSString *> *names) {
@@ -97,18 +81,7 @@ static UIView *NeoWCFriendRelationAvatarView(NSString *userName) {
 }
 
 static BOOL NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *userName) {
-    if (!source || userName.length == 0 || !source.navigationController) return NO;
-    id contact = NeoWCFriendRelationContactForUserName(userName);
-    Class controllerClass = NSClassFromString(@"ContactInfoViewController");
-    if (!contact || !controllerClass) return NO;
-    @try {
-        UIViewController *controller = [[controllerClass alloc] init];
-        [controller setValue:contact forKey:@"m_contact"];
-        [source.navigationController pushViewController:controller animated:YES];
-        return YES;
-    } @catch (__unused NSException *exception) {
-        return NO;
-    }
+    return NeoWCPushPrivateContactProfile(source, userName);
 }
 
 @interface NeoWCFriendRelationResultCell : UITableViewCell

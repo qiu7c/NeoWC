@@ -1,4 +1,5 @@
 #import "NeoWCSettingsActions.h"
+#import "NeoWCPrivateAPI.h"
 #import "NeoWCSettingsCatalog.h"
 #import "NeoWCAntiRevoke.h"
 #import "NeoWCAntiRevokeTemplateEditor.h"
@@ -23,16 +24,6 @@
 
 static char NeoWCAuthorSearchLogicKey;
 static NSString *const NeoWCAuthorUserName = @"ic7ouo";
-
-static id NeoWCSettingsServiceForClass(Class serviceClass) {
-    Class centerClass = NSClassFromString(@"MMServiceCenter");
-    SEL centerSelector = NSSelectorFromString(@"defaultCenter");
-    SEL serviceSelector = NSSelectorFromString(@"getService:");
-    if (!centerClass || !serviceClass || ![centerClass respondsToSelector:centerSelector]) return nil;
-    id center = ((id (*)(id, SEL))objc_msgSend)(centerClass, centerSelector);
-    if (!center || ![center respondsToSelector:serviceSelector]) return nil;
-    return ((id (*)(id, SEL, Class))objc_msgSend)(center, serviceSelector, serviceClass);
-}
 
 @interface NeoWCSettingsActions () <UIColorPickerViewControllerDelegate>
 @property (nonatomic, weak) UIViewController *viewController;
@@ -75,30 +66,7 @@ static id NeoWCSettingsServiceForClass(Class serviceClass) {
     NSString *userName = [requestedUserName stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     if (!sourceController || userName.length == 0) return;
 
-    Class handlerClass = NSClassFromString(@"MMURLHandler");
-    SEL sharedSelector = NSSelectorFromString(@"sharedInstance");
-    SEL constructSelector = NSSelectorFromString(@"constructContactInfoView:withUserName:");
-    id handler = handlerClass && [handlerClass respondsToSelector:sharedSelector]
-        ? ((id (*)(id, SEL))objc_msgSend)(handlerClass, sharedSelector) : nil;
-    Class contactManagerClass = NSClassFromString(@"CContactMgr");
-    id contactManager = NeoWCSettingsServiceForClass(contactManagerClass);
-    id contact = nil;
-    for (NSString *selectorName in @[@"getContactByName:", @"getContactByNameFromCache:"]) {
-        SEL selector = NSSelectorFromString(selectorName);
-        if (!contactManager || ![contactManager respondsToSelector:selector]) continue;
-        contact = ((id (*)(id, SEL, id))objc_msgSend)(contactManager, selector, userName);
-        if (contact) break;
-    }
-    if (handler && contact && [handler respondsToSelector:constructSelector]) {
-        id profileController = ((id (*)(id, SEL, id, id))objc_msgSend)(handler,
-                                                                       constructSelector,
-                                                                       contact,
-                                                                       userName);
-        if ([profileController isKindOfClass:[UIViewController class]] && sourceController.navigationController) {
-            [sourceController.navigationController pushViewController:profileController animated:YES];
-            return;
-        }
-    }
+    if (NeoWCPushPrivateContactProfile(sourceController, userName)) return;
 
     Class searchClass = NSClassFromString(@"GetA8KeyLogic");
     SEL initializer = NSSelectorFromString(@"initWithViewController:delegate:");

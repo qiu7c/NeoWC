@@ -27,6 +27,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCLogging.h"
 #import "Sources/NeoWCEnhancements.h"
 #import "Sources/NeoWCPluginManager.h"
+#import "Sources/NeoWCPrivateAPI.h"
 #import "Sources/NeoWCRuntimeFeatures.h"
 #import "Sources/NeoWCInterfaceTweaks.h"
 #import "Sources/NeoWCMessageTime.h"
@@ -2715,6 +2716,10 @@ static void NeoWCOpenAvatarProfile(UIViewController *chatController, UIView *hea
         ((void (*)(id, SEL, id))objc_msgSend)(chatController, selector, headView);
         return;
     }
+    NSString *userName = NeoWCTweakValueForSelectorNames(
+        contact, @[@"m_nsUsrName", @"getUsrName", @"m_nsUserName", @"userName"]);
+    if ([userName isKindOfClass:NSString.class] && userName.length > 0 &&
+        NeoWCPushPrivateContactProfile(chatController, userName)) return;
     Class controllerClass = NSClassFromString(@"ContactInfoViewController");
     UIViewController *profile = controllerClass ? [controllerClass new] : nil;
     if (!profile) {
@@ -7726,37 +7731,10 @@ static void NeoWCSendQuickReplyMessageReferenceWithConfirmation(BaseMsgContentVi
 static BOOL NeoWCSubmitSavedGroupInvitation(NSString *groupUserName,
                                              NSString *memberUserName,
                                              BOOL *supported) {
-    if (supported) *supported = NO;
-    if (![groupUserName hasSuffix:@"@chatroom"] || memberUserName.length == 0 ||
-        [memberUserName hasSuffix:@"@chatroom"] || [memberUserName isEqualToString:@"filehelper"] ||
-        [memberUserName isEqualToString:NeoWCCurrentUserWXID()]) return NO;
-    Class managerClass = NSClassFromString(@"CContactMgr");
-    id manager = managerClass ? NeoWCServiceForClass(managerClass) : nil;
-    SEL selector = NSSelectorFromString(@"InviteGroupMember:withMemberList:");
-    Method method = manager ? class_getInstanceMethod([manager class], selector) : NULL;
-    if (!method || method_getNumberOfArguments(method) != 4 ||
-        !NeoWCMethodArgumentIsObject(method, 2) ||
-        !NeoWCMethodArgumentIsObject(method, 3)) return NO;
-    if (supported) *supported = YES;
-    @try {
-        if (NeoWCMethodReturnsVoid(method)) {
-            ((void (*)(id, SEL, id, id))objc_msgSend)(manager, selector,
-                                                      groupUserName, @[memberUserName]);
-            return YES;
-        }
-        if (NeoWCMethodReturnsObject(method)) {
-            return ((id (*)(id, SEL, id, id))objc_msgSend)(manager, selector,
-                                                           groupUserName, @[memberUserName]) != nil;
-        }
-        if (NeoWCMethodReturnsInteger(method)) {
-            return ((NSInteger (*)(id, SEL, id, id))objc_msgSend)(manager, selector,
-                                                                  groupUserName, @[memberUserName]) != 0;
-        }
-        if (supported) *supported = NO;
-    } @catch (NSException *exception) {
-        NeoWCLog(@"发送已保存群聊邀请失败：%@", exception.reason ?: exception.name);
-    }
-    return NO;
+    NeoWCPrivateGroupInvitationResult result =
+        NeoWCPrivateInviteGroupMember(groupUserName, memberUserName);
+    if (supported) *supported = result != NeoWCPrivateGroupInvitationResultUnsupported;
+    return result == NeoWCPrivateGroupInvitationResultSubmitted;
 }
 
 static void NeoWCSendQuickReplyGroupInvitationWithConfirmation(BaseMsgContentViewController *controller,
