@@ -7,6 +7,8 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
     NeoWCQuickReplyTypeImage = 1,
     NeoWCQuickReplyTypeVideo = 2,
     NeoWCQuickReplyTypeVoice = 3,
+    NeoWCQuickReplyTypeMessageReference = 4,
+    NeoWCQuickReplyTypeGroupInvitation = 5,
 };
 
 @interface NeoWCQuickReplyItem : NSObject <NSCopying>
@@ -55,6 +57,18 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
                              sourceConversation:(nullable NSString *)sourceConversation
                                 sourceMessageID:(nullable NSString *)sourceMessageID
                                           error:(NSError **)error;
+- (nullable NeoWCQuickReplyItem *)addMessageReferenceForConversation:(NSString *)conversation
+                                                              localID:(unsigned long long)localID
+                                                             serverID:(long long)serverID
+                                                          messageType:(NSInteger)messageType
+                                                              preview:(nullable NSString *)preview
+                                                                title:(nullable NSString *)title
+                                                    folderIdentifier:(nullable NSString *)folderIdentifier
+                                                                error:(NSError **)error;
+- (nullable NeoWCQuickReplyItem *)addGroupInvitationForGroupUserName:(NSString *)groupUserName
+                                                               title:(nullable NSString *)title
+                                                   folderIdentifier:(nullable NSString *)folderIdentifier
+                                                               error:(NSError **)error;
 - (BOOL)updateItem:(NeoWCQuickReplyItem *)item error:(NSError **)error;
 - (BOOL)setPinned:(BOOL)pinned forIdentifier:(NSString *)identifier error:(NSError **)error;
 - (BOOL)recordUsageForIdentifier:(NSString *)identifier error:(NSError **)error;

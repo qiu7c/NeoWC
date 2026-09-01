@@ -4,6 +4,7 @@
 #import "NeoWCEnhancements.h"
 #import "NeoWCRuntimeFeatures.h"
 #import "NeoWCInterfaceTweaks.h"
+#import "NeoWCSendConfirmationViewController.h"
 #import <AVFoundation/AVFoundation.h>
 #import <AVKit/AVKit.h>
 #import <math.h>
@@ -468,6 +469,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 - (void)sortTapped;
 - (void)exportAllTapped;
 - (void)cleanupMediaTapped;
+- (void)presentGroupInvitationPicker;
 @end
 
 @implementation NeoWCQuickReplyViewController
@@ -559,11 +561,11 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     NSString *key = @"com.qiu7c.neowc.quick-reply.import-tip.shared";
     if ([NSUserDefaults.standardUserDefaults boolForKey:key]) return;
     [NSUserDefaults.standardUserDefaults setBool:YES forKey:key];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"从文件传输助手加入素材"
-                                                                   message:@"长按单条文字、图片、视频文件或语音可加入；也可进入微信多选后批量加入。媒体需先下载到本机。"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"从聊天中选取消息"
+                                                                   message:@"在任意聊天中进入微信多选，选择消息后点“存入消息库”。文字、图片、语音、文件、小程序等消息均会在发送时复用微信原生链路。"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"前往文件传输助手" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"打开文件传输助手" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         NeoWCOpenChatForUserName(@"filehelper");
     }]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -701,7 +703,10 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (void)cleanupMediaTapped {
     NSUInteger mediaCount = 0;
-    for (NeoWCQuickReplyItem *item in self.allItems) if (item.type != NeoWCQuickReplyTypeText) mediaCount++;
+    for (NeoWCQuickReplyItem *item in self.allItems) {
+        if (item.type == NeoWCQuickReplyTypeImage || item.type == NeoWCQuickReplyTypeVideo ||
+            item.type == NeoWCQuickReplyTypeVoice) mediaCount++;
+    }
     if (mediaCount == 0) {
         [self showError:[NSError errorWithDomain:@"NeoWC" code:3 userInfo:@{NSLocalizedDescriptionKey: @"消息库中没有媒体消息。"}]];
         return;
@@ -714,7 +719,8 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     [alert addAction:[UIAlertAction actionWithTitle:@"清理" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
         NSError *lastError = nil;
         for (NeoWCQuickReplyItem *item in weakSelf.allItems) {
-            if (item.type != NeoWCQuickReplyTypeText) {
+            if (item.type == NeoWCQuickReplyTypeImage || item.type == NeoWCQuickReplyTypeVideo ||
+                item.type == NeoWCQuickReplyTypeVoice) {
                 NSError *error = nil;
                 [NeoWCQuickReplyStore.sharedStore deleteItemWithIdentifier:item.identifier error:&error];
                 if (error) lastError = error;
@@ -727,7 +733,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 }
 
 - (void)editMediaItem:(NeoWCQuickReplyItem *)item {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"编辑媒体素材" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"编辑消息库记录" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
     [sheet addAction:[UIAlertAction actionWithTitle:@"重命名备注" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"重命名备注" message:nil preferredStyle:UIAlertControllerStyleAlert];
         [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"备注（可选）"; field.text = item.title; }];
@@ -803,14 +809,17 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
         [self showError:[NSError errorWithDomain:@"NeoWC" code:1 userInfo:@{NSLocalizedDescriptionKey: @"共享消息库暂时无法读写。"}]];
         return;
     }
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"添加素材" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"添加消息库记录" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
     [sheet addAction:[UIAlertAction actionWithTitle:@"新建文字" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         [self presentTextEditorForItem:nil];
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"从相册选择图片或视频" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         [self presentMediaPicker];
     }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"前往文件传输助手" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"保存群聊邀请" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [self presentGroupInvitationPicker];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"从聊天中选取（打开文件传输助手）" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         NeoWCOpenChatForUserName(@"filehelper");
     }]];
     if (!self.currentFolderIdentifier.length) {
@@ -822,6 +831,48 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     UIPopoverPresentationController *popover = sheet.popoverPresentationController;
     popover.barButtonItem = self.navigationItem.rightBarButtonItem;
     [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentGroupInvitationPicker {
+    __block NSString *selectedGroup = nil;
+    UIViewController *picker = NeoWCCreateGroupPicker(
+        @"选择邀请目标群",
+        @"选择一次后会保存为消息库记录；以后在好友聊天中点击即可直接邀请。",
+        ^BOOL(NSString *userName) {
+            return selectedGroup.length > 0 && [selectedGroup isEqualToString:userName];
+        },
+        ^(NSString *userName) {
+            selectedGroup = [selectedGroup isEqualToString:userName] ? nil : [userName copy];
+        });
+    __weak typeof(self) weakSelf = self;
+    __weak UIViewController *weakPicker = picker;
+    NeoWCConfigureConversationPickerCompletion(picker, ^{
+        if (selectedGroup.length == 0) {
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"无法保存"
+                                                                           message:@"请先选择一个群聊。"
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+            [weakPicker presentViewController:alert animated:YES completion:nil];
+            return;
+        }
+        NSError *error = nil;
+        NeoWCQuickReplyItem *item = [NeoWCQuickReplyStore.sharedStore
+            addGroupInvitationForGroupUserName:selectedGroup
+                                         title:@"群聊邀请"
+                             folderIdentifier:weakSelf.currentFolderIdentifier
+                                         error:&error];
+        if (!item) {
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"保存失败"
+                                                                           message:error.localizedDescription ?: @"保存群聊邀请失败。"
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+            [weakPicker presentViewController:alert animated:YES completion:nil];
+            return;
+        }
+        [weakPicker.navigationController popViewControllerAnimated:YES];
+        [weakSelf reloadItems];
+    });
+    [self.navigationController pushViewController:picker animated:YES];
 }
 
 - (void)createFolder {
@@ -976,18 +1027,29 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     NeoWCQuickReplyItem *item = [self itemAtIndexPath:indexPath];
     if (!item) return cell;
     NSString *fallbackTitle = item.type == NeoWCQuickReplyTypeText ? item.text :
-        (item.type == NeoWCQuickReplyTypeImage ? @"图片素材" : (item.type == NeoWCQuickReplyTypeVideo ? @"视频素材" : @"语音素材"));
+        (item.type == NeoWCQuickReplyTypeImage ? @"图片素材" :
+         (item.type == NeoWCQuickReplyTypeVideo ? @"视频素材" :
+          (item.type == NeoWCQuickReplyTypeVoice ? @"语音素材" :
+           (item.type == NeoWCQuickReplyTypeGroupInvitation ? @"群聊邀请" : (item.text.length ? item.text : @"原消息")))));
     cell.textLabel.text = item.title.length > 0 ? item.title : fallbackTitle;
     cell.textLabel.numberOfLines = 1;
     NSString *typeName = item.type == NeoWCQuickReplyTypeText ? @"文字" :
-        (item.type == NeoWCQuickReplyTypeImage ? @"图片" : (item.type == NeoWCQuickReplyTypeVideo ? @"视频" : @"语音"));
+        (item.type == NeoWCQuickReplyTypeImage ? @"图片" :
+         (item.type == NeoWCQuickReplyTypeVideo ? @"视频" :
+          (item.type == NeoWCQuickReplyTypeVoice ? @"语音" :
+           (item.type == NeoWCQuickReplyTypeGroupInvitation ? @"群邀请" : @"原消息"))));
     NSMutableArray<NSString *> *details = [NSMutableArray arrayWithObject:typeName];
+    if (item.type == NeoWCQuickReplyTypeGroupInvitation && item.text.length > 0) {
+        [details addObject:item.text];
+    }
     if (item.isPinned) [details addObject:@"已置顶"];
     cell.detailTextLabel.text = [details componentsJoinedByString:@" · "];
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     NSString *symbol = item.type == NeoWCQuickReplyTypeText ? @"text.bubble" :
         (item.type == NeoWCQuickReplyTypeImage ? @"photo" :
-         (item.type == NeoWCQuickReplyTypeVideo ? @"video" : @"waveform"));
+         (item.type == NeoWCQuickReplyTypeVideo ? @"video" :
+          (item.type == NeoWCQuickReplyTypeVoice ? @"waveform" :
+           (item.type == NeoWCQuickReplyTypeGroupInvitation ? @"person.badge.plus" : @"bubble.left.and.text.bubble.right"))));
     UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:20.0
                                                                                                    weight:UIImageSymbolWeightRegular];
     cell.imageView.image = [[UIImage systemImageNamed:symbol withConfiguration:configuration]
@@ -1040,6 +1102,10 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
         [self presentTextEditorForItem:item];
         return;
     }
+    if (item.type == NeoWCQuickReplyTypeMessageReference || item.type == NeoWCQuickReplyTypeGroupInvitation) {
+        [self editMediaItem:item];
+        return;
+    }
     NSString *path = [NeoWCQuickReplyStore.sharedStore absoluteMediaPathForItem:item];
     if (item.type == NeoWCQuickReplyTypeVoice && path.length > 0) {
         NeoWCQuickReplyMediaPreviewViewController *preview = [[NeoWCQuickReplyMediaPreviewViewController alloc] initWithItem:item];
@@ -1052,7 +1118,8 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (void)useItemNormally:(NeoWCQuickReplyItem *)item {
     if (!self.selectionHandler) return;
-    if (item.type == NeoWCQuickReplyTypeText) {
+    if (item.type == NeoWCQuickReplyTypeText || item.type == NeoWCQuickReplyTypeMessageReference ||
+        item.type == NeoWCQuickReplyTypeGroupInvitation) {
         [NeoWCQuickReplyStore.sharedStore recordUsageForIdentifier:item.identifier error:nil];
         NeoWCQuickReplySelectionHandler handler = self.selectionHandler;
         [self dismissViewControllerAnimated:YES completion:^{ if (handler) handler(item); }];

@@ -21,3 +21,5 @@ FOUNDATION_EXPORT UIViewController *NeoWCCreateFriendPicker(NSString *title,
 FOUNDATION_EXPORT void NeoWCConfigureConversationPickerBulkActions(UIViewController *picker,
                                                                    dispatch_block_t selectAll,
                                                                    dispatch_block_t invertSelection);
+FOUNDATION_EXPORT void NeoWCConfigureConversationPickerCompletion(UIViewController *picker,
+                                                                  dispatch_block_t completion);

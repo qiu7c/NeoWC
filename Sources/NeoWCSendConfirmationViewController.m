@@ -185,6 +185,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
 @property (nonatomic, copy) NeoWCConversationPickerToggleBlock toggleBlock;
 @property (nonatomic, copy, nullable) dispatch_block_t selectAllBlock;
 @property (nonatomic, copy, nullable) dispatch_block_t invertSelectionBlock;
+@property (nonatomic, copy, nullable) dispatch_block_t completionBlock;
 @property (nonatomic, assign) BOOL groupsOnly;
 @property (nonatomic, assign) BOOL friendsOnly;
 - (instancetype)initWithTitle:(NSString *)title
@@ -242,7 +243,10 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
     [self loadConversations];
 }
 
-- (void)done { [self.navigationController popViewControllerAnimated:YES]; }
+- (void)done {
+    if (self.completionBlock) self.completionBlock();
+    else [self.navigationController popViewControllerAnimated:YES];
+}
 
 - (void)selectAllTapped {
     if (self.selectAllBlock) self.selectAllBlock();
@@ -340,7 +344,7 @@ static NSDictionary *NeoWCSendConfirmationConversation(id candidate, id manager,
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NSString *username = [self itemAtIndexPath:indexPath][@"username"];
     if (self.toggleBlock) self.toggleBlock(username);
-    [tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+    [tableView reloadData];
 }
 
 @end
@@ -387,6 +391,12 @@ void NeoWCConfigureConversationPickerBulkActions(UIViewController *picker,
         (NeoWCSendConfirmationConversationPicker *)picker;
     conversationPicker.selectAllBlock = selectAll;
     conversationPicker.invertSelectionBlock = invertSelection;
+}
+
+void NeoWCConfigureConversationPickerCompletion(UIViewController *picker,
+                                                 dispatch_block_t completion) {
+    if (![picker isKindOfClass:NeoWCSendConfirmationConversationPicker.class]) return;
+    ((NeoWCSendConfirmationConversationPicker *)picker).completionBlock = completion;
 }
 
 @interface NeoWCSendConfirmationViewController ()

@@ -8,6 +8,7 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <string.h>
+#include <limits.h>
 #include <atomic>
 
 extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
@@ -458,6 +459,7 @@ static NSString *NeoWCChatUserName(id controller);
 static void NeoWCShowTransientMessage(NSString *message, BOOL success);
 static BOOL NeoWCMethodReturnsVoid(Method method);
 static BOOL NeoWCMethodReturnsObject(Method method);
+static BOOL NeoWCMethodReturnsInteger(Method method);
 static BOOL NeoWCMethodArgumentIsObject(Method method, unsigned int index);
 static BOOL NeoWCMethodArgumentIsIntegerScalar(Method method, unsigned int index);
 static BOOL NeoWCMethodArgumentIsSelector(Method method, unsigned int index);
@@ -5466,10 +5468,10 @@ static NeoWCQuickReplyType NeoWCQuickReplyTypeForMessage(id message, BOOL *suppo
 
 static BOOL NeoWCMessageCanAddToQuickReply(id message) {
     if (!NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey) || !message) return NO;
-    if (![[NeoWCSessionForMessage(message) lowercaseString] isEqualToString:@"filehelper"]) return NO;
-    BOOL supported = NO;
-    (void)NeoWCQuickReplyTypeForMessage(message, &supported);
-    return supported;
+    NSString *session = NeoWCSessionForMessage(message);
+    unsigned long long localID = [NeoWCTweakSafeValue(message, @"m_uiMesLocalID") unsignedLongLongValue];
+    long long serverID = [NeoWCTweakSafeValue(message, @"m_n64MesSvrID") longLongValue];
+    return session.length > 0 && (localID > 0 || serverID != 0);
 }
 
 static NSString *NeoWCQuickReplySourceMessageID(id message) {
@@ -5519,6 +5521,28 @@ static NSDictionary *NeoWCQuickReplyVoiceMetadata(id message) {
     if ([voiceTime respondsToSelector:@selector(unsignedIntegerValue)] && voiceTime.unsignedIntegerValue > 0) metadata[@"voiceTime"] = voiceTime;
     if ([voiceFormat respondsToSelector:@selector(unsignedIntegerValue)]) metadata[@"voiceFormat"] = voiceFormat;
     return metadata;
+}
+
+static NSString *NeoWCQuickReplyMessagePreview(id message) {
+    SEL displaySelector = NSSelectorFromString(@"GetDisplayContent");
+    Method displayMethod = message ? class_getInstanceMethod([message class], displaySelector) : NULL;
+    if (displayMethod && method_getNumberOfArguments(displayMethod) == 2 &&
+        NeoWCMethodReturnsObject(displayMethod)) {
+        @try {
+            id value = ((id (*)(id, SEL))objc_msgSend)(message, displaySelector);
+            if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
+        } @catch (__unused NSException *exception) {}
+    }
+    for (NSString *key in @[@"m_nsTitle", @"m_nsAppFileName", @"m_nsDesc"]) {
+        id value = NeoWCTweakSafeValue(message, key);
+        if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
+    }
+    NSInteger type = [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue];
+    if (type == 1) {
+        id content = NeoWCTweakSafeValue(message, @"m_nsContent");
+        if ([content isKindOfClass:NSString.class] && [content length] > 0) return content;
+    }
+    return [NSString stringWithFormat:@"微信消息 · 类型 %ld", (long)type];
 }
 
 typedef NS_ENUM(NSUInteger, NeoWCMediaToVoiceKind) {
@@ -5856,7 +5880,17 @@ static void NeoWCCommitMessageToQuickReply(id message, NeoWCQuickReplyType type,
     NSUInteger beforeCount = NeoWCQuickReplyStore.sharedStore.items.count;
     NSError *error = nil;
     NeoWCQuickReplyItem *item = nil;
-    if (type == NeoWCQuickReplyTypeText) {
+    if (type == NeoWCQuickReplyTypeMessageReference) {
+        item = [NeoWCQuickReplyStore.sharedStore
+            addMessageReferenceForConversation:session
+                                        localID:[NeoWCTweakSafeValue(message, @"m_uiMesLocalID") unsignedLongLongValue]
+                                       serverID:[NeoWCTweakSafeValue(message, @"m_n64MesSvrID") longLongValue]
+                                    messageType:[NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue]
+                                        preview:NeoWCQuickReplyMessagePreview(message)
+                                          title:trimmedRemark
+                              folderIdentifier:folderIdentifier
+                                          error:&error];
+    } else if (type == NeoWCQuickReplyTypeText) {
         NSString *text = NeoWCTweakSafeValue(message, @"m_nsContent");
         item = [NeoWCQuickReplyStore.sharedStore addText:text ?: @""
                                                     title:trimmedRemark
@@ -5921,9 +5955,9 @@ static void NeoWCAddMessageToQuickReply(id cell) {
     if (!NeoWCMessageCanAddToQuickReply(message)) return;
     BOOL supported = NO;
     NeoWCQuickReplyType type = NeoWCQuickReplyTypeForMessage(message, &supported);
-    if (!supported) return;
+    if (!supported) type = NeoWCQuickReplyTypeMessageReference;
     NSString *path = nil;
-    if (type != NeoWCQuickReplyTypeText) {
+    if (type != NeoWCQuickReplyTypeText && type != NeoWCQuickReplyTypeMessageReference) {
         path = type == NeoWCQuickReplyTypeImage ? NeoWCExistingQuickReplyImagePath(message) :
             (type == NeoWCQuickReplyTypeVoice ? NeoWCExistingQuickReplyVoicePath(message) : NeoWCExistingQuickReplyAttachmentPath(message));
         if (path.length == 0) {
@@ -5955,14 +5989,15 @@ static NSArray *NeoWCOperationMenuItemsWithQuickReply(id target, NSArray *origin
     if (!NeoWCMessageCanAddToQuickReply(message)) return originalItems;
     for (id item in originalItems) {
         NSString *title = NeoWCTweakSafeValue(item, @"title");
-        if ([title isEqualToString:@"存入素材"] || [title isEqualToString:@"加入快捷回复"]) return originalItems;
+        if ([title isEqualToString:@"存入素材"] || [title isEqualToString:@"存入消息库"] ||
+            [title isEqualToString:@"加入快捷回复"]) return originalItems;
     }
     Class itemClass = objc_getClass("MMMenuItem");
     if (!itemClass || ![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) return originalItems;
     UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightRegular];
     UIImage *icon = [[UIImage systemImageNamed:@"tray.and.arrow.down.fill" withConfiguration:configuration]
         imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
-    MMMenuItem *menuItem = [[itemClass alloc] initWithTitle:@"存入素材"
+    MMMenuItem *menuItem = [[itemClass alloc] initWithTitle:@"存入消息库"
                                                        icon:icon
                                                      target:target
                                                      action:@selector(neowc_addToQuickReply:)];
@@ -7578,6 +7613,177 @@ static BOOL NeoWCSendQuickReplyVoiceNow(BaseMsgContentViewController *controller
     return NeoWCSendVoiceMessage(message, path, lockedUserName);
 }
 
+static id NeoWCResolveQuickReplyMessageReference(NeoWCQuickReplyItem *item) {
+    NSString *sourceConversation = item.sourceConversation;
+    unsigned long long localID = [item.metadata[@"localID"] unsignedLongLongValue];
+    long long serverID = [item.metadata[@"serverID"] longLongValue];
+    id manager = NeoWCMessageManager();
+    if (!manager || sourceConversation.length == 0) return nil;
+    @try {
+        SEL localSelector = NSSelectorFromString(@"GetMsg:LocalID:");
+        Method localMethod = class_getInstanceMethod([manager class], localSelector);
+        if (localID > 0 && localID <= UINT_MAX && [manager respondsToSelector:localSelector] &&
+            localMethod && method_getNumberOfArguments(localMethod) == 4 &&
+            NeoWCMethodReturnsObject(localMethod) &&
+            NeoWCMethodArgumentIsObject(localMethod, 2) &&
+            NeoWCMethodArgumentIsIntegerScalar(localMethod, 3)) {
+            id message = ((id (*)(id, SEL, id, unsigned int))objc_msgSend)(
+                manager, localSelector, sourceConversation, (unsigned int)localID);
+            if (message) return message;
+        }
+        SEL serverSelector = NSSelectorFromString(@"GetMsg:n64SvrID:");
+        Method serverMethod = class_getInstanceMethod([manager class], serverSelector);
+        if (serverID != 0 && [manager respondsToSelector:serverSelector] &&
+            serverMethod && method_getNumberOfArguments(serverMethod) == 4 &&
+            NeoWCMethodReturnsObject(serverMethod) &&
+            NeoWCMethodArgumentIsObject(serverMethod, 2) &&
+            NeoWCMethodArgumentIsIntegerScalar(serverMethod, 3)) {
+            return ((id (*)(id, SEL, id, long long))objc_msgSend)(
+                manager, serverSelector, sourceConversation, serverID);
+        }
+    } @catch (NSException *exception) {
+        NeoWCLog(@"消息库回查原消息失败：%@", exception.reason ?: exception.name);
+    }
+    return nil;
+}
+
+static BOOL NeoWCForwardQuickReplyMessageNow(BaseMsgContentViewController *controller,
+                                              NSString *targetUserName,
+                                              id message) {
+    if (!controller.view.window || targetUserName.length == 0 || !message) return NO;
+    NSInteger messageType = [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue];
+    if (messageType == 34) return NeoWCRepeatVoiceMessage(message, targetUserName);
+    id contact = NeoWCContactForUserName(targetUserName);
+    Class forwardClass = objc_getClass("ForwardMessageLogicController");
+    SEL forwardSelector = sel_registerName("forwardNoConfirmForMsgList:toContacts:");
+    SEL delegateSelector = sel_registerName("setDelegate:");
+    if (!contact || !forwardClass) return NO;
+    Class utilityClass = objc_getClass("ForwardMsgUtil");
+    SEL canForwardSelector = sel_registerName("canBeForwardWithMsg:");
+    if ([utilityClass respondsToSelector:canForwardSelector] &&
+        !((BOOL (*)(id, SEL, id))objc_msgSend)(utilityClass, canForwardSelector, message)) return NO;
+    Method forwardMethod = class_getInstanceMethod(forwardClass, forwardSelector);
+    Method delegateMethod = class_getInstanceMethod(forwardClass, delegateSelector);
+    if (!forwardMethod || method_getNumberOfArguments(forwardMethod) != 4 ||
+        !NeoWCMethodArgumentIsObject(forwardMethod, 2) ||
+        !NeoWCMethodArgumentIsObject(forwardMethod, 3) ||
+        !delegateMethod || method_getNumberOfArguments(delegateMethod) != 3 ||
+        !NeoWCMethodArgumentIsObject(delegateMethod, 2)) return NO;
+    id logic = [forwardClass new];
+    NeoWCMessageRepeatSession *session = [NeoWCMessageRepeatSession new];
+    session.forwardLogic = logic;
+    session.message = message;
+    session.contact = contact;
+    session.presenter = controller;
+    ((void (*)(id, SEL, id))objc_msgSend)(logic, delegateSelector, session);
+    [NeoWCActiveQuickSendSessions() addObject:session];
+    @try {
+        ((void (*)(id, SEL, id, id))objc_msgSend)(logic, forwardSelector, @[message], @[contact]);
+    } @catch (NSException *exception) {
+        NeoWCLog(@"消息库原消息转发失败：%@", exception.reason ?: exception.name);
+        [session finishSession];
+        return NO;
+    }
+    __weak NeoWCMessageRepeatSession *weakSession = session;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        NeoWCMessageRepeatSession *activeSession = weakSession;
+        if (activeSession && !activeSession.finished) [activeSession finishSession];
+    });
+    return YES;
+}
+
+static void NeoWCSendQuickReplyMessageReferenceWithConfirmation(BaseMsgContentViewController *controller,
+                                                                 NSString *lockedUserName,
+                                                                 NeoWCQuickReplyItem *item) {
+    id message = NeoWCResolveQuickReplyMessageReference(item);
+    if (!message) {
+        NeoWCShowTransientMessage(@"原聊天消息已不存在，无法发送", NO);
+        return;
+    }
+    __weak BaseMsgContentViewController *weakController = controller;
+    dispatch_block_t sendAction = ^{
+        BaseMsgContentViewController *strongController = weakController;
+        if (!NeoWCForwardQuickReplyMessageNow(strongController, lockedUserName, message)) {
+            NeoWCShowTransientMessage(@"微信原生转发链暂不支持该消息", NO);
+        }
+    };
+    BOOL held = NeoWCPresentSendConfirmationIfNeeded(controller, lockedUserName,
+                                                      item.text.length ? item.text : @"原消息", ^BOOL{
+        BaseMsgContentViewController *strongController = weakController;
+        return strongController.view.window &&
+               [NeoWCChatUserName(strongController) isEqualToString:lockedUserName];
+    }, sendAction);
+    if (!held) sendAction();
+}
+
+static BOOL NeoWCSubmitSavedGroupInvitation(NSString *groupUserName,
+                                             NSString *memberUserName,
+                                             BOOL *supported) {
+    if (supported) *supported = NO;
+    if (![groupUserName hasSuffix:@"@chatroom"] || memberUserName.length == 0 ||
+        [memberUserName hasSuffix:@"@chatroom"] || [memberUserName isEqualToString:@"filehelper"] ||
+        [memberUserName isEqualToString:NeoWCCurrentUserWXID()]) return NO;
+    Class managerClass = NSClassFromString(@"CContactMgr");
+    id manager = managerClass ? NeoWCServiceForClass(managerClass) : nil;
+    SEL selector = NSSelectorFromString(@"InviteGroupMember:withMemberList:");
+    Method method = manager ? class_getInstanceMethod([manager class], selector) : NULL;
+    if (!method || method_getNumberOfArguments(method) != 4 ||
+        !NeoWCMethodArgumentIsObject(method, 2) ||
+        !NeoWCMethodArgumentIsObject(method, 3)) return NO;
+    if (supported) *supported = YES;
+    @try {
+        if (NeoWCMethodReturnsVoid(method)) {
+            ((void (*)(id, SEL, id, id))objc_msgSend)(manager, selector,
+                                                      groupUserName, @[memberUserName]);
+            return YES;
+        }
+        if (NeoWCMethodReturnsObject(method)) {
+            return ((id (*)(id, SEL, id, id))objc_msgSend)(manager, selector,
+                                                           groupUserName, @[memberUserName]) != nil;
+        }
+        if (NeoWCMethodReturnsInteger(method)) {
+            return ((NSInteger (*)(id, SEL, id, id))objc_msgSend)(manager, selector,
+                                                                  groupUserName, @[memberUserName]) != 0;
+        }
+        if (supported) *supported = NO;
+    } @catch (NSException *exception) {
+        NeoWCLog(@"发送已保存群聊邀请失败：%@", exception.reason ?: exception.name);
+    }
+    return NO;
+}
+
+static void NeoWCSendQuickReplyGroupInvitationWithConfirmation(BaseMsgContentViewController *controller,
+                                                                NSString *lockedUserName,
+                                                                NeoWCQuickReplyItem *item) {
+    NSString *groupUserName = [item.metadata[@"groupUserName"] isKindOfClass:NSString.class]
+        ? item.metadata[@"groupUserName"] : item.text;
+    if ([lockedUserName hasSuffix:@"@chatroom"] || [lockedUserName isEqualToString:@"filehelper"] ||
+        [lockedUserName isEqualToString:NeoWCCurrentUserWXID()]) {
+        NeoWCShowTransientMessage(@"群聊邀请只能在好友单聊中使用", NO);
+        return;
+    }
+    __weak BaseMsgContentViewController *weakController = controller;
+    dispatch_block_t sendAction = ^{
+        BaseMsgContentViewController *strongController = weakController;
+        if (!strongController.view.window ||
+            ![NeoWCChatUserName(strongController) isEqualToString:lockedUserName]) return;
+        BOOL supported = NO;
+        BOOL accepted = NeoWCSubmitSavedGroupInvitation(groupUserName, lockedUserName, &supported);
+        NeoWCShowTransientMessage(supported ? (accepted ? @"已提交群聊邀请" : @"群聊邀请未被微信接受")
+                                             : @"当前微信版本不支持群聊邀请",
+                                  accepted);
+    };
+    BOOL held = NeoWCPresentSendConfirmationIfNeeded(controller, lockedUserName,
+        [NSString stringWithFormat:@"%@：邀请当前好友", item.title.length ? item.title : @"群聊邀请"],
+        ^BOOL{
+            BaseMsgContentViewController *strongController = weakController;
+            return strongController.view.window &&
+                [NeoWCChatUserName(strongController) isEqualToString:lockedUserName];
+        }, sendAction);
+    if (!held) sendAction();
+}
+
 static void NeoWCSendQuickReplyMediaWithConfirmation(BaseMsgContentViewController *controller,
                                                       NSString *lockedUserName,
                                                       NeoWCQuickReplyItem *item) {
@@ -7630,6 +7836,14 @@ static void NeoWCPresentQuickReplyLibrary(BaseMsgContentViewController *controll
             }
             return;
         }
+        if (item.type == NeoWCQuickReplyTypeMessageReference) {
+            NeoWCSendQuickReplyMessageReferenceWithConfirmation(strongController, lockedUserName, item);
+            return;
+        }
+        if (item.type == NeoWCQuickReplyTypeGroupInvitation) {
+            NeoWCSendQuickReplyGroupInvitationWithConfirmation(strongController, lockedUserName, item);
+            return;
+        }
         NeoWCSendQuickReplyMediaWithConfirmation(strongController, lockedUserName, item);
     } directSendHandler:^(NeoWCQuickReplyItem *item) {
         __weak BaseMsgContentViewController *delayedController = weakController;
@@ -7643,6 +7857,10 @@ static void NeoWCPresentQuickReplyLibrary(BaseMsgContentViewController *controll
             }
             if (item.type == NeoWCQuickReplyTypeText) {
                 if (item.text.length > 0) NeoWCSendQuickReplyTextWithConfirmation(strongController, lockedUserName, item.text);
+            } else if (item.type == NeoWCQuickReplyTypeMessageReference) {
+                NeoWCSendQuickReplyMessageReferenceWithConfirmation(strongController, lockedUserName, item);
+            } else if (item.type == NeoWCQuickReplyTypeGroupInvitation) {
+                NeoWCSendQuickReplyGroupInvitationWithConfirmation(strongController, lockedUserName, item);
             } else {
                 NeoWCSendQuickReplyMediaWithConfirmation(strongController, lockedUserName, item);
             }

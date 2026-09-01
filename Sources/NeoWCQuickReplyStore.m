@@ -25,6 +25,10 @@ static NSString *const NeoWCQuickReplyFolderMetadataName = @".folder.json";
 static NSString *const NeoWCQuickReplySearchIndexName = @"search-index.json";
 static NSString *const NeoWCQuickReplyItemsMigrationMarkerName = @".items-v2";
 static NSString *const NeoWCQuickReplyFoldersMigrationMarkerName = @".folders-v2";
+static NSString *const NeoWCQuickReplyItemsStableRecoveryMarkerName = @".items-v3-stable";
+static NSString *const NeoWCQuickReplyFoldersStableRecoveryMarkerName = @".folders-v3-stable";
+static NSString *const NeoWCQuickReplyItemsDefaultsKey = @"com.qiu7c.neowc.quick-reply.message-list.v3";
+static NSString *const NeoWCQuickReplyFoldersDefaultsKey = @"com.qiu7c.neowc.quick-reply.folder-list.v3";
 
 static NSError *NeoWCQuickReplyError(NeoWCQuickReplyErrorCode code, NSString *description) {
     return [NSError errorWithDomain:NeoWCQuickReplyErrorDomain
@@ -245,6 +249,13 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
             return nil;
         }
     }
+    NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:YES error:nil];
+    if (recoveryDirectory) {
+        [self migratePreviousPersistentLibrariesIntoDirectory:directory
+                                            recoveryDirectory:recoveryDirectory];
+    }
+    NSURL *legacyRoot = [self legacyQuickRepliesRootURL];
+    if (legacyRoot) [self migrateLegacyLibrariesIntoDirectory:directory root:legacyRoot];
     return directory;
 }
 
@@ -425,7 +436,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     NSNumber *typeValue = dictionary[@"type"];
     if (identifier.length == 0 || ![typeValue respondsToSelector:@selector(integerValue)]) return nil;
     NSInteger type = typeValue.integerValue;
-    if (type < NeoWCQuickReplyTypeText || type > NeoWCQuickReplyTypeVoice) return nil;
+    if (type < NeoWCQuickReplyTypeText || type > NeoWCQuickReplyTypeGroupInvitation) return nil;
     NeoWCQuickReplyItem *item = [NeoWCQuickReplyItem new];
     item.identifier = identifier;
     item.type = (NeoWCQuickReplyType)type;
@@ -718,13 +729,67 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     BOOL migrated = [NSFileManager.defaultManager fileExistsAtPath:migrationMarker.path];
     NSArray *canonicalRecords = [self canonicalItemDictionariesInSharedDirectory:directory];
     if (migrated) {
-        if (!canonicalRecords) return nil;
-        NSMutableArray *canonicalItems = [NSMutableArray arrayWithCapacity:canonicalRecords.count];
-        for (NSDictionary *dictionary in canonicalRecords) {
+        NSURL *stableRecoveryMarker = [[self libraryDirectoryInSharedDirectory:directory]
+            URLByAppendingPathComponent:NeoWCQuickReplyItemsStableRecoveryMarkerName];
+        BOOL stableRecoveryFinished = [NSFileManager.defaultManager fileExistsAtPath:stableRecoveryMarker.path];
+        id defaultsValue = [NSUserDefaults.standardUserDefaults objectForKey:NeoWCQuickReplyItemsDefaultsKey];
+        NSArray *defaultsRecords = [defaultsValue isKindOfClass:NSArray.class] ? defaultsValue : @[];
+        if (!canonicalRecords && defaultsRecords.count == 0) return nil;
+        NSMutableDictionary<NSString *, NSDictionary *> *recordsByIdentifier = [NSMutableDictionary dictionary];
+        for (NSDictionary *dictionary in defaultsRecords) {
+            if (![dictionary isKindOfClass:NSDictionary.class]) continue;
+            NSString *identifier = NeoWCQuickReplyTrimmedString(dictionary[@"id"]);
+            if (identifier.length > 0) recordsByIdentifier[identifier.lowercaseString] = dictionary;
+        }
+        NSURL *recoveryDirectory = nil;
+        if (!stableRecoveryFinished) {
+            recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:NO error:nil];
+            NSArray *legacyIndex = [self loadJSONArrayAtURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
+                                                  backupURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyItemsBackupName]
+                                                recoveryURL:[recoveryDirectory URLByAppendingPathComponent:NeoWCQuickReplyItemsIndexName]
+                                                      error:nil];
+            for (NSDictionary *dictionary in legacyIndex ?: @[]) {
+                if (![dictionary isKindOfClass:NSDictionary.class]) continue;
+                NSString *identifier = NeoWCQuickReplyTrimmedString(dictionary[@"id"]);
+                if (identifier.length > 0) recordsByIdentifier[identifier.lowercaseString] = dictionary;
+            }
+            for (NSURL *recordDirectory in recoveryDirectory ? @[directory, recoveryDirectory] : @[directory]) {
+                for (NSDictionary *dictionary in [self recordDictionariesInDirectory:recordDirectory]) {
+                    NSString *identifier = NeoWCQuickReplyTrimmedString(dictionary[@"id"]);
+                    if (identifier.length > 0) recordsByIdentifier[identifier.lowercaseString] = dictionary;
+                }
+            }
+        }
+        for (NSDictionary *dictionary in canonicalRecords ?: @[]) {
+            if (![dictionary isKindOfClass:NSDictionary.class]) continue;
+            NSString *identifier = NeoWCQuickReplyTrimmedString(dictionary[@"id"]);
+            if (identifier.length > 0) recordsByIdentifier[identifier.lowercaseString] = dictionary;
+        }
+        NSMutableArray *canonicalItems = [NSMutableArray arrayWithCapacity:recordsByIdentifier.count];
+        for (NSDictionary *dictionary in recordsByIdentifier.allValues) {
             NeoWCQuickReplyItem *item = [self itemFromDictionary:dictionary];
             if (!item) return nil;
             [canonicalItems addObject:item];
         }
+        if (!stableRecoveryFinished) {
+            NSMutableSet<NSString *> *knownIdentifiers = [NSMutableSet setWithCapacity:canonicalItems.count];
+            for (NeoWCQuickReplyItem *item in canonicalItems) [knownIdentifiers addObject:item.identifier.lowercaseString];
+            [self appendOrphanedMediaFromDirectory:directory sharedDirectory:directory recoveryDirectory:recoveryDirectory
+                                  knownIdentifiers:knownIdentifiers items:canonicalItems];
+            if (recoveryDirectory) {
+                [self appendOrphanedMediaFromDirectory:recoveryDirectory sharedDirectory:directory recoveryDirectory:recoveryDirectory
+                                      knownIdentifiers:knownIdentifiers items:canonicalItems];
+            }
+        }
+        if (!stableRecoveryFinished || canonicalRecords.count != canonicalItems.count) {
+            if ([self writeCanonicalItemRecordsLocked:canonicalItems sharedDirectory:directory error:nil]) {
+                [[NSData data] writeToURL:stableRecoveryMarker options:NSDataWritingAtomic error:nil];
+            }
+        }
+        NSMutableArray *mirroredRecords = [NSMutableArray arrayWithCapacity:canonicalItems.count];
+        for (NeoWCQuickReplyItem *item in canonicalItems) [mirroredRecords addObject:[self dictionaryForItem:item]];
+        [NSUserDefaults.standardUserDefaults setObject:mirroredRecords forKey:NeoWCQuickReplyItemsDefaultsKey];
+        [NSUserDefaults.standardUserDefaults synchronize];
         return canonicalItems;
     }
 
@@ -781,9 +846,16 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     NSURL *directory = [self sharedDirectoryCreatingIfNeeded:YES error:error];
     if (!directory) return NO;
     if (![self writeCanonicalItemRecordsLocked:items sharedDirectory:directory error:error]) return NO;
+    NSMutableArray *defaultsRecords = [NSMutableArray arrayWithCapacity:items.count];
+    for (NeoWCQuickReplyItem *item in items) [defaultsRecords addObject:[self dictionaryForItem:item]];
+    [NSUserDefaults.standardUserDefaults setObject:defaultsRecords forKey:NeoWCQuickReplyItemsDefaultsKey];
+    [NSUserDefaults.standardUserDefaults synchronize];
     NSURL *migrationMarker = [[self libraryDirectoryInSharedDirectory:directory]
                               URLByAppendingPathComponent:NeoWCQuickReplyItemsMigrationMarkerName];
     [[NSData data] writeToURL:migrationMarker options:NSDataWritingAtomic error:nil];
+    NSURL *stableRecoveryMarker = [[self libraryDirectoryInSharedDirectory:directory]
+        URLByAppendingPathComponent:NeoWCQuickReplyItemsStableRecoveryMarkerName];
+    [[NSData data] writeToURL:stableRecoveryMarker options:NSDataWritingAtomic error:nil];
     return YES;
 }
 
@@ -813,6 +885,8 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     NSURL *libraryDirectory = [self libraryDirectoryInSharedDirectory:directory];
     NSURL *migrationMarker = [libraryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersMigrationMarkerName];
     BOOL migrated = [NSFileManager.defaultManager fileExistsAtPath:migrationMarker.path];
+    NSURL *stableRecoveryMarker = [libraryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersStableRecoveryMarkerName];
+    BOOL stableRecoveryFinished = [NSFileManager.defaultManager fileExistsAtPath:stableRecoveryMarker.path];
     NSMutableArray<NeoWCQuickReplyFolder *> *folders = [NSMutableArray array];
     NSArray<NSURL *> *children = [NSFileManager.defaultManager contentsOfDirectoryAtURL:libraryDirectory
                                                               includingPropertiesForKeys:@[NSURLIsDirectoryKey]
@@ -836,7 +910,47 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
             ? [dictionary[@"sort"] integerValue] : folders.count;
         [folders addObject:folder];
     }
-    if (migrated) return folders;
+    id defaultsValue = [NSUserDefaults.standardUserDefaults objectForKey:NeoWCQuickReplyFoldersDefaultsKey];
+    NSArray *defaultsFolders = [defaultsValue isKindOfClass:NSArray.class] ? defaultsValue : @[];
+    if (migrated && !stableRecoveryFinished) {
+        NSData *legacyData = [NSData dataWithContentsOfURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
+                                                   options:0 error:nil];
+        id legacyObject = legacyData.length ? [NSJSONSerialization JSONObjectWithData:legacyData options:0 error:nil] : nil;
+        if ([legacyObject isKindOfClass:NSArray.class]) {
+            defaultsFolders = [defaultsFolders arrayByAddingObjectsFromArray:legacyObject];
+        }
+    }
+    for (NSDictionary *dictionary in defaultsFolders) {
+        if (![dictionary isKindOfClass:NSDictionary.class]) continue;
+        NSString *identifier = NeoWCQuickReplyTrimmedString(dictionary[@"id"]);
+        NSString *name = NeoWCQuickReplyTrimmedString(dictionary[@"name"]);
+        if (!NeoWCQuickReplyIsSafePathComponent(identifier) || name.length == 0) continue;
+        NSUInteger existingIndex = [folders indexOfObjectPassingTest:^BOOL(NeoWCQuickReplyFolder *candidate,
+                                                                            NSUInteger idx,
+                                                                            BOOL *stop) {
+            (void)idx; (void)stop;
+            return [candidate.identifier isEqualToString:identifier];
+        }];
+        if (existingIndex != NSNotFound) continue;
+        NeoWCQuickReplyFolder *folder = [NeoWCQuickReplyFolder new];
+        folder.identifier = identifier;
+        folder.name = name;
+        folder.sortIndex = [dictionary[@"sort"] respondsToSelector:@selector(integerValue)]
+            ? [dictionary[@"sort"] integerValue] : folders.count;
+        [folders addObject:folder];
+    }
+    if (migrated) {
+        NSMutableArray *mirroredFolders = [NSMutableArray arrayWithCapacity:folders.count];
+        for (NeoWCQuickReplyFolder *folder in folders) {
+            [mirroredFolders addObject:@{ @"id": folder.identifier,
+                                          @"name": folder.name,
+                                          @"sort": @(folder.sortIndex) }];
+        }
+        [NSUserDefaults.standardUserDefaults setObject:mirroredFolders forKey:NeoWCQuickReplyFoldersDefaultsKey];
+        [NSUserDefaults.standardUserDefaults synchronize];
+        [[NSData data] writeToURL:stableRecoveryMarker options:NSDataWritingAtomic error:nil];
+        return folders;
+    }
 
     NSURL *recoveryDirectory = [self recoveryDirectoryCreatingIfNeeded:NO error:nil];
     NSArray *object = recoveryDirectory ? [self loadJSONArrayAtURL:[directory URLByAppendingPathComponent:NeoWCQuickReplyFoldersIndexName]
@@ -888,6 +1002,14 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         if (!data || ![data writeToURL:[folderDirectory URLByAppendingPathComponent:NeoWCQuickReplyFolderMetadataName]
                                options:NSDataWritingAtomic error:error]) return NO;
     }
+    NSMutableArray *defaultsFolders = [NSMutableArray arrayWithCapacity:folders.count];
+    for (NeoWCQuickReplyFolder *folder in folders) {
+        [defaultsFolders addObject:@{ @"id": folder.identifier,
+                                      @"name": folder.name,
+                                      @"sort": @(folder.sortIndex) }];
+    }
+    [NSUserDefaults.standardUserDefaults setObject:defaultsFolders forKey:NeoWCQuickReplyFoldersDefaultsKey];
+    [NSUserDefaults.standardUserDefaults synchronize];
     NSArray<NSURL *> *children = [manager contentsOfDirectoryAtURL:libraryDirectory
                                          includingPropertiesForKeys:@[NSURLIsDirectoryKey]
                                                             options:NSDirectoryEnumerationSkipsHiddenFiles error:nil];
@@ -901,7 +1023,9 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         if (remaining.count == 0) [manager removeItemAtURL:child error:nil];
     }
     [[NSData data] writeToURL:[libraryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersMigrationMarkerName]
-                    options:NSDataWritingAtomic error:nil];
+                     options:NSDataWritingAtomic error:nil];
+    [[NSData data] writeToURL:[libraryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersStableRecoveryMarkerName]
+                     options:NSDataWritingAtomic error:nil];
     return YES;
 }
 
@@ -1032,6 +1156,81 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         item.sourceMessageID = NeoWCQuickReplyTrimmedString(sourceMessageID).length > 0 ? sourceMessageID : nil;
         item.sourceAccountIdentifier = NeoWCQuickReplyTrimmedString(NeoWCCurrentUserWXID()).length ? NeoWCCurrentUserWXID() : nil;
         item.metadata = @{};
+        [items addObject:item];
+        return [self saveItemsLocked:items error:error] ? item.copy : nil;
+    }
+}
+
+- (NeoWCQuickReplyItem *)addMessageReferenceForConversation:(NSString *)conversation
+                                                     localID:(unsigned long long)localID
+                                                    serverID:(long long)serverID
+                                                 messageType:(NSInteger)messageType
+                                                     preview:(NSString *)preview
+                                                       title:(NSString *)title
+                                           folderIdentifier:(NSString *)folderIdentifier
+                                                       error:(NSError **)error {
+    NSString *session = NeoWCQuickReplyTrimmedString(conversation);
+    if (session.length == 0 || (localID == 0 && serverID == 0)) {
+        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue,
+                                                 @"消息会话或消息标识无效");
+        return nil;
+    }
+    NSString *sourceMessageID = serverID != 0
+        ? [NSString stringWithFormat:@"svr:%lld", serverID]
+        : [NSString stringWithFormat:@"local:%llu", localID];
+    @synchronized (self) {
+        NSMutableArray *items = [self loadItemsLocked];
+        if (!items) { NeoWCQuickReplySetIndexReadError(error); return nil; }
+        NeoWCQuickReplyItem *existing = [self existingItemInItems:items
+                                          sourceAccountIdentifier:NeoWCCurrentUserWXID()
+                                               sourceConversation:session
+                                                  sourceMessageID:sourceMessageID];
+        if (existing) return existing.copy;
+        NeoWCQuickReplyItem *item = [NeoWCQuickReplyItem new];
+        item.identifier = NSUUID.UUID.UUIDString.lowercaseString;
+        item.type = NeoWCQuickReplyTypeMessageReference;
+        item.title = NeoWCQuickReplyTrimmedString(title);
+        item.text = NeoWCQuickReplyTrimmedString(preview);
+        item.folderIdentifier = NeoWCQuickReplyTrimmedString(folderIdentifier).length ? folderIdentifier : nil;
+        item.sortIndex = [self nextSortIndexForItems:items];
+        item.pinned = NO;
+        item.createdAt = NSDate.date;
+        item.sourceConversation = session;
+        item.sourceMessageID = sourceMessageID;
+        item.sourceAccountIdentifier = NeoWCQuickReplyTrimmedString(NeoWCCurrentUserWXID()).length
+            ? NeoWCCurrentUserWXID() : nil;
+        item.metadata = @{ @"localID": @(localID),
+                           @"serverID": @(serverID),
+                           @"messageType": @(messageType) };
+        [items addObject:item];
+        return [self saveItemsLocked:items error:error] ? item.copy : nil;
+    }
+}
+
+- (NeoWCQuickReplyItem *)addGroupInvitationForGroupUserName:(NSString *)groupUserName
+                                                      title:(NSString *)title
+                                          folderIdentifier:(NSString *)folderIdentifier
+                                                      error:(NSError **)error {
+    NSString *group = NeoWCQuickReplyTrimmedString(groupUserName);
+    if (![group hasSuffix:@"@chatroom"]) {
+        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"群聊标识无效");
+        return nil;
+    }
+    @synchronized (self) {
+        NSMutableArray *items = [self loadItemsLocked];
+        if (!items) { NeoWCQuickReplySetIndexReadError(error); return nil; }
+        NeoWCQuickReplyItem *item = [NeoWCQuickReplyItem new];
+        item.identifier = NSUUID.UUID.UUIDString.lowercaseString;
+        item.type = NeoWCQuickReplyTypeGroupInvitation;
+        item.title = NeoWCQuickReplyTrimmedString(title);
+        item.text = group;
+        item.folderIdentifier = NeoWCQuickReplyTrimmedString(folderIdentifier).length ? folderIdentifier : nil;
+        item.sortIndex = [self nextSortIndexForItems:items];
+        item.pinned = NO;
+        item.createdAt = NSDate.date;
+        item.sourceAccountIdentifier = NeoWCQuickReplyTrimmedString(NeoWCCurrentUserWXID()).length
+            ? NeoWCCurrentUserWXID() : nil;
+        item.metadata = @{ @"groupUserName": group };
         [items addObject:item];
         return [self saveItemsLocked:items error:error] ? item.copy : nil;
     }

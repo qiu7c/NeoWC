@@ -56,9 +56,19 @@ static id NeoWCFriendRelationContactValue(id contact, NSArray<NSString *> *names
 }
 
 static UIView *NeoWCFriendRelationAvatarView(NSString *userName) {
-    Class helperClass = NSClassFromString(@"MMHeadImageHelper");
-    if (!helperClass || userName.length == 0) return nil;
+    if (userName.length == 0) return nil;
     id contact = NeoWCFriendRelationContactForUserName(userName);
+    id imageValue = NeoWCFriendRelationContactValue(contact, @[@"getContactHeadImage"]);
+    if ([imageValue isKindOfClass:UIImage.class]) {
+        UIImageView *imageView = [[UIImageView alloc] initWithImage:imageValue];
+        imageView.contentMode = UIViewContentModeScaleAspectFill;
+        imageView.userInteractionEnabled = NO;
+        imageView.clipsToBounds = YES;
+        return imageView;
+    }
+
+    Class helperClass = NSClassFromString(@"MMHeadImageHelper");
+    if (!helperClass) return nil;
     id URL = NeoWCFriendRelationContactValue(contact,
         @[@"m_nsHeadHDImgUrl", @"m_nsHeadImgUrl", @"headImgUrl", @"headImageURL"]);
     for (NSString *name in @[
@@ -89,6 +99,22 @@ static UIView *NeoWCFriendRelationAvatarView(NSString *userName) {
 static BOOL NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *userName) {
     if (!source || userName.length == 0 || !source.navigationController) return NO;
     id contact = NeoWCFriendRelationContactForUserName(userName);
+    Class handlerClass = NSClassFromString(@"MMURLHandler");
+    SEL sharedSelector = NSSelectorFromString(@"sharedInstance");
+    SEL constructSelector = NSSelectorFromString(@"constructContactInfoView:withUserName:");
+    id handler = NeoWCFriendRelationObjectMethod(handlerClass, sharedSelector, 2)
+        ? ((id (*)(id, SEL))objc_msgSend)(handlerClass, sharedSelector) : nil;
+    if (contact && NeoWCFriendRelationObjectMethod(handler, constructSelector, 4)) {
+        @try {
+            id controller = ((id (*)(id, SEL, id, id))objc_msgSend)(
+                handler, constructSelector, contact, userName);
+            if ([controller isKindOfClass:UIViewController.class]) {
+                [source.navigationController pushViewController:controller animated:YES];
+                return YES;
+            }
+        } @catch (__unused NSException *exception) {}
+    }
+
     Class controllerClass = NSClassFromString(@"ContactInfoViewController");
     SEL setContactSelector = NSSelectorFromString(@"setM_contact:");
     Method setContactMethod = controllerClass ? class_getInstanceMethod(controllerClass, setContactSelector) : NULL;
@@ -141,14 +167,26 @@ static BOOL NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGRect frame = self.imageView.frame;
-    CGFloat side = MIN(40.0, MIN(CGRectGetWidth(frame), CGRectGetHeight(frame)));
-    if (side <= 1.0) side = 40.0;
-    frame.size = CGSizeMake(side, side);
-    frame.origin.y = floor((CGRectGetHeight(self.contentView.bounds) - side) * 0.5);
+    CGFloat side = 48.0;
+    CGRect frame = CGRectMake(self.layoutMargins.left,
+                              floor((CGRectGetHeight(self.contentView.bounds) - side) * 0.5),
+                              side, side);
     self.nativeAvatarView.frame = frame;
     self.nativeAvatarView.layer.cornerRadius = side * 0.5;
     self.imageView.hidden = self.nativeAvatarView != nil;
+    if (self.nativeAvatarView) {
+        CGFloat labelX = CGRectGetMaxX(frame) + 12.0;
+        CGFloat trailing = self.accessoryType == UITableViewCellAccessoryNone ? 16.0 : 38.0;
+        CGFloat labelWidth = MAX(0.0, CGRectGetWidth(self.contentView.bounds) - labelX - trailing);
+        CGRect textFrame = self.textLabel.frame;
+        textFrame.origin.x = labelX;
+        textFrame.size.width = labelWidth;
+        self.textLabel.frame = textFrame;
+        CGRect detailFrame = self.detailTextLabel.frame;
+        detailFrame.origin.x = labelX;
+        detailFrame.size.width = labelWidth;
+        self.detailTextLabel.frame = detailFrame;
+    }
 }
 
 - (void)prepareForReuse {
@@ -185,7 +223,7 @@ static BOOL NeoWCFriendRelationOpenProfile(UIViewController *source, NSString *u
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = self.pageTitle;
-    self.tableView.rowHeight = 62.0;
+    self.tableView.rowHeight = 68.0;
     self.tableView.allowsMultipleSelectionDuringEditing = YES;
     [self updateNavigationButtons];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(reloadItems)
