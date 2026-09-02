@@ -80,6 +80,7 @@ FOUNDATION_EXPORT NSString *const NeoWCGroupMemberReminderEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCRedEnvelopeDetailEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCRedEnvelopeDetailCenterKey;
 FOUNDATION_EXPORT NSString *const NeoWCRedEnvelopeDetailFontSizeKey;
+FOUNDATION_EXPORT NSString *const NeoWCEntertainmentRedEnvelopeEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCCallConfirmEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCAutoSpeakerphoneEnabledKey;
 FOUNDATION_EXPORT NSString *const NeoWCQRCodeCameraSourceEnabledKey;

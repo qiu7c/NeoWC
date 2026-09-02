@@ -179,6 +179,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCRedEnvelopeDetailEnabledKey: @NO,
         NeoWCRedEnvelopeDetailCenterKey: @NO,
         NeoWCRedEnvelopeDetailFontSizeKey: @14.0,
+        NeoWCEntertainmentRedEnvelopeEnabledKey: @NO,
         NeoWCCallConfirmEnabledKey: @NO,
         NeoWCAutoSpeakerphoneEnabledKey: @NO,
         NeoWCQRCodeCameraSourceEnabledKey: @NO,
@@ -586,6 +587,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
     ], defaults, collapsed);
 
     NSMutableArray *local = [NSMutableArray array];
+    [local addObject:NeoWCItem(@"娱乐红包", @"群聊原生发红包入口中增加正常红包与娱乐红包选择", @"envelope.open", NeoWCSettingRowKindSwitch, NeoWCEntertainmentRedEnvelopeEnabledKey, nil, NeoWCSettingActionNone)];
     [local addObject:NeoWCItem(@"查找好友", @"输入微信号或初始账号打开指定账号资料", @"person.crop.circle.badge.magnifyingglass", NeoWCSettingRowKindDetail, nil, @"查找", NeoWCSettingActionFindFriend)];
     [local addObject:NeoWCItem(@"按 ID 打开聊天", @"原样输入单聊内部 ID 或群聊 ID，测试微信能否直接跳转", @"rectangle.and.pencil.and.ellipsis", NeoWCSettingRowKindDetail, nil, @"测试", NeoWCSettingActionOpenChatByID)];
     [local addObject:NeoWCItem(@"检测单删好友", @"通过微信支付前置接口串行检测，并区分疑似单删与网络异常", @"person.crop.circle.badge.questionmark", NeoWCSettingRowKindDetail, nil, @"检测", NeoWCSettingActionFriendRelationCheck)];
