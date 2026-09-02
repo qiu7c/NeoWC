@@ -147,6 +147,28 @@ FOUNDATION_EXPORT BOOL NeoWCPushPrivateChat(UIViewController * _Nullable source,
                                             NSString *userName,
                                             BOOL animated);
 
+/// Identifies a temporary contact created for NeoWC's clearly labelled entertainment-red-envelope flow.
+/// @param contact A WeChat contact-like object received by the `CBaseContact -isChatroom` hook.
+/// @return YES only when its stable username ends in the synthetic `@chatroom@` or `@@chatroom` marker.
+/// @discussion Thread-safe for an already-owned object. This function reads only the unified username
+/// adapter and never changes a saved contact. Unknown fields and ordinary `@chatroom` contacts return NO
+/// on every version so the hook can defer to WeChat's original implementation.
+FOUNDATION_EXPORT BOOL NeoWCPrivateIsEntertainmentRedEnvelopeContact(id _Nullable contact);
+
+/// Opens WeChat's native send-red-envelope page with an explicitly synthetic group contact.
+/// @param source Visible controller supplied as the native red-envelope logic source.
+/// @param groupUserName A real saved group username ending exactly in `@chatroom`.
+/// @return YES after a verified native start selector is invoked; NO before navigation on failure.
+/// @discussion Must be called on the main thread. A temporary `CContact` whose username appends one
+/// trailing `@` is created in memory and labelled as entertainment/simulation; no contact is persisted.
+/// The current object-return/five-argument `WCRedEnvelopesControlMgr` start ABI is tried first with
+/// a prepared `WCRedEnvelopesControlData`, followed by the older object-return/four-argument ABI.
+/// Services are obtained only
+/// through `NeoWCPrivateService`. Missing classes/selectors, ABI mismatches, exceptions, or unsupported
+/// versions return NO. This does not fabricate payment success, receipt, balance, or transaction data.
+FOUNDATION_EXPORT BOOL NeoWCPrivateStartEntertainmentRedEnvelope(UIViewController *source,
+                                                                 NSString *groupUserName);
+
 /// Extracts an official masked recipient name from a transfer-verification response.
 /// @param response A `WCPayBeforeTransferCgi` response or known nested response container.
 /// @return A trimmed masked value such as `**明`, or nil when no value containing `*`/`＊`

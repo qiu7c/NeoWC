@@ -481,6 +481,137 @@ BOOL NeoWCPushPrivateChat(UIViewController *source, NSString *userName, BOOL ani
         resolvedUserName, navigationController, animated);
 }
 
+#pragma mark - Entertainment Red Envelope
+
+static BOOL NeoWCPrivateSetObject(id receiver, NSString *selectorName, id value) {
+    SEL selector = NSSelectorFromString(selectorName);
+    NSMethodSignature *signature = NeoWCPrivateSignature(receiver, selector, 3);
+    if (!signature || !NeoWCPrivateTypeIsVoid(signature.methodReturnType) ||
+        !NeoWCPrivateObjectArguments(signature, NSMakeRange(2, 1))) return NO;
+    @try {
+        ((void (*)(id, SEL, id))objc_msgSend)(receiver, selector, value);
+        return YES;
+    } @catch (__unused NSException *exception) {
+        return NO;
+    }
+}
+
+static BOOL NeoWCPrivateSetInteger(id receiver, NSString *selectorName, NSInteger value) {
+    SEL selector = NSSelectorFromString(selectorName);
+    NSMethodSignature *signature = NeoWCPrivateSignature(receiver, selector, 3);
+    if (!signature || !NeoWCPrivateTypeIsVoid(signature.methodReturnType) ||
+        !NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:2])) return NO;
+    @try {
+        ((void (*)(id, SEL, NSInteger))objc_msgSend)(receiver, selector, value);
+        return YES;
+    } @catch (__unused NSException *exception) {
+        return NO;
+    }
+}
+
+BOOL NeoWCPrivateIsEntertainmentRedEnvelopeContact(id contact) {
+    NSString *userName = NeoWCPrivateContactUserName(contact);
+    return [userName hasSuffix:@"@chatroom@"] || [userName hasSuffix:@"@@chatroom"];
+}
+
+static id NeoWCPrivateEntertainmentRedEnvelopeContact(NSString *groupUserName,
+                                                       id savedGroupContact) {
+    Class contactClass = NSClassFromString(@"CContact");
+    id contact = contactClass ? [[contactClass alloc] init] : nil;
+    if (!contact) return nil;
+
+    NSString *syntheticUserName = [groupUserName stringByAppendingString:@"@"];
+    NSString *groupName = NeoWCPrivateContactDisplayName(savedGroupContact, groupUserName);
+    NSString *label = [NSString stringWithFormat:@"[娱乐模拟] %@", groupName ?: groupUserName];
+    if (!NeoWCPrivateSetObject(contact, @"setM_nsUsrName:", syntheticUserName)) {
+        @try { [contact setValue:syntheticUserName forKey:@"m_nsUsrName"]; }
+        @catch (__unused NSException *exception) { return nil; }
+    }
+    if (!NeoWCPrivateSetObject(contact, @"setM_nsAliasName:", groupUserName)) {
+        @try { [contact setValue:groupUserName forKey:@"m_nsAliasName"]; }
+        @catch (__unused NSException *exception) {}
+    }
+    if (!NeoWCPrivateSetObject(contact, @"setM_nsNickName:", label)) {
+        @try { [contact setValue:label forKey:@"m_nsNickName"]; }
+        @catch (__unused NSException *exception) {}
+    }
+    return contact;
+}
+
+static BOOL NeoWCPrivateStartRedEnvelopeCurrentABI(id manager,
+                                                    UIViewController *source,
+                                                    id data,
+                                                    id contact) {
+    NSString *selectorName =
+        @"startSendRedEnvelopesLogic:Data:WithSelectContact:Scene:RedEnvelopesType:";
+    SEL selector = NSSelectorFromString(selectorName);
+    NSMethodSignature *signature = NeoWCPrivateSignature(manager, selector, 7);
+    if (!signature || !NeoWCPrivateTypeIsObject(signature.methodReturnType) ||
+        !NeoWCPrivateObjectArguments(signature, NSMakeRange(2, 3)) ||
+        !NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:5]) ||
+        !NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:6])) return NO;
+    @try {
+        (void)((id (*)(id, SEL, id, id, id, NSInteger, NSInteger))objc_msgSend)(
+            manager, selector, source, data, contact, 2, 0);
+        return YES;
+    } @catch (NSException *exception) {
+        NeoWCLog(@"娱乐红包适配 %@ 调用失败：%@", selectorName,
+                 exception.reason ?: exception.name);
+        return NO;
+    }
+}
+
+static BOOL NeoWCPrivateStartRedEnvelopeLegacyABI(id manager,
+                                                   UIViewController *source,
+                                                   id contact) {
+    NSString *selectorName =
+        @"startSendRedEnvelopesLogic:WithSelectContact:Scene:RedEnvelopesType:";
+    SEL selector = NSSelectorFromString(selectorName);
+    NSMethodSignature *signature = NeoWCPrivateSignature(manager, selector, 6);
+    if (!signature || !NeoWCPrivateTypeIsObject(signature.methodReturnType) ||
+        !NeoWCPrivateObjectArguments(signature, NSMakeRange(2, 2)) ||
+        !NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:4]) ||
+        !NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:5])) return NO;
+    @try {
+        (void)((id (*)(id, SEL, id, id, NSInteger, NSInteger))objc_msgSend)(
+            manager, selector, source, contact, 2, 0);
+        return YES;
+    } @catch (NSException *exception) {
+        NeoWCLog(@"娱乐红包适配 %@ 调用失败：%@", selectorName,
+                 exception.reason ?: exception.name);
+        return NO;
+    }
+}
+
+BOOL NeoWCPrivateStartEntertainmentRedEnvelope(UIViewController *source,
+                                                NSString *groupUserName) {
+    NSCAssert(NSThread.isMainThread, @"Entertainment red-envelope navigation must run on the main thread");
+    if (!source || ![groupUserName hasSuffix:@"@chatroom"] ||
+        [groupUserName hasSuffix:@"@chatroom@"] || [groupUserName hasSuffix:@"@@chatroom"]) return NO;
+
+    id savedGroupContact = NeoWCPrivateContact(groupUserName);
+    id syntheticContact = savedGroupContact
+        ? NeoWCPrivateEntertainmentRedEnvelopeContact(groupUserName, savedGroupContact) : nil;
+    id manager = NeoWCPrivateService(@"WCRedEnvelopesControlMgr");
+    if (!syntheticContact || !manager) return NO;
+
+    Class dataClass = NSClassFromString(@"WCRedEnvelopesControlData");
+    id data = dataClass ? [[dataClass alloc] init] : nil;
+    if (data) {
+        (void)NeoWCPrivateSetObject(data, @"setM_oSelectContact:", syntheticContact);
+        // WCR/WCPulse use this field only for a real exclusive-recipient contact.
+        // Entertainment group routing deliberately leaves it empty.
+        (void)NeoWCPrivateSetObject(data, @"setSelectedMemberContact:", nil);
+        (void)NeoWCPrivateSetObject(data, @"setM_arrSelectedSendRedEnvelopesUserList:",
+                                    @[NeoWCPrivateContactUserName(syntheticContact) ?: @""]);
+        (void)NeoWCPrivateSetInteger(manager, @"refreshCurrentRedEnvLaunchMode:", 2);
+        if (NeoWCPrivateStartRedEnvelopeCurrentABI(manager, source, data, syntheticContact)) {
+            return YES;
+        }
+    }
+    return NeoWCPrivateStartRedEnvelopeLegacyABI(manager, source, syntheticContact);
+}
+
 #pragma mark - Transfer Verification
 
 static NSString *NeoWCPrivateTransferString(id value) {

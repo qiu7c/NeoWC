@@ -377,6 +377,7 @@ static id NeoWCPendingExclusiveRedEnvelopeContact;
 static NSString *NeoWCPendingExclusiveRedEnvelopeGroupID;
 static CFTimeInterval NeoWCPendingExclusiveRedEnvelopeDeadline;
 static NSUInteger NeoWCPendingExclusiveRedEnvelopeGeneration;
+static BOOL (*NeoWCOriginalEntertainmentContactIsChatroom)(id, SEL) = NULL;
 static char NeoWCReplyOriginalTransformKey;
 static char NeoWCReplyTransformSnapshotsKey;
 static char NeoWCReplyFeedbackGeneratorKey;
@@ -2773,6 +2774,32 @@ static void NeoWCOpenAvatarExclusiveRedEnvelope(id chatController,
     });
 }
 
+static void NeoWCOpenEntertainmentRedEnvelope(UIViewController *source,
+                                               NSString *groupUserName) {
+    if (!source || groupUserName.length == 0) return;
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:@"娱乐红包（模拟）"
+                         message:@"此入口仅打开娱乐模拟红包页面，不代表真实付款、到账或交易成功。请勿用于误导他人。"
+                  preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    __weak UIViewController *weakSource = source;
+    NSString *retainedGroupUserName = [groupUserName copy];
+    [alert addAction:[UIAlertAction actionWithTitle:@"继续"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction *action) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            UIViewController *strongSource = weakSource;
+            if (strongSource && NeoWCPrivateStartEntertainmentRedEnvelope(
+                    strongSource, retainedGroupUserName)) return;
+            NeoWCShowTransientMessage(@"当前微信版本不支持娱乐红包", NO);
+        });
+    }]];
+    [source presentViewController:alert animated:YES completion:nil];
+}
+
 static void NeoWCOpenAvatarTransfer(id chatController, NSString *targetUserName, id targetContact, NSString *chatUserName) {
     Class dataClass = NSClassFromString(@"WCPayControlData");
     Class managerClass = NSClassFromString(@"WCPayControlMgr");
@@ -2960,6 +2987,11 @@ static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
     if (group && !isSelf) {
         [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"专属红包" symbolName:@"envelope" handler:^{
             NeoWCOpenAvatarExclusiveRedEnvelope(weakController, retainedContact, retainedChat);
+        }]];
+    }
+    if (group) {
+        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"娱乐红包（模拟）" symbolName:@"envelope.open" handler:^{
+            NeoWCOpenEntertainmentRedEnvelope(weakController, retainedChat);
         }]];
     }
     if (!isSelf) {
@@ -13424,6 +13456,12 @@ static void NeoWCRedEnvelopeViewDidLoad(id self, SEL command) {
     (void)NeoWCSelectExclusiveRedEnvelopeMode(self, 0, YES);
 }
 
+static BOOL NeoWCEntertainmentContactIsChatroom(id self, SEL command) {
+    if (NeoWCPrivateIsEntertainmentRedEnvelopeContact(self)) return YES;
+    return NeoWCOriginalEntertainmentContactIsChatroom
+        ? NeoWCOriginalEntertainmentContactIsChatroom(self, command) : NO;
+}
+
 static const char *NeoWCUnqualifiedMethodType(const char *type) {
     if (!type) return "";
     while (*type && strchr("rnNoORV", *type)) type++;
@@ -13466,6 +13504,14 @@ static BOOL NeoWCMethodTypeIsInteger(const char *type) {
 static BOOL NeoWCMethodReturnsInteger(Method method) {
     char *type = method ? method_copyReturnType(method) : NULL;
     BOOL matches = NeoWCMethodTypeIsInteger(type);
+    if (type) free(type);
+    return matches;
+}
+
+static BOOL NeoWCMethodReturnsBoolean(Method method) {
+    char *type = method ? method_copyReturnType(method) : NULL;
+    const char value = NeoWCUnqualifiedMethodType(type)[0];
+    BOOL matches = value == @encode(BOOL)[0] || value == 'c' || value == 'B';
     if (type) free(type);
     return matches;
 }
@@ -13569,6 +13615,18 @@ static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
     }
 }
 
+static void NeoWCInstallEntertainmentRedEnvelopeContactHook(void) {
+    Class contactClass = NSClassFromString(@"CBaseContact");
+    SEL selector = NSSelectorFromString(@"isChatroom");
+    Method method = contactClass ? class_getInstanceMethod(contactClass, selector) : NULL;
+    if (!method || method_getNumberOfArguments(method) != 2 ||
+        !NeoWCMethodReturnsBoolean(method)) return;
+    IMP original = NULL;
+    MSHookMessageEx(contactClass, selector,
+                    (IMP)NeoWCEntertainmentContactIsChatroom, &original);
+    NeoWCOriginalEntertainmentContactIsChatroom = (BOOL (*)(id, SEL))original;
+}
+
 %hook MMAuthorizeUserInfoViewController
 
 - (void)viewDidLayoutSubviews {
@@ -13592,6 +13650,7 @@ static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
     NeoWCMomentsCommentAntiDeleteInstallHooks();
     NeoWCInstallAutoSpeakerphoneHook();
     NeoWCInstallExclusiveRedEnvelopeHooks();
+    NeoWCInstallEntertainmentRedEnvelopeContactHook();
     if ([CADisplayLink instancesRespondToSelector:@selector(setPreferredFrameRateRange:)]) {
         %init(NeoWCHighRefreshRateRange);
     }
