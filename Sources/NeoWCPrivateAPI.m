@@ -546,13 +546,44 @@ static BOOL NeoWCPrivateStartRedEnvelopeCurrentABI(id manager,
         @"startSendRedEnvelopesLogic:Data:WithSelectContact:Scene:RedEnvelopesType:";
     SEL selector = NSSelectorFromString(selectorName);
     NSMethodSignature *signature = NeoWCPrivateSignature(manager, selector, 7);
-    if (!signature || !NeoWCPrivateTypeIsObject(signature.methodReturnType) ||
-        !NeoWCPrivateObjectArguments(signature, NSMakeRange(2, 3)) ||
+    BOOL typeIsObject = signature &&
+        NeoWCPrivateTypeIsObject([signature getArgumentTypeAtIndex:6]);
+    BOOL typeIsInteger = signature &&
+        NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:6]);
+    const char *returnType = signature
+        ? NeoWCPrivateUnqualifiedType(signature.methodReturnType) : "";
+    BOOL returnIsObject = NeoWCPrivateTypeIsObject(returnType);
+    BOOL returnIsVoid = NeoWCPrivateTypeIsVoid(returnType);
+    BOOL returnIsInteger = NeoWCPrivateTypeIsInteger(returnType);
+    if (!signature || !NeoWCPrivateObjectArguments(signature, NSMakeRange(2, 3)) ||
         !NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:5]) ||
-        !NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:6])) return NO;
+        (!typeIsObject && !typeIsInteger) ||
+        (!returnIsObject && !returnIsVoid && !returnIsInteger)) {
+        NeoWCLog(@"娱乐红包适配 %@ ABI 不匹配", selectorName);
+        return NO;
+    }
     @try {
-        (void)((id (*)(id, SEL, id, id, id, NSInteger, NSInteger))objc_msgSend)(
-            manager, selector, source, data, contact, 2, 0);
+        if (typeIsObject) {
+            if (returnIsObject) {
+                (void)((id (*)(id, SEL, id, id, id, NSInteger, id))objc_msgSend)(
+                    manager, selector, source, data, contact, 2, nil);
+            } else if (returnIsVoid) {
+                ((void (*)(id, SEL, id, id, id, NSInteger, id))objc_msgSend)(
+                    manager, selector, source, data, contact, 2, nil);
+            } else {
+                (void)((NSInteger (*)(id, SEL, id, id, id, NSInteger, id))objc_msgSend)(
+                    manager, selector, source, data, contact, 2, nil);
+            }
+        } else if (returnIsObject) {
+            (void)((id (*)(id, SEL, id, id, id, NSInteger, NSInteger))objc_msgSend)(
+                manager, selector, source, data, contact, 2, 0);
+        } else if (returnIsVoid) {
+            ((void (*)(id, SEL, id, id, id, NSInteger, NSInteger))objc_msgSend)(
+                manager, selector, source, data, contact, 2, 0);
+        } else {
+            (void)((NSInteger (*)(id, SEL, id, id, id, NSInteger, NSInteger))objc_msgSend)(
+                manager, selector, source, data, contact, 2, 0);
+        }
         return YES;
     } @catch (NSException *exception) {
         NeoWCLog(@"娱乐红包适配 %@ 调用失败：%@", selectorName,
@@ -568,13 +599,44 @@ static BOOL NeoWCPrivateStartRedEnvelopeLegacyABI(id manager,
         @"startSendRedEnvelopesLogic:WithSelectContact:Scene:RedEnvelopesType:";
     SEL selector = NSSelectorFromString(selectorName);
     NSMethodSignature *signature = NeoWCPrivateSignature(manager, selector, 6);
-    if (!signature || !NeoWCPrivateTypeIsObject(signature.methodReturnType) ||
-        !NeoWCPrivateObjectArguments(signature, NSMakeRange(2, 2)) ||
+    BOOL typeIsObject = signature &&
+        NeoWCPrivateTypeIsObject([signature getArgumentTypeAtIndex:5]);
+    BOOL typeIsInteger = signature &&
+        NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:5]);
+    const char *returnType = signature
+        ? NeoWCPrivateUnqualifiedType(signature.methodReturnType) : "";
+    BOOL returnIsObject = NeoWCPrivateTypeIsObject(returnType);
+    BOOL returnIsVoid = NeoWCPrivateTypeIsVoid(returnType);
+    BOOL returnIsInteger = NeoWCPrivateTypeIsInteger(returnType);
+    if (!signature || !NeoWCPrivateObjectArguments(signature, NSMakeRange(2, 2)) ||
         !NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:4]) ||
-        !NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:5])) return NO;
+        (!typeIsObject && !typeIsInteger) ||
+        (!returnIsObject && !returnIsVoid && !returnIsInteger)) {
+        NeoWCLog(@"娱乐红包适配 %@ ABI 不匹配", selectorName);
+        return NO;
+    }
     @try {
-        (void)((id (*)(id, SEL, id, id, NSInteger, NSInteger))objc_msgSend)(
-            manager, selector, source, contact, 2, 0);
+        if (typeIsObject) {
+            if (returnIsObject) {
+                (void)((id (*)(id, SEL, id, id, NSInteger, id))objc_msgSend)(
+                    manager, selector, source, contact, 2, nil);
+            } else if (returnIsVoid) {
+                ((void (*)(id, SEL, id, id, NSInteger, id))objc_msgSend)(
+                    manager, selector, source, contact, 2, nil);
+            } else {
+                (void)((NSInteger (*)(id, SEL, id, id, NSInteger, id))objc_msgSend)(
+                    manager, selector, source, contact, 2, nil);
+            }
+        } else if (returnIsObject) {
+            (void)((id (*)(id, SEL, id, id, NSInteger, NSInteger))objc_msgSend)(
+                manager, selector, source, contact, 2, 0);
+        } else if (returnIsVoid) {
+            ((void (*)(id, SEL, id, id, NSInteger, NSInteger))objc_msgSend)(
+                manager, selector, source, contact, 2, 0);
+        } else {
+            (void)((NSInteger (*)(id, SEL, id, id, NSInteger, NSInteger))objc_msgSend)(
+                manager, selector, source, contact, 2, 0);
+        }
         return YES;
     } @catch (NSException *exception) {
         NeoWCLog(@"娱乐红包适配 %@ 调用失败：%@", selectorName,
@@ -590,10 +652,28 @@ BOOL NeoWCPrivateStartEntertainmentRedEnvelope(UIViewController *source,
         [groupUserName hasSuffix:@"@chatroom@"] || [groupUserName hasSuffix:@"@@chatroom"]) return NO;
 
     id savedGroupContact = NeoWCPrivateContact(groupUserName);
+    if (!savedGroupContact) {
+        id currentContact = NeoWCPrivateChatContact(source);
+        NSString *currentUserName = NeoWCPrivateContactUserName(currentContact);
+        if ([currentUserName isEqualToString:groupUserName]) {
+            savedGroupContact = currentContact;
+        }
+    }
     id syntheticContact = savedGroupContact
         ? NeoWCPrivateEntertainmentRedEnvelopeContact(groupUserName, savedGroupContact) : nil;
     id manager = NeoWCPrivateService(@"WCRedEnvelopesControlMgr");
-    if (!syntheticContact || !manager) return NO;
+    if (!savedGroupContact) {
+        NeoWCLog(@"娱乐红包适配未找到群联系人：%@", groupUserName);
+        return NO;
+    }
+    if (!syntheticContact) {
+        NeoWCLog(@"娱乐红包适配无法构造临时联系人：%@", groupUserName);
+        return NO;
+    }
+    if (!manager) {
+        NeoWCLog(@"娱乐红包适配未找到 WCRedEnvelopesControlMgr");
+        return NO;
+    }
 
     Class dataClass = NSClassFromString(@"WCRedEnvelopesControlData");
     id data = dataClass ? [[dataClass alloc] init] : nil;

@@ -161,10 +161,11 @@ FOUNDATION_EXPORT BOOL NeoWCPrivateIsEntertainmentRedEnvelopeContact(id _Nullabl
 /// @return YES after a verified native start selector is invoked; NO before navigation on failure.
 /// @discussion Must be called on the main thread. A temporary `CContact` whose username appends one
 /// trailing `@` is created in memory and labelled as entertainment/simulation; no contact is persisted.
-/// The current object-return/five-argument `WCRedEnvelopesControlMgr` start ABI is tried first with
-/// a prepared `WCRedEnvelopesControlData`, followed by the older object-return/four-argument ABI.
-/// Services are obtained only
-/// through `NeoWCPrivateService`. Missing classes/selectors, ABI mismatches, exceptions, or unsupported
+/// The current five-argument `WCRedEnvelopesControlMgr` start ABI is tried first with a prepared
+/// `WCRedEnvelopesControlData`, followed by the older four-argument ABI. Object, void, and integer
+/// return encodings plus integer/object `RedEnvelopesType` variants are dispatched with matching
+/// function signatures. Services are obtained only through `NeoWCPrivateService`. Missing
+/// classes/selectors, ABI mismatches, exceptions, or unsupported
 /// versions return NO. This does not fabricate payment success, receipt, balance, or transaction data.
 FOUNDATION_EXPORT BOOL NeoWCPrivateStartEntertainmentRedEnvelope(UIViewController *source,
                                                                  NSString *groupUserName);
