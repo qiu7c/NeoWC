@@ -587,6 +587,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
 
     NSMutableArray *local = [NSMutableArray array];
     [local addObject:NeoWCItem(@"查找好友", @"输入微信号或初始账号打开指定账号资料", @"person.crop.circle.badge.magnifyingglass", NeoWCSettingRowKindDetail, nil, @"查找", NeoWCSettingActionFindFriend)];
+    [local addObject:NeoWCItem(@"按 ID 打开聊天", @"原样输入单聊内部 ID 或群聊 ID，测试微信能否直接跳转", @"rectangle.and.pencil.and.ellipsis", NeoWCSettingRowKindDetail, nil, @"测试", NeoWCSettingActionOpenChatByID)];
     [local addObject:NeoWCItem(@"检测单删好友", @"通过微信支付前置接口串行检测，并区分疑似单删与网络异常", @"person.crop.circle.badge.questionmark", NeoWCSettingRowKindDetail, nil, @"检测", NeoWCSettingActionFriendRelationCheck)];
     [local addObject:NeoWCItem(@"显示信息卡片", @"在好友、群聊和群成员资料中集中显示账号信息", @"person.text.rectangle", NeoWCSettingRowKindSwitch, NeoWCShowRawContactIDEnabledKey, nil, NeoWCSettingActionNone)];
     NeoWCStepMode stepMode = [defaults integerForKey:NeoWCStepModeKey] == NeoWCStepModeDailyRandom ? NeoWCStepModeDailyRandom : NeoWCStepModeDailyFixed;

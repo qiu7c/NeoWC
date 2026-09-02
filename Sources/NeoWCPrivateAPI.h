@@ -134,13 +134,15 @@ FOUNDATION_EXPORT BOOL NeoWCPushPrivateGroupProfile(UIViewController *source,
 /// Opens WeChat's native chat page through its message-logic service.
 /// @param source Optional source used to locate a navigation controller; nil uses WeChat's
 /// current navigation-controller class method.
-/// @param userName Stable contact or `@chatroom` username, never a display name.
+/// @param userName Contact or `@chatroom` username passed to WeChat without rewriting,
+/// trimming, suffix checks, or display-name inference.
 /// @param animated Whether WeChat should animate the native transition.
 /// @return YES when already in the target chat or after the native push selector is invoked.
 /// @discussion Must be called on the main thread. Resolves the contact before calling the
 /// object/object/BOOL `PushOtherBaseMsgControllerByContact:navigationController:animated:` ABI;
 /// an older username variant is the only fallback. Missing/mismatched selectors, services,
-/// contacts, navigation, exceptions, and empty usernames return NO.
+/// contacts, navigation, exceptions, and empty usernames return NO. Nonempty content is not
+/// format-validated so diagnostic callers can test WeChat's own acceptance behavior.
 FOUNDATION_EXPORT BOOL NeoWCPushPrivateChat(UIViewController * _Nullable source,
                                             NSString *userName,
                                             BOOL animated);

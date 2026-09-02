@@ -124,6 +124,40 @@ static NSString *const NeoWCAuthorUserName = @"ic7ouo";
     [self.viewController presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)presentOpenChatByID {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"按 ID 打开聊天"
+                                                                   message:@"输入内容将原样交给微信聊天跳转接口，不校验账号或群聊格式。"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"wxid_… 或 50631397390@chatroom";
+        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        field.autocorrectionType = UITextAutocorrectionTypeNo;
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"跳转"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction *action) {
+        NSString *input = alert.textFields.firstObject.text;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            typeof(self) strongSelf = weakSelf;
+            if (!strongSelf || NeoWCPushPrivateChat(strongSelf.viewController, input, YES)) return;
+            UIAlertController *failure = [UIAlertController alertControllerWithTitle:@"跳转失败"
+                                                                              message:@"微信未能使用该输入打开聊天。"
+                                                                       preferredStyle:UIAlertControllerStyleAlert];
+            [failure addAction:[UIAlertAction actionWithTitle:@"确定"
+                                                        style:UIAlertActionStyleDefault
+                                                      handler:nil]];
+            [strongSelf.viewController presentViewController:failure animated:YES completion:nil];
+        });
+    }]];
+    [self.viewController presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)presentRevokeFilterPicker {
     NSTimeInterval current = [NSUserDefaults.standardUserDefaults doubleForKey:NeoWCAntiRevokeTimeFilterKey];
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"回复时间限制" message:@"仅影响“回复撤回者”，不会影响本地防撤回" preferredStyle:UIAlertControllerStyleActionSheet];
@@ -616,6 +650,7 @@ static NSString *const NeoWCAuthorUserName = @"ic7ouo";
         case NeoWCSettingActionConfigManager: [self push:[NeoWCConfigManagerViewController new]]; break;
         case NeoWCSettingActionAuthorProfile: [self openAuthorProfile]; break;
         case NeoWCSettingActionFindFriend: [self presentFindFriend]; break;
+        case NeoWCSettingActionOpenChatByID: [self presentOpenChatByID]; break;
         case NeoWCSettingActionFriendRelationCheck: [self push:[NeoWCFriendRelationCheckViewController new]]; break;
         case NeoWCSettingActionReleaseNotes: [self push:[NeoWCReleaseNotesHistoryViewController new]]; break;
         case NeoWCSettingActionLogRecords: [self push:[NeoWCLogViewController new]]; break;

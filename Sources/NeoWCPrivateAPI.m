@@ -460,7 +460,8 @@ static BOOL NeoWCPrivatePushChatSelector(id messageLogic,
 
 BOOL NeoWCPushPrivateChat(UIViewController *source, NSString *userName, BOOL animated) {
     NSCAssert(NSThread.isMainThread, @"Native chat navigation must run on the main thread");
-    NSString *resolvedUserName = NeoWCPrivateNonemptyString(userName);
+    NSString *resolvedUserName = [userName isKindOfClass:NSString.class] && userName.length > 0
+        ? userName : nil;
     if (resolvedUserName.length == 0) return NO;
     UINavigationController *navigationController = NeoWCPrivateNavigationController(source);
     if (!navigationController) return NO;
