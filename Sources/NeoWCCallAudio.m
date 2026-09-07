@@ -371,13 +371,8 @@ static OSStatus NeoWCAudioComponentInstanceDispose(AudioComponentInstance instan
 
 - (void)pickVoice {
     if (!NeoWCEnhancementEnabled(NeoWCCallVoiceDisguiseEnabledKey)) return;
-    UIDocumentPickerViewController *picker;
-    if (@available(iOS 14.0, *)) {
-        picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeAudio] asCopy:YES];
-    } else {
-        picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.audio"]
-                                                                       inMode:UIDocumentPickerModeImport];
-    }
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
+        initForOpeningContentTypes:@[UTTypeAudio] asCopy:YES];
     picker.delegate = self;
     [self.window.rootViewController presentViewController:picker animated:YES completion:nil];
 }
