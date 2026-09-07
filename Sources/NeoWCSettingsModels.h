@@ -81,6 +81,7 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionMomentsCommentAntiDeleteText,
     NeoWCSettingActionMomentsCommentAntiDeleteFontSize,
     NeoWCSettingActionInAppNotificationAppearance,
+    NeoWCSettingActionCallRecordings,
 };
 
 @interface NeoWCSettingItem : NSObject

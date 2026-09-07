@@ -13593,6 +13593,7 @@ static void NeoWCAudioDeviceStartedSuccess(id self, SEL selector, uintptr_t valu
     if (NeoWCOriginalAudioDeviceStartedSuccess) {
         NeoWCOriginalAudioDeviceStartedSuccess(self, selector, value);
     }
+    NeoWCCallAudioNotifyAudioDeviceStarted();
     if (!NeoWCEnhancementEnabled(NeoWCAutoSpeakerphoneEnabledKey)) return;
     SEL audioModeSelector = NSSelectorFromString(@"isAudioMode");
     if (![self respondsToSelector:audioModeSelector] ||
@@ -13608,7 +13609,7 @@ static void NeoWCInstallAutoSpeakerphoneHook(void) {
     SEL selector = NSSelectorFromString(@"audioDeviceStartedSuccess:");
     Method method = managerClass ? class_getInstanceMethod(managerClass, selector) : NULL;
     if (!method || method_getNumberOfArguments(method) != 3 || !NeoWCMethodReturnsVoid(method) ||
-        !NeoWCMethodArgumentIsObject(method, 2)) return;
+        (!NeoWCMethodArgumentIsObject(method, 2) && !NeoWCMethodArgumentIsInteger(method, 2))) return;
     IMP original = NULL;
     MSHookMessageEx(managerClass, selector, (IMP)NeoWCAudioDeviceStartedSuccess, &original);
     NeoWCOriginalAudioDeviceStartedSuccess = (NeoWCAudioDeviceStartedSuccessIMP)original;

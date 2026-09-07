@@ -287,6 +287,18 @@ static OSStatus NeoWCAudioComponentInstanceDispose(AudioComponentInstance instan
     return status;
 }
 
+@interface NeoWCCallPassthroughWindow : UIWindow
+@end
+
+@implementation NeoWCCallPassthroughWindow
+
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *hit = [super hitTest:point withEvent:event];
+    return hit == self.rootViewController.view ? nil : hit;
+}
+
+@end
+
 @interface NeoWCCallAudioPanel : NSObject <UIDocumentPickerDelegate>
 @property (nonatomic, strong) UIWindow *window;
 @property (nonatomic, strong) UILabel *statusLabel;
@@ -318,12 +330,18 @@ static OSStatus NeoWCAudioComponentInstanceDispose(AudioComponentInstance instan
             [candidate isKindOfClass:UIWindowScene.class]) { scene = (UIWindowScene *)candidate; break; }
     }
     if (!scene) return;
-    UIWindow *window = [[UIWindow alloc] initWithWindowScene:scene];
+    UIWindow *window = [[NeoWCCallPassthroughWindow alloc] initWithWindowScene:scene];
     window.windowLevel = UIWindowLevelAlert + 2;
-    window.frame = CGRectMake(12, 110, 186, 104);
+    window.frame = scene.coordinateSpace.bounds;
+    window.backgroundColor = UIColor.clearColor;
     UIViewController *controller = [[UIViewController alloc] init];
-    controller.view.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.88];
-    controller.view.layer.cornerRadius = 16;
+    controller.view.backgroundColor = UIColor.clearColor;
+    UIView *panel = [[UIView alloc] init];
+    panel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.9];
+    panel.layer.cornerRadius = 16;
+    panel.layer.cornerCurve = kCACornerCurveContinuous;
+    panel.translatesAutoresizingMaskIntoConstraints = NO;
+    [controller.view addSubview:panel];
     UILabel *label = [[UILabel alloc] init];
     label.text = atomic_load(&NeoWCCallRecording) ? @"● 正在录音" : @"通话音频";
     label.textColor = UIColor.whiteColor;
@@ -340,12 +358,16 @@ static OSStatus NeoWCAudioComponentInstanceDispose(AudioComponentInstance instan
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 8;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
-    [controller.view addSubview:stack];
+    [panel addSubview:stack];
     [NSLayoutConstraint activateConstraints:@[
-        [stack.leadingAnchor constraintEqualToAnchor:controller.view.leadingAnchor constant:8],
-        [stack.trailingAnchor constraintEqualToAnchor:controller.view.trailingAnchor constant:-8],
-        [stack.topAnchor constraintEqualToAnchor:controller.view.topAnchor constant:12],
-        [stack.bottomAnchor constraintEqualToAnchor:controller.view.bottomAnchor constant:-12],
+        [panel.leadingAnchor constraintEqualToAnchor:controller.view.safeAreaLayoutGuide.leadingAnchor constant:12],
+        [panel.topAnchor constraintEqualToAnchor:controller.view.safeAreaLayoutGuide.topAnchor constant:12],
+        [panel.widthAnchor constraintEqualToConstant:186],
+        [panel.heightAnchor constraintEqualToConstant:104],
+        [stack.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:8],
+        [stack.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor constant:-8],
+        [stack.topAnchor constraintEqualToAnchor:panel.topAnchor constant:12],
+        [stack.bottomAnchor constraintEqualToAnchor:panel.bottomAnchor constant:-12],
     ]];
     window.rootViewController = controller;
     window.hidden = NO;
@@ -452,6 +474,14 @@ static void NeoWCCallDidStart(void) {
     atomic_store(&NeoWCCallRecording, NeoWCEnhancementEnabled(NeoWCCallRecordingEnabledKey));
     dispatch_async(dispatch_get_main_queue(), ^{ [[NeoWCCallAudioPanel sharedPanel] show]; });
     NeoWCLog(@"通话音频会话开始");
+}
+
+void NeoWCCallAudioNotifyAudioDeviceStarted(void) {
+    if (NSThread.isMainThread) {
+        NeoWCCallDidStart();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), ^{ NeoWCCallDidStart(); });
+    }
 }
 
 static void NeoWCCallDidStop(void) {
