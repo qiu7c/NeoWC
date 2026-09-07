@@ -170,9 +170,11 @@ NeoWCPrivateEntertainmentRedEnvelopeUserName(NSString * _Nullable groupUserName)
 /// @return YES after a verified `WCUIActionSheet` is populated and shown; otherwise NO.
 /// @discussion Must be called on the main thread. The adapter resolves `getViewController` with a
 /// no-argument object ABI and falls back to the visible chat controller. It requires the evidenced
-/// `initWithTitle:`, `addBtnTitle:handler:`, `addCancelBtnTitle:handler:`, and `showInView:` ABIs.
-/// Missing classes/selectors, ABI mismatches, exceptions, or a detached view return NO so the caller
-/// can invoke WeChat's original action instead.
+/// `initWithTitle:`, `addBtnTitle:handler:`, `addCancelBtnTitle:handler:`, and `showInView:` argument
+/// ABIs. Object, void, and integer returns used by known header generations are dispatched with
+/// matching function signatures. A detached owner falls back to the visible chat controller.
+/// Missing classes/selectors, ABI mismatches, exceptions, or no attached view return NO so the
+/// caller can invoke WeChat's original action instead.
 FOUNDATION_EXPORT BOOL
 NeoWCPrivatePresentEntertainmentRedEnvelopeMenu(id logicController,
                                                  dispatch_block_t normalHandler,

@@ -182,6 +182,9 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCEntertainmentRedEnvelopeEnabledKey: @NO,
         NeoWCCallConfirmEnabledKey: @NO,
         NeoWCAutoSpeakerphoneEnabledKey: @NO,
+        NeoWCCallRecordingEnabledKey: @NO,
+        NeoWCCallVoiceDisguiseEnabledKey: @NO,
+        NeoWCCallVoiceModeKey: @0,
         NeoWCQRCodeCameraSourceEnabledKey: @NO,
         NeoWCAutoOriginalImageEnabledKey: @NO,
         NeoWCAutoCombineSendEnabledKey: @NO,
@@ -466,6 +469,9 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
     [reminders addObjectsFromArray:@[
         NeoWCItem(@"通话二次确认", @"发起语音或视频通话前确认", @"phone.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCCallConfirmEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"通话自动免提", @"通话音频设备启动成功后自动切换扬声器", @"speaker.wave.2", NeoWCSettingRowKindSwitch, NeoWCAutoSpeakerphoneEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"通话录音", @"通话时显示控制条，并将本地与对端音轨保存到微信 Documents/NeoWC/CallRecordings", @"record.circle", NeoWCSettingRowKindSwitch, NeoWCCallRecordingEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"通话语音伪装", @"通话中选择音频文件，替换上行麦克风输入", @"waveform.badge.mic", NeoWCSettingRowKindSwitch, NeoWCCallVoiceDisguiseEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"语音包混合麦克风", @"开启后保留部分现场麦克风声音；关闭时完全替换", @"slider.horizontal.3", NeoWCSettingRowKindSwitch, NeoWCCallVoiceModeKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"通知直达聊天", @"点击通知后进入对应会话", @"bubble.left.and.arrow.forward", NeoWCSettingRowKindSwitch, NeoWCNotificationDirectChatEnabledKey, nil, NeoWCSettingActionNone),
     ]];
 

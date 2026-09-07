@@ -28,6 +28,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCEnhancements.h"
 #import "Sources/NeoWCPluginManager.h"
 #import "Sources/NeoWCPrivateAPI.h"
+#import "Sources/NeoWCCallAudio.h"
 #import "Sources/NeoWCRuntimeFeatures.h"
 #import "Sources/NeoWCInterfaceTweaks.h"
 #import "Sources/NeoWCMessageTime.h"
@@ -13470,6 +13471,9 @@ static void NeoWCStartEntertainmentRedEnvelopeFlow(id logicController,
 
 static void NeoWCOnRedEnvelopesControlLogic(id self, SEL command) {
     NSString *chatUserName = NeoWCPrivateChatUserName(self);
+    if (chatUserName.length == 0) {
+        chatUserName = NeoWCPrivateChatUserName(NeoWCPrivateCurrentChatController());
+    }
     BOOL group = NeoWCEntertainmentRedEnvelopeGroupUserName(chatUserName);
     BOOL fakeGroup = [chatUserName hasSuffix:@"@chatroom@"] ||
         [chatUserName hasSuffix:@"@@chatroom"];
@@ -13489,6 +13493,9 @@ static void NeoWCOnRedEnvelopesControlLogic(id self, SEL command) {
         }
     }
     if (!NeoWCEnhancementEnabled(NeoWCEntertainmentRedEnvelopeEnabledKey) || !group) {
+        NeoWCLog(@"娱乐红包入口回落原逻辑：enabled=%d userName=%@ group=%d",
+                 NeoWCEnhancementEnabled(NeoWCEntertainmentRedEnvelopeEnabledKey),
+                 chatUserName ?: @"<nil>", group);
         if (NeoWCOriginalOnRedEnvelopesControlLogic) {
             NeoWCOriginalOnRedEnvelopesControlLogic(self, command);
         }
@@ -13512,6 +13519,7 @@ static void NeoWCOnRedEnvelopesControlLogic(id self, SEL command) {
             }
         });
     });
+    NeoWCLog(@"娱乐红包选择菜单结果：presented=%d userName=%@", presented, chatUserName);
     if (!presented && NeoWCOriginalOnRedEnvelopesControlLogic) {
         NeoWCOriginalOnRedEnvelopesControlLogic(self, command);
     }
@@ -13687,10 +13695,15 @@ static void NeoWCInstallEntertainmentRedEnvelopeActionHook(void) {
     SEL selector = NSSelectorFromString(@"onRedEnvelopesControlLogic");
     Method method = logicClass ? class_getInstanceMethod(logicClass, selector) : NULL;
     if (!method || method_getNumberOfArguments(method) != 2 ||
-        !NeoWCMethodReturnsVoid(method)) return;
+        !NeoWCMethodReturnsVoid(method)) {
+        NeoWCLog(@"娱乐红包 Hook 安装失败：class=%@ method=%p args=%u",
+                 logicClass, method, method ? method_getNumberOfArguments(method) : 0);
+        return;
+    }
     IMP original = NULL;
     MSHookMessageEx(logicClass, selector, (IMP)NeoWCOnRedEnvelopesControlLogic, &original);
     NeoWCOriginalOnRedEnvelopesControlLogic = (void (*)(id, SEL))original;
+    NeoWCLog(@"娱乐红包 Hook 已安装：original=%p", original);
 }
 
 %hook MMAuthorizeUserInfoViewController
@@ -13714,6 +13727,7 @@ static void NeoWCInstallEntertainmentRedEnvelopeActionHook(void) {
 %ctor {
     %init;
     NeoWCMomentsCommentAntiDeleteInstallHooks();
+    NeoWCCallAudioInstallHooks();
     NeoWCInstallAutoSpeakerphoneHook();
     NeoWCInstallExclusiveRedEnvelopeHooks();
     NeoWCInstallEntertainmentRedEnvelopeContactHook();

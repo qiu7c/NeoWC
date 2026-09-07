@@ -525,8 +525,18 @@ NSString *NeoWCPrivateEntertainmentRedEnvelopeUserName(NSString *groupUserName) 
 
 static UIViewController *NeoWCPrivateOwningChatController(id logicController) {
     id controller = NeoWCPrivateNoArgumentObject(logicController, @"getViewController");
-    if ([controller isKindOfClass:UIViewController.class]) return controller;
+    if ([controller isKindOfClass:UIViewController.class]) {
+        UIViewController *viewController = controller;
+        if (viewController.isViewLoaded && viewController.view.window) return viewController;
+    }
     return NeoWCPrivateCurrentChatController();
+}
+
+static BOOL NeoWCPrivateSupportedScalarOrObjectReturn(NSMethodSignature *signature) {
+    if (!signature) return NO;
+    return NeoWCPrivateTypeIsObject(signature.methodReturnType) ||
+        NeoWCPrivateTypeIsVoid(signature.methodReturnType) ||
+        NeoWCPrivateTypeIsInteger(signature.methodReturnType);
 }
 
 static BOOL NeoWCPrivateActionSheetAdd(id sheet,
@@ -535,10 +545,17 @@ static BOOL NeoWCPrivateActionSheetAdd(id sheet,
                                        dispatch_block_t handler) {
     SEL selector = NSSelectorFromString(selectorName);
     NSMethodSignature *signature = NeoWCPrivateSignature(sheet, selector, 4);
-    if (!signature || !NeoWCPrivateTypeIsObject(signature.methodReturnType) ||
+    if (!NeoWCPrivateSupportedScalarOrObjectReturn(signature) ||
         !NeoWCPrivateObjectArguments(signature, NSMakeRange(2, 2))) return NO;
     @try {
-        (void)((id (*)(id, SEL, id, id))objc_msgSend)(sheet, selector, title, [handler copy]);
+        if (NeoWCPrivateTypeIsObject(signature.methodReturnType)) {
+            (void)((id (*)(id, SEL, id, id))objc_msgSend)(sheet, selector, title, [handler copy]);
+        } else if (NeoWCPrivateTypeIsVoid(signature.methodReturnType)) {
+            ((void (*)(id, SEL, id, id))objc_msgSend)(sheet, selector, title, [handler copy]);
+        } else {
+            (void)((NSInteger (*)(id, SEL, id, id))objc_msgSend)(
+                sheet, selector, title, [handler copy]);
+        }
         return YES;
     } @catch (NSException *exception) {
         NeoWCLog(@"娱乐红包菜单 %@ 调用失败：%@", selectorName,
@@ -551,14 +568,20 @@ BOOL NeoWCPrivatePresentEntertainmentRedEnvelopeMenu(id logicController,
                                                       dispatch_block_t normalHandler,
                                                       dispatch_block_t entertainmentHandler) {
     NSCAssert(NSThread.isMainThread, @"Entertainment red-envelope menu must run on the main thread");
-    if (!logicController || !normalHandler || !entertainmentHandler) return NO;
+    if (!logicController || !normalHandler || !entertainmentHandler) {
+        NeoWCLog(@"娱乐红包菜单参数无效");
+        return NO;
+    }
     Class sheetClass = NSClassFromString(@"WCUIActionSheet");
     SEL initializer = NSSelectorFromString(@"initWithTitle:");
     NSMethodSignature *initSignature = sheetClass
         ? [sheetClass instanceMethodSignatureForSelector:initializer] : nil;
     if (!initSignature || initSignature.numberOfArguments != 3 ||
         !NeoWCPrivateTypeIsObject(initSignature.methodReturnType) ||
-        !NeoWCPrivateTypeIsObject([initSignature getArgumentTypeAtIndex:2])) return NO;
+        !NeoWCPrivateTypeIsObject([initSignature getArgumentTypeAtIndex:2])) {
+        NeoWCLog(@"娱乐红包菜单 initWithTitle: ABI 不匹配或类不存在");
+        return NO;
+    }
 
     id sheet = nil;
     @try {
@@ -580,10 +603,20 @@ BOOL NeoWCPrivatePresentEntertainmentRedEnvelopeMenu(id logicController,
     UIView *view = controller.isViewLoaded ? controller.view : nil;
     SEL showSelector = NSSelectorFromString(@"showInView:");
     NSMethodSignature *showSignature = NeoWCPrivateSignature(sheet, showSelector, 3);
-    if (!view.window || !showSignature || !NeoWCPrivateTypeIsObject(showSignature.methodReturnType) ||
-        !NeoWCPrivateObjectArguments(showSignature, NSMakeRange(2, 1))) return NO;
+    if (!view.window || !NeoWCPrivateSupportedScalarOrObjectReturn(showSignature) ||
+        !NeoWCPrivateObjectArguments(showSignature, NSMakeRange(2, 1))) {
+        NeoWCLog(@"娱乐红包菜单 showInView: 不可用，controller=%@ window=%@",
+                 controller, view.window);
+        return NO;
+    }
     @try {
-        (void)((id (*)(id, SEL, id))objc_msgSend)(sheet, showSelector, view);
+        if (NeoWCPrivateTypeIsObject(showSignature.methodReturnType)) {
+            (void)((id (*)(id, SEL, id))objc_msgSend)(sheet, showSelector, view);
+        } else if (NeoWCPrivateTypeIsVoid(showSignature.methodReturnType)) {
+            ((void (*)(id, SEL, id))objc_msgSend)(sheet, showSelector, view);
+        } else {
+            (void)((NSInteger (*)(id, SEL, id))objc_msgSend)(sheet, showSelector, view);
+        }
         return YES;
     } @catch (NSException *exception) {
         NeoWCLog(@"娱乐红包菜单显示失败：%@", exception.reason ?: exception.name);
