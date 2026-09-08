@@ -4,6 +4,8 @@
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
 
+static BOOL NeoWCBackgroundAutomationRequired = NO;
+
 @interface NeoWCBackgroundKeeper : NSObject
 @property (nonatomic, assign) UIBackgroundTaskIdentifier taskIdentifier;
 @property (nonatomic, strong, nullable) NSTimer *renewalTimer;
@@ -27,7 +29,8 @@
 }
 
 - (BOOL)enabled {
-    return NeoWCEnhancementEnabled(NeoWCBackgroundKeepAliveEnabledKey);
+    return NeoWCEnhancementEnabled(NeoWCBackgroundKeepAliveEnabledKey) ||
+        NeoWCBackgroundAutomationRequired;
 }
 
 - (void)endCurrentTask {
@@ -193,9 +196,21 @@ void NeoWCBackgroundKeeperWillEnterForeground(void) {
 
 void NeoWCBackgroundKeeperSettingsDidChange(void) {
     NeoWCBackgroundKeeper *keeper = [NeoWCBackgroundKeeper sharedKeeper];
-    if (!NeoWCEnhancementEnabled(NeoWCBackgroundKeepAliveEnabledKey)) {
+    if (![keeper enabled]) {
         [keeper leaveBackground];
     } else if (UIApplication.sharedApplication.applicationState == UIApplicationStateBackground) {
         [keeper enterBackground];
     }
+}
+
+void NeoWCBackgroundKeeperSetAutomationRequired(BOOL required) {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NeoWCBackgroundKeeperSetAutomationRequired(required);
+        });
+        return;
+    }
+    if (NeoWCBackgroundAutomationRequired == required) return;
+    NeoWCBackgroundAutomationRequired = required;
+    NeoWCBackgroundKeeperSettingsDidChange();
 }

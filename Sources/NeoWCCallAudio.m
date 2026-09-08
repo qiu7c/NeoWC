@@ -327,7 +327,7 @@ static UIViewController *NeoWCCallTopViewController(UIViewController *controller
     if ([controller isKindOfClass:UITabBarController.class]) {
         return NeoWCCallTopViewController(((UITabBarController *)controller).selectedViewController);
     }
-    for (UIViewController *child in controller.children.reverseObjectEnumerator) {
+    for (UIViewController *child in controller.childViewControllers.reverseObjectEnumerator) {
         if (child.viewIfLoaded.window) return NeoWCCallTopViewController(child);
     }
     return controller;

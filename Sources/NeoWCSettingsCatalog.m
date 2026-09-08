@@ -499,6 +499,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
                                                                  NSSet<NSString *> *collapsed,
                                                                  BOOL momentsOnly) {
     NSMutableArray *automation = [NSMutableArray arrayWithArray:@[
+        NeoWCItem(@"定时消息与脚本", @"发送固定文字、消息库文字或 HTTP/JS 处理结果", @"clock.badge.checkmark", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionAutomations),
         NeoWCItem(@"保持后台运行", @"尽量维持微信后台活跃，供朋友圈提醒等周期功能使用", @"moon.zzz", NeoWCSettingRowKindSwitch, NeoWCBackgroundKeepAliveEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"设备扫码自动登录", @"自动确认电脑、平板等设备登录", @"desktopcomputer", NeoWCSettingRowKindSwitch, NeoWCAutoDeviceLoginKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"游戏授权自动允许", @"自动确认游戏扫码授权", @"gamecontroller", NeoWCSettingRowKindSwitch, NeoWCAutoGameAuthorizeKey, nil, NeoWCSettingActionNone),

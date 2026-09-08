@@ -19,6 +19,7 @@
 #import "NeoWCSendConfirmationViewController.h"
 #import "NeoWCMomentsReminder.h"
 #import "NeoWCCallRecordingsViewController.h"
+#import "NeoWCAutomationViewController.h"
 #import <math.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -679,6 +680,7 @@ static NSString *const NeoWCAuthorUserName = @"ic7ouo";
         case NeoWCSettingActionPluginManager: [self push:[WCPluginsViewController new]]; break;
         case NeoWCSettingActionInAppNotificationAppearance: [self push:[NeoWCInAppNotificationSettingsViewController new]]; break;
         case NeoWCSettingActionCallRecordings: [self push:[NeoWCCallRecordingsViewController new]]; break;
+        case NeoWCSettingActionAutomations: [self push:[NeoWCAutomationViewController new]]; break;
         case NeoWCSettingActionHapticIntensity: [self presentHapticIntensityPicker]; break;
         case NeoWCSettingActionStepMode: [self presentStepModePicker]; break;
         case NeoWCSettingActionFixedSteps: [self presentFixedStepsEditor]; break;

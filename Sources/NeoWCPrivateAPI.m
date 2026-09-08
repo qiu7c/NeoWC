@@ -517,6 +517,125 @@ BOOL NeoWCPushPrivateChat(UIViewController *source, NSString *userName, BOOL ani
         resolvedUserName, navigationController, animated);
 }
 
+#pragma mark - Message Submission
+
+static BOOL NeoWCPrivateSetValue(id object, NSString *key, id value) {
+    if (!object || key.length == 0 || !value) return NO;
+    NSString *capitalized = [key stringByReplacingCharactersInRange:NSMakeRange(0, 1)
+                                                          withString:[[key substringToIndex:1] uppercaseString]];
+    SEL setter = NSSelectorFromString([NSString stringWithFormat:@"set%@:", capitalized]);
+    NSMethodSignature *signature = NeoWCPrivateSignature(object, setter, 3);
+    if (signature && NeoWCPrivateTypeIsVoid(signature.methodReturnType)) {
+        const char *argumentType = [signature getArgumentTypeAtIndex:2];
+        @try {
+            if (NeoWCPrivateTypeIsObject(argumentType)) {
+                ((void (*)(id, SEL, id))objc_msgSend)(object, setter, value);
+                return YES;
+            }
+        } @catch (__unused NSException *exception) {}
+    }
+    @try {
+        [object setValue:value forKey:key];
+        return YES;
+    } @catch (__unused NSException *exception) {
+        return NO;
+    }
+}
+
+static id NeoWCPrivateInitializeMessageWrap(Class wrapClass,
+                                             SEL initializer,
+                                             char argumentCode) {
+    id allocated = [wrapClass alloc];
+    switch (argumentCode) {
+        case 'c': return ((id (*)(id, SEL, signed char))objc_msgSend)(allocated, initializer, 1);
+        case 'C': return ((id (*)(id, SEL, unsigned char))objc_msgSend)(allocated, initializer, 1);
+        case 's': return ((id (*)(id, SEL, short))objc_msgSend)(allocated, initializer, 1);
+        case 'S': return ((id (*)(id, SEL, unsigned short))objc_msgSend)(allocated, initializer, 1);
+        case 'i': return ((id (*)(id, SEL, int))objc_msgSend)(allocated, initializer, 1);
+        case 'I': return ((id (*)(id, SEL, unsigned int))objc_msgSend)(allocated, initializer, 1);
+        case 'l': return ((id (*)(id, SEL, long))objc_msgSend)(allocated, initializer, 1);
+        case 'L': return ((id (*)(id, SEL, unsigned long))objc_msgSend)(allocated, initializer, 1);
+        case 'q': return ((id (*)(id, SEL, long long))objc_msgSend)(allocated, initializer, 1);
+        case 'Q': return ((id (*)(id, SEL, unsigned long long))objc_msgSend)(allocated, initializer, 1);
+        case 'B': return ((id (*)(id, SEL, BOOL))objc_msgSend)(allocated, initializer, YES);
+        default: return nil;
+    }
+}
+
+static void NeoWCPrivateSubmitMessage(id manager,
+                                      SEL selector,
+                                      id target,
+                                      id wrap,
+                                      const char *returnType) {
+    switch (NeoWCPrivateUnqualifiedType(returnType)[0]) {
+        case 'v': ((void (*)(id, SEL, id, id))objc_msgSend)(manager, selector, target, wrap); break;
+        case 'c': (void)((signed char (*)(id, SEL, id, id))objc_msgSend)(manager, selector, target, wrap); break;
+        case 'C': (void)((unsigned char (*)(id, SEL, id, id))objc_msgSend)(manager, selector, target, wrap); break;
+        case 's': (void)((short (*)(id, SEL, id, id))objc_msgSend)(manager, selector, target, wrap); break;
+        case 'S': (void)((unsigned short (*)(id, SEL, id, id))objc_msgSend)(manager, selector, target, wrap); break;
+        case 'i': (void)((int (*)(id, SEL, id, id))objc_msgSend)(manager, selector, target, wrap); break;
+        case 'I': (void)((unsigned int (*)(id, SEL, id, id))objc_msgSend)(manager, selector, target, wrap); break;
+        case 'l': (void)((long (*)(id, SEL, id, id))objc_msgSend)(manager, selector, target, wrap); break;
+        case 'L': (void)((unsigned long (*)(id, SEL, id, id))objc_msgSend)(manager, selector, target, wrap); break;
+        case 'q': (void)((long long (*)(id, SEL, id, id))objc_msgSend)(manager, selector, target, wrap); break;
+        case 'Q': (void)((unsigned long long (*)(id, SEL, id, id))objc_msgSend)(manager, selector, target, wrap); break;
+        case 'B': (void)((BOOL (*)(id, SEL, id, id))objc_msgSend)(manager, selector, target, wrap); break;
+        default: break;
+    }
+}
+
+BOOL NeoWCPrivateSendTextMessage(NSString *userName, NSString *text) {
+    NSCAssert(NSThread.isMainThread, @"Message submission must run on the main thread");
+    NSString *target = NeoWCPrivateNonemptyString(userName);
+    NSString *content = NeoWCPrivateNonemptyString(text);
+    NSString *currentUser = NeoWCPrivateNonemptyString(NeoWCCurrentUserWXID());
+    if (target.length == 0 || content.length == 0 || currentUser.length == 0) return NO;
+
+    Class wrapClass = NSClassFromString(@"CMessageWrap");
+    SEL initializer = NSSelectorFromString(@"initWithMsgType:");
+    Method initializerMethod = wrapClass ? class_getInstanceMethod(wrapClass, initializer) : NULL;
+    if (!initializerMethod || method_getNumberOfArguments(initializerMethod) != 3) return NO;
+    char *returnType = method_copyReturnType(initializerMethod);
+    BOOL objectReturn = NeoWCPrivateTypeIsObject(returnType);
+    if (returnType) free(returnType);
+    if (!objectReturn) return NO;
+    char *argumentType = method_copyArgumentType(initializerMethod, 2);
+    BOOL integerArgument = NeoWCPrivateTypeIsInteger(argumentType);
+    char argumentCode = NeoWCPrivateUnqualifiedType(argumentType)[0];
+    if (argumentType) free(argumentType);
+    if (!integerArgument) return NO;
+
+    id wrap = nil;
+    @try {
+        wrap = NeoWCPrivateInitializeMessageWrap(wrapClass, initializer, argumentCode);
+    } @catch (__unused NSException *exception) {
+        return NO;
+    }
+    if (!wrap || !NeoWCPrivateSetValue(wrap, @"m_nsFromUsr", currentUser) ||
+        !NeoWCPrivateSetValue(wrap, @"m_nsToUsr", target) ||
+        !NeoWCPrivateSetValue(wrap, @"m_nsContent", content)) return NO;
+    NeoWCPrivateSetValue(wrap, @"m_uiMessageType", @1);
+    NeoWCPrivateSetValue(wrap, @"m_uiStatus", @1);
+    NeoWCPrivateSetValue(wrap, @"m_uiCreateTime",
+                         @((NSUInteger)NSDate.date.timeIntervalSince1970));
+
+    id manager = NeoWCPrivateService(@"CMessageMgr");
+    SEL sendSelector = NSSelectorFromString(@"AddMsg:MsgWrap:");
+    NSMethodSignature *sendSignature = NeoWCPrivateSignature(manager, sendSelector, 4);
+    if (!sendSignature ||
+        !NeoWCPrivateObjectArguments(sendSignature, NSMakeRange(2, 2)) ||
+        (!NeoWCPrivateTypeIsVoid(sendSignature.methodReturnType) &&
+         !NeoWCPrivateTypeIsInteger(sendSignature.methodReturnType))) return NO;
+    @try {
+        NeoWCPrivateSubmitMessage(manager, sendSelector, target, wrap,
+                                  sendSignature.methodReturnType);
+        return YES;
+    } @catch (NSException *exception) {
+        NeoWCLog(@"文本消息适配发送失败：%@", exception.reason ?: exception.name);
+        return NO;
+    }
+}
+
 #pragma mark - Transfer Verification
 
 static NSString *NeoWCPrivateTransferString(id value) {

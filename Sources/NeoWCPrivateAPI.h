@@ -162,6 +162,18 @@ FOUNDATION_EXPORT BOOL NeoWCPushPrivateChat(UIViewController * _Nullable source,
                                             NSString *userName,
                                             BOOL animated);
 
+/// Sends one plain-text message to a stable WeChat username or group username.
+/// @param userName Exact destination username, including an `@chatroom` suffix for groups.
+/// @param text Nonempty text content. No display-name lookup or target rewriting is performed.
+/// @return YES after a message wrapper was constructed and submitted to WeChat's message manager;
+/// NO when input, services, constructors, field injection, or send ABI are unavailable.
+/// @discussion Must be called on the main thread. Builds a type-1 `CMessageWrap`, injects the
+/// current account, destination, content, status, and timestamp, then invokes the verified
+/// `AddMsg:MsgWrap:` object/object ABI. Submission does not imply server delivery. Unsupported
+/// WeChat versions and Objective-C exceptions fail closed without trying unrelated selectors.
+FOUNDATION_EXPORT BOOL NeoWCPrivateSendTextMessage(NSString *userName,
+                                                   NSString *text);
+
 /// Extracts an official masked recipient name from a transfer-verification response.
 /// @param response A `WCPayBeforeTransferCgi` response or known nested response container.
 /// @return A trimmed masked value such as `**明`, or nil when no value containing `*`/`＊`
