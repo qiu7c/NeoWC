@@ -81,7 +81,6 @@ NSString *const NeoWCGroupMemberReminderEnabledKey = @"com.qiu7c.neowc.message.g
 NSString *const NeoWCRedEnvelopeDetailEnabledKey = @"com.qiu7c.neowc.chat.red-envelope-detail";
 NSString *const NeoWCRedEnvelopeDetailCenterKey = @"com.qiu7c.neowc.chat.red-envelope-detail.center";
 NSString *const NeoWCRedEnvelopeDetailFontSizeKey = @"com.qiu7c.neowc.chat.red-envelope-detail.font-size";
-NSString *const NeoWCEntertainmentRedEnvelopeEnabledKey = @"com.qiu7c.neowc.chat.entertainment-red-envelope";
 NSString *const NeoWCCallConfirmEnabledKey = @"com.qiu7c.neowc.chat.call-confirm";
 NSString *const NeoWCAutoSpeakerphoneEnabledKey = @"com.qiu7c.neowc.chat.auto-speakerphone";
 NSString *const NeoWCCallRecordingEnabledKey = @"com.qiu7c.neowc.chat.call-recording";

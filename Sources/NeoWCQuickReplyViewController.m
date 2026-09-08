@@ -962,8 +962,10 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"删除文件夹" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
         NSError *error = nil;
-        [NeoWCQuickReplyStore.sharedStore deleteFolderWithIdentifier:folder.identifier error:&error];
-        if (error) [self showError:error];
+        BOOL deleted = [NeoWCQuickReplyStore.sharedStore deleteFolderWithIdentifier:folder.identifier error:&error];
+        if (!deleted) [self showError:error ?: [NSError errorWithDomain:@"com.qiu7c.neowc.quick-reply"
+                                                                    code:1
+                                                                userInfo:@{NSLocalizedDescriptionKey: @"删除文件夹失败"}]];
         [self reloadItems];
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
@@ -1228,7 +1230,9 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
         UIContextualAction *deleteFolder = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"删除" handler:^(__unused UIContextualAction *action, __unused UIView *sourceView, void (^completionHandler)(BOOL)) {
             NSError *error = nil;
             BOOL deleted = [NeoWCQuickReplyStore.sharedStore deleteFolderWithIdentifier:folder.identifier error:&error];
-            if (error) [weakSelf showError:error];
+            if (!deleted) [weakSelf showError:error ?: [NSError errorWithDomain:@"com.qiu7c.neowc.quick-reply"
+                                                                                 code:1
+                                                                             userInfo:@{NSLocalizedDescriptionKey: @"删除文件夹失败"}]];
             [weakSelf reloadItems];
             completionHandler(deleted);
         }];

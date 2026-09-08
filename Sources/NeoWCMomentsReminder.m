@@ -3,6 +3,7 @@
 #import "NeoWCLogging.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCInAppNotification.h"
+#import "NeoWCPrivateAPI.h"
 #import "NeoWCRuntimeFeatures.h"
 #import <AVFoundation/AVFoundation.h>
 #import <UserNotifications/UserNotifications.h>
@@ -289,7 +290,7 @@ static void NeoWCMomentsReminderForwardItem(id dataItem, NSString *username, NSS
     NSDateFormatter *formatter = [NSDateFormatter new];
     formatter.locale = [NSLocale localeWithLocaleIdentifier:@"zh_CN"];
     formatter.dateFormat = @"yyyy-MM-dd HH:mm:ss";
-    NSString *name = nickname.length > 0 ? nickname : username;
+    NSString *name = NeoWCPrivateNotificationDisplayName(username, nickname);
     NSString *copyText = content.length > 0 ? [NSString stringWithFormat:@"文案: %@", content] : @"";
     NSString *message = [NSString stringWithFormat:@"【朋友圈特别关注】\n好友: %@\n类型: %@\n时间: %@\n%@",
                          name ?: @"", NeoWCMomentsReminderContentTypeName(dataItem),
@@ -316,21 +317,11 @@ static void NeoWCMomentsReminderForwardItem(id dataItem, NSString *username, NSS
 }
 
 static id NeoWCMomentsReminderContact(NSString *username) {
-    Class contextClass = objc_getClass("MMContext");
-    SEL activeSelector = sel_registerName("activeUserContext");
-    SEL serviceSelector = sel_registerName("getService:");
-    Class managerClass = objc_getClass("CContactMgr");
-    if (!contextClass || !managerClass || ![contextClass respondsToSelector:activeSelector]) return nil;
-    id context = ((id (*)(id, SEL))objc_msgSend)(contextClass, activeSelector);
-    if (!context || ![context respondsToSelector:serviceSelector]) return nil;
-    id manager = ((id (*)(id, SEL, Class))objc_msgSend)(context, serviceSelector, managerClass);
-    SEL contactSelector = sel_registerName("getContactByName:");
-    if (!manager || ![manager respondsToSelector:contactSelector]) return nil;
-    return ((id (*)(id, SEL, id))objc_msgSend)(manager, contactSelector, username);
+    return NeoWCPrivateContact(username);
 }
 
 static void NeoWCMomentsReminderNotify(NSString *username, NSString *nickname, NSString *content, uint64_t createdAt, NSString *tid) {
-    NSString *name = nickname.length > 0 ? nickname : username;
+    NSString *name = NeoWCPrivateNotificationDisplayName(username, nickname);
     if (name.length == 0) name = @"好友";
     NSString *body = content.length > 0 ? content : @"发布了新朋友圈";
     if (body.length > 180) body = [[body substringToIndex:177] stringByAppendingString:@"…"];

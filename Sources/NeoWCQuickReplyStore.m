@@ -29,6 +29,7 @@ static NSString *const NeoWCQuickReplyItemsStableRecoveryMarkerName = @".items-v
 static NSString *const NeoWCQuickReplyFoldersStableRecoveryMarkerName = @".folders-v3-stable";
 static NSString *const NeoWCQuickReplyItemsDefaultsKey = @"com.qiu7c.neowc.quick-reply.message-list.v3";
 static NSString *const NeoWCQuickReplyFoldersDefaultsKey = @"com.qiu7c.neowc.quick-reply.folder-list.v3";
+static NSString *const NeoWCQuickReplyDeletedFoldersDefaultsKey = @"com.qiu7c.neowc.quick-reply.deleted-folder-identifiers.v1";
 
 static NSError *NeoWCQuickReplyError(NeoWCQuickReplyErrorCode code, NSString *description) {
     return [NSError errorWithDomain:NeoWCQuickReplyErrorDomain
@@ -53,6 +54,23 @@ static BOOL NeoWCQuickReplyIsSafePathComponent(NSString *value) {
            ![value isEqualToString:@"."] && ![value isEqualToString:@".."] &&
            [value rangeOfString:@"/"].location == NSNotFound &&
            [value rangeOfString:@"\\"].location == NSNotFound;
+}
+
+static NSSet<NSString *> *NeoWCQuickReplyDeletedFolderIdentifiers(void) {
+    id value = [NSUserDefaults.standardUserDefaults objectForKey:NeoWCQuickReplyDeletedFoldersDefaultsKey];
+    if (![value isKindOfClass:NSArray.class]) return [NSSet set];
+    NSMutableSet<NSString *> *identifiers = [NSMutableSet set];
+    for (id candidate in (NSArray *)value) {
+        NSString *identifier = NeoWCQuickReplyTrimmedString(candidate);
+        if (NeoWCQuickReplyIsSafePathComponent(identifier)) [identifiers addObject:identifier];
+    }
+    return identifiers;
+}
+
+static void NeoWCQuickReplySetDeletedFolderIdentifiers(NSSet<NSString *> *identifiers) {
+    NSArray<NSString *> *values = [[identifiers allObjects] sortedArrayUsingSelector:@selector(compare:)];
+    [NSUserDefaults.standardUserDefaults setObject:values forKey:NeoWCQuickReplyDeletedFoldersDefaultsKey];
+    [NSUserDefaults.standardUserDefaults synchronize];
 }
 
 static void NeoWCQuickReplyTarWriteOctal(char *field, size_t length, unsigned long long value) {
@@ -887,6 +905,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     BOOL migrated = [NSFileManager.defaultManager fileExistsAtPath:migrationMarker.path];
     NSURL *stableRecoveryMarker = [libraryDirectory URLByAppendingPathComponent:NeoWCQuickReplyFoldersStableRecoveryMarkerName];
     BOOL stableRecoveryFinished = [NSFileManager.defaultManager fileExistsAtPath:stableRecoveryMarker.path];
+    NSSet<NSString *> *deletedIdentifiers = NeoWCQuickReplyDeletedFolderIdentifiers();
     NSMutableArray<NeoWCQuickReplyFolder *> *folders = [NSMutableArray array];
     id defaultsValue = [NSUserDefaults.standardUserDefaults objectForKey:NeoWCQuickReplyFoldersDefaultsKey];
     NSMutableArray<NSDictionary *> *rememberedFolders = [NSMutableArray array];
@@ -930,7 +949,8 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     for (NSURL *child in children) {
         NSNumber *isDirectory = nil;
         [child getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:nil];
-        if (!isDirectory.boolValue || [child.lastPathComponent isEqualToString:NeoWCQuickReplyRootDirectoryName]) continue;
+        if (!isDirectory.boolValue || [child.lastPathComponent isEqualToString:NeoWCQuickReplyRootDirectoryName] ||
+            [deletedIdentifiers containsObject:child.lastPathComponent]) continue;
         NSData *data = [NSData dataWithContentsOfURL:[child URLByAppendingPathComponent:NeoWCQuickReplyFolderMetadataName]
                                              options:0 error:nil];
         id dictionary = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
@@ -958,7 +978,8 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         if (![dictionary isKindOfClass:NSDictionary.class]) continue;
         NSString *identifier = NeoWCQuickReplyTrimmedString(dictionary[@"id"]);
         NSString *name = NeoWCQuickReplyTrimmedString(dictionary[@"name"]);
-        if (!NeoWCQuickReplyIsSafePathComponent(identifier) || name.length == 0) continue;
+        if (!NeoWCQuickReplyIsSafePathComponent(identifier) || name.length == 0 ||
+            [deletedIdentifiers containsObject:identifier]) continue;
         NSUInteger existingIndex = [folders indexOfObjectPassingTest:^BOOL(NeoWCQuickReplyFolder *candidate,
                                                                             NSUInteger idx,
                                                                             BOOL *stop) {
@@ -999,6 +1020,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         NSString *identifier = NeoWCQuickReplyTrimmedString(dictionary[@"id"]);
         NSString *name = NeoWCQuickReplyTrimmedString(dictionary[@"name"]);
         if (!identifier.length || !name.length) return nil;
+        if ([deletedIdentifiers containsObject:identifier]) continue;
         NeoWCQuickReplyFolder *folder = [NeoWCQuickReplyFolder new];
         folder.identifier = identifier;
         folder.name = name;
@@ -1054,6 +1076,12 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
                             error:error]) return NO;
     [NSUserDefaults.standardUserDefaults setObject:defaultsFolders forKey:NeoWCQuickReplyFoldersDefaultsKey];
     [NSUserDefaults.standardUserDefaults synchronize];
+    NSMutableSet<NSString *> *deletedIdentifiers = [NeoWCQuickReplyDeletedFolderIdentifiers() mutableCopy];
+    NSUInteger deletedCount = deletedIdentifiers.count;
+    [deletedIdentifiers minusSet:identifiers];
+    if (deletedIdentifiers.count != deletedCount) {
+        NeoWCQuickReplySetDeletedFolderIdentifiers(deletedIdentifiers);
+    }
     NSArray<NSURL *> *children = [manager contentsOfDirectoryAtURL:libraryDirectory
                                          includingPropertiesForKeys:@[NSURLIsDirectoryKey]
                                                             options:NSDirectoryEnumerationSkipsHiddenFiles error:nil];
@@ -1130,19 +1158,34 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
 }
 
 - (BOOL)deleteFolderWithIdentifier:(NSString *)identifier error:(NSError **)error {
-    if (!identifier.length) return NO;
+    if (!identifier.length) {
+        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"文件夹标识无效");
+        return NO;
+    }
     @synchronized (self) {
         NSMutableArray *folders = [self loadFoldersLocked];
         if (!folders) { NeoWCQuickReplySetIndexReadError(error); return NO; }
         NSIndexSet *matches = [folders indexesOfObjectsPassingTest:^BOOL(NeoWCQuickReplyFolder *folder, NSUInteger idx, BOOL *stop) {
             (void)idx; (void)stop; return [folder.identifier isEqualToString:identifier];
         }];
-        if (!matches.count) return NO;
+        if (!matches.count) {
+            if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"文件夹不存在或已被删除");
+            return NO;
+        }
         [folders removeObjectsAtIndexes:matches];
         NSMutableArray *items = [self loadItemsLocked];
         if (!items) { NeoWCQuickReplySetIndexReadError(error); return NO; }
         for (NeoWCQuickReplyItem *item in items) if ([item.folderIdentifier isEqualToString:identifier]) item.folderIdentifier = nil;
-        return [self saveItemsLocked:items error:error] && [self saveFoldersLocked:folders error:error];
+        NSMutableSet<NSString *> *deletedIdentifiers = [NeoWCQuickReplyDeletedFolderIdentifiers() mutableCopy];
+        [deletedIdentifiers addObject:identifier];
+        NeoWCQuickReplySetDeletedFolderIdentifiers(deletedIdentifiers);
+        BOOL succeeded = [self saveItemsLocked:items error:error] &&
+            [self saveFoldersLocked:folders error:error];
+        if (!succeeded) {
+            [deletedIdentifiers removeObject:identifier];
+            NeoWCQuickReplySetDeletedFolderIdentifiers(deletedIdentifiers);
+        }
+        return succeeded;
     }
 }
 

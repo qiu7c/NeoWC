@@ -3,6 +3,7 @@
 #import "NeoWCLogging.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCInAppNotification.h"
+#import "NeoWCPrivateAPI.h"
 #import "NeoWCRuntimeFeatures.h"
 #import <UserNotifications/UserNotifications.h>
 #import <UIKit/UIKit.h>
@@ -86,7 +87,7 @@ static void NeoWCMomentsInteractionNotify(NSUInteger count, NSString *messageKey
     id comment = NeoWCMomentsInteractionObjectGetter(message, "comment");
     NSString *username = NeoWCMomentsInteractionStringGetter(comment, "username");
     NSString *nickname = NeoWCMomentsInteractionStringGetter(comment, "nickname");
-    NSString *author = nickname.length > 0 ? nickname : username;
+    NSString *author = NeoWCPrivateNotificationDisplayName(username, nickname);
     NSString *commentContent = NeoWCMomentsInteractionStringGetter(comment, "content");
     if (commentContent.length > 100) {
         commentContent = [[commentContent substringToIndex:97] stringByAppendingString:@"…"];

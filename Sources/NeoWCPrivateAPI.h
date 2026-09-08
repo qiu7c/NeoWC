@@ -61,6 +61,17 @@ FOUNDATION_EXPORT NSString * _Nullable NeoWCPrivateContactUserName(id _Nullable 
 FOUNDATION_EXPORT NSString * _Nullable NeoWCPrivateContactDisplayName(id _Nullable contact,
                                                                       NSString * _Nullable fallback);
 
+/// Resolves the user-facing name used in NeoWC-generated notifications.
+/// @param userName Stable WeChat username used only to load the contact and as the final fallback.
+/// @param eventFallback Optional nickname supplied by the notification event.
+/// @return Current contact remark first, then WeChat display name/nickname, eventFallback, and
+/// finally userName. Returns nil only when both inputs and every supported contact field are empty.
+/// @discussion Call on the main thread because contact lookup uses the active account service.
+/// Unsupported contact selectors, absent contacts, and empty remarks fall through without guessing.
+FOUNDATION_EXPORT NSString * _Nullable
+NeoWCPrivateNotificationDisplayName(NSString * _Nullable userName,
+                                    NSString * _Nullable eventFallback);
+
 /// Reads the contact nickname, remark, or public WeChat alias respectively.
 /// @param contact Contact-like object returned by WeChat services.
 /// @return A trimmed value, or nil when the field is empty/unsupported.
@@ -146,55 +157,6 @@ FOUNDATION_EXPORT BOOL NeoWCPushPrivateGroupProfile(UIViewController *source,
 FOUNDATION_EXPORT BOOL NeoWCPushPrivateChat(UIViewController * _Nullable source,
                                             NSString *userName,
                                             BOOL animated);
-
-/// Identifies a temporary contact created for NeoWC's clearly labelled entertainment-red-envelope flow.
-/// @param contact A WeChat contact-like object received by the `CBaseContact -isChatroom` hook.
-/// @return YES only when its stable username ends in the synthetic `@chatroom@` or `@@chatroom` marker.
-/// @discussion Thread-safe for an already-owned object. This function reads only the unified username
-/// adapter and never changes a saved contact. Unknown fields and ordinary `@chatroom` contacts return NO
-/// on every version so the hook can defer to WeChat's original implementation.
-FOUNDATION_EXPORT BOOL NeoWCPrivateIsEntertainmentRedEnvelopeContact(id _Nullable contact);
-
-/// Converts an ordinary group username into WeChat's entertainment-room marker.
-/// @param groupUserName A username ending exactly in `@chatroom`, or an existing `@chatroom@` value.
-/// @return The corresponding value ending in `@chatroom@`, or nil for non-group/empty input.
-/// @discussion Thread-safe and local-only. Existing entertainment markers are preserved. No contact
-/// lookup or mutation occurs, and unsupported input has no inferred fallback.
-FOUNDATION_EXPORT NSString * _Nullable
-NeoWCPrivateEntertainmentRedEnvelopeUserName(NSString * _Nullable groupUserName);
-
-/// Presents WCR's native normal/entertainment red-envelope choice sheet.
-/// @param logicController The `BaseMsgContentLogicController` that received the red-envelope action.
-/// @param normalHandler Called on the main thread when “发送正常红包” is selected.
-/// @param entertainmentHandler Called on the main thread when “发送娱乐红包” is selected.
-/// @return YES after a verified `WCUIActionSheet` is populated and shown; otherwise NO.
-/// @discussion Must be called on the main thread. The adapter resolves `getViewController` with a
-/// no-argument object ABI and falls back to the visible chat controller. It requires the evidenced
-/// `initWithTitle:`, `addBtnTitle:handler:`, `addCancelBtnTitle:handler:`, and `showInView:` argument
-/// ABIs. Object, void, and integer returns used by known header generations are dispatched with
-/// matching function signatures. A detached owner falls back to the visible chat controller.
-/// Missing classes/selectors, ABI mismatches, exceptions, or no attached view return NO so the
-/// caller can invoke WeChat's original action instead.
-FOUNDATION_EXPORT BOOL
-NeoWCPrivatePresentEntertainmentRedEnvelopeMenu(id logicController,
-                                                 dispatch_block_t normalHandler,
-                                                 dispatch_block_t entertainmentHandler);
-
-/// Runs WCR's fake-room navigation chain and then opens WeChat's native send-red-envelope page.
-/// @param source Visible chat controller used to resolve native navigation.
-/// @param groupUserName A real group username ending exactly in `@chatroom`.
-/// @param completion Called once on the main thread after native invocation succeeds or any step fails.
-/// The argument is YES only when a verified native red-envelope start selector was invoked.
-/// @return YES when the asynchronous fake-room navigation was dispatched; NO on synchronous failure.
-/// @discussion Must be called on the main thread. The adapter creates an in-memory `CContact` with
-/// username, alias, and nickname all equal to the `@chatroom@` marker, removes only a stale local
-/// contact with that exact synthetic username, navigates using evidenced `CAppViewControllerManager`
-/// selectors and then `MMMsgLogicManager` fallbacks, waits 0.45 seconds, verifies the visible fake
-/// chat, and invokes `WCRedEnvelopesControlMgr` with scene 2. Current data and legacy start ABIs are
-/// checked independently. No fake contact is persisted and no payment result or transaction is forged.
-FOUNDATION_EXPORT BOOL NeoWCPrivateStartEntertainmentRedEnvelope(UIViewController *source,
-                                                                 NSString *groupUserName,
-                                                                 void (^completion)(BOOL success));
 
 /// Extracts an official masked recipient name from a transfer-verification response.
 /// @param response A `WCPayBeforeTransferCgi` response or known nested response container.
