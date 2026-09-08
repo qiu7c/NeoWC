@@ -174,6 +174,57 @@ FOUNDATION_EXPORT BOOL NeoWCPushPrivateChat(UIViewController * _Nullable source,
 FOUNDATION_EXPORT BOOL NeoWCPrivateSendTextMessage(NSString *userName,
                                                    NSString *text);
 
+/// Sends a local image through WeChat's native message-provider and forwarding services.
+/// @param userName Exact friend or group username.
+/// @param imagePath Readable local image path.
+/// @return YES after the native forwarding request is submitted; delivery is asynchronous.
+/// @discussion Main-thread only. Uses the class object/object `GetMessageFromImage:contact:` ABI,
+/// then instance object/object `forwardNoConfirmForMsgList:toContacts:`. Missing contacts, files,
+/// classes, selectors, ABI mismatches, decode failures, and exceptions return NO; no legacy is sent.
+FOUNDATION_EXPORT BOOL NeoWCPrivateSendImageMessage(NSString *userName,
+                                                    NSString *imagePath);
+
+/// Sends a local video through WeChat's capture-video builder and message manager.
+/// @param userName Exact friend or group username.
+/// @param videoPath Existing readable local video path.
+/// @return YES after a valid video-info object is built and submitted; delivery is asynchronous.
+/// @discussion Main-thread only. Builds a thumbnail, prefers the verified high-bitrate
+/// `OpenApiMgrHelper` builder when applicable, falls back to `CaptureVideoInfo`, injects its
+/// thumbnail path, then calls `AddVideoMsg:ToUsr:VideoInfo:` with current-user/source/target/video
+/// objects in that order. Missing classes, ABI mismatches, invalid media, and exceptions return NO.
+FOUNDATION_EXPORT BOOL NeoWCPrivateSendVideoMessage(NSString *userName,
+                                                    NSString *videoPath);
+
+/// Sends a local WeChat/Silk voice payload through the native voice uploader.
+/// @param userName Exact friend or group username.
+/// @param voicePath Existing local encoded voice file.
+/// @param durationMilliseconds Duration written into WeChat's voice metadata.
+/// @param voiceFormat WeChat voice format value; use 4 for NeoWC-generated Silk.
+/// @return YES after local insertion, file placement, and uploader submission all succeed.
+/// @discussion Main-thread only. The adapter verifies `CMessageWrap`, `CMessageMgr`, and
+/// `AudioSender` `ResendVoiceMsg:MsgWrap:` object ABIs and preserves WeChat's required order: construct
+/// the wrapper, inject fields, AddLocalMsg, derive the destination path, copy bytes, then upload. Unsupported versions
+/// and every partial failure return NO without trying unrelated selectors.
+FOUNDATION_EXPORT BOOL NeoWCPrivateSendVoiceMessage(NSString *userName,
+                                                    NSString *voicePath,
+                                                    NSUInteger durationMilliseconds,
+                                                    NSUInteger voiceFormat);
+
+/// Returns whether the unified voice sender is inside its short native-forward upload window.
+/// @discussion Thread-safe; used only by the two verified upload-request setter hooks. It returns
+/// NO outside an adapter-owned send and naturally expires on unsupported or interrupted versions.
+FOUNDATION_EXPORT BOOL NeoWCPrivateVoiceUploadCompatibilityActive(void);
+
+/// Reads stable fields from one incoming WeChat message wrapper for automation matching.
+/// @param message A `CMessageWrap` received by a message-manager callback; it is never modified.
+/// @return A dictionary containing session, sender, content, identifier, and fromSelf, or nil for
+/// non-text/empty/malformed wrappers.
+/// @discussion Safe on the callback thread. Uses guarded KVC against known wrapper fields. Group
+/// session selection prefers an `@chatroom` endpoint; private incoming sessions use the sender.
+/// Missing fields and older unsupported layouts fail closed and return nil.
+FOUNDATION_EXPORT NSDictionary<NSString *, id> * _Nullable
+NeoWCPrivateIncomingTextMessageInfo(id _Nullable message);
+
 /// Extracts an official masked recipient name from a transfer-verification response.
 /// @param response A `WCPayBeforeTransferCgi` response or known nested response container.
 /// @return A trimmed masked value such as `**明`, or nil when no value containing `*`/`＊`

@@ -11355,7 +11355,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook UploadVoiceWrap
 
 - (void)setM_uiVoiceForwardFlag:(unsigned int)forwardFlag {
-    %orig(NeoWCVoiceRepeatUploadIsActive() ? 1 : forwardFlag);
+    %orig((NeoWCVoiceRepeatUploadIsActive() || NeoWCPrivateVoiceUploadCompatibilityActive()) ? 1 : forwardFlag);
 }
 
 %end
@@ -11363,7 +11363,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook UploadVoiceRequest
 
 - (void)setForwardFlag:(unsigned int)forwardFlag {
-    %orig(NeoWCVoiceRepeatUploadIsActive() ? 1 : forwardFlag);
+    %orig((NeoWCVoiceRepeatUploadIsActive() || NeoWCPrivateVoiceUploadCompatibilityActive()) ? 1 : forwardFlag);
 }
 
 %end
@@ -11949,34 +11949,38 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)AsyncOnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
     %orig;
-    if (NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap)) {
+    BOOL deleted = NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap);
+    if (deleted) {
         NeoWCCompatibilityMarkTriggered(@"message-block");
-    }
+    } else NeoWCAutomationHandleIncomingMessage(wrap);
 }
 
 - (void)AsyncOnAddMsgForSession:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
     %orig;
-    if (NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap)) {
+    BOOL deleted = NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap);
+    if (deleted) {
         NeoWCCompatibilityMarkTriggered(@"message-block");
-    }
+    } else NeoWCAutomationHandleIncomingMessage(wrap);
 }
 
 - (void)AsyncOnAddMsgForSession:(NSString *)sessionUserName
                         MsgWrap:(CMessageWrap *)wrap
              NewMsgArriveNotify:(BOOL)notify {
     %orig;
-    if (NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap)) {
+    BOOL deleted = NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap);
+    if (deleted) {
         NeoWCCompatibilityMarkTriggered(@"message-block");
-    }
+    } else NeoWCAutomationHandleIncomingMessage(wrap);
 }
 
 - (void)HandleMsgList:(NSString *)sessionUserName MsgList:(NSArray *)messages {
     %orig;
     if (![messages isKindOfClass:NSArray.class]) return;
     for (id message in messages) {
-        if (NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, message)) {
+        BOOL deleted = NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, message);
+        if (deleted) {
             NeoWCCompatibilityMarkTriggered(@"message-block");
-        }
+        } else NeoWCAutomationHandleIncomingMessage(message);
     }
 }
 
@@ -11989,6 +11993,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
         NeoWCLog(@"防撤回兼容保护已回退微信原逻辑：%@", exception.reason ?: exception.name);
     }
     %orig;
+    NeoWCAutomationHandleIncomingMessage(wrap);
 }
 
 - (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap {

@@ -77,19 +77,22 @@ static NSString *NeoWCQuickReplyReferenceTypeName(NeoWCQuickReplyItem *item) {
 @property (nonatomic, strong) UITextField *titleField;
 @property (nonatomic, strong) UITextView *textView;
 @property (nonatomic, copy) void (^saveHandler)(NSString *title, NSString *text);
-- (instancetype)initWithItem:(nullable NeoWCQuickReplyItem *)item;
+@property (nonatomic, assign) BOOL scriptMode;
+- (instancetype)initWithItem:(nullable NeoWCQuickReplyItem *)item scriptMode:(BOOL)scriptMode;
 @end
 
 @implementation NeoWCQuickReplyTextEditorViewController
 
-- (instancetype)initWithItem:(NeoWCQuickReplyItem *)item {
+- (instancetype)initWithItem:(NeoWCQuickReplyItem *)item scriptMode:(BOOL)scriptMode {
     self = [super initWithNibName:nil bundle:nil];
     if (self) {
         _titleField = [UITextField new];
         _titleField.text = item.title;
         _textView = [UITextView new];
         _textView.text = item.text;
-        self.title = item ? @"编辑文字素材" : @"新建文字素材";
+        _scriptMode = scriptMode;
+        self.title = scriptMode ? (item ? @"编辑 JS 脚本" : @"新建 JS 脚本")
+                                : (item ? @"编辑文字素材" : @"新建文字素材");
     }
     return self;
 }
@@ -112,7 +115,8 @@ static NSString *NeoWCQuickReplyReferenceTypeName(NeoWCQuickReplyItem *item) {
     self.titleField.leftViewMode = UITextFieldViewModeAlways;
 
     self.textView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.textView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+    self.textView.font = self.scriptMode ? [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightRegular]
+                                         : [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     self.textView.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
     self.textView.layer.cornerRadius = 10.0;
     self.textView.textContainerInset = UIEdgeInsetsMake(14, 10, 14, 10);
@@ -120,7 +124,7 @@ static NSString *NeoWCQuickReplyReferenceTypeName(NeoWCQuickReplyItem *item) {
 
     UILabel *hint = [UILabel new];
     hint.translatesAutoresizingMaskIntoConstraints = NO;
-    hint.text = @"文字内容";
+    hint.text = self.scriptMode ? @"JavaScript（实现 main(input)）" : @"文字内容";
     hint.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
     hint.textColor = UIColor.secondaryLabelColor;
 
@@ -146,7 +150,7 @@ static NSString *NeoWCQuickReplyReferenceTypeName(NeoWCQuickReplyItem *item) {
     NSString *text = [self.textView.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     if (text.length == 0) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"无法保存"
-                                                                       message:@"文字内容不能为空。"
+                                                                       message:self.scriptMode ? @"JS 脚本不能为空。" : @"文字内容不能为空。"
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
@@ -522,6 +526,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 @property (nonatomic, copy, nullable) NSString *currentFolderIdentifier;
 @property (nonatomic, copy, nullable) NSString *currentFolderName;
 @property (nonatomic, strong, nullable) NSURL *pendingExportURL;
+@property (nonatomic, assign) BOOL pendingAudioImport;
 - (void)sortTapped;
 - (void)exportAllTapped;
 - (void)cleanupMediaTapped;
@@ -675,11 +680,25 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
     (void)controller;
+    self.pendingAudioImport = NO;
     [self finishPendingExport];
 }
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)URLs {
-    (void)controller; (void)URLs;
+    (void)controller;
+    if (self.pendingAudioImport) {
+        self.pendingAudioImport = NO;
+        NSURL *URL = URLs.firstObject;
+        BOOL accessed = [URL startAccessingSecurityScopedResource];
+        NSError *error = nil;
+        [NeoWCQuickReplyStore.sharedStore addMediaAtURL:URL type:NeoWCQuickReplyTypeVoice
+            title:URL.lastPathComponent.stringByDeletingPathExtension
+            folderIdentifier:self.currentFolderIdentifier sourceConversation:nil sourceMessageID:nil error:&error];
+        if (accessed) [URL stopAccessingSecurityScopedResource];
+        if (error) [self showError:error];
+        [self reloadItems];
+        return;
+    }
     [self finishPendingExport];
 }
 
@@ -869,8 +888,14 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     [sheet addAction:[UIAlertAction actionWithTitle:@"新建文字" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         [self presentTextEditorForItem:nil];
     }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"新建 JS 脚本" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [self presentScriptEditorForItem:nil];
+    }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"从相册选择图片或视频" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         [self presentMediaPicker];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"从文件导入语音包" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [self presentAudioDocumentPicker];
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"保存群聊邀请" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         [self presentGroupInvitationPicker];
@@ -975,7 +1000,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 }
 
 - (void)presentTextEditorForItem:(NeoWCQuickReplyItem *)item {
-    NeoWCQuickReplyTextEditorViewController *editor = [[NeoWCQuickReplyTextEditorViewController alloc] initWithItem:item];
+    NeoWCQuickReplyTextEditorViewController *editor = [[NeoWCQuickReplyTextEditorViewController alloc] initWithItem:item scriptMode:NO];
     __weak typeof(self) weakSelf = self;
     __weak NeoWCQuickReplyItem *weakItem = item;
     editor.saveHandler = ^(NSString *title, NSString *text) {
@@ -996,6 +1021,28 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     [self.navigationController pushViewController:editor animated:YES];
 }
 
+- (void)presentScriptEditorForItem:(NeoWCQuickReplyItem *)item {
+    NeoWCQuickReplyTextEditorViewController *editor = [[NeoWCQuickReplyTextEditorViewController alloc] initWithItem:item scriptMode:YES];
+    if (!item) editor.textView.text = @"function main(input) {\n  return { type: 'text', text: '自动回复' };\n}";
+    __weak typeof(self) weakSelf = self;
+    __weak NeoWCQuickReplyItem *weakItem = item;
+    editor.saveHandler = ^(NSString *title, NSString *script) {
+        NSError *error = nil;
+        NeoWCQuickReplyItem *strongItem = weakItem;
+        if (strongItem) {
+            strongItem.title = title;
+            strongItem.text = script;
+            [NeoWCQuickReplyStore.sharedStore updateItem:strongItem error:&error];
+        } else {
+            [NeoWCQuickReplyStore.sharedStore addJavaScript:script title:title
+                                          folderIdentifier:weakSelf.currentFolderIdentifier error:&error];
+        }
+        if (error) [weakSelf showError:error];
+        [weakSelf reloadItems];
+    };
+    [self.navigationController pushViewController:editor animated:YES];
+}
+
 - (void)presentMediaPicker {
     if (![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) return;
     UIImagePickerController *picker = [UIImagePickerController new];
@@ -1003,6 +1050,23 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     picker.mediaTypes = @[@"public.image", @"public.movie"];
     picker.videoQuality = UIImagePickerControllerQualityTypeHigh;
     picker.delegate = self;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)presentAudioDocumentPicker {
+    Class typeClass = NSClassFromString(@"UTType");
+    SEL typeSelector = NSSelectorFromString(@"typeWithIdentifier:");
+    SEL pickerSelector = NSSelectorFromString(@"initForOpeningContentTypes:asCopy:");
+    if (![typeClass respondsToSelector:typeSelector] ||
+        ![UIDocumentPickerViewController instancesRespondToSelector:pickerSelector]) return;
+    id audioType = ((id (*)(id, SEL, id))objc_msgSend)(typeClass, typeSelector, @"public.audio");
+    if (!audioType) return;
+    UIDocumentPickerViewController *picker = ((id (*)(id, SEL, id, BOOL))objc_msgSend)(
+        [UIDocumentPickerViewController alloc], pickerSelector, @[audioType], YES);
+    if (!picker) return;
+    self.pendingAudioImport = YES;
+    picker.delegate = self;
+    picker.allowsMultipleSelection = NO;
     [self presentViewController:picker animated:YES completion:nil];
 }
 
@@ -1095,22 +1159,24 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     if (item.type == NeoWCQuickReplyTypeGroupInvitation && groupName.length == 0) {
         groupName = NeoWCSendConfirmationDisplayName(groupUserName);
     }
-    NSString *fallbackTitle = item.type == NeoWCQuickReplyTypeText ? item.text :
+    NSString *fallbackTitle = item.type == NeoWCQuickReplyTypeJavaScript ? @"JS 脚本" :
+        (item.type == NeoWCQuickReplyTypeText ? item.text :
         (item.type == NeoWCQuickReplyTypeImage ? @"图片素材" :
          (item.type == NeoWCQuickReplyTypeVideo ? @"视频素材" :
           (item.type == NeoWCQuickReplyTypeVoice ? @"语音素材" :
            (item.type == NeoWCQuickReplyTypeGroupInvitation
                 ? [NSString stringWithFormat:@"群邀请 · %@", groupName.length ? groupName : @"未知群聊"]
-                : (item.text.length ? item.text : @"原消息")))));
+                 : (item.text.length ? item.text : @"原消息"))))));
     BOOL genericGroupTitle = item.type == NeoWCQuickReplyTypeGroupInvitation &&
         ([item.title isEqualToString:@"群聊邀请"] || [item.title isEqualToString:@"群邀请"]);
     cell.textLabel.text = item.title.length > 0 && !genericGroupTitle ? item.title : fallbackTitle;
     cell.textLabel.numberOfLines = 1;
-    NSString *typeName = item.type == NeoWCQuickReplyTypeText ? @"文字" :
+    NSString *typeName = item.type == NeoWCQuickReplyTypeJavaScript ? @"JS 脚本" :
+        (item.type == NeoWCQuickReplyTypeText ? @"文字" :
         (item.type == NeoWCQuickReplyTypeImage ? @"图片" :
          (item.type == NeoWCQuickReplyTypeVideo ? @"视频" :
           (item.type == NeoWCQuickReplyTypeVoice ? @"语音" :
-           (item.type == NeoWCQuickReplyTypeGroupInvitation ? @"群邀请" : NeoWCQuickReplyReferenceTypeName(item)))));
+           (item.type == NeoWCQuickReplyTypeGroupInvitation ? @"群邀请" : NeoWCQuickReplyReferenceTypeName(item))))));
     NSMutableArray<NSString *> *details = [NSMutableArray arrayWithObject:typeName];
     if (item.type == NeoWCQuickReplyTypeGroupInvitation) {
         if (groupName.length > 0) [details addObject:groupName];
@@ -1119,11 +1185,12 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     if (item.isPinned) [details addObject:@"已置顶"];
     cell.detailTextLabel.text = [details componentsJoinedByString:@" · "];
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-    NSString *symbol = item.type == NeoWCQuickReplyTypeText ? @"text.bubble" :
+    NSString *symbol = item.type == NeoWCQuickReplyTypeJavaScript ? @"curlybraces" :
+        (item.type == NeoWCQuickReplyTypeText ? @"text.bubble" :
         (item.type == NeoWCQuickReplyTypeImage ? @"photo" :
          (item.type == NeoWCQuickReplyTypeVideo ? @"video" :
           (item.type == NeoWCQuickReplyTypeVoice ? @"waveform" :
-           (item.type == NeoWCQuickReplyTypeGroupInvitation ? @"person.badge.plus" : NeoWCQuickReplyReferenceSymbol(item)))));
+           (item.type == NeoWCQuickReplyTypeGroupInvitation ? @"person.badge.plus" : NeoWCQuickReplyReferenceSymbol(item))))));
     UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:20.0
                                                                                                    weight:UIImageSymbolWeightRegular];
     UIImage *groupAvatar = item.type == NeoWCQuickReplyTypeGroupInvitation
@@ -1173,12 +1240,21 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     NeoWCQuickReplyItem *item = [self itemAtIndexPath:indexPath];
     if (!item) return;
     if (self.selectionHandler) {
+        if (item.type == NeoWCQuickReplyTypeJavaScript) {
+            [self showError:[NSError errorWithDomain:@"com.qiu7c.neowc.quick-reply" code:1
+                userInfo:@{NSLocalizedDescriptionKey: @"JS 脚本只能在自动消息任务中执行。"}]];
+            return;
+        }
         if (NeoWCEnhancementEnabled(NeoWCQuickReplyInstantSendEnabledKey)) [self sendItemDirectly:item];
         else [self useItemNormally:item];
         return;
     }
     if (item.type == NeoWCQuickReplyTypeText) {
         [self presentTextEditorForItem:item];
+        return;
+    }
+    if (item.type == NeoWCQuickReplyTypeJavaScript) {
+        [self presentScriptEditorForItem:item];
         return;
     }
     if (item.type == NeoWCQuickReplyTypeMessageReference || item.type == NeoWCQuickReplyTypeGroupInvitation) {

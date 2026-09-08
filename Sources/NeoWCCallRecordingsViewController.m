@@ -2,24 +2,21 @@
 #import <AVFoundation/AVFoundation.h>
 
 @interface NeoWCCallRecordingsViewController () <AVAudioPlayerDelegate>
-@property (nonatomic, copy) NSArray<NSURL *> *recordings;
+@property (nonatomic, copy) NSArray<NSDictionary *> *sessions;
 @property (nonatomic, strong) AVAudioPlayer *player;
 @property (nonatomic, strong) NSURL *playingURL;
 @end
 
 @implementation NeoWCCallRecordingsViewController
 
-- (instancetype)init {
-    return [self initWithStyle:UITableViewStyleInsetGrouped];
-}
+- (instancetype)init { return [self initWithStyle:UITableViewStyleInsetGrouped]; }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"通话录音";
     self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
-        initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh
-        target:self action:@selector(reloadRecordings)];
+        initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh target:self action:@selector(reloadRecordings)];
     [self reloadRecordings];
 }
 
@@ -36,50 +33,71 @@
     return [documents URLByAppendingPathComponent:@"NeoWC/CallRecordings" isDirectory:YES];
 }
 
+- (NSString *)prefixForURL:(NSURL *)URL {
+    NSString *name = URL.lastPathComponent.stringByDeletingPathExtension;
+    for (NSString *suffix in @[@"-mixed", @"-mic", @"-peer"]) {
+        if ([name hasSuffix:suffix]) return [name substringToIndex:name.length - suffix.length];
+    }
+    return nil;
+}
+
 - (void)reloadRecordings {
-    NSURL *directory = [self recordingDirectory];
+    NSURL *directory = self.recordingDirectory;
     [NSFileManager.defaultManager createDirectoryAtURL:directory
                            withIntermediateDirectories:YES attributes:nil error:nil];
     NSArray<NSURL *> *files = [NSFileManager.defaultManager contentsOfDirectoryAtURL:directory
-                                                          includingPropertiesForKeys:@[
-        NSURLContentModificationDateKey, NSURLFileSizeKey, NSURLIsRegularFileKey
-    ] options:NSDirectoryEnumerationSkipsHiddenFiles error:nil] ?: @[];
-    NSPredicate *audioPredicate = [NSPredicate predicateWithBlock:^BOOL(NSURL *url,
-                                                                         NSDictionary *bindings) {
-        (void)bindings;
-        return [@[@"m4a", @"caf"] containsObject:url.pathExtension.lowercaseString];
-    }];
-    self.recordings = [[files filteredArrayUsingPredicate:audioPredicate]
-        sortedArrayUsingComparator:^NSComparisonResult(NSURL *first, NSURL *second) {
-        NSDate *firstDate = nil;
-        NSDate *secondDate = nil;
-        [first getResourceValue:&firstDate forKey:NSURLContentModificationDateKey error:nil];
-        [second getResourceValue:&secondDate forKey:NSURLContentModificationDateKey error:nil];
-        return [secondDate ?: NSDate.distantPast compare:firstDate ?: NSDate.distantPast];
+                                                          includingPropertiesForKeys:@[NSURLFileSizeKey]
+                                                                             options:NSDirectoryEnumerationSkipsHiddenFiles
+                                                                               error:nil] ?: @[];
+    NSMutableDictionary<NSString *, NSMutableDictionary *> *groups = [NSMutableDictionary dictionary];
+    for (NSURL *URL in files) {
+        if (![@[@"m4a", @"caf"] containsObject:URL.pathExtension.lowercaseString]) continue;
+        NSString *prefix = [self prefixForURL:URL];
+        if (prefix.length == 0) continue;
+        NSMutableDictionary *session = groups[prefix];
+        if (!session) {
+            session = [@{ @"prefix": prefix, @"tracks": [NSMutableDictionary dictionary] } mutableCopy];
+            groups[prefix] = session;
+        }
+        NSString *track = [URL.lastPathComponent containsString:@"-mixed."] ? @"mixed" :
+            ([URL.lastPathComponent containsString:@"-mic."] ? @"mic" : @"peer");
+        ((NSMutableDictionary *)session[@"tracks"])[track] = URL;
+    }
+    NSMutableArray *sessions = [NSMutableArray array];
+    for (NSMutableDictionary *session in groups.allValues) {
+        NSString *prefix = session[@"prefix"];
+        NSURL *metadataURL = [directory URLByAppendingPathComponent:[prefix stringByAppendingPathExtension:@"json"]];
+        NSData *data = [NSData dataWithContentsOfURL:metadataURL];
+        id metadataObject = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        NSDictionary *metadata = [metadataObject isKindOfClass:NSDictionary.class] ? metadataObject : nil;
+        session[@"name"] = [metadata[@"name"] isKindOfClass:NSString.class] ? metadata[@"name"] : @"通话录音";
+        NSDateFormatter *parser = [NSDateFormatter new];
+        parser.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+        parser.dateFormat = @"yyyyMMdd-HHmmss";
+        session[@"date"] = [parser dateFromString:prefix] ?: NSDate.distantPast;
+        [sessions addObject:session.copy];
+    }
+    self.sessions = [sessions sortedArrayUsingComparator:^NSComparisonResult(NSDictionary *left, NSDictionary *right) {
+        return [right[@"date"] compare:left[@"date"]];
     }];
     [self.tableView reloadData];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    (void)tableView;
-    (void)section;
-    return MAX((NSInteger)self.recordings.count, 1);
+    (void)tableView; (void)section;
+    return MAX((NSInteger)self.sessions.count, 1);
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    (void)tableView;
-    (void)section;
-    return self.recordings.count > 0
-        ? @"点按播放或暂停。mixed 是双方混合录音，mic 和 peer 是本地、对端原始音轨。"
-        : @"暂无通话录音。开启通话录音后，文件将在通话结束时保存。";
+    (void)tableView; (void)section;
+    return self.sessions.count ? @"每次通话只显示一条记录；点按后选择双方混合、本地麦克风或对端声音。"
+                               : @"暂无通话录音。开启后会在通话期间自动录制。";
 }
 
-- (UITableViewCell *)tableView:(UITableView *)tableView
-         cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"call-recording"];
-    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle
-                                             reuseIdentifier:@"call-recording"];
-    if (self.recordings.count == 0) {
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"call-session"];
+    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"call-session"];
+    if (self.sessions.count == 0) {
         cell.textLabel.text = @"暂无录音";
         cell.detailTextLabel.text = @"完成一次启用录音的通话后再查看";
         cell.imageView.image = [UIImage systemImageNamed:@"waveform.slash"];
@@ -87,46 +105,26 @@
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         return cell;
     }
-    NSURL *url = self.recordings[indexPath.row];
-    NSNumber *size = nil;
-    NSDate *date = nil;
-    [url getResourceValue:&size forKey:NSURLFileSizeKey error:nil];
-    [url getResourceValue:&date forKey:NSURLContentModificationDateKey error:nil];
-    static NSDateFormatter *formatter;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        formatter = [[NSDateFormatter alloc] init];
-        formatter.dateFormat = @"yyyy-MM-dd HH:mm:ss";
-    });
-    NSString *track = [url.lastPathComponent containsString:@"-mixed."] ? @"双方混合" :
-        ([url.lastPathComponent containsString:@"-mic."] ? @"本地麦克风" : @"对端声音");
-    cell.textLabel.text = url.lastPathComponent;
-    cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ · %@ · %.1f MB", track,
-                                 date ? [formatter stringFromDate:date] : @"未知时间",
-                                 size.longLongValue / 1048576.0];
-    cell.imageView.image = [UIImage systemImageNamed:[self.playingURL isEqual:url] && self.player.isPlaying
-                                                     ? @"pause.circle.fill" : @"play.circle"];
+    NSDictionary *session = self.sessions[indexPath.row];
+    NSDictionary *tracks = session[@"tracks"];
+    cell.textLabel.text = session[@"name"];
+    cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ · %lu 条音轨",
+        [NSDateFormatter localizedStringFromDate:session[@"date"] dateStyle:NSDateFormatterMediumStyle
+                                       timeStyle:NSDateFormatterShortStyle], (unsigned long)tracks.count];
+    cell.imageView.image = [UIImage systemImageNamed:@"waveform.circle"];
     cell.imageView.tintColor = UIColor.systemGreenColor;
-    cell.accessoryType = UITableViewCellAccessoryNone;
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     return cell;
 }
 
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (indexPath.row >= self.recordings.count) return;
-    NSURL *url = self.recordings[indexPath.row];
-    if ([self.playingURL isEqual:url] && self.player.isPlaying) {
-        [self.player pause];
-        [self.tableView reloadData];
-        return;
-    }
+- (void)playURL:(NSURL *)URL {
+    if ([self.playingURL isEqual:URL] && self.player.isPlaying) { [self.player pause]; return; }
     NSError *error = nil;
-    AVAudioPlayer *player = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:&error];
+    AVAudioPlayer *player = [[AVAudioPlayer alloc] initWithContentsOfURL:URL error:&error];
     if (!player) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"无法播放"
-                                                                       message:error.localizedDescription ?: @"录音文件不可用"
-                                                                preferredStyle:UIAlertControllerStyleAlert];
+            message:error.localizedDescription ?: @"录音文件不可用" preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
         return;
@@ -134,36 +132,53 @@
     [self.player stop];
     self.player = player;
     self.player.delegate = self;
-    self.playingURL = url;
+    self.playingURL = URL;
     [self.player play];
-    [self.tableView reloadData];
 }
 
-- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag {
-    (void)player;
-    (void)flag;
-    self.playingURL = nil;
-    self.player = nil;
-    [self.tableView reloadData];
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (indexPath.row >= self.sessions.count) return;
+    NSDictionary *tracks = self.sessions[indexPath.row][@"tracks"];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择播放音轨" message:nil
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    for (NSArray *entry in @[@[@"mixed", @"双方混合"], @[@"mic", @"本地麦克风"], @[@"peer", @"对端声音"]]) {
+        NSURL *URL = tracks[entry[0]];
+        if (!URL) continue;
+        [sheet addAction:[UIAlertAction actionWithTitle:entry[1] style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *action) { [self playURL:URL]; }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
+    sheet.popoverPresentationController.sourceView = cell;
+    sheet.popoverPresentationController.sourceRect = cell.bounds;
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView;
-    return indexPath.row < self.recordings.count;
+    return indexPath.row < self.sessions.count;
 }
 
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)style
  forRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView;
-    if (style != UITableViewCellEditingStyleDelete || indexPath.row >= self.recordings.count) return;
-    NSURL *url = self.recordings[indexPath.row];
-    if ([self.playingURL isEqual:url]) {
-        [self.player stop];
-        self.player = nil;
-        self.playingURL = nil;
+    if (style != UITableViewCellEditingStyleDelete || indexPath.row >= self.sessions.count) return;
+    NSDictionary *session = self.sessions[indexPath.row];
+    for (NSURL *URL in [session[@"tracks"] allValues]) {
+        if ([self.playingURL isEqual:URL]) { [self.player stop]; self.player = nil; self.playingURL = nil; }
+        [NSFileManager.defaultManager removeItemAtURL:URL error:nil];
     }
-    [NSFileManager.defaultManager removeItemAtURL:url error:nil];
+    NSURL *metadataURL = [self.recordingDirectory URLByAppendingPathComponent:
+        [session[@"prefix"] stringByAppendingPathExtension:@"json"]];
+    [NSFileManager.defaultManager removeItemAtURL:metadataURL error:nil];
     [self reloadRecordings];
+}
+
+- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag {
+    (void)player; (void)flag;
+    self.player = nil;
+    self.playingURL = nil;
 }
 
 @end

@@ -3,6 +3,7 @@
 #import "NeoWCLogging.h"
 #import "NeoWCPrivateAPI.h"
 #import "NeoWCQuickReplyStore.h"
+#import "NeoWCSilkEncoder.h"
 #import <JavaScriptCore/JavaScriptCore.h>
 #import <UIKit/UIKit.h>
 
@@ -18,12 +19,15 @@ static const NSUInteger NeoWCAutomationMaximumResponseBytes = 1024 * 1024;
     _identifier = NSUUID.UUID.UUIDString.lowercaseString;
     _name = @"定时消息";
     _targetUserName = @"";
+    _targetUserNames = @[];
     _enabled = YES;
     _sourceType = NeoWCAutomationSourceTypeFixedText;
     _fixedText = @"";
     _script = @"function main(input) {\n  return \"定时消息\";\n}";
     _nextFireDate = [NSDate dateWithTimeIntervalSinceNow:300.0];
     _repeatMode = NeoWCAutomationRepeatModeOnce;
+    _triggerMode = NeoWCAutomationTriggerModeScheduled;
+    _triggerKeyword = @"";
     return self;
 }
 
@@ -32,6 +36,7 @@ static const NSUInteger NeoWCAutomationMaximumResponseBytes = 1024 * 1024;
     task.identifier = self.identifier;
     task.name = self.name;
     task.targetUserName = self.targetUserName;
+    task.targetUserNames = self.targetUserNames;
     task.enabled = self.enabled;
     task.sourceType = self.sourceType;
     task.fixedText = self.fixedText;
@@ -39,6 +44,8 @@ static const NSUInteger NeoWCAutomationMaximumResponseBytes = 1024 * 1024;
     task.script = self.script;
     task.nextFireDate = self.nextFireDate;
     task.repeatMode = self.repeatMode;
+    task.triggerMode = self.triggerMode;
+    task.triggerKeyword = self.triggerKeyword;
     task.lastRunDate = self.lastRunDate;
     task.lastResult = self.lastResult;
     return task;
@@ -52,6 +59,7 @@ static const NSUInteger NeoWCAutomationMaximumResponseBytes = 1024 * 1024;
 @property (nonatomic, strong) dispatch_queue_t scriptQueue;
 @property (nonatomic, assign) BOOL started;
 @property (nonatomic, assign) NSUInteger activeExecutions;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSDate *> *recentIncomingMessages;
 @end
 
 @implementation NeoWCAutomationManager
@@ -68,6 +76,7 @@ static const NSUInteger NeoWCAutomationMaximumResponseBytes = 1024 * 1024;
     if (!self) return nil;
     _scriptQueue = dispatch_queue_create("com.qiu7c.neowc.automation-scripts", DISPATCH_QUEUE_SERIAL);
     _mutableTasks = [NSMutableArray array];
+    _recentIncomingMessages = [NSMutableDictionary dictionary];
     [self loadTasks];
     return self;
 }
@@ -85,6 +94,13 @@ static NSString *NeoWCAutomationString(id value) {
     task.identifier = identifier;
     task.name = NeoWCAutomationString(dictionary[@"name"]);
     task.targetUserName = NeoWCAutomationString(dictionary[@"target"]);
+    NSMutableArray *targets = [NSMutableArray array];
+    for (id value in [dictionary[@"targets"] isKindOfClass:NSArray.class] ? dictionary[@"targets"] : @[]) {
+        NSString *target = NeoWCAutomationString(value);
+        if (target.length && ![targets containsObject:target]) [targets addObject:target];
+    }
+    if (targets.count == 0 && task.targetUserName.length) [targets addObject:task.targetUserName];
+    task.targetUserNames = targets.copy;
     task.enabled = [dictionary[@"enabled"] boolValue];
     task.sourceType = MAX(NeoWCAutomationSourceTypeFixedText,
                           MIN(NeoWCAutomationSourceTypeJavaScript, [dictionary[@"source"] integerValue]));
@@ -95,6 +111,9 @@ static NSString *NeoWCAutomationString(id value) {
     task.nextFireDate = fire > 0 ? [NSDate dateWithTimeIntervalSince1970:fire] : NSDate.date;
     task.repeatMode = [dictionary[@"repeat"] integerValue] == NeoWCAutomationRepeatModeDaily
         ? NeoWCAutomationRepeatModeDaily : NeoWCAutomationRepeatModeOnce;
+    task.triggerMode = [dictionary[@"trigger"] integerValue] == NeoWCAutomationTriggerModeKeyword
+        ? NeoWCAutomationTriggerModeKeyword : NeoWCAutomationTriggerModeScheduled;
+    task.triggerKeyword = NeoWCAutomationString(dictionary[@"keyword"]);
     NSTimeInterval lastRun = [dictionary[@"lastRun"] doubleValue];
     task.lastRunDate = lastRun > 0 ? [NSDate dateWithTimeIntervalSince1970:lastRun] : nil;
     task.lastResult = [dictionary[@"lastResult"] isKindOfClass:NSString.class]
@@ -107,12 +126,15 @@ static NSString *NeoWCAutomationString(id value) {
         @"id": task.identifier ?: @"",
         @"name": task.name ?: @"",
         @"target": task.targetUserName ?: @"",
+        @"targets": task.targetUserNames ?: @[],
         @"enabled": @(task.isEnabled),
         @"source": @(task.sourceType),
         @"text": task.fixedText ?: @"",
         @"script": task.script ?: @"",
         @"nextFire": @((task.nextFireDate ?: NSDate.date).timeIntervalSince1970),
         @"repeat": @(task.repeatMode),
+        @"trigger": @(task.triggerMode),
+        @"keyword": task.triggerKeyword ?: @"",
     } mutableCopy];
     if (task.libraryItemIdentifier.length) dictionary[@"library"] = task.libraryItemIdentifier;
     if (task.lastRunDate) dictionary[@"lastRun"] = @(task.lastRunDate.timeIntervalSince1970);
@@ -235,10 +257,9 @@ static NSString *NeoWCAutomationString(id value) {
     return nil;
 }
 
-- (NSString *)libraryTextForTask:(NeoWCAutomationTask *)task {
+- (NeoWCQuickReplyItem *)libraryItemForTask:(NeoWCAutomationTask *)task {
     for (NeoWCQuickReplyItem *item in NeoWCQuickReplyStore.sharedStore.items) {
-        if ([item.identifier isEqualToString:task.libraryItemIdentifier] &&
-            item.type == NeoWCQuickReplyTypeText) return item.text;
+        if ([item.identifier isEqualToString:task.libraryItemIdentifier]) return item;
     }
     return nil;
 }
@@ -304,7 +325,58 @@ static NSString *NeoWCAutomationHTTPRequest(NSString *method,
     return text;
 }
 
-- (NSString *)executeScript:(NSString *)script target:(NSString *)target error:(NSString **)error {
+static NSString *NeoWCAutomationDownloadURL(NSString *URLString, NSString *type, NSString **failureReason) {
+    NSURL *URL = [NSURL URLWithString:NeoWCAutomationString(URLString)];
+    if (!URL || ![@[@"http", @"https"] containsObject:URL.scheme.lowercaseString]) {
+        if (failureReason) *failureReason = @"媒体地址无效";
+        return nil;
+    }
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+    __block NSData *data = nil;
+    __block NSURLResponse *response = nil;
+    __block NSError *requestError = nil;
+    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithURL:URL
+        completionHandler:^(NSData *value, NSURLResponse *URLResponse, NSError *error) {
+        data = value; response = URLResponse; requestError = error; dispatch_semaphore_signal(semaphore);
+    }];
+    [task resume];
+    if (dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 32 * NSEC_PER_SEC)) != 0) {
+        [task cancel]; if (failureReason) *failureReason = @"媒体请求超时"; return nil;
+    }
+    if (requestError || data.length == 0) {
+        if (failureReason) *failureReason = requestError.localizedDescription ?: @"媒体响应为空";
+        return nil;
+    }
+    if ([response isKindOfClass:NSHTTPURLResponse.class]) {
+        NSInteger status = ((NSHTTPURLResponse *)response).statusCode;
+        if (status < 200 || status >= 300) {
+            if (failureReason) *failureReason = [NSString stringWithFormat:@"媒体 HTTP 状态码 %ld", (long)status];
+            return nil;
+        }
+    }
+    NSUInteger limit = [type isEqualToString:@"video"] ? 200 * 1024 * 1024 : 50 * 1024 * 1024;
+    if (data.length > limit) { if (failureReason) *failureReason = @"媒体文件过大"; return nil; }
+    NSString *extension = URL.pathExtension.lowercaseString;
+    if ([@[@"php", @"asp", @"aspx", @"cgi"] containsObject:extension]) extension = nil;
+    if (!extension.length) extension = response.suggestedFilename.pathExtension.lowercaseString;
+    if ([@[@"php", @"asp", @"aspx", @"cgi"] containsObject:extension]) extension = nil;
+    NSString *MIMEType = response.MIMEType.lowercaseString;
+    if (!extension.length && [MIMEType hasPrefix:@"image/"]) extension = [MIMEType substringFromIndex:6];
+    if (!extension.length && [MIMEType isEqualToString:@"video/quicktime"]) extension = @"mov";
+    if (!extension.length && [MIMEType hasPrefix:@"video/"]) extension = @"mp4";
+    if (!extension.length && [MIMEType hasPrefix:@"audio/"]) extension = [MIMEType substringFromIndex:6];
+    if (!extension.length) extension = [type isEqualToString:@"image"] ? @"jpg" :
+        ([type isEqualToString:@"video"] ? @"mp4" : @"audio");
+    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:
+        [NSString stringWithFormat:@"neowc-%@.%@", NSUUID.UUID.UUIDString, extension]];
+    if (![data writeToFile:path atomically:YES]) {
+        if (failureReason) *failureReason = @"媒体临时文件写入失败";
+        return nil;
+    }
+    return path;
+}
+
+- (id)executeScript:(NSString *)script input:(NSDictionary *)input error:(NSString **)error {
     if (script.length == 0) {
         if (error) *error = @"JS 脚本为空";
         return nil;
@@ -341,26 +413,22 @@ static NSString *NeoWCAutomationHTTPRequest(NSString *method,
     }
     JSValue *main = context[@"main"];
     JSValue *result = main.isObject
-        ? [main callWithArguments:@[@{ @"target": target ?: @"",
-                                      @"timestamp": @((long long)NSDate.date.timeIntervalSince1970) }]]
+        ? [main callWithArguments:@[input ?: @{}]]
         : evaluation;
     if (context.exception) {
         if (error) *error = context.exception.toString ?: @"JavaScript main 执行失败";
         return nil;
     }
-    NSString *text = result.isString ? result.toString : nil;
-    text = NeoWCAutomationString(text);
-    if (text.length == 0) {
-        if (error) *error = HTTPFailure ?: @"JS 必须返回非空字符串";
+    id object = result.isString ? result.toString : [result toObject];
+    if ((!object || object == NSNull.null) ||
+        ([object isKindOfClass:NSString.class] && NeoWCAutomationString(object).length == 0)) {
+        if (error) *error = HTTPFailure ?: @"JS 必须返回文字或消息对象";
         return nil;
     }
-    return text;
+    return object;
 }
 
-- (void)finishTaskIdentifier:(NSString *)identifier
-                      target:(NSString *)target
-                        text:(NSString *)text
-                       error:(NSString *)error {
+- (void)completeTaskIdentifier:(NSString *)identifier result:(NSString *)result {
     NeoWCAutomationTask *stored = [self storedTaskWithIdentifier:identifier];
     if (!stored) {
         if (self.activeExecutions > 0) self.activeExecutions--;
@@ -368,16 +436,6 @@ static NSString *NeoWCAutomationHTTPRequest(NSString *method,
         return;
     }
     stored.lastRunDate = NSDate.date;
-    stored.lastResult = error.length ? [@"失败：" stringByAppendingString:error] : @"正在提交";
-    [self persistTasks];
-    if (error.length) {
-        NeoWCLog(@"自动任务 %@ 失败：%@", identifier, error);
-        if (self.activeExecutions > 0) self.activeExecutions--;
-        [self updateBackgroundRequirement];
-        return;
-    }
-    BOOL submitted = NeoWCPrivateSendTextMessage(target, text);
-    NSString *result = submitted ? @"已提交发送" : @"失败：微信发送接口不可用";
     stored.lastResult = result;
     [self persistTasks];
     NeoWCLog(@"自动任务 %@ %@", identifier, result);
@@ -385,33 +443,118 @@ static NSString *NeoWCAutomationHTTPRequest(NSString *method,
     [self updateBackgroundRequirement];
 }
 
-- (void)executeTask:(NeoWCAutomationTask *)task {
-    NSString *target = NeoWCAutomationString(task.targetUserName);
-    if (target.length == 0) {
-        [self finishTaskIdentifier:task.identifier target:target text:nil error:@"目标用户为空"];
-        return;
+- (void)executeTask:(NeoWCAutomationTask *)task input:(NSDictionary *)triggerInput {
+    NSMutableArray<NSString *> *targets = [NSMutableArray array];
+    for (id value in task.targetUserNames ?: @[]) {
+        NSString *candidate = NeoWCAutomationString(value);
+        if (candidate.length && ![targets containsObject:candidate]) [targets addObject:candidate];
     }
-    if (task.sourceType == NeoWCAutomationSourceTypeFixedText) {
-        NSString *text = NeoWCAutomationString(task.fixedText);
-        [self finishTaskIdentifier:task.identifier target:target text:text
-                             error:text.length ? nil : @"固定文本为空"];
-        return;
-    }
-    if (task.sourceType == NeoWCAutomationSourceTypeLibraryText) {
-        NSString *text = NeoWCAutomationString([self libraryTextForTask:task]);
-        [self finishTaskIdentifier:task.identifier target:target text:text
-                             error:text.length ? nil : @"消息库文字素材不存在"];
-        return;
-    }
+    NSString *legacyTarget = NeoWCAutomationString(task.targetUserName);
+    if (targets.count == 0 && legacyTarget.length) [targets addObject:legacyTarget];
+    if (targets.count == 0) { [self completeTaskIdentifier:task.identifier result:@"失败：目标会话为空"]; return; }
     NSString *identifier = task.identifier;
-    NSString *script = task.script;
     dispatch_async(self.scriptQueue, ^{
-        NSString *scriptError = nil;
-        NSString *text = [self executeScript:script target:target error:&scriptError];
+        NSString *failure = nil;
+        id output = nil;
+        NeoWCQuickReplyItem *item = task.sourceType == NeoWCAutomationSourceTypeLibraryText
+            ? [self libraryItemForTask:task] : nil;
+        NSMutableDictionary *input = [triggerInput isKindOfClass:NSDictionary.class]
+            ? [triggerInput mutableCopy] : [NSMutableDictionary dictionary];
+        input[@"target"] = targets.firstObject;
+        input[@"targets"] = targets;
+        input[@"timestamp"] = @((long long)NSDate.date.timeIntervalSince1970);
+        if (task.sourceType == NeoWCAutomationSourceTypeFixedText) output = task.fixedText;
+        else if (task.sourceType == NeoWCAutomationSourceTypeJavaScript)
+            output = [self executeScript:task.script input:input error:&failure];
+        else if (!item) failure = @"消息库素材不存在";
+        else if (item.type == NeoWCQuickReplyTypeJavaScript)
+            output = [self executeScript:item.text input:input error:&failure];
+        else if (item.type == NeoWCQuickReplyTypeText) output = item.text;
+        else if (item.type == NeoWCQuickReplyTypeImage || item.type == NeoWCQuickReplyTypeVideo ||
+                 item.type == NeoWCQuickReplyTypeVoice) {
+            NSString *path = [NeoWCQuickReplyStore.sharedStore absoluteMediaPathForItem:item];
+            NSString *type = item.type == NeoWCQuickReplyTypeImage ? @"image" :
+                (item.type == NeoWCQuickReplyTypeVideo ? @"video" : @"voice");
+            if (path.length) output = @{ @"type": type, @"path": path, @"metadata": item.metadata ?: @{} };
+            else failure = @"消息库媒体文件已丢失";
+        } else failure = @"该消息库素材不支持自动发送";
+        if (!failure && [output isKindOfClass:NSDictionary.class]) {
+            NSMutableDictionary *payload = [(NSDictionary *)output mutableCopy];
+            NSString *type = NeoWCAutomationString(payload[@"type"]).lowercaseString;
+            if (![@[@"text", @"image", @"video", @"voice"] containsObject:type]) {
+                failure = @"JS 消息类型不支持";
+            } else if (![type isEqualToString:@"text"]) {
+                NSString *path = NeoWCAutomationString(payload[@"path"]);
+                if (!path.length) {
+                    path = NeoWCAutomationDownloadURL(payload[@"url"], type, &failure);
+                    if (path.length) payload[@"temporary"] = @YES;
+                }
+                if (path.length) payload[@"path"] = path;
+                NSDictionary *voiceMetadata = [payload[@"metadata"] isKindOfClass:NSDictionary.class]
+                    ? payload[@"metadata"] : @{};
+                BOOL isNativeSilk = [voiceMetadata[@"voiceFormat"] unsignedIntegerValue] == 4 ||
+                    [payload[@"voiceFormat"] unsignedIntegerValue] == 4;
+                if (!failure && [type isEqualToString:@"voice"] && !isNativeSilk) {
+                    NSString *silkPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
+                        [NSString stringWithFormat:@"neowc-%@.aud", NSUUID.UUID.UUIDString]];
+                    NSUInteger duration = 0;
+                    NSError *encodeError = nil;
+                    if (!NeoWCEncodeAudioFileToSilk(path, silkPath, &duration, &encodeError)) {
+                        failure = encodeError.localizedDescription ?: @"语音转码失败";
+                    } else {
+                        if ([payload[@"temporary"] boolValue]) [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+                        payload[@"path"] = silkPath;
+                        payload[@"temporary"] = @YES;
+                        NSDictionary *existingMetadata = [payload[@"metadata"] isKindOfClass:NSDictionary.class]
+                            ? payload[@"metadata"] : @{};
+                        NSMutableDictionary *metadata = [existingMetadata mutableCopy];
+                        metadata[@"voiceTime"] = @(duration);
+                        payload[@"metadata"] = metadata;
+                    }
+                }
+            }
+            output = payload;
+        }
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self finishTaskIdentifier:identifier target:target text:text error:scriptError];
+            NSString *sendFailure = failure;
+            NSUInteger submitted = 0;
+            NSString *type = @"text";
+            NSString *text = nil;
+            NSString *path = nil;
+            NSDictionary *metadata = nil;
+            if ([output isKindOfClass:NSString.class]) text = NeoWCAutomationString(output);
+            else if ([output isKindOfClass:NSDictionary.class]) {
+                type = NeoWCAutomationString(output[@"type"]).lowercaseString;
+                text = NeoWCAutomationString(output[@"text"]);
+                path = NeoWCAutomationString(output[@"path"]);
+                metadata = [output[@"metadata"] isKindOfClass:NSDictionary.class] ? output[@"metadata"] : @{};
+            } else if (!sendFailure) sendFailure = @"任务没有生成可发送内容";
+            if (!sendFailure && [type isEqualToString:@"text"] && text.length == 0) sendFailure = @"发送文字为空";
+            if (!sendFailure) for (NSString *target in targets) {
+                BOOL sent = [type isEqualToString:@"text"] ? NeoWCPrivateSendTextMessage(target, text) :
+                    ([type isEqualToString:@"image"] ? NeoWCPrivateSendImageMessage(target, path) :
+                     ([type isEqualToString:@"voice"] ? NeoWCPrivateSendVoiceMessage(target, path,
+                         [metadata[@"voiceTime"] unsignedIntegerValue], [metadata[@"voiceFormat"] unsignedIntegerValue] ?: 4) :
+                       ([type isEqualToString:@"video"] ? NeoWCPrivateSendVideoMessage(target, path) : NO)));
+                if (sent) submitted++;
+            }
+            if ([output isKindOfClass:NSDictionary.class] && [output[@"temporary"] boolValue]) {
+                if ([type isEqualToString:@"video"]) {
+                    NSString *temporaryPath = [path copy];
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 120 * NSEC_PER_SEC),
+                        dispatch_get_main_queue(), ^{ [NSFileManager.defaultManager removeItemAtPath:temporaryPath error:nil]; });
+                } else [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+            }
+            NSString *result = sendFailure.length ? [@"失败：" stringByAppendingString:sendFailure] :
+                (submitted == targets.count ? [NSString stringWithFormat:@"已提交 %lu 个会话", (unsigned long)submitted] :
+                 [NSString stringWithFormat:@"失败：仅提交 %lu/%lu", (unsigned long)submitted, (unsigned long)targets.count]);
+            [self completeTaskIdentifier:identifier result:result];
         });
     });
+}
+
+- (void)executeTask:(NeoWCAutomationTask *)task {
+    [self executeTask:task input:nil];
 }
 
 - (NSDate *)nextDailyDateAfterDate:(NSDate *)date now:(NSDate *)now {
@@ -431,7 +574,8 @@ static NSString *NeoWCAutomationHTTPRequest(NSString *method,
     NSDate *now = NSDate.date;
     NSMutableArray<NeoWCAutomationTask *> *due = [NSMutableArray array];
     for (NeoWCAutomationTask *task in self.mutableTasks) {
-        if (!task.isEnabled || [task.nextFireDate compare:now] == NSOrderedDescending) continue;
+        if (!task.isEnabled || task.triggerMode != NeoWCAutomationTriggerModeScheduled ||
+            [task.nextFireDate compare:now] == NSOrderedDescending) continue;
         [due addObject:task.copy];
         if (task.repeatMode == NeoWCAutomationRepeatModeDaily) {
             task.nextFireDate = [self nextDailyDateAfterDate:task.nextFireDate now:now];
@@ -459,8 +603,45 @@ static NSString *NeoWCAutomationHTTPRequest(NSString *method,
     [self executeTask:task.copy];
 }
 
+- (void)handleIncomingInfo:(NSDictionary *)info {
+    if (![info isKindOfClass:NSDictionary.class] || [info[@"fromSelf"] boolValue]) return;
+    NSString *session = NeoWCAutomationString(info[@"session"]);
+    NSString *content = NeoWCAutomationString(info[@"content"]);
+    NSString *messageID = NeoWCAutomationString(info[@"identifier"]);
+    if (!session.length || !content.length) return;
+    NSDate *now = NSDate.date;
+    for (NSString *key in self.recentIncomingMessages.allKeys.copy) {
+        if ([now timeIntervalSinceDate:self.recentIncomingMessages[key]] > 300) [self.recentIncomingMessages removeObjectForKey:key];
+    }
+    if (messageID.length && self.recentIncomingMessages[messageID]) return;
+    if (messageID.length) self.recentIncomingMessages[messageID] = now;
+    for (NeoWCAutomationTask *stored in self.mutableTasks) {
+        if (!stored.isEnabled || stored.triggerMode != NeoWCAutomationTriggerModeKeyword) continue;
+        NSString *keyword = NeoWCAutomationString(stored.triggerKeyword);
+        if (!keyword.length || [content rangeOfString:keyword options:NSCaseInsensitiveSearch].location == NSNotFound) continue;
+        NSArray *configuredTargets = stored.targetUserNames.count ? stored.targetUserNames :
+            (stored.targetUserName.length ? @[stored.targetUserName] : @[]);
+        if (configuredTargets.count && ![configuredTargets containsObject:session]) continue;
+        NeoWCAutomationTask *task = stored.copy;
+        task.targetUserNames = @[session];
+        task.targetUserName = session;
+        self.activeExecutions++;
+        [self executeTask:task input:@{ @"trigger": @"keyword", @"message": content,
+                                       @"sender": info[@"sender"] ?: @"", @"session": session }];
+    }
+    [self updateBackgroundRequirement];
+}
+
 @end
 
 void NeoWCAutomationStart(void) {
     [NeoWCAutomationManager.sharedManager start];
+}
+
+void NeoWCAutomationHandleIncomingMessage(id message) {
+    NSDictionary *info = NeoWCPrivateIncomingTextMessageInfo(message);
+    if (!info) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [NeoWCAutomationManager.sharedManager handleIncomingInfo:info];
+    });
 }

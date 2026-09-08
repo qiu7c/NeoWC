@@ -454,7 +454,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     NSNumber *typeValue = dictionary[@"type"];
     if (identifier.length == 0 || ![typeValue respondsToSelector:@selector(integerValue)]) return nil;
     NSInteger type = typeValue.integerValue;
-    if (type < NeoWCQuickReplyTypeText || type > NeoWCQuickReplyTypeGroupInvitation) return nil;
+    if (type < NeoWCQuickReplyTypeText || type > NeoWCQuickReplyTypeJavaScript) return nil;
     NeoWCQuickReplyItem *item = [NeoWCQuickReplyItem new];
     item.identifier = identifier;
     item.type = (NeoWCQuickReplyType)type;
@@ -1248,6 +1248,33 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     }
 }
 
+- (NeoWCQuickReplyItem *)addJavaScript:(NSString *)script
+                                  title:(NSString *)title
+                       folderIdentifier:(NSString *)folderIdentifier
+                                  error:(NSError **)error {
+    NSString *trimmed = NeoWCQuickReplyTrimmedString(script);
+    if (trimmed.length == 0) {
+        if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"JS 脚本不能为空");
+        return nil;
+    }
+    @synchronized (self) {
+        NSMutableArray *items = [self loadItemsLocked];
+        if (!items) { NeoWCQuickReplySetIndexReadError(error); return nil; }
+        NeoWCQuickReplyItem *item = [NeoWCQuickReplyItem new];
+        item.identifier = NSUUID.UUID.UUIDString.lowercaseString;
+        item.type = NeoWCQuickReplyTypeJavaScript;
+        item.title = NeoWCQuickReplyTrimmedString(title);
+        item.text = trimmed;
+        item.folderIdentifier = NeoWCQuickReplyTrimmedString(folderIdentifier).length ? folderIdentifier : nil;
+        item.sortIndex = [self nextSortIndexForItems:items];
+        item.createdAt = NSDate.date;
+        item.sourceAccountIdentifier = NeoWCQuickReplyTrimmedString(NeoWCCurrentUserWXID()).length ? NeoWCCurrentUserWXID() : nil;
+        item.metadata = @{};
+        [items addObject:item];
+        return [self saveItemsLocked:items error:error] ? item.copy : nil;
+    }
+}
+
 - (NeoWCQuickReplyItem *)addMessageReferenceForConversation:(NSString *)conversation
                                                      localID:(unsigned long long)localID
                                                     serverID:(long long)serverID
@@ -1436,10 +1463,11 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         stored.title = NeoWCQuickReplyTrimmedString(item.title);
         stored.folderIdentifier = NeoWCQuickReplyTrimmedString(item.folderIdentifier).length ? item.folderIdentifier : nil;
         stored.metadata = [item.metadata isKindOfClass:NSDictionary.class] ? item.metadata : @{};
-        if (stored.type == NeoWCQuickReplyTypeText) {
+        if (stored.type == NeoWCQuickReplyTypeText || stored.type == NeoWCQuickReplyTypeJavaScript) {
             NSString *text = NeoWCQuickReplyTrimmedString(item.text);
             if (text.length == 0) {
-                if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue, @"文字内容不能为空");
+                if (error) *error = NeoWCQuickReplyError(NeoWCQuickReplyErrorInvalidValue,
+                    stored.type == NeoWCQuickReplyTypeJavaScript ? @"JS 脚本不能为空" : @"文字内容不能为空");
                 return NO;
             }
             stored.text = text;

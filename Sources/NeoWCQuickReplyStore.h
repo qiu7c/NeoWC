@@ -9,6 +9,7 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
     NeoWCQuickReplyTypeVoice = 3,
     NeoWCQuickReplyTypeMessageReference = 4,
     NeoWCQuickReplyTypeGroupInvitation = 5,
+    NeoWCQuickReplyTypeJavaScript = 6,
 };
 
 @interface NeoWCQuickReplyItem : NSObject <NSCopying>
@@ -50,6 +51,10 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplyType) {
                        sourceConversation:(nullable NSString *)sourceConversation
                           sourceMessageID:(nullable NSString *)sourceMessageID
                                     error:(NSError **)error;
+- (nullable NeoWCQuickReplyItem *)addJavaScript:(NSString *)script
+                                          title:(nullable NSString *)title
+                               folderIdentifier:(nullable NSString *)folderIdentifier
+                                          error:(NSError **)error;
 - (nullable NeoWCQuickReplyItem *)addMediaAtURL:(NSURL *)sourceURL
                                            type:(NeoWCQuickReplyType)type
                                           title:(nullable NSString *)title

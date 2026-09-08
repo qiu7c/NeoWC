@@ -1,9 +1,11 @@
 #import "NeoWCPrivateAPI.h"
 #import "NeoWCAccount.h"
 #import "NeoWCLogging.h"
+#import <AVFoundation/AVFoundation.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 #include <string.h>
+#include <stdatomic.h>
 
 #pragma mark - Runtime ABI Helpers
 
@@ -634,6 +636,253 @@ BOOL NeoWCPrivateSendTextMessage(NSString *userName, NSString *text) {
         NeoWCLog(@"文本消息适配发送失败：%@", exception.reason ?: exception.name);
         return NO;
     }
+}
+
+@interface NeoWCPrivateMediaSendSession : NSObject
+@property (nonatomic, strong) id logic;
+@property (nonatomic, strong) id message;
+@property (nonatomic, strong) id contact;
+@end
+@implementation NeoWCPrivateMediaSendSession
+@end
+
+static _Atomic(double) NeoWCPrivateVoiceUploadDeadline;
+
+BOOL NeoWCPrivateVoiceUploadCompatibilityActive(void) {
+    return atomic_load(&NeoWCPrivateVoiceUploadDeadline) > NSDate.date.timeIntervalSince1970;
+}
+
+static NSMutableSet<NeoWCPrivateMediaSendSession *> *NeoWCPrivateMediaSessions(void) {
+    static NSMutableSet *sessions;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ sessions = [NSMutableSet set]; });
+    return sessions;
+}
+
+BOOL NeoWCPrivateSendImageMessage(NSString *userName, NSString *imagePath) {
+    NSCAssert(NSThread.isMainThread, @"Image submission must run on the main thread");
+    NSString *target = NeoWCPrivateNonemptyString(userName);
+    NSString *path = NeoWCPrivateNonemptyString(imagePath);
+    UIImage *image = path.length ? [UIImage imageWithContentsOfFile:path] : nil;
+    id contact = target.length ? NeoWCPrivateContact(target) : nil;
+    Class providerClass = NSClassFromString(@"PasteboardMsgProvider");
+    Class logicClass = NSClassFromString(@"ForwardMessageLogicController");
+    SEL makeSelector = NSSelectorFromString(@"GetMessageFromImage:contact:");
+    SEL sendSelector = NSSelectorFromString(@"forwardNoConfirmForMsgList:toContacts:");
+    Method makeMethod = providerClass ? class_getClassMethod(providerClass, makeSelector) : NULL;
+    Method sendMethod = logicClass ? class_getInstanceMethod(logicClass, sendSelector) : NULL;
+    char *makeReturnType = makeMethod ? method_copyReturnType(makeMethod) : NULL;
+    BOOL makeReturnsObject = NeoWCPrivateTypeIsObject(makeReturnType);
+    if (makeReturnType) free(makeReturnType);
+    char *makeFirstType = makeMethod ? method_copyArgumentType(makeMethod, 2) : NULL;
+    char *makeSecondType = makeMethod ? method_copyArgumentType(makeMethod, 3) : NULL;
+    BOOL makeArgumentsAreObjects = NeoWCPrivateTypeIsObject(makeFirstType) && NeoWCPrivateTypeIsObject(makeSecondType);
+    if (makeFirstType) free(makeFirstType);
+    if (makeSecondType) free(makeSecondType);
+    char *sendReturnType = sendMethod ? method_copyReturnType(sendMethod) : NULL;
+    char sendReturnEncoding[2] = { NeoWCPrivateUnqualifiedType(sendReturnType)[0], '\0' };
+    char *sendFirstType = sendMethod ? method_copyArgumentType(sendMethod, 2) : NULL;
+    char *sendSecondType = sendMethod ? method_copyArgumentType(sendMethod, 3) : NULL;
+    BOOL sendABIValid = (NeoWCPrivateTypeIsVoid(sendReturnType) || NeoWCPrivateTypeIsInteger(sendReturnType)) &&
+        NeoWCPrivateTypeIsObject(sendFirstType) && NeoWCPrivateTypeIsObject(sendSecondType);
+    if (sendReturnType) free(sendReturnType);
+    if (sendFirstType) free(sendFirstType);
+    if (sendSecondType) free(sendSecondType);
+    if (!image || !contact || !makeMethod || method_getNumberOfArguments(makeMethod) != 4 ||
+        !makeReturnsObject || !makeArgumentsAreObjects ||
+        !sendMethod || method_getNumberOfArguments(sendMethod) != 4 || !sendABIValid) return NO;
+    id message = nil;
+    id logic = nil;
+    NeoWCPrivateMediaSendSession *session = nil;
+    @try {
+        message = ((id (*)(id, SEL, id, id))objc_msgSend)(providerClass, makeSelector, image, contact);
+        logic = message ? [logicClass new] : nil;
+        if (!logic) return NO;
+        session = [NeoWCPrivateMediaSendSession new];
+        session.logic = logic; session.message = message; session.contact = contact;
+        [NeoWCPrivateMediaSessions() addObject:session];
+        NeoWCPrivateSubmitMessage(logic, sendSelector, @[message], @[contact], sendReturnEncoding);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{ [NeoWCPrivateMediaSessions() removeObject:session]; });
+        return YES;
+    } @catch (NSException *exception) {
+        if (session) [NeoWCPrivateMediaSessions() removeObject:session];
+        NeoWCLog(@"图片消息适配发送失败：%@", exception.reason ?: exception.name);
+        return NO;
+    }
+}
+
+static BOOL NeoWCPrivateInvokeThreeObjects(id receiver, SEL selector, id first, id second, id third,
+                                            const char *returnType) {
+    switch (NeoWCPrivateUnqualifiedType(returnType)[0]) {
+        case 'v': ((void (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        case '@': (void)((id (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        case 'c': (void)((signed char (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        case 'C': (void)((unsigned char (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        case 's': (void)((short (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        case 'S': (void)((unsigned short (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        case 'i': (void)((int (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        case 'I': (void)((unsigned int (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        case 'l': (void)((long (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        case 'L': (void)((unsigned long (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        case 'q': (void)((long long (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        case 'Q': (void)((unsigned long long (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        case 'B': (void)((BOOL (*)(id, SEL, id, id, id))objc_msgSend)(receiver, selector, first, second, third); return YES;
+        default: return NO;
+    }
+}
+
+BOOL NeoWCPrivateSendVideoMessage(NSString *userName, NSString *videoPath) {
+    NSCAssert(NSThread.isMainThread, @"Video submission must run on the main thread");
+    NSString *target = NeoWCPrivateNonemptyString(userName);
+    NSString *path = NeoWCPrivateNonemptyString(videoPath);
+    NSString *currentUser = NeoWCPrivateNonemptyString(NeoWCCurrentUserWXID());
+    if (!target || !currentUser || ![NSFileManager.defaultManager fileExistsAtPath:path]) return NO;
+    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:path] options:nil];
+    AVAssetTrack *track = [asset tracksWithMediaType:AVMediaTypeVideo].firstObject;
+    if (!track) return NO;
+    AVAssetImageGenerator *generator = [AVAssetImageGenerator assetImageGeneratorWithAsset:asset];
+    generator.appliesPreferredTrackTransform = YES;
+    CGImageRef frame = [generator copyCGImageAtTime:CMTimeMakeWithSeconds(0.1, 600) actualTime:NULL error:nil];
+    UIImage *thumbnail = frame ? [UIImage imageWithCGImage:frame] : nil;
+    if (frame) CGImageRelease(frame);
+    NSString *thumbnailPath = nil;
+    NSData *thumbnailData = thumbnail ? UIImageJPEGRepresentation(thumbnail, 0.85) : nil;
+    if (thumbnailData.length) {
+        thumbnailPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
+            [NSString stringWithFormat:@"neowc-video-%@.jpg", NSUUID.UUID.UUIDString]];
+        if (![thumbnailData writeToFile:thumbnailPath atomically:YES]) thumbnailPath = nil;
+    }
+    @try {
+        id videoInfo = nil;
+        Class highClass = NSClassFromString(@"OpenApiMgrHelper");
+        SEL highSelector = NSSelectorFromString(@"genCaptureVideoInfoWithVideoData:mediaMessage:param:");
+        NSMethodSignature *highSignature = NeoWCPrivateSignature(highClass, highSelector, 5);
+        if (track.estimatedDataRate >= 5000000.0 && highSignature &&
+            NeoWCPrivateTypeIsObject(highSignature.methodReturnType) &&
+            NeoWCPrivateObjectArguments(highSignature, NSMakeRange(2, 3))) {
+            NSData *videoData = [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];
+            if (videoData.length) videoInfo = ((id (*)(id, SEL, id, id, id))objc_msgSend)(highClass, highSelector, videoData, nil, nil);
+        }
+        if (!videoInfo) {
+            Class infoClass = NSClassFromString(@"CaptureVideoInfo");
+            SEL infoSelector = NSSelectorFromString(@"genVideoInfoWithVideoUrl:thumb:");
+            NSMethodSignature *infoSignature = NeoWCPrivateSignature(infoClass, infoSelector, 4);
+            if (!infoSignature || !NeoWCPrivateTypeIsObject(infoSignature.methodReturnType) ||
+                !NeoWCPrivateObjectArguments(infoSignature, NSMakeRange(2, 2))) return NO;
+            videoInfo = ((id (*)(id, SEL, id, id))objc_msgSend)(infoClass, infoSelector,
+                [NSURL fileURLWithPath:path], thumbnail);
+        }
+        if (!videoInfo) return NO;
+        if (thumbnailPath.length) NeoWCPrivateSetValue(videoInfo, @"thumb_path", thumbnailPath);
+        id manager = NeoWCPrivateService(@"CMessageMgr");
+        SEL addSelector = NSSelectorFromString(@"AddVideoMsg:ToUsr:VideoInfo:");
+        NSMethodSignature *signature = NeoWCPrivateSignature(manager, addSelector, 5);
+        if (!signature || !NeoWCPrivateObjectArguments(signature, NSMakeRange(2, 3))) return NO;
+        BOOL submitted = NeoWCPrivateInvokeThreeObjects(manager, addSelector, currentUser, target,
+                                                         videoInfo, signature.methodReturnType);
+        return submitted;
+    } @catch (NSException *exception) {
+        NeoWCLog(@"视频消息适配发送失败：%@", exception.reason ?: exception.name);
+        return NO;
+    } @finally {
+        if (thumbnailPath.length) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
+            dispatch_get_main_queue(), ^{ [NSFileManager.defaultManager removeItemAtPath:thumbnailPath error:nil]; });
+    }
+}
+
+BOOL NeoWCPrivateSendVoiceMessage(NSString *userName, NSString *voicePath,
+                                  NSUInteger durationMilliseconds, NSUInteger voiceFormat) {
+    NSCAssert(NSThread.isMainThread, @"Voice submission must run on the main thread");
+    NSString *target = NeoWCPrivateNonemptyString(userName);
+    NSString *path = NeoWCPrivateNonemptyString(voicePath);
+    NSString *currentUser = NeoWCPrivateNonemptyString(NeoWCCurrentUserWXID());
+    if (!target || !currentUser || ![NSFileManager.defaultManager fileExistsAtPath:path]) return NO;
+    Class wrapClass = NSClassFromString(@"CMessageWrap");
+    SEL initializer = NSSelectorFromString(@"initWithMsgType:");
+    Method initializerMethod = wrapClass ? class_getInstanceMethod(wrapClass, initializer) : NULL;
+    if (!initializerMethod || method_getNumberOfArguments(initializerMethod) != 3) return NO;
+    char *argumentType = method_copyArgumentType(initializerMethod, 2);
+    char argumentCode = NeoWCPrivateUnqualifiedType(argumentType)[0];
+    BOOL integerArgument = NeoWCPrivateTypeIsInteger(argumentType);
+    if (argumentType) free(argumentType);
+    if (!integerArgument) return NO;
+    id manager = NeoWCPrivateService(@"CMessageMgr");
+    id sender = NeoWCPrivateService(@"AudioSender");
+    SEL addSelector = NSSelectorFromString(@"AddLocalMsg:MsgWrap:");
+    SEL pathSelector = NSSelectorFromString(@"getPathOfAudio:");
+    SEL uploaderSelector = NSSelectorFromString(@"uploaderForMsgWrap:");
+    SEL resendSelector = NSSelectorFromString(@"ResendVoiceMsg:MsgWrap:");
+    NSMethodSignature *addSignature = NeoWCPrivateSignature(manager, addSelector, 4);
+    NSMethodSignature *pathSignature = NeoWCPrivateSignature(wrapClass, pathSelector, 3);
+    if (!addSignature || !NeoWCPrivateObjectArguments(addSignature, NSMakeRange(2, 2)) ||
+        (!NeoWCPrivateTypeIsVoid(addSignature.methodReturnType) &&
+         !NeoWCPrivateTypeIsInteger(addSignature.methodReturnType)) ||
+        !pathSignature || !NeoWCPrivateTypeIsObject(pathSignature.methodReturnType) ||
+        !NeoWCPrivateTypeIsObject([pathSignature getArgumentTypeAtIndex:2])) return NO;
+    @try {
+        id wrap = NeoWCPrivateInitializeMessageWrap(wrapClass, initializer, argumentCode);
+        if (!wrap) return NO;
+        NeoWCPrivateSetValue(wrap, @"m_uiMessageType", @34);
+        NeoWCPrivateSetValue(wrap, @"m_nsFromUsr", currentUser);
+        NeoWCPrivateSetValue(wrap, @"m_nsRealChatUsr", currentUser);
+        NeoWCPrivateSetValue(wrap, @"m_nsToUsr", target);
+        NeoWCPrivateSetValue(wrap, @"m_uiStatus", @1);
+        NSUInteger now = (NSUInteger)NSDate.date.timeIntervalSince1970;
+        NeoWCPrivateSetValue(wrap, @"m_uiCreateTime", @(now));
+        NeoWCPrivateSetValue(wrap, @"m_uiSendTime", @(now));
+        id extendInfo = NeoWCPrivateObjectField(wrap, @[@"m_extendInfoWithMsgType"]);
+        if (durationMilliseconds) NeoWCPrivateSetValue(extendInfo, @"m_uiVoiceTime", @(durationMilliseconds));
+        NeoWCPrivateSetValue(extendInfo, @"m_uiVoiceFormat", @(voiceFormat));
+        NeoWCPrivateSetValue(extendInfo, @"m_uiVoiceForwardFlag", @1);
+        NeoWCPrivateSubmitMessage(manager, addSelector, target, wrap, addSignature.methodReturnType);
+        NSString *destination = ((id (*)(id, SEL, id))objc_msgSend)(wrapClass, pathSelector, wrap);
+        if (![destination isKindOfClass:NSString.class] || destination.length == 0) return NO;
+        [NSFileManager.defaultManager createDirectoryAtPath:destination.stringByDeletingLastPathComponent
+                                withIntermediateDirectories:YES attributes:nil error:nil];
+        [NSFileManager.defaultManager removeItemAtPath:destination error:nil];
+        if (![NSFileManager.defaultManager copyItemAtPath:path toPath:destination error:nil]) return NO;
+        id resendTarget = sender;
+        if (![resendTarget respondsToSelector:resendSelector] && [sender respondsToSelector:uploaderSelector])
+            resendTarget = ((id (*)(id, SEL, id))objc_msgSend)(sender, uploaderSelector, wrap);
+        NSMethodSignature *resendSignature = NeoWCPrivateSignature(resendTarget, resendSelector, 4);
+        if (!resendSignature || !NeoWCPrivateObjectArguments(resendSignature, NSMakeRange(2, 2)) ||
+            (!NeoWCPrivateTypeIsVoid(resendSignature.methodReturnType) &&
+             !NeoWCPrivateTypeIsInteger(resendSignature.methodReturnType))) return NO;
+        atomic_store(&NeoWCPrivateVoiceUploadDeadline, NSDate.date.timeIntervalSince1970 + 12.0);
+        NeoWCPrivateSubmitMessage(resendTarget, resendSelector, target, wrap, resendSignature.methodReturnType);
+        return YES;
+    } @catch (NSException *exception) {
+        NeoWCLog(@"语音消息适配发送失败：%@", exception.reason ?: exception.name);
+        return NO;
+    }
+}
+
+NSDictionary<NSString *, id> *NeoWCPrivateIncomingTextMessageInfo(id message) {
+    if (!message) return nil;
+    id (^KVCValue)(NSString *) = ^id(NSString *key) {
+        @try { return [message valueForKey:key]; }
+        @catch (__unused NSException *exception) { return nil; }
+    };
+    NSNumber *type = KVCValue(@"m_uiMessageType");
+    if (![type respondsToSelector:@selector(integerValue)] || type.integerValue != 1) return nil;
+    NSString *from = NeoWCPrivateNonemptyString(KVCValue(@"m_nsFromUsr"));
+    NSString *to = NeoWCPrivateNonemptyString(KVCValue(@"m_nsToUsr"));
+    NSString *content = NeoWCPrivateNonemptyString(KVCValue(@"m_nsContent"));
+    NSString *realSender = NeoWCPrivateNonemptyString(KVCValue(@"m_nsRealChatUsr"));
+    NSString *currentUser = NeoWCPrivateNonemptyString(NeoWCCurrentUserWXID());
+    if (!content.length || (!from.length && !to.length)) return nil;
+    BOOL fromSelf = currentUser.length && [from isEqualToString:currentUser];
+    NSString *session = [from hasSuffix:@"@chatroom"] ? from :
+        ([to hasSuffix:@"@chatroom"] ? to : (fromSelf ? to : from));
+    if (!session.length) return nil;
+    id createTime = KVCValue(@"m_uiCreateTime");
+    NSString *identifier = [NSString stringWithFormat:@"%@:%@:%llu:%lu", session,
+        realSender ?: from ?: @"",
+        [createTime respondsToSelector:@selector(unsignedLongLongValue)] ? [createTime unsignedLongLongValue] : 0,
+        (unsigned long)content.hash];
+    return @{ @"session": session, @"sender": realSender ?: from ?: @"", @"content": content,
+              @"identifier": identifier, @"fromSelf": @(fromSelf) };
 }
 
 #pragma mark - Transfer Verification

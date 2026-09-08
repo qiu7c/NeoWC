@@ -1,10 +1,11 @@
 #import "NeoWCAutomationViewController.h"
 #import "NeoWCAutomation.h"
 #import "NeoWCQuickReplyStore.h"
+#import "NeoWCSendConfirmationViewController.h"
 
 static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
     switch (type) {
-        case NeoWCAutomationSourceTypeLibraryText: return @"消息库文字";
+        case NeoWCAutomationSourceTypeLibraryText: return @"消息库";
         case NeoWCAutomationSourceTypeJavaScript: return @"JavaScript";
         default: return @"固定文字";
     }
@@ -27,11 +28,13 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"选择文字素材";
+    self.title = @"选择消息库素材";
     NSPredicate *predicate = [NSPredicate predicateWithBlock:^BOOL(NeoWCQuickReplyItem *item,
                                                                      NSDictionary *bindings) {
         (void)bindings;
-        return item.type == NeoWCQuickReplyTypeText;
+        return item.type == NeoWCQuickReplyTypeText || item.type == NeoWCQuickReplyTypeImage ||
+            item.type == NeoWCQuickReplyTypeVideo || item.type == NeoWCQuickReplyTypeVoice ||
+            item.type == NeoWCQuickReplyTypeJavaScript;
     }];
     self.items = [[NeoWCQuickReplyStore.sharedStore.items filteredArrayUsingPredicate:predicate]
         sortedArrayUsingComparator:^NSComparisonResult(NeoWCQuickReplyItem *first,
@@ -47,7 +50,7 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView; (void)section;
-    return self.items.count ? @"仅显示消息库中的文字素材。" : @"消息库中暂无文字素材。";
+    return self.items.count ? @"支持文字、图片、视频、语音和 JS 脚本。" : @"消息库中暂无可用素材。";
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView
@@ -56,14 +59,18 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
     if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle
                                              reuseIdentifier:@"automation-library"];
     if (self.items.count == 0) {
-        cell.textLabel.text = @"暂无文字素材";
-        cell.detailTextLabel.text = @"请先在消息库添加文字";
+        cell.textLabel.text = @"暂无可用素材";
+        cell.detailTextLabel.text = @"请先在消息库添加内容";
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         return cell;
     }
     NeoWCQuickReplyItem *item = self.items[indexPath.row];
-    cell.textLabel.text = item.title.length ? item.title : @"未命名文字";
-    cell.detailTextLabel.text = item.text;
+    NSString *fallback = item.type == NeoWCQuickReplyTypeJavaScript ? @"JS 脚本" :
+        (item.type == NeoWCQuickReplyTypeImage ? @"图片素材" :
+         (item.type == NeoWCQuickReplyTypeVideo ? @"视频素材" :
+          (item.type == NeoWCQuickReplyTypeVoice ? @"语音素材" : @"文字素材")));
+    cell.textLabel.text = item.title.length ? item.title : fallback;
+    cell.detailTextLabel.text = item.type == NeoWCQuickReplyTypeText ? item.text : fallback;
     cell.detailTextLabel.numberOfLines = 2;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     return cell;
@@ -82,11 +89,13 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
 @property (nonatomic, strong) NeoWCAutomationTask *task;
 @property (nonatomic, strong) UISwitch *enabledSwitch;
 @property (nonatomic, strong) UITextField *nameField;
-@property (nonatomic, strong) UITextField *targetField;
+@property (nonatomic, strong) NSMutableOrderedSet<NSString *> *selectedTargets;
 @property (nonatomic, strong) UISegmentedControl *sourceControl;
 @property (nonatomic, strong) UITextView *contentView;
 @property (nonatomic, strong) UISegmentedControl *repeatControl;
 @property (nonatomic, strong) UIDatePicker *datePicker;
+@property (nonatomic, strong) UISegmentedControl *triggerControl;
+@property (nonatomic, strong) UITextField *keywordField;
 @property (nonatomic, assign) NeoWCAutomationSourceType displayedSource;
 @property (nonatomic, copy) void (^saveHandler)(NeoWCAutomationTask *task);
 - (instancetype)initWithTask:(NeoWCAutomationTask *)task
@@ -106,16 +115,16 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"定时任务";
+    self.title = @"自动消息任务";
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
         initWithBarButtonSystemItem:UIBarButtonSystemItemSave target:self action:@selector(saveTask)];
 
     self.enabledSwitch = [UISwitch new];
     self.enabledSwitch.on = self.task.isEnabled;
     self.nameField = [self fieldWithPlaceholder:@"任务名称" text:self.task.name];
-    self.targetField = [self fieldWithPlaceholder:@"wxid 或 123@chatroom" text:self.task.targetUserName];
-    self.targetField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-    self.targetField.autocorrectionType = UITextAutocorrectionTypeNo;
+    NSArray *savedTargets = self.task.targetUserNames.count ? self.task.targetUserNames :
+        (self.task.targetUserName.length ? @[self.task.targetUserName] : @[]);
+    self.selectedTargets = [NSMutableOrderedSet orderedSetWithArray:savedTargets];
     self.sourceControl = [[UISegmentedControl alloc] initWithItems:@[@"固定文字", @"消息库", @"JS"]];
     self.sourceControl.selectedSegmentIndex = self.task.sourceType;
     self.displayedSource = self.task.sourceType;
@@ -127,6 +136,10 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
     self.contentView.delegate = self;
     self.repeatControl = [[UISegmentedControl alloc] initWithItems:@[@"仅一次", @"每天"]];
     self.repeatControl.selectedSegmentIndex = self.task.repeatMode;
+    self.triggerControl = [[UISegmentedControl alloc] initWithItems:@[@"定时", @"关键词"]];
+    self.triggerControl.selectedSegmentIndex = self.task.triggerMode;
+    [self.triggerControl addTarget:self action:@selector(triggerChanged:) forControlEvents:UIControlEventValueChanged];
+    self.keywordField = [self fieldWithPlaceholder:@"收到消息包含的关键词" text:self.task.triggerKeyword];
     self.datePicker = [UIDatePicker new];
     self.datePicker.datePickerMode = UIDatePickerModeDateAndTime;
     if (@available(iOS 13.4, *)) self.datePicker.preferredDatePickerStyle = UIDatePickerStyleCompact;
@@ -150,21 +163,23 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
     (void)tableView;
     if (section == 1) return 2;
     if (section == 2) return 2;
-    if (section == 3) return 2;
+    if (section == 3) return self.triggerControl.selectedSegmentIndex == NeoWCAutomationTriggerModeKeyword ? 2 : 3;
     return 1;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     (void)tableView;
-    return @[@"状态", @"目标", @"内容来源", @"执行时间", @"说明"][section];
+    return @[@"状态", @"任务与目标", @"内容来源", @"触发方式", @"说明"][section];
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView;
-    if (section == 1) return @"目标固定由任务配置，脚本不能更改发送对象。";
+    if (section == 1) return @"可同时选择多个好友或群聊；脚本不能更改发送对象。";
     if (section == 2 && self.sourceControl.selectedSegmentIndex == NeoWCAutomationSourceTypeJavaScript)
-        return @"实现 function main(input)，返回要发送的非空字符串。可用 httpGet(url) 和 httpPost(url, body, contentType)，建议仅请求 HTTPS。";
-    if (section == 3) return @"微信被系统挂起或结束后无法保证整点执行；恢复运行时会补跑逾期任务。";
+        return @"main(input) 可返回文字，或 {type:'text|image|video|voice', text/url/path}；URL 可直接指向 PHP 等媒体响应。";
+    if (section == 3) return self.triggerControl.selectedSegmentIndex == NeoWCAutomationTriggerModeKeyword
+        ? @"仅匹配所选会话收到的文字消息，并自动忽略本人消息与重复回调。"
+        : @"微信被系统挂起或结束后无法保证整点执行；恢复运行时会补跑逾期任务。";
     if (section == 4) return @"启用任务后会自动复用“保持后台运行”。单次任务完成后自动关闭。";
     return nil;
 }
@@ -192,24 +207,35 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
         cell.accessoryView = self.enabledSwitch;
         return cell;
     }
-    if (indexPath.section == 1) return [self controlCell:indexPath.row ? self.targetField : self.nameField
-                                               identifier:indexPath.row ? @"target" : @"name"];
+    if (indexPath.section == 1 && indexPath.row == 0) return [self controlCell:self.nameField identifier:@"name"];
+    if (indexPath.section == 1) {
+        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"targets"];
+        if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"targets"];
+        cell.textLabel.text = @"选择好友或群聊";
+        cell.detailTextLabel.text = self.selectedTargets.count ? [NSString stringWithFormat:@"已选 %lu 个", (unsigned long)self.selectedTargets.count] : @"未选择";
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        return cell;
+    }
     if (indexPath.section == 2 && indexPath.row == 0)
         return [self controlCell:self.sourceControl identifier:@"source"];
     if (indexPath.section == 2) {
         if (self.sourceControl.selectedSegmentIndex == NeoWCAutomationSourceTypeLibraryText) {
             UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"library"];
             if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"library"];
-            cell.textLabel.text = @"选择文字素材";
+            cell.textLabel.text = @"选择消息库素材";
             cell.detailTextLabel.text = [self selectedLibraryTitle];
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             return cell;
         }
         return [self controlCell:self.contentView identifier:@"content"];
     }
+    if (indexPath.section == 3 && indexPath.row == 0)
+        return [self controlCell:self.triggerControl identifier:@"trigger"];
+    if (indexPath.section == 3 && self.triggerControl.selectedSegmentIndex == NeoWCAutomationTriggerModeKeyword)
+        return [self controlCell:self.keywordField identifier:@"keyword"];
     if (indexPath.section == 3)
-        return [self controlCell:indexPath.row ? self.datePicker : self.repeatControl
-                       identifier:indexPath.row ? @"date" : @"repeat"];
+        return [self controlCell:indexPath.row == 1 ? self.repeatControl : self.datePicker
+                       identifier:indexPath.row == 1 ? @"repeat" : @"date"];
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"notice"];
     if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"notice"];
     cell.textLabel.text = @"进程内定时调度";
@@ -228,6 +254,7 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (indexPath.section == 1 && indexPath.row == 1) { [self presentTargetPicker]; return; }
     if (indexPath.section != 2 || indexPath.row != 1 ||
         self.sourceControl.selectedSegmentIndex != NeoWCAutomationSourceTypeLibraryText) return;
     __weak typeof(self) weakSelf = self;
@@ -243,9 +270,33 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
 - (NSString *)selectedLibraryTitle {
     for (NeoWCQuickReplyItem *item in NeoWCQuickReplyStore.sharedStore.items) {
         if ([item.identifier isEqualToString:self.task.libraryItemIdentifier])
-            return item.title.length ? item.title : @"未命名文字";
+            return item.title.length ? item.title : @"未命名素材";
     }
     return @"未选择";
+}
+
+- (void)presentTargetPicker {
+    __weak typeof(self) weakSelf = self;
+    __block UIViewController *picker = nil;
+    picker = NeoWCCreateConversationPicker(@"选择接收会话", @"可多选好友和群聊，完成后返回任务编辑页。",
+        ^BOOL(NSString *userName) { return [weakSelf.selectedTargets containsObject:userName]; },
+        ^(NSString *userName) {
+            if ([weakSelf.selectedTargets containsObject:userName]) [weakSelf.selectedTargets removeObject:userName];
+            else if (userName.length) [weakSelf.selectedTargets addObject:userName];
+        });
+    __weak UIViewController *weakPicker = picker;
+    NeoWCConfigureConversationPickerCompletion(picker, ^{
+        [weakPicker.navigationController popViewControllerAnimated:YES];
+        [weakSelf.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:1 inSection:1]]
+                                  withRowAnimation:UITableViewRowAnimationNone];
+    });
+    [self.navigationController pushViewController:picker animated:YES];
+}
+
+- (void)triggerChanged:(UISegmentedControl *)sender {
+    (void)sender;
+    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:3]
+                  withRowAnimation:UITableViewRowAnimationFade];
 }
 
 - (void)sourceChanged:(UISegmentedControl *)sender {
@@ -282,23 +333,28 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
     NSString *(^trim)(NSString *) = ^NSString *(NSString *value) {
         return [value ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     };
-    NSString *target = trim(self.targetField.text);
-    if (target.length == 0) { [self showError:@"请输入单聊 wxid 或群聊 ID。"] ; return; }
+    if (self.selectedTargets.count == 0) { [self showError:@"请至少选择一个好友或群聊。"] ; return; }
     NeoWCAutomationSourceType source = self.sourceControl.selectedSegmentIndex;
     if (source == NeoWCAutomationSourceTypeLibraryText && self.task.libraryItemIdentifier.length == 0) {
-        [self showError:@"请选择消息库文字素材。"]; return;
+        [self showError:@"请选择消息库素材。"]; return;
     }
+    if (self.triggerControl.selectedSegmentIndex == NeoWCAutomationTriggerModeKeyword &&
+        trim(self.keywordField.text).length == 0) { [self showError:@"触发关键词不能为空。"]; return; }
     if (source != NeoWCAutomationSourceTypeLibraryText && trim(self.contentView.text).length == 0) {
         [self showError:source == NeoWCAutomationSourceTypeJavaScript ? @"JS 脚本不能为空。" : @"发送文字不能为空。"]; return;
     }
-    self.task.name = trim(self.nameField.text).length ? trim(self.nameField.text) : @"定时消息";
-    self.task.targetUserName = target;
+    self.task.name = trim(self.nameField.text).length ? trim(self.nameField.text) :
+        (self.triggerControl.selectedSegmentIndex == NeoWCAutomationTriggerModeKeyword ? @"关键词回复" : @"定时消息");
+    self.task.targetUserNames = self.selectedTargets.array;
+    self.task.targetUserName = self.selectedTargets.array.firstObject ?: @"";
     self.task.enabled = self.enabledSwitch.isOn;
     self.task.sourceType = source;
     if (source == NeoWCAutomationSourceTypeFixedText) self.task.fixedText = self.contentView.text ?: @"";
     if (source == NeoWCAutomationSourceTypeJavaScript) self.task.script = self.contentView.text ?: @"";
     self.task.repeatMode = self.repeatControl.selectedSegmentIndex;
     self.task.nextFireDate = self.datePicker.date;
+    self.task.triggerMode = self.triggerControl.selectedSegmentIndex;
+    self.task.triggerKeyword = trim(self.keywordField.text);
     if (self.saveHandler) self.saveHandler(self.task);
     [self.navigationController popViewControllerAnimated:YES];
 }
@@ -315,7 +371,7 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"定时消息与脚本";
+    self.title = @"自动消息与脚本";
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
         initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(addTask)];
 }
@@ -360,10 +416,13 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
         formatter.dateFormat = @"MM-dd HH:mm";
     });
     cell.textLabel.text = task.name;
-    NSString *schedule = task.repeatMode == NeoWCAutomationRepeatModeDaily
+    NSString *schedule = task.triggerMode == NeoWCAutomationTriggerModeKeyword
+        ? [NSString stringWithFormat:@"关键词：%@", task.triggerKeyword.length ? task.triggerKeyword : @"未设置"]
+        : (task.repeatMode == NeoWCAutomationRepeatModeDaily
         ? [@"每天 " stringByAppendingString:[[formatter stringFromDate:task.nextFireDate] substringFromIndex:6]]
-        : [formatter stringFromDate:task.nextFireDate];
-    cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ · %@ · %@%@", task.targetUserName.length ? task.targetUserName : @"未设置目标",
+        : [formatter stringFromDate:task.nextFireDate]);
+    NSUInteger targetCount = task.targetUserNames.count ?: (task.targetUserName.length ? 1 : 0);
+    cell.detailTextLabel.text = [NSString stringWithFormat:@"%lu 个会话 · %@ · %@%@", (unsigned long)targetCount,
         NeoWCAutomationSourceName(task.sourceType), schedule, task.lastResult.length ? [@" · " stringByAppendingString:task.lastResult] : @""];
     cell.detailTextLabel.numberOfLines = 2;
     UISwitch *toggle = [UISwitch new];
@@ -395,10 +454,10 @@ static NSString *NeoWCAutomationSourceName(NeoWCAutomationSourceType type) {
 - (void)toggleChanged:(UISwitch *)sender {
     if (sender.tag >= self.tasks.count) return;
     NeoWCAutomationTask *task = self.tasks[sender.tag].copy;
-    if (sender.isOn && task.targetUserName.length == 0) {
+    if (sender.isOn && task.targetUserNames.count == 0 && task.targetUserName.length == 0) {
         sender.on = NO;
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"请先编辑任务"
-            message:@"启用前需要填写接收消息的 wxid 或群聊 ID。"
+            message:@"启用前需要至少选择一个好友或群聊。"
             preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];

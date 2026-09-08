@@ -44,6 +44,7 @@ static NeoWCPCMWriter NeoWCPeerWriter;
 static os_unfair_lock NeoWCMicWriterLock = OS_UNFAIR_LOCK_INIT;
 static os_unfair_lock NeoWCPeerWriterLock = OS_UNFAIR_LOCK_INIT;
 static NSString *NeoWCCallSessionPrefix;
+static NSString *NeoWCCallSessionDisplayName;
 static NSString *NeoWCMicRecordingPath;
 static NSString *NeoWCPeerRecordingPath;
 static NeoWCRenderSlot NeoWCRenderSlots[16];
@@ -549,6 +550,9 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
     if (!atomic_load(&NeoWCCallRecording)) return;
     UILabel *nameLabel = NeoWCCallNameLabel(controller);
     if (!nameLabel) return;
+    NSString *displayName = [nameLabel.text stringByTrimmingCharactersInSet:
+        NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (displayName.length > 0) NeoWCCallSessionDisplayName = displayName;
     UIView *dot = [UIView new];
     dot.backgroundColor = UIColor.systemRedColor;
     dot.layer.cornerRadius = 4.0;
@@ -763,6 +767,7 @@ static void NeoWCCallDidStart(void) {
     formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
     formatter.dateFormat = @"yyyyMMdd-HHmmss";
     NeoWCCallSessionPrefix = [formatter stringFromDate:NSDate.date];
+    NeoWCCallSessionDisplayName = nil;
     NeoWCMicRecordingPath = nil;
     NeoWCPeerRecordingPath = nil;
     atomic_fetch_add(&NeoWCAudioActivityGeneration, 1);
@@ -791,6 +796,18 @@ static void NeoWCCallDidStop(void) {
     atomic_store(&NeoWCVoiceActive, false);
     atomic_store(&NeoWCVoiceByteCount, 0);
     void *voiceBytes = (void *)atomic_exchange(&NeoWCVoiceBytes, 0);
+    NSString *sessionPrefix = NeoWCCallSessionPrefix;
+    NSString *displayName = NeoWCCallSessionDisplayName;
+    NSString *micRecordingPath = NeoWCMicRecordingPath;
+    NSString *peerRecordingPath = NeoWCPeerRecordingPath;
+    if (sessionPrefix.length > 0) {
+        NSDictionary *metadata = @{ @"name": displayName.length ? displayName : @"通话录音",
+                                    @"timestamp": @((long long)NSDate.date.timeIntervalSince1970) };
+        NSData *metadataData = [NSJSONSerialization dataWithJSONObject:metadata options:0 error:nil];
+        NSURL *metadataURL = [NeoWCCallRecordDirectory() URLByAppendingPathComponent:
+            [sessionPrefix stringByAppendingPathExtension:@"json"]];
+        [metadataData writeToURL:metadataURL atomically:YES];
+    }
     dispatch_async(NeoWCCallFileQueue, ^{
         os_unfair_lock_lock(&NeoWCMicWriterLock);
         NeoWCCloseWriter(&NeoWCMicWriter);
@@ -798,8 +815,7 @@ static void NeoWCCallDidStop(void) {
         os_unfair_lock_lock(&NeoWCPeerWriterLock);
         NeoWCCloseWriter(&NeoWCPeerWriter);
         os_unfair_lock_unlock(&NeoWCPeerWriterLock);
-        NeoWCExportMixedRecording(NeoWCMicRecordingPath, NeoWCPeerRecordingPath,
-                                  NeoWCCallSessionPrefix);
+        NeoWCExportMixedRecording(micRecordingPath, peerRecordingPath, sessionPrefix);
     });
     dispatch_async(dispatch_get_main_queue(), ^{ [[NeoWCCallAudioPanel sharedPanel] hide]; });
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)),

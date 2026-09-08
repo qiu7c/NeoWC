@@ -5,7 +5,6 @@
 #import "NeoWCInAppNotification.h"
 #import "NeoWCPrivateAPI.h"
 #import "NeoWCRuntimeFeatures.h"
-#import <AVFoundation/AVFoundation.h>
 #import <UserNotifications/UserNotifications.h>
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
@@ -42,104 +41,26 @@ static NSString *NeoWCMomentsReminderForwardTarget(void) {
 
 static void NeoWCMomentsReminderSendText(NSString *target, NSString *content) {
     if (target.length == 0 || content.length == 0) return;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        Class wrapClass = objc_getClass("CMessageWrap");
-        SEL initSelector = sel_registerName("initWithMsgType:");
-        if (!wrapClass || ![wrapClass instancesRespondToSelector:initSelector]) return;
-        id wrap = ((id (*)(id, SEL, unsigned int))objc_msgSend)([wrapClass alloc], initSelector, 1);
-        if (!wrap) return;
-        NSString *from = NeoWCMomentsReminderLocalUsername();
-        ((void (*)(id, SEL, id))objc_msgSend)(wrap, sel_registerName("setM_nsFromUsr:"), from);
-        ((void (*)(id, SEL, id))objc_msgSend)(wrap, sel_registerName("setM_nsToUsr:"), target);
-        ((void (*)(id, SEL, unsigned int))objc_msgSend)(wrap, sel_registerName("setM_uiStatus:"), 4);
-        ((void (*)(id, SEL, id))objc_msgSend)(wrap, sel_registerName("setM_nsContent:"), content);
-        ((void (*)(id, SEL, unsigned int))objc_msgSend)(wrap, sel_registerName("setM_uiCreateTime:"),
-                                                        (unsigned int)NSDate.date.timeIntervalSince1970);
-        id manager = NeoWCMomentsReminderService("CMessageMgr");
-        SEL addSelector = sel_registerName("AddMsg:MsgWrap:");
-        if (manager && [manager respondsToSelector:addSelector]) {
-            ((void (*)(id, SEL, id, id))objc_msgSend)(manager, addSelector, target, wrap);
-        }
-    });
+    dispatch_async(dispatch_get_main_queue(), ^{ NeoWCPrivateSendTextMessage(target, content); });
 }
 
 static void NeoWCMomentsReminderSendImage(NSString *target, UIImage *image) {
     if (target.length == 0 || !image) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSData *data = UIImagePNGRepresentation(image);
-        Class logicClass = objc_getClass("WeixinContentLogicController");
-        id logic = logicClass ? [[logicClass alloc] init] : nil;
-        SEL formSelector = sel_registerName("FormImageMsg:withImage:withData:");
-        if (!logic || !data || ![logic respondsToSelector:formSelector]) return;
-        id wrap = ((id (*)(id, SEL, id, id, id))objc_msgSend)(logic, formSelector, target, image, data);
-        if (!wrap) return;
-        SEL extendSelector = sel_registerName("m_extendInfoWithMsgType");
-        id extendInfo = [wrap respondsToSelector:extendSelector]
-            ? ((id (*)(id, SEL))objc_msgSend)(wrap, extendSelector) : nil;
-        SEL imageSelector = sel_registerName("setImage:withData:isOriginImage:");
-        if (extendInfo && [extendInfo respondsToSelector:imageSelector]) {
-            ((void (*)(id, SEL, id, id, BOOL))objc_msgSend)(extendInfo, imageSelector, image, data, YES);
-        }
-        id manager = NeoWCMomentsReminderService("CMessageMgr");
-        SEL addSelector = sel_registerName("AddMsg:MsgWrap:");
-        if (manager && [manager respondsToSelector:addSelector]) {
-            ((void (*)(id, SEL, id, id))objc_msgSend)(manager, addSelector, target, wrap);
-        }
+        NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:
+            [NSString stringWithFormat:@"neowc-moments-%@.png", NSUUID.UUID.UUIDString]];
+        if (![data writeToFile:path atomically:YES]) return;
+        NeoWCPrivateSendImageMessage(target, path);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+        });
     });
-}
-
-static UIImage *NeoWCMomentsReminderVideoThumbnail(NSString *path) {
-    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:path] options:nil];
-    AVAssetImageGenerator *generator = [AVAssetImageGenerator assetImageGeneratorWithAsset:asset];
-    generator.appliesPreferredTrackTransform = YES;
-    CGImageRef imageRef = [generator copyCGImageAtTime:CMTimeMakeWithSeconds(0.1, 600)
-                                            actualTime:NULL error:NULL];
-    if (!imageRef) return nil;
-    UIImage *image = [UIImage imageWithCGImage:imageRef];
-    CGImageRelease(imageRef);
-    return image;
 }
 
 static void NeoWCMomentsReminderSendVideo(NSString *target, NSString *path) {
     if (target.length == 0 || path.length == 0 || ![NSFileManager.defaultManager fileExistsAtPath:path]) return;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIImage *thumb = NeoWCMomentsReminderVideoThumbnail(path);
-        NSString *thumbPath = nil;
-        NSData *thumbData = thumb ? UIImageJPEGRepresentation(thumb, 0.85) : nil;
-        if (thumbData.length > 0) {
-            thumbPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
-                [NSString stringWithFormat:@"neowc-moments-video-thumb-%@.jpg", NSUUID.UUID.UUIDString]];
-            if (![thumbData writeToFile:thumbPath atomically:YES]) thumbPath = nil;
-        }
-        id videoInfo = nil;
-        AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:path] options:nil];
-        AVAssetTrack *videoTrack = [asset tracksWithMediaType:AVMediaTypeVideo].firstObject;
-        float bitrate = videoTrack.estimatedDataRate;
-        Class openAPIClass = objc_getClass("OpenApiMgrHelper");
-        SEL highSelector = sel_registerName("genCaptureVideoInfoWithVideoData:mediaMessage:param:");
-        if (bitrate >= 5000000.0f && openAPIClass && [openAPIClass respondsToSelector:highSelector]) {
-            NSData *videoData = [NSData dataWithContentsOfFile:path];
-            videoInfo = ((id (*)(id, SEL, id, id, id))objc_msgSend)(openAPIClass, highSelector, videoData, nil, nil);
-        }
-        if (!videoInfo) {
-            Class infoClass = objc_getClass("CaptureVideoInfo");
-            SEL infoSelector = sel_registerName("genVideoInfoWithVideoUrl:thumb:");
-            if (infoClass && [infoClass respondsToSelector:infoSelector]) {
-                videoInfo = ((id (*)(id, SEL, id, id))objc_msgSend)(infoClass, infoSelector,
-                                                                    [NSURL fileURLWithPath:path], thumb);
-            }
-        }
-        SEL thumbPathSelector = sel_registerName("setThumb_path:");
-        if (videoInfo && thumbPath.length > 0 && [videoInfo respondsToSelector:thumbPathSelector]) {
-            ((void (*)(id, SEL, id))objc_msgSend)(videoInfo, thumbPathSelector, thumbPath);
-        }
-        id manager = NeoWCMomentsReminderService("CMessageMgr");
-        SEL addSelector = sel_registerName("AddVideoMsg:ToUsr:VideoInfo:");
-        NSString *from = NeoWCMomentsReminderLocalUsername();
-        if (videoInfo && from.length > 0 && manager && [manager respondsToSelector:addSelector]) {
-            ((void (*)(id, SEL, id, id, id))objc_msgSend)(manager, addSelector, from, target, videoInfo);
-        }
-    });
+    dispatch_async(dispatch_get_main_queue(), ^{ NeoWCPrivateSendVideoMessage(target, path); });
 }
 
 NSArray<NSString *> *NeoWCMomentsReminderUsers(void) {

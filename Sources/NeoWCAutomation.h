@@ -13,10 +13,16 @@ typedef NS_ENUM(NSInteger, NeoWCAutomationRepeatMode) {
     NeoWCAutomationRepeatModeDaily = 1,
 };
 
+typedef NS_ENUM(NSInteger, NeoWCAutomationTriggerMode) {
+    NeoWCAutomationTriggerModeScheduled = 0,
+    NeoWCAutomationTriggerModeKeyword = 1,
+};
+
 @interface NeoWCAutomationTask : NSObject <NSCopying>
 @property (nonatomic, copy) NSString *identifier;
 @property (nonatomic, copy) NSString *name;
 @property (nonatomic, copy) NSString *targetUserName;
+@property (nonatomic, copy) NSArray<NSString *> *targetUserNames;
 @property (nonatomic, assign, getter=isEnabled) BOOL enabled;
 @property (nonatomic, assign) NeoWCAutomationSourceType sourceType;
 @property (nonatomic, copy) NSString *fixedText;
@@ -24,6 +30,8 @@ typedef NS_ENUM(NSInteger, NeoWCAutomationRepeatMode) {
 @property (nonatomic, copy) NSString *script;
 @property (nonatomic, strong) NSDate *nextFireDate;
 @property (nonatomic, assign) NeoWCAutomationRepeatMode repeatMode;
+@property (nonatomic, assign) NeoWCAutomationTriggerMode triggerMode;
+@property (nonatomic, copy) NSString *triggerKeyword;
 @property (nonatomic, strong, nullable) NSDate *lastRunDate;
 @property (nonatomic, copy, nullable) NSString *lastResult;
 @end
@@ -39,5 +47,9 @@ typedef NS_ENUM(NSInteger, NeoWCAutomationRepeatMode) {
 
 /// Starts the in-process automation scheduler. Safe to call repeatedly.
 FOUNDATION_EXPORT void NeoWCAutomationStart(void);
+
+/// Delivers one incoming WeChat message wrapper to enabled keyword automations.
+/// The wrapper is read-only; unsupported/non-text/self messages are ignored.
+FOUNDATION_EXPORT void NeoWCAutomationHandleIncomingMessage(id _Nullable message);
 
 NS_ASSUME_NONNULL_END
