@@ -49,6 +49,7 @@ static NSString *NeoWCPeerRecordingPath;
 static NeoWCRenderSlot NeoWCRenderSlots[16];
 static dispatch_queue_t NeoWCCallFileQueue;
 static void NeoWCCallDidStop(void);
+static void NeoWCCallVoiceDidFinish(void);
 
 static OSStatus (*NeoWCOriginalAudioUnitRender)(AudioUnit, AudioUnitRenderActionFlags *,
                                                 const AudioTimeStamp *, UInt32, UInt32,
@@ -170,13 +171,21 @@ static void NeoWCWriteBuffers(NeoWCPCMWriter *writer, NSString *suffix,
     os_unfair_lock_unlock(writerLock);
 }
 
-static inline float NeoWCVoiceSample(uint64_t sourceFrame, UInt32 targetChannel) {
+static inline BOOL NeoWCVoiceSample(uint64_t sourceFrame, UInt32 targetChannel,
+                                    float *sample) {
     const SInt16 *samples = (const SInt16 *)atomic_load(&NeoWCVoiceBytes);
     size_t bytes = atomic_load(&NeoWCVoiceByteCount);
     size_t frameCount = bytes / sizeof(SInt16);
-    if (!samples || frameCount == 0) return 0;
+    if (!samples || frameCount == 0 || !sample) return NO;
+    if (sourceFrame >= frameCount) {
+        if (atomic_exchange(&NeoWCVoiceActive, false)) {
+            dispatch_async(dispatch_get_main_queue(), ^{ NeoWCCallVoiceDidFinish(); });
+        }
+        return NO;
+    }
     (void)targetChannel;
-    return (float)samples[sourceFrame % frameCount] / 32768.0f;
+    *sample = (float)samples[sourceFrame] / 32768.0f;
+    return YES;
 }
 
 static void NeoWCApplyVoice(AudioStreamBasicDescription format, UInt32 frames,
@@ -196,7 +205,8 @@ static void NeoWCApplyVoice(AudioStreamBasicDescription format, UInt32 frames,
             if (!values) continue;
             UInt32 availableFrames = buffer->mDataByteSize / (sizeof(SInt16) * channels);
             for (UInt32 frame = 0; frame < MIN(frames, availableFrames); frame++) {
-                float voice = NeoWCVoiceSample((uint64_t)((start + frame) * ratio), bufferIndex);
+                float voice = 0;
+                if (!NeoWCVoiceSample((uint64_t)((start + frame) * ratio), bufferIndex, &voice)) break;
                 for (UInt32 channel = 0; channel < channels; channel++) {
                     UInt32 index = frame * channels + channel;
                     float original = (float)values[index] / 32768.0f;
@@ -210,7 +220,8 @@ static void NeoWCApplyVoice(AudioStreamBasicDescription format, UInt32 frames,
             if (!values) continue;
             UInt32 availableFrames = buffer->mDataByteSize / (sizeof(float) * channels);
             for (UInt32 frame = 0; frame < MIN(frames, availableFrames); frame++) {
-                float voice = NeoWCVoiceSample((uint64_t)((start + frame) * ratio), bufferIndex);
+                float voice = 0;
+                if (!NeoWCVoiceSample((uint64_t)((start + frame) * ratio), bufferIndex, &voice)) break;
                 for (UInt32 channel = 0; channel < channels; channel++) {
                     UInt32 index = frame * channels + channel;
                     float result = mix ? values[index] * 0.45f + voice * 0.75f : voice;
@@ -311,11 +322,52 @@ static OSStatus NeoWCAudioComponentInstanceDispose(AudioComponentInstance instan
 
 @interface NeoWCCallAudioPanel : NSObject
 @property (nonatomic, strong) UIView *controlView;
+@property (nonatomic, strong) UIView *menuView;
+@property (nonatomic, strong) UIView *recordingDot;
 @property (nonatomic, weak) UIViewController *hostController;
 @property (nonatomic, weak) UIViewController *voiceLibraryController;
 @property (nonatomic, strong) UILabel *statusLabel;
+@property (nonatomic, assign) BOOL menuExpanded;
 - (void)loadVoiceItem:(NeoWCQuickReplyItem *)item;
+- (void)voiceDidFinish;
 @end
+
+static void NeoWCCallCollectLabels(UIView *view, NSMutableArray<UILabel *> *labels) {
+    if (!view || view.hidden || view.alpha <= 0.01) return;
+    if ([view isKindOfClass:UILabel.class]) {
+        UILabel *label = (UILabel *)view;
+        if (label.text.length > 0) [labels addObject:label];
+    }
+    for (UIView *subview in view.subviews) NeoWCCallCollectLabels(subview, labels);
+}
+
+static UILabel *NeoWCCallNameLabel(UIViewController *controller) {
+    if (!controller.viewIfLoaded.window) return nil;
+    NSMutableArray<UILabel *> *labels = [NSMutableArray array];
+    NeoWCCallCollectLabels(controller.view, labels);
+    UILabel *best = nil;
+    CGFloat bestScore = -CGFLOAT_MAX;
+    CGFloat width = CGRectGetWidth(controller.view.bounds);
+    CGFloat height = CGRectGetHeight(controller.view.bounds);
+    for (UILabel *label in labels) {
+        CGRect rect = [label convertRect:label.bounds toView:controller.view];
+        CGFloat centerX = CGRectGetMidX(rect);
+        CGFloat centerY = CGRectGetMidY(rect);
+        if (CGRectIsEmpty(rect) || centerY < height * 0.18 || centerY > height * 0.58 ||
+            fabs(centerX - width * 0.5) > width * 0.3) continue;
+        NSString *text = [label.text stringByTrimmingCharactersInSet:
+            NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (text.length == 0 || [text containsString:@":"] || [text containsString:@"录音"] ||
+            [text containsString:@"语音包"]) continue;
+        CGFloat score = label.font.pointSize * 12.0 - fabs(centerX - width * 0.5) -
+            fabs(centerY - height * 0.36) * 0.08;
+        if (score > bestScore) {
+            best = label;
+            bestScore = score;
+        }
+    }
+    return best;
+}
 
 static UIViewController *NeoWCCallTopViewController(UIViewController *controller) {
     if (!controller) return nil;
@@ -491,6 +543,44 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
     return button;
 }
 
+- (void)installRecordingIndicatorInController:(UIViewController *)controller {
+    [self.recordingDot removeFromSuperview];
+    self.recordingDot = nil;
+    if (!atomic_load(&NeoWCCallRecording)) return;
+    UILabel *nameLabel = NeoWCCallNameLabel(controller);
+    if (!nameLabel) return;
+    UIView *dot = [UIView new];
+    dot.backgroundColor = UIColor.systemRedColor;
+    dot.layer.cornerRadius = 4.0;
+    dot.layer.zPosition = 10000.0;
+    dot.translatesAutoresizingMaskIntoConstraints = NO;
+    [controller.view addSubview:dot];
+    CGFloat textWidth = ceil([nameLabel.text sizeWithAttributes:
+        @{ NSFontAttributeName: nameLabel.font }].width);
+    textWidth = MIN(textWidth, CGRectGetWidth(nameLabel.bounds));
+    [NSLayoutConstraint activateConstraints:@[
+        [dot.centerXAnchor constraintEqualToAnchor:nameLabel.centerXAnchor
+                                          constant:textWidth * 0.5 + 11.0],
+        [dot.centerYAnchor constraintEqualToAnchor:nameLabel.centerYAnchor],
+        [dot.widthAnchor constraintEqualToConstant:8.0],
+        [dot.heightAnchor constraintEqualToConstant:8.0],
+    ]];
+    self.recordingDot = dot;
+}
+
+- (void)toggleMenu {
+    self.menuExpanded = !self.menuExpanded;
+    if (self.menuExpanded) self.menuView.hidden = NO;
+    [UIView animateWithDuration:0.2 animations:^{
+        self.menuView.alpha = self.menuExpanded ? 1.0 : 0.0;
+        self.menuView.transform = self.menuExpanded
+            ? CGAffineTransformIdentity : CGAffineTransformMakeScale(0.92, 0.92);
+    } completion:^(BOOL finished) {
+        (void)finished;
+        if (!self.menuExpanded) self.menuView.hidden = YES;
+    }];
+}
+
 - (void)show {
     if (!NeoWCEnhancementEnabled(NeoWCCallRecordingEnabledKey) &&
         !NeoWCEnhancementEnabled(NeoWCCallVoiceDisguiseEnabledKey)) return;
@@ -500,45 +590,73 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
         ([controller isKindOfClass:UINavigationController.class] &&
          [((UINavigationController *)controller).topViewController
              isKindOfClass:NeoWCCallVoiceLibraryViewController.class])) return;
-    if (self.hostController == controller && self.controlView.superview == controller.view) return;
+    BOOL voiceEnabled = NeoWCEnhancementEnabled(NeoWCCallVoiceDisguiseEnabledKey);
+    if (self.hostController == controller) {
+        [self installRecordingIndicatorInController:controller];
+        if (!voiceEnabled || self.controlView.superview == controller.view) return;
+    }
     [self.controlView removeFromSuperview];
-    UIView *panel = [[UIView alloc] init];
-    panel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.9];
-    panel.layer.cornerRadius = 16;
-    panel.layer.cornerCurve = kCACornerCurveContinuous;
-    panel.layer.zPosition = 10000.0;
-    panel.translatesAutoresizingMaskIntoConstraints = NO;
-    [controller.view addSubview:panel];
+    [self.menuView removeFromSuperview];
+    [self.recordingDot removeFromSuperview];
+    self.hostController = controller;
+    [self installRecordingIndicatorInController:controller];
+    if (!voiceEnabled) return;
+
+    UIButton *voiceButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    voiceButton.backgroundColor = [UIColor colorWithWhite:0.12 alpha:0.82];
+    voiceButton.tintColor = UIColor.whiteColor;
+    voiceButton.layer.cornerRadius = 22.0;
+    voiceButton.layer.cornerCurve = kCACornerCurveContinuous;
+    voiceButton.layer.zPosition = 10000.0;
+    voiceButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [voiceButton setImage:[UIImage systemImageNamed:@"waveform"] forState:UIControlStateNormal];
+    [voiceButton addTarget:self action:@selector(toggleMenu) forControlEvents:UIControlEventTouchUpInside];
+    [controller.view addSubview:voiceButton];
+
+    UIView *menu = [UIView new];
+    menu.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.92];
+    menu.layer.cornerRadius = 14.0;
+    menu.layer.cornerCurve = kCACornerCurveContinuous;
+    menu.layer.zPosition = 9999.0;
+    menu.translatesAutoresizingMaskIntoConstraints = NO;
+    menu.alpha = 0.0;
+    menu.hidden = YES;
+    menu.transform = CGAffineTransformMakeScale(0.92, 0.92);
+    [controller.view insertSubview:menu belowSubview:voiceButton];
+
     UILabel *label = [[UILabel alloc] init];
-    label.text = atomic_load(&NeoWCCallRecording) ? @"● 通话自动录音中" : @"通话语音包";
+    label.text = @"语音包未播放";
     label.textColor = UIColor.whiteColor;
-    label.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
-    label.textAlignment = NSTextAlignmentCenter;
+    label.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
+    label.textAlignment = NSTextAlignmentLeft;
     UIButton *pickButton = [self button:@"选择语音包" action:@selector(pickVoice)];
     UIButton *stopButton = [self button:@"停止播放" action:@selector(stopVoice)];
-    BOOL voiceEnabled = NeoWCEnhancementEnabled(NeoWCCallVoiceDisguiseEnabledKey);
     UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:@[pickButton, stopButton]];
     buttons.axis = UILayoutConstraintAxisHorizontal;
     buttons.distribution = UIStackViewDistributionFillEqually;
-    UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:
-        voiceEnabled ? @[label, buttons] : @[label]];
+    UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[label, buttons]];
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 8;
+    stack.spacing = 5;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
-    [panel addSubview:stack];
+    [menu addSubview:stack];
     [NSLayoutConstraint activateConstraints:@[
-        [panel.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
-        [panel.topAnchor constraintEqualToAnchor:controller.view.safeAreaLayoutGuide.topAnchor constant:12],
-        [panel.widthAnchor constraintEqualToConstant:220],
-        [panel.heightAnchor constraintEqualToConstant:(voiceEnabled ? 92.0 : 44.0)],
-        [stack.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:8],
-        [stack.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor constant:-8],
-        [stack.topAnchor constraintEqualToAnchor:panel.topAnchor constant:12],
-        [stack.bottomAnchor constraintEqualToAnchor:panel.bottomAnchor constant:-12],
+        [voiceButton.leadingAnchor constraintEqualToAnchor:controller.view.safeAreaLayoutGuide.leadingAnchor constant:12],
+        [voiceButton.centerYAnchor constraintEqualToAnchor:controller.view.centerYAnchor],
+        [voiceButton.widthAnchor constraintEqualToConstant:44],
+        [voiceButton.heightAnchor constraintEqualToConstant:44],
+        [menu.leadingAnchor constraintEqualToAnchor:voiceButton.trailingAnchor constant:8],
+        [menu.centerYAnchor constraintEqualToAnchor:voiceButton.centerYAnchor],
+        [menu.widthAnchor constraintEqualToConstant:190],
+        [menu.heightAnchor constraintEqualToConstant:78],
+        [stack.leadingAnchor constraintEqualToAnchor:menu.leadingAnchor constant:10],
+        [stack.trailingAnchor constraintEqualToAnchor:menu.trailingAnchor constant:-8],
+        [stack.topAnchor constraintEqualToAnchor:menu.topAnchor constant:8],
+        [stack.bottomAnchor constraintEqualToAnchor:menu.bottomAnchor constant:-8],
     ]];
-    self.controlView = panel;
-    self.hostController = controller;
+    self.controlView = voiceButton;
+    self.menuView = menu;
     self.statusLabel = label;
+    self.menuExpanded = NO;
 }
 
 - (void)hide {
@@ -547,9 +665,14 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
     }
     self.voiceLibraryController = nil;
     [self.controlView removeFromSuperview];
+    [self.menuView removeFromSuperview];
+    [self.recordingDot removeFromSuperview];
     self.controlView = nil;
+    self.menuView = nil;
+    self.recordingDot = nil;
     self.hostController = nil;
     self.statusLabel = nil;
+    self.menuExpanded = NO;
 }
 
 - (void)pickVoice {
@@ -567,8 +690,12 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
 - (void)stopVoice {
     atomic_store(&NeoWCVoiceActive, false);
     atomic_store(&NeoWCVoiceFramePosition, 0);
-    self.statusLabel.text = atomic_load(&NeoWCCallRecording)
-        ? @"● 自动录音中 · 语音包已停止" : @"语音包已停止";
+    self.statusLabel.text = @"语音包已停止";
+}
+
+- (void)voiceDidFinish {
+    if (atomic_load(&NeoWCVoiceActive)) return;
+    self.statusLabel.text = @"语音包已播完";
 }
 
 - (void)loadVoiceItem:(NeoWCQuickReplyItem *)item {
@@ -619,14 +746,16 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
                 NeoWCRetiredVoiceBuffers[NeoWCRetiredVoiceBufferCount++] = old;
             }
             [NeoWCQuickReplyStore.sharedStore recordUsageForIdentifier:item.identifier error:nil];
-            self.statusLabel.text = atomic_load(&NeoWCCallRecording)
-                ? [NSString stringWithFormat:@"● 录音中 · %@", title]
-                : [NSString stringWithFormat:@"语音包：%@", title];
+            self.statusLabel.text = [NSString stringWithFormat:@"语音包：%@", title];
         });
     });
 }
 
 @end
+
+static void NeoWCCallVoiceDidFinish(void) {
+    [[NeoWCCallAudioPanel sharedPanel] voiceDidFinish];
+}
 
 static void NeoWCCallDidStart(void) {
     if (atomic_exchange(&NeoWCCallActive, true)) return;
