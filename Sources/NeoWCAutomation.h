@@ -43,6 +43,12 @@ typedef NS_ENUM(NSInteger, NeoWCAutomationTriggerMode) {
 - (void)saveTask:(NeoWCAutomationTask *)task;
 - (void)deleteTaskWithIdentifier:(NSString *)identifier;
 - (void)runTaskNow:(NeoWCAutomationTask *)task;
+/// Executes one message-library JavaScript in the supplied conversation without creating a task.
+/// The script uses the same HTTP helpers, result schema, media download/conversion, and unified
+/// private send adapters as scheduled/keyword automation. Completion is delivered on the main thread.
+- (void)runJavaScript:(NSString *)script
+       targetUserName:(NSString *)targetUserName
+            completion:(void (^ _Nullable)(NSString *result))completion;
 @end
 
 /// Starts the in-process automation scheduler. Safe to call repeatedly.

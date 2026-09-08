@@ -60,6 +60,7 @@ static const NSUInteger NeoWCAutomationMaximumResponseBytes = 1024 * 1024;
 @property (nonatomic, assign) BOOL started;
 @property (nonatomic, assign) NSUInteger activeExecutions;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSDate *> *recentIncomingMessages;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, id> *completionHandlers;
 @end
 
 @implementation NeoWCAutomationManager
@@ -75,6 +76,7 @@ static const NSUInteger NeoWCAutomationMaximumResponseBytes = 1024 * 1024;
     self = [super init];
     if (!self) return nil;
     _scriptQueue = dispatch_queue_create("com.qiu7c.neowc.automation-scripts", DISPATCH_QUEUE_SERIAL);
+    _completionHandlers = [NSMutableDictionary dictionary];
     _mutableTasks = [NSMutableArray array];
     _recentIncomingMessages = [NSMutableDictionary dictionary];
     [self loadTasks];
@@ -429,10 +431,13 @@ static NSString *NeoWCAutomationDownloadURL(NSString *URLString, NSString *type,
 }
 
 - (void)completeTaskIdentifier:(NSString *)identifier result:(NSString *)result {
+    void (^completion)(NSString *) = self.completionHandlers[identifier];
+    if (completion) [self.completionHandlers removeObjectForKey:identifier];
     NeoWCAutomationTask *stored = [self storedTaskWithIdentifier:identifier];
     if (!stored) {
         if (self.activeExecutions > 0) self.activeExecutions--;
         [self updateBackgroundRequirement];
+        if (completion) completion(result);
         return;
     }
     stored.lastRunDate = NSDate.date;
@@ -441,6 +446,7 @@ static NSString *NeoWCAutomationDownloadURL(NSString *URLString, NSString *type,
     NeoWCLog(@"自动任务 %@ %@", identifier, result);
     if (self.activeExecutions > 0) self.activeExecutions--;
     [self updateBackgroundRequirement];
+    if (completion) completion(result);
 }
 
 - (void)executeTask:(NeoWCAutomationTask *)task input:(NSDictionary *)triggerInput {
@@ -601,6 +607,32 @@ static NSString *NeoWCAutomationDownloadURL(NSString *URLString, NSString *type,
     self.activeExecutions++;
     [self updateBackgroundRequirement];
     [self executeTask:task.copy];
+}
+
+- (void)runJavaScript:(NSString *)script
+       targetUserName:(NSString *)targetUserName
+            completion:(void (^)(NSString *))completion {
+    if (!NSThread.isMainThread) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self runJavaScript:script targetUserName:targetUserName completion:completion];
+        });
+        return;
+    }
+    NSString *target = NeoWCAutomationString(targetUserName);
+    if (script.length == 0 || target.length == 0) {
+        if (completion) completion(script.length == 0 ? @"失败：JS 脚本为空" : @"失败：目标会话为空");
+        return;
+    }
+    NeoWCAutomationTask *task = [NeoWCAutomationTask new];
+    task.name = @"消息库 JS";
+    task.sourceType = NeoWCAutomationSourceTypeJavaScript;
+    task.script = script;
+    task.targetUserName = target;
+    task.targetUserNames = @[target];
+    if (completion) self.completionHandlers[task.identifier] = [completion copy];
+    self.activeExecutions++;
+    [self updateBackgroundRequirement];
+    [self executeTask:task input:@{ @"trigger": @"manual", @"session": target }];
 }
 
 - (void)handleIncomingInfo:(NSDictionary *)info {

@@ -50,6 +50,7 @@ static NSString *NeoWCPeerRecordingPath;
 static NeoWCRenderSlot NeoWCRenderSlots[16];
 static dispatch_queue_t NeoWCCallFileQueue;
 static void NeoWCCallDidStop(void);
+static void NeoWCFinalizeCurrentRecording(void);
 static void NeoWCCallVoiceDidFinish(void);
 
 static OSStatus (*NeoWCOriginalAudioUnitRender)(AudioUnit, AudioUnitRenderActionFlags *,
@@ -331,6 +332,7 @@ static OSStatus NeoWCAudioComponentInstanceDispose(AudioComponentInstance instan
 @property (nonatomic, assign) BOOL menuExpanded;
 - (void)loadVoiceItem:(NeoWCQuickReplyItem *)item;
 - (void)voiceDidFinish;
+- (void)stopCurrentRecording;
 @end
 
 static void NeoWCCallCollectLabels(UIView *view, NSMutableArray<UILabel *> *labels) {
@@ -553,23 +555,46 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
     NSString *displayName = [nameLabel.text stringByTrimmingCharactersInSet:
         NSCharacterSet.whitespaceAndNewlineCharacterSet];
     if (displayName.length > 0) NeoWCCallSessionDisplayName = displayName;
+    UIButton *dotButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    dotButton.backgroundColor = UIColor.clearColor;
+    dotButton.layer.zPosition = 10000.0;
+    dotButton.translatesAutoresizingMaskIntoConstraints = NO;
+    dotButton.accessibilityLabel = @"结束本次通话录音";
+    dotButton.accessibilityHint = @"只停止本次通话，下次通话仍会自动录音";
+    [dotButton addTarget:self action:@selector(stopCurrentRecording)
+        forControlEvents:UIControlEventTouchUpInside];
     UIView *dot = [UIView new];
+    dot.userInteractionEnabled = NO;
     dot.backgroundColor = UIColor.systemRedColor;
     dot.layer.cornerRadius = 4.0;
-    dot.layer.zPosition = 10000.0;
     dot.translatesAutoresizingMaskIntoConstraints = NO;
-    [controller.view addSubview:dot];
+    [dotButton addSubview:dot];
+    [controller.view addSubview:dotButton];
     CGFloat textWidth = ceil([nameLabel.text sizeWithAttributes:
         @{ NSFontAttributeName: nameLabel.font }].width);
     textWidth = MIN(textWidth, CGRectGetWidth(nameLabel.bounds));
     [NSLayoutConstraint activateConstraints:@[
-        [dot.centerXAnchor constraintEqualToAnchor:nameLabel.centerXAnchor
-                                          constant:textWidth * 0.5 + 11.0],
-        [dot.centerYAnchor constraintEqualToAnchor:nameLabel.centerYAnchor],
+        [dotButton.centerXAnchor constraintEqualToAnchor:nameLabel.centerXAnchor
+                                                constant:textWidth * 0.5 + 11.0],
+        [dotButton.centerYAnchor constraintEqualToAnchor:nameLabel.centerYAnchor],
+        [dotButton.widthAnchor constraintEqualToConstant:28.0],
+        [dotButton.heightAnchor constraintEqualToConstant:28.0],
+        [dot.centerXAnchor constraintEqualToAnchor:dotButton.centerXAnchor],
+        [dot.centerYAnchor constraintEqualToAnchor:dotButton.centerYAnchor],
         [dot.widthAnchor constraintEqualToConstant:8.0],
         [dot.heightAnchor constraintEqualToConstant:8.0],
     ]];
-    self.recordingDot = dot;
+    self.recordingDot = dotButton;
+}
+
+- (void)stopCurrentRecording {
+    if (!atomic_load(&NeoWCCallActive) || !atomic_load(&NeoWCCallRecording)) return;
+    NeoWCFinalizeCurrentRecording();
+    [self.recordingDot removeFromSuperview];
+    self.recordingDot = nil;
+    UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc]
+        initWithStyle:UIImpactFeedbackStyleLight];
+    [feedback impactOccurred];
 }
 
 - (void)toggleMenu {
@@ -790,17 +815,18 @@ void NeoWCCallAudioNotifyAudioDeviceStarted(void) {
     }
 }
 
-static void NeoWCCallDidStop(void) {
-    if (!atomic_exchange(&NeoWCCallActive, false)) return;
-    atomic_store(&NeoWCCallRecording, false);
-    atomic_store(&NeoWCVoiceActive, false);
-    atomic_store(&NeoWCVoiceByteCount, 0);
-    void *voiceBytes = (void *)atomic_exchange(&NeoWCVoiceBytes, 0);
+static void NeoWCFinalizeCurrentRecording(void) {
+    BOOL wasRecording = atomic_exchange(&NeoWCCallRecording, false);
     NSString *sessionPrefix = NeoWCCallSessionPrefix;
     NSString *displayName = NeoWCCallSessionDisplayName;
     NSString *micRecordingPath = NeoWCMicRecordingPath;
     NSString *peerRecordingPath = NeoWCPeerRecordingPath;
-    if (sessionPrefix.length > 0) {
+    NeoWCCallSessionPrefix = nil;
+    NeoWCCallSessionDisplayName = nil;
+    NeoWCMicRecordingPath = nil;
+    NeoWCPeerRecordingPath = nil;
+    if (!wasRecording && micRecordingPath.length == 0 && peerRecordingPath.length == 0) return;
+    if (sessionPrefix.length > 0 && (micRecordingPath.length > 0 || peerRecordingPath.length > 0)) {
         NSDictionary *metadata = @{ @"name": displayName.length ? displayName : @"通话录音",
                                     @"timestamp": @((long long)NSDate.date.timeIntervalSince1970) };
         NSData *metadataData = [NSJSONSerialization dataWithJSONObject:metadata options:0 error:nil];
@@ -817,6 +843,15 @@ static void NeoWCCallDidStop(void) {
         os_unfair_lock_unlock(&NeoWCPeerWriterLock);
         NeoWCExportMixedRecording(micRecordingPath, peerRecordingPath, sessionPrefix);
     });
+    NeoWCLog(@"本次通话录音已结束，自动录音总开关保持不变");
+}
+
+static void NeoWCCallDidStop(void) {
+    if (!atomic_exchange(&NeoWCCallActive, false)) return;
+    atomic_store(&NeoWCVoiceActive, false);
+    atomic_store(&NeoWCVoiceByteCount, 0);
+    void *voiceBytes = (void *)atomic_exchange(&NeoWCVoiceBytes, 0);
+    NeoWCFinalizeCurrentRecording();
     dispatch_async(dispatch_get_main_queue(), ^{ [[NeoWCCallAudioPanel sharedPanel] hide]; });
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{

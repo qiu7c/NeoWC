@@ -7748,6 +7748,13 @@ static void NeoWCPresentQuickReplyLibrary(BaseMsgContentViewController *controll
             NeoWCShowTransientMessage(@"原会话已离开，未使用快捷回复", NO);
             return;
         }
+        if (item.type == NeoWCQuickReplyTypeJavaScript) {
+            [NeoWCAutomationManager.sharedManager runJavaScript:item.text
+                targetUserName:lockedUserName completion:^(NSString *result) {
+                    NeoWCShowTransientMessage(result, ![result hasPrefix:@"失败："]);
+                }];
+            return;
+        }
         if (item.type == NeoWCQuickReplyTypeText) {
             if (!NeoWCInsertQuickReplyText(strongController, item.text)) {
                 NeoWCShowTransientMessage(@"无法写入当前输入框", NO);
@@ -7773,7 +7780,12 @@ static void NeoWCPresentQuickReplyLibrary(BaseMsgContentViewController *controll
                 NeoWCShowTransientMessage(@"原会话已离开，未发送快捷回复", NO);
                 return;
             }
-            if (item.type == NeoWCQuickReplyTypeText) {
+            if (item.type == NeoWCQuickReplyTypeJavaScript) {
+                [NeoWCAutomationManager.sharedManager runJavaScript:item.text
+                    targetUserName:lockedUserName completion:^(NSString *result) {
+                        NeoWCShowTransientMessage(result, ![result hasPrefix:@"失败："]);
+                    }];
+            } else if (item.type == NeoWCQuickReplyTypeText) {
                 if (item.text.length > 0) NeoWCSendQuickReplyTextWithConfirmation(strongController, lockedUserName, item.text);
             } else if (item.type == NeoWCQuickReplyTypeMessageReference) {
                 NeoWCSendQuickReplyMessageReferenceWithConfirmation(strongController, lockedUserName, item);

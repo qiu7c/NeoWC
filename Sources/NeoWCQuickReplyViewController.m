@@ -1240,11 +1240,6 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     NeoWCQuickReplyItem *item = [self itemAtIndexPath:indexPath];
     if (!item) return;
     if (self.selectionHandler) {
-        if (item.type == NeoWCQuickReplyTypeJavaScript) {
-            [self showError:[NSError errorWithDomain:@"com.qiu7c.neowc.quick-reply" code:1
-                userInfo:@{NSLocalizedDescriptionKey: @"JS 脚本只能在自动消息任务中执行。"}]];
-            return;
-        }
         if (NeoWCEnhancementEnabled(NeoWCQuickReplyInstantSendEnabledKey)) [self sendItemDirectly:item];
         else [self useItemNormally:item];
         return;
@@ -1273,7 +1268,8 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (void)useItemNormally:(NeoWCQuickReplyItem *)item {
     if (!self.selectionHandler) return;
-    if (item.type == NeoWCQuickReplyTypeText || item.type == NeoWCQuickReplyTypeMessageReference ||
+    if (item.type == NeoWCQuickReplyTypeText || item.type == NeoWCQuickReplyTypeJavaScript ||
+        item.type == NeoWCQuickReplyTypeMessageReference ||
         item.type == NeoWCQuickReplyTypeGroupInvitation) {
         [NeoWCQuickReplyStore.sharedStore recordUsageForIdentifier:item.identifier error:nil];
         NeoWCQuickReplySelectionHandler handler = self.selectionHandler;

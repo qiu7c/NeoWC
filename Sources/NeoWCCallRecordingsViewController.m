@@ -1,10 +1,189 @@
 #import "NeoWCCallRecordingsViewController.h"
 #import <AVFoundation/AVFoundation.h>
 
-@interface NeoWCCallRecordingsViewController () <AVAudioPlayerDelegate>
-@property (nonatomic, copy) NSArray<NSDictionary *> *sessions;
+@interface NeoWCCallRecordingPlayerViewController : UIViewController <AVAudioPlayerDelegate>
+@property (nonatomic, strong) NSURL *recordingURL;
+@property (nonatomic, copy) NSString *recordingTitle;
+@property (nonatomic, copy) NSString *trackTitle;
 @property (nonatomic, strong) AVAudioPlayer *player;
-@property (nonatomic, strong) NSURL *playingURL;
+@property (nonatomic, strong) UISlider *progressSlider;
+@property (nonatomic, strong) UILabel *elapsedLabel;
+@property (nonatomic, strong) UILabel *durationLabel;
+@property (nonatomic, strong) UIButton *playPauseButton;
+@property (nonatomic, strong) NSTimer *progressTimer;
+- (instancetype)initWithURL:(NSURL *)URL title:(NSString *)title trackTitle:(NSString *)trackTitle;
+- (void)close;
+- (void)togglePlayback;
+- (void)seekToSliderValue:(UISlider *)slider;
+- (void)updateProgress;
+- (void)exportRecording;
+@end
+
+@interface NeoWCCallRecordingsViewController ()
+@property (nonatomic, copy) NSArray<NSDictionary *> *sessions;
+@end
+
+@implementation NeoWCCallRecordingPlayerViewController
+
+- (instancetype)initWithURL:(NSURL *)URL title:(NSString *)title trackTitle:(NSString *)trackTitle {
+    self = [super initWithNibName:nil bundle:nil];
+    if (self) {
+        _recordingURL = URL;
+        _recordingTitle = [title copy];
+        _trackTitle = [trackTitle copy];
+    }
+    return self;
+}
+
+- (NSString *)timeText:(NSTimeInterval)time {
+    NSInteger seconds = MAX((NSInteger)time, 0);
+    return [NSString stringWithFormat:@"%02ld:%02ld", (long)(seconds / 60), (long)(seconds % 60)];
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = self.recordingTitle.length ? self.recordingTitle : @"通话录音";
+    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
+        initWithTitle:@"导出" style:UIBarButtonItemStylePlain target:self action:@selector(exportRecording)];
+
+    UILabel *trackLabel = [UILabel new];
+    trackLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    trackLabel.text = self.trackTitle;
+    trackLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    trackLabel.textAlignment = NSTextAlignmentCenter;
+
+    UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"waveform.circle.fill"]];
+    iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    iconView.tintColor = UIColor.systemGreenColor;
+    iconView.contentMode = UIViewContentModeScaleAspectFit;
+
+    self.progressSlider = [UISlider new];
+    self.progressSlider.translatesAutoresizingMaskIntoConstraints = NO;
+    self.progressSlider.minimumValue = 0;
+    [self.progressSlider addTarget:self action:@selector(seekToSliderValue:)
+                  forControlEvents:UIControlEventValueChanged];
+
+    self.elapsedLabel = [UILabel new];
+    self.elapsedLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.elapsedLabel.font = [UIFont monospacedDigitSystemFontOfSize:13 weight:UIFontWeightRegular];
+    self.elapsedLabel.textColor = UIColor.secondaryLabelColor;
+    self.elapsedLabel.text = @"00:00";
+
+    self.durationLabel = [UILabel new];
+    self.durationLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.durationLabel.font = [UIFont monospacedDigitSystemFontOfSize:13 weight:UIFontWeightRegular];
+    self.durationLabel.textColor = UIColor.secondaryLabelColor;
+    self.durationLabel.textAlignment = NSTextAlignmentRight;
+    self.durationLabel.text = @"00:00";
+
+    self.playPauseButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.playPauseButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.playPauseButton.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    [self.playPauseButton setTitle:@"播放" forState:UIControlStateNormal];
+    [self.playPauseButton addTarget:self action:@selector(togglePlayback)
+                   forControlEvents:UIControlEventTouchUpInside];
+
+    [self.view addSubview:trackLabel];
+    [self.view addSubview:iconView];
+    [self.view addSubview:self.progressSlider];
+    [self.view addSubview:self.elapsedLabel];
+    [self.view addSubview:self.durationLabel];
+    [self.view addSubview:self.playPauseButton];
+    UILayoutGuide *guide = self.view.safeAreaLayoutGuide;
+    [NSLayoutConstraint activateConstraints:@[
+        [iconView.topAnchor constraintEqualToAnchor:guide.topAnchor constant:56],
+        [iconView.centerXAnchor constraintEqualToAnchor:guide.centerXAnchor],
+        [iconView.widthAnchor constraintEqualToConstant:88],
+        [iconView.heightAnchor constraintEqualToConstant:88],
+        [trackLabel.topAnchor constraintEqualToAnchor:iconView.bottomAnchor constant:20],
+        [trackLabel.leadingAnchor constraintEqualToAnchor:guide.leadingAnchor constant:24],
+        [trackLabel.trailingAnchor constraintEqualToAnchor:guide.trailingAnchor constant:-24],
+        [self.progressSlider.topAnchor constraintEqualToAnchor:trackLabel.bottomAnchor constant:48],
+        [self.progressSlider.leadingAnchor constraintEqualToAnchor:guide.leadingAnchor constant:28],
+        [self.progressSlider.trailingAnchor constraintEqualToAnchor:guide.trailingAnchor constant:-28],
+        [self.elapsedLabel.topAnchor constraintEqualToAnchor:self.progressSlider.bottomAnchor constant:8],
+        [self.elapsedLabel.leadingAnchor constraintEqualToAnchor:self.progressSlider.leadingAnchor],
+        [self.durationLabel.topAnchor constraintEqualToAnchor:self.progressSlider.bottomAnchor constant:8],
+        [self.durationLabel.trailingAnchor constraintEqualToAnchor:self.progressSlider.trailingAnchor],
+        [self.playPauseButton.topAnchor constraintEqualToAnchor:self.elapsedLabel.bottomAnchor constant:36],
+        [self.playPauseButton.centerXAnchor constraintEqualToAnchor:guide.centerXAnchor],
+        [self.playPauseButton.widthAnchor constraintGreaterThanOrEqualToConstant:120],
+        [self.playPauseButton.heightAnchor constraintEqualToConstant:48]
+    ]];
+
+    NSError *error = nil;
+    self.player = [[AVAudioPlayer alloc] initWithContentsOfURL:self.recordingURL error:&error];
+    if (!self.player) {
+        self.playPauseButton.enabled = NO;
+        self.navigationItem.rightBarButtonItem.enabled = NO;
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"无法打开录音"
+            message:error.localizedDescription ?: @"录音文件不可用" preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    self.player.delegate = self;
+    [self.player prepareToPlay];
+    self.progressSlider.maximumValue = (float)self.player.duration;
+    self.durationLabel.text = [self timeText:self.player.duration];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    if (!self.isMovingFromParentViewController && !self.isBeingDismissed &&
+        !self.navigationController.isBeingDismissed) return;
+    [self.progressTimer invalidate];
+    self.progressTimer = nil;
+    [self.player stop];
+}
+
+- (void)close {
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)togglePlayback {
+    if (self.player.isPlaying) {
+        [self.player pause];
+        [self.playPauseButton setTitle:@"继续播放" forState:UIControlStateNormal];
+        return;
+    }
+    if (self.player.currentTime >= self.player.duration) self.player.currentTime = 0;
+    [self.player play];
+    [self.playPauseButton setTitle:@"暂停" forState:UIControlStateNormal];
+    if (!self.progressTimer) {
+        self.progressTimer = [NSTimer scheduledTimerWithTimeInterval:0.25 target:self
+            selector:@selector(updateProgress) userInfo:nil repeats:YES];
+    }
+}
+
+- (void)seekToSliderValue:(UISlider *)slider {
+    self.player.currentTime = slider.value;
+    self.elapsedLabel.text = [self timeText:self.player.currentTime];
+}
+
+- (void)updateProgress {
+    if (!self.progressSlider.isTracking) self.progressSlider.value = (float)self.player.currentTime;
+    self.elapsedLabel.text = [self timeText:self.player.currentTime];
+}
+
+- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag {
+    (void)player; (void)flag;
+    [self.progressTimer invalidate];
+    self.progressTimer = nil;
+    self.progressSlider.value = (float)self.player.duration;
+    self.elapsedLabel.text = [self timeText:self.player.duration];
+    [self.playPauseButton setTitle:@"重新播放" forState:UIControlStateNormal];
+}
+
+- (void)exportRecording {
+    if (!self.recordingURL) return;
+    UIActivityViewController *controller = [[UIActivityViewController alloc]
+        initWithActivityItems:@[self.recordingURL] applicationActivities:nil];
+    controller.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItem;
+    [self presentViewController:controller animated:YES completion:nil];
+}
+
 @end
 
 @implementation NeoWCCallRecordingsViewController
@@ -16,15 +195,13 @@
     self.title = @"通话录音";
     self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
-        initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh target:self action:@selector(reloadRecordings)];
+        initWithTitle:@"刷新" style:UIBarButtonItemStylePlain target:self action:@selector(reloadRecordings)];
     [self reloadRecordings];
 }
 
-- (void)viewWillDisappear:(BOOL)animated {
-    [super viewWillDisappear:animated];
-    [self.player stop];
-    self.player = nil;
-    self.playingURL = nil;
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self reloadRecordings];
 }
 
 - (NSURL *)recordingDirectory {
@@ -118,24 +295,6 @@
     return cell;
 }
 
-- (void)playURL:(NSURL *)URL {
-    if ([self.playingURL isEqual:URL] && self.player.isPlaying) { [self.player pause]; return; }
-    NSError *error = nil;
-    AVAudioPlayer *player = [[AVAudioPlayer alloc] initWithContentsOfURL:URL error:&error];
-    if (!player) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"无法播放"
-            message:error.localizedDescription ?: @"录音文件不可用" preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
-        return;
-    }
-    [self.player stop];
-    self.player = player;
-    self.player.delegate = self;
-    self.playingURL = URL;
-    [self.player play];
-}
-
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.row >= self.sessions.count) return;
@@ -146,7 +305,19 @@
         NSURL *URL = tracks[entry[0]];
         if (!URL) continue;
         [sheet addAction:[UIAlertAction actionWithTitle:entry[1] style:UIAlertActionStyleDefault
-                                                handler:^(__unused UIAlertAction *action) { [self playURL:URL]; }]];
+                                                handler:^(__unused UIAlertAction *action) {
+            NeoWCCallRecordingPlayerViewController *player = [[NeoWCCallRecordingPlayerViewController alloc]
+                initWithURL:URL title:self.sessions[indexPath.row][@"name"] trackTitle:entry[1]];
+            if (self.navigationController) {
+                [self.navigationController pushViewController:player animated:YES];
+            } else {
+                UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:player];
+                player.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc]
+                    initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:player
+                    action:@selector(close)];
+                [self presentViewController:navigation animated:YES completion:nil];
+            }
+        }]];
     }
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
@@ -166,19 +337,12 @@
     if (style != UITableViewCellEditingStyleDelete || indexPath.row >= self.sessions.count) return;
     NSDictionary *session = self.sessions[indexPath.row];
     for (NSURL *URL in [session[@"tracks"] allValues]) {
-        if ([self.playingURL isEqual:URL]) { [self.player stop]; self.player = nil; self.playingURL = nil; }
         [NSFileManager.defaultManager removeItemAtURL:URL error:nil];
     }
     NSURL *metadataURL = [self.recordingDirectory URLByAppendingPathComponent:
         [session[@"prefix"] stringByAppendingPathExtension:@"json"]];
     [NSFileManager.defaultManager removeItemAtURL:metadataURL error:nil];
     [self reloadRecordings];
-}
-
-- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag {
-    (void)player; (void)flag;
-    self.player = nil;
-    self.playingURL = nil;
 }
 
 @end
