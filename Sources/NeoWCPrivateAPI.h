@@ -40,9 +40,11 @@ FOUNDATION_EXPORT NSString * _Nullable NeoWCPrivateChatUserName(id _Nullable cha
 
 /// Resolves a contact using the known cache and database selectors.
 /// @param userName WeChat username, not a display name or alias.
-/// @return The first contact returned by a supported selector, or nil on absence/failure.
+/// @return A contact returned by a supported selector, preferring a result carrying a nonempty
+/// remark; otherwise the first valid result, or nil on absence/failure.
 /// @discussion Call on the main thread. Database selectors are attempted before cache fallbacks;
-/// unsupported selectors and Objective-C exceptions are treated as nil.
+/// all supported paths are checked when an earlier result lacks a remark. Unsupported selectors
+/// and Objective-C exceptions are treated as nil.
 FOUNDATION_EXPORT id _Nullable NeoWCPrivateContact(NSString *userName);
 
 /// Reads the stable username from a WeChat contact/session object.
@@ -67,7 +69,9 @@ FOUNDATION_EXPORT NSString * _Nullable NeoWCPrivateContactDisplayName(id _Nullab
 /// @return Current contact remark first, then WeChat display name/nickname, eventFallback, and
 /// finally userName. Returns nil only when both inputs and every supported contact field are empty.
 /// @discussion Call on the main thread because contact lookup uses the active account service.
-/// Unsupported contact selectors, absent contacts, and empty remarks fall through without guessing.
+/// When direct lookup returns a lightweight object without a remark, the complete contact list is
+/// searched by exact username or alias. Nicknames are never used as identity keys, so duplicate
+/// display names cannot select the wrong remark. Unsupported paths fall through without guessing.
 FOUNDATION_EXPORT NSString * _Nullable
 NeoWCPrivateNotificationDisplayName(NSString * _Nullable userName,
                                     NSString * _Nullable eventFallback);

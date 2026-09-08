@@ -160,6 +160,7 @@ NSString *NeoWCPrivateChatUserName(id chatController) {
 id NeoWCPrivateContact(NSString *userName) {
     if (userName.length == 0) return nil;
     id manager = NeoWCPrivateService(@"CContactMgr");
+    id fallbackContact = nil;
     for (NSString *selectorName in @[
         @"getContactByName:", @"getContactForSearchByName:",
         @"getContactByNameFromCache:", @"getContact:"
@@ -170,13 +171,17 @@ id NeoWCPrivateContact(NSString *userName) {
             !NeoWCPrivateTypeIsObject(signature.methodReturnType)) continue;
         @try {
             id contact = ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
-            if (contact) return contact;
+            if (!contact) continue;
+            if (!fallbackContact) fallbackContact = contact;
+            NSString *remark = NeoWCPrivateNonemptyString(NeoWCPrivateObjectField(
+                contact, @[@"m_nsRemark", @"getRemark", @"remark", @"remarkName"]));
+            if (remark.length > 0) return contact;
         } @catch (NSException *exception) {
             NeoWCLog(@"联系人适配 %@ 调用失败：%@", selectorName,
                      exception.reason ?: exception.name);
         }
     }
-    return nil;
+    return fallbackContact;
 }
 
 static NSString *NeoWCPrivateContactString(id contact, NSArray<NSString *> *names) {
@@ -220,7 +225,23 @@ NSString *NeoWCPrivateNotificationDisplayName(NSString *userName, NSString *even
     id contact = normalizedUserName.length > 0 ? NeoWCPrivateContact(normalizedUserName) : nil;
     NSString *name = NeoWCPrivateContactRemark(contact);
     if (name.length > 0) return name;
+    id listContact = nil;
+    if (normalizedUserName.length > 0) {
+        for (id candidate in NeoWCPrivateContactList()) {
+            NSString *candidateUserName = NeoWCPrivateContactUserName(candidate);
+            NSString *candidateAlias = NeoWCPrivateContactAlias(candidate);
+            if ([candidateUserName isEqualToString:normalizedUserName] ||
+                [candidateAlias isEqualToString:normalizedUserName]) {
+                listContact = candidate;
+                break;
+            }
+        }
+    }
+    name = NeoWCPrivateContactRemark(listContact);
+    if (name.length > 0) return name;
     name = NeoWCPrivateContactDisplayName(contact, nil);
+    if (name.length > 0) return name;
+    name = NeoWCPrivateContactDisplayName(listContact, nil);
     if (name.length > 0) return name;
     name = NeoWCPrivateNonemptyString(eventFallback);
     if (name.length > 0) return name;

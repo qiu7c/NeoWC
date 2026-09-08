@@ -2654,6 +2654,21 @@ static NSString *NeoWCAvatarDisplayName(id contact, NSString *fallback) {
     return NeoWCPrivateContactDisplayName(contact, fallback) ?: @"";
 }
 
+static UIViewController *NeoWCAvatarOwningViewController(UIView *view) {
+    UIViewController *nearestController = nil;
+    UIResponder *responder = view;
+    Class chatControllerClass = NSClassFromString(@"BaseMsgContentViewController");
+    while ((responder = responder.nextResponder)) {
+        if (![responder isKindOfClass:UIViewController.class]) continue;
+        UIViewController *controller = (UIViewController *)responder;
+        if (!nearestController) nearestController = controller;
+        for (UIViewController *candidate = controller; candidate; candidate = candidate.parentViewController) {
+            if (chatControllerClass && [candidate isKindOfClass:chatControllerClass]) return candidate;
+        }
+    }
+    return nearestController;
+}
+
 static NSString *NeoWCAvatarTargetUserName(CommonMessageCellView *cell, NSString *chatUserName) {
     id message = NeoWCMessageWrapForCell(cell);
     NSString *currentUser = NeoWCCurrentUserWXID();
@@ -2916,16 +2931,17 @@ static void NeoWCOpenAvatarInfoCard(UIViewController *chatController,
 }
 
 static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *headView) {
-    BaseMsgContentViewController *chatController = NeoWCResolveVisibleChatController();
-    NSString *chatUserName = NeoWCChatUserName(chatController);
+    id message = NeoWCMessageWrapForCell(cell);
+    NSString *chatUserName = NeoWCSessionForMessage(message);
+    UIViewController *chatController = NeoWCAvatarOwningViewController(cell);
     NSString *targetUserName = NeoWCAvatarTargetUserName(cell, chatUserName);
-    if (!chatController || targetUserName.length == 0) {
+    if (chatController.view.window != cell.window ||
+        chatUserName.length == 0 || targetUserName.length == 0) {
         NeoWCShowTransientMessage(@"未能识别头像对应的联系人", NO);
         return NO;
     }
     BOOL group = [chatUserName hasSuffix:@"@chatroom"];
     BOOL isSelf = [targetUserName isEqualToString:NeoWCCurrentUserWXID()];
-    id message = NeoWCMessageWrapForCell(cell);
     id contact = group ? NeoWCMessageChatContact(message) : nil;
     if (!contact) contact = NeoWCContactForUserName(targetUserName);
     id groupContact = group ? NeoWCContactForUserName(chatUserName) : nil;

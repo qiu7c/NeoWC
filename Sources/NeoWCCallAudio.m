@@ -1,10 +1,11 @@
 #import "NeoWCCallAudio.h"
 #import "NeoWCEnhancements.h"
 #import "NeoWCLogging.h"
+#import "NeoWCQuickReplyStore.h"
+#import "NeoWCSilkDecoder.h"
 #import <AudioToolbox/AudioToolbox.h>
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
-#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <math.h>
 #import <objc/runtime.h>
 #import <os/lock.h>
@@ -35,6 +36,7 @@ static _Atomic(int) NeoWCVoiceMode; // 0 replace, 1 mix
 static _Atomic(uintptr_t) NeoWCVoiceBytes;
 static _Atomic(size_t) NeoWCVoiceByteCount;
 static _Atomic(uint64_t) NeoWCVoiceFramePosition;
+static _Atomic(uint64_t) NeoWCAudioActivityGeneration;
 static void *NeoWCRetiredVoiceBuffers[32];
 static NSUInteger NeoWCRetiredVoiceBufferCount;
 static NeoWCPCMWriter NeoWCMicWriter;
@@ -46,6 +48,7 @@ static NSString *NeoWCMicRecordingPath;
 static NSString *NeoWCPeerRecordingPath;
 static NeoWCRenderSlot NeoWCRenderSlots[16];
 static dispatch_queue_t NeoWCCallFileQueue;
+static void NeoWCCallDidStop(void);
 
 static OSStatus (*NeoWCOriginalAudioUnitRender)(AudioUnit, AudioUnitRenderActionFlags *,
                                                 const AudioTimeStamp *, UInt32, UInt32,
@@ -224,6 +227,7 @@ static OSStatus NeoWCAudioUnitRender(AudioUnit unit, AudioUnitRenderActionFlags 
     OSStatus status = NeoWCOriginalAudioUnitRender
         ? NeoWCOriginalAudioUnitRender(unit, flags, timestamp, bus, frames, buffers) : -1;
     if (status != noErr || !atomic_load(&NeoWCCallActive)) return status;
+    atomic_fetch_add(&NeoWCAudioActivityGeneration, 1);
     AudioStreamBasicDescription format = NeoWCFormatForUnit(unit, kAudioUnitScope_Output, bus);
     NeoWCApplyVoice(format, frames, buffers);
     NeoWCWriteBuffers(&NeoWCMicWriter, @"mic", &NeoWCMicWriterLock, format, frames, buffers);
@@ -251,6 +255,7 @@ static OSStatus NeoWCRenderCallback(void *refCon, AudioUnitRenderActionFlags *fl
     if (!slot || !slot->callback) return noErr;
     OSStatus status = slot->callback(slot->refCon, flags, timestamp, bus, frames, buffers);
     if (status == noErr && atomic_load(&NeoWCCallActive)) {
+        atomic_fetch_add(&NeoWCAudioActivityGeneration, 1);
         AudioStreamBasicDescription format = NeoWCFormatForUnit(slot->unit, kAudioUnitScope_Input, bus);
         NeoWCWriteBuffers(&NeoWCPeerWriter, @"peer", &NeoWCPeerWriterLock,
                           format, frames, buffers);
@@ -282,26 +287,191 @@ static OSStatus NeoWCAudioComponentInstanceDispose(AudioComponentInstance instan
         ? NeoWCOriginalAudioComponentInstanceDispose(instance) : kAudio_ParamError;
     if (status == noErr) {
         NeoWCRenderSlot *slot = NeoWCSlotForUnit((AudioUnit)instance, NO);
-        if (slot) memset(slot, 0, sizeof(*slot));
+        if (slot) {
+            memset(slot, 0, sizeof(*slot));
+            uint64_t generation = atomic_load(&NeoWCAudioActivityGeneration);
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                if (atomic_load(&NeoWCCallActive) &&
+                    atomic_load(&NeoWCAudioActivityGeneration) == generation) {
+                    NeoWCCallDidStop();
+                }
+            });
+        }
     }
     return status;
 }
 
-@interface NeoWCCallPassthroughWindow : UIWindow
+@class NeoWCCallAudioPanel;
+
+@interface NeoWCCallVoiceLibraryViewController : UITableViewController
+@property (nonatomic, copy) NSArray<NeoWCQuickReplyItem *> *voiceItems;
+@property (nonatomic, weak) NeoWCCallAudioPanel *audioPanel;
 @end
 
-@implementation NeoWCCallPassthroughWindow
+@interface NeoWCCallAudioPanel : NSObject
+@property (nonatomic, strong) UIView *controlView;
+@property (nonatomic, weak) UIViewController *hostController;
+@property (nonatomic, weak) UIViewController *voiceLibraryController;
+@property (nonatomic, strong) UILabel *statusLabel;
+- (void)loadVoiceItem:(NeoWCQuickReplyItem *)item;
+@end
 
-- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    UIView *hit = [super hitTest:point withEvent:event];
-    return hit == self.rootViewController.view ? nil : hit;
+static UIViewController *NeoWCCallTopViewController(UIViewController *controller) {
+    if (!controller) return nil;
+    UIViewController *presented = controller.presentedViewController;
+    if (presented && !presented.isBeingDismissed) return NeoWCCallTopViewController(presented);
+    if ([controller isKindOfClass:UINavigationController.class]) {
+        return NeoWCCallTopViewController(((UINavigationController *)controller).visibleViewController);
+    }
+    if ([controller isKindOfClass:UITabBarController.class]) {
+        return NeoWCCallTopViewController(((UITabBarController *)controller).selectedViewController);
+    }
+    for (UIViewController *child in controller.children.reverseObjectEnumerator) {
+        if (child.viewIfLoaded.window) return NeoWCCallTopViewController(child);
+    }
+    return controller;
 }
 
-@end
+static BOOL NeoWCCallClassNameLooksLikeCallUI(id object) {
+    if (!object) return NO;
+    NSString *name = NSStringFromClass([object class]).lowercaseString;
+    if ([name hasPrefix:@"neowc"] || [name hasPrefix:@"wcallrecorder"]) return NO;
+    return [name containsString:@"voip"] || [name containsString:@"multitalk"] ||
+           [name containsString:@"callview"] || [name containsString:@"calling"];
+}
 
-@interface NeoWCCallAudioPanel : NSObject <UIDocumentPickerDelegate>
-@property (nonatomic, strong) UIWindow *window;
-@property (nonatomic, strong) UILabel *statusLabel;
+static UIViewController *NeoWCCallVisibleInterfaceController(void) {
+    NSMutableArray<UIWindow *> *windows = [NSMutableArray array];
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:UIWindowScene.class] ||
+            (scene.activationState != UISceneActivationStateForegroundActive &&
+             scene.activationState != UISceneActivationStateForegroundInactive)) continue;
+        for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+            if (!window.hidden && window.alpha > 0.01 && window.rootViewController) [windows addObject:window];
+        }
+    }
+    [windows sortUsingComparator:^NSComparisonResult(UIWindow *first, UIWindow *second) {
+        if (first.windowLevel > second.windowLevel) return NSOrderedAscending;
+        if (first.windowLevel < second.windowLevel) return NSOrderedDescending;
+        if (first.isKeyWindow != second.isKeyWindow) {
+            return first.isKeyWindow ? NSOrderedAscending : NSOrderedDescending;
+        }
+        return NSOrderedSame;
+    }];
+    UIViewController *fallback = nil;
+    for (UIWindow *window in windows) {
+        UIViewController *candidate = NeoWCCallTopViewController(window.rootViewController);
+        if (!candidate.viewIfLoaded.window) continue;
+        if (NeoWCCallClassNameLooksLikeCallUI(window) || NeoWCCallClassNameLooksLikeCallUI(candidate)) {
+            return candidate;
+        }
+        for (UIViewController *parent = candidate.parentViewController; parent; parent = parent.parentViewController) {
+            if (NeoWCCallClassNameLooksLikeCallUI(parent)) return candidate;
+        }
+        if (!fallback && window.windowLevel < UIWindowLevelAlert) fallback = candidate;
+    }
+    return fallback;
+}
+
+static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
+    if (path.length == 0) return nil;
+    AVAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:path] options:nil];
+    AVAssetTrack *track = [asset tracksWithMediaType:AVMediaTypeAudio].firstObject;
+    AVAssetReader *reader = track ? [[AVAssetReader alloc] initWithAsset:asset error:error] : nil;
+    NSDictionary *settings = @{ AVFormatIDKey: @(kAudioFormatLinearPCM),
+                                AVSampleRateKey: @48000,
+                                AVNumberOfChannelsKey: @1,
+                                AVLinearPCMBitDepthKey: @16,
+                                AVLinearPCMIsFloatKey: @NO,
+                                AVLinearPCMIsBigEndianKey: @NO,
+                                AVLinearPCMIsNonInterleaved: @NO };
+    AVAssetReaderTrackOutput *output = track ? [[AVAssetReaderTrackOutput alloc] initWithTrack:track
+                                                                                outputSettings:settings] : nil;
+    if (!reader || !output || ![reader canAddOutput:output]) return nil;
+    [reader addOutput:output];
+    if (![reader startReading]) return nil;
+    NSMutableData *pcm = [NSMutableData data];
+    CMSampleBufferRef sample = NULL;
+    while ((sample = [output copyNextSampleBuffer])) {
+        CMBlockBufferRef block = CMSampleBufferGetDataBuffer(sample);
+        size_t length = block ? CMBlockBufferGetDataLength(block) : 0;
+        if (length > 0) {
+            NSUInteger oldLength = pcm.length;
+            [pcm increaseLengthBy:length];
+            CMBlockBufferCopyDataBytes(block, 0, length, (uint8_t *)pcm.mutableBytes + oldLength);
+        }
+        CFRelease(sample);
+    }
+    return reader.status == AVAssetReaderStatusCompleted && pcm.length > 0 ? pcm : nil;
+}
+
+@implementation NeoWCCallVoiceLibraryViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"选择通话语音包";
+    self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc]
+        initWithBarButtonSystemItem:UIBarButtonSystemItemCancel target:self action:@selector(close)];
+    NSMutableArray<NeoWCQuickReplyItem *> *items = [NSMutableArray array];
+    NeoWCQuickReplyStore *store = NeoWCQuickReplyStore.sharedStore;
+    for (NeoWCQuickReplyItem *item in store.items) {
+        if (item.type != NeoWCQuickReplyTypeVoice) continue;
+        NSString *path = [store absoluteMediaPathForItem:item];
+        if (path.length > 0 && [NSFileManager.defaultManager fileExistsAtPath:path]) [items addObject:item];
+    }
+    self.voiceItems = items;
+}
+
+- (void)close {
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    (void)tableView;
+    (void)section;
+    return MAX((NSInteger)self.voiceItems.count, 1);
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+    (void)tableView;
+    (void)section;
+    return self.voiceItems.count ? @"只显示消息库中已有本地音频文件的语音素材。"
+                                 : @"消息库中暂无可用语音素材。";
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView
+         cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"call-voice-item"];
+    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle
+                                             reuseIdentifier:@"call-voice-item"];
+    if (indexPath.row >= self.voiceItems.count) {
+        cell.textLabel.text = @"暂无语音包";
+        cell.detailTextLabel.text = @"先将语音或音频保存到消息库";
+        cell.imageView.image = [UIImage systemImageNamed:@"waveform.slash"];
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        return cell;
+    }
+    NeoWCQuickReplyItem *item = self.voiceItems[indexPath.row];
+    cell.textLabel.text = item.title.length ? item.title : @"语音素材";
+    cell.detailTextLabel.text = item.createdAt
+        ? [NSDateFormatter localizedStringFromDate:item.createdAt
+                                         dateStyle:NSDateFormatterShortStyle
+                                         timeStyle:NSDateFormatterShortStyle] : nil;
+    cell.imageView.image = [UIImage systemImageNamed:@"waveform"];
+    cell.imageView.tintColor = UIColor.systemGreenColor;
+    cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (indexPath.row >= self.voiceItems.count) return;
+    NeoWCQuickReplyItem *item = self.voiceItems[indexPath.row];
+    [self dismissViewControllerAnimated:YES completion:^{ [self.audioPanel loadVoiceItem:item]; }];
+}
+
 @end
 
 @implementation NeoWCCallAudioPanel
@@ -322,143 +492,138 @@ static OSStatus NeoWCAudioComponentInstanceDispose(AudioComponentInstance instan
 }
 
 - (void)show {
-    if (self.window || (!NeoWCEnhancementEnabled(NeoWCCallRecordingEnabledKey) &&
-                        !NeoWCEnhancementEnabled(NeoWCCallVoiceDisguiseEnabledKey))) return;
-    UIWindowScene *scene = nil;
-    for (UIScene *candidate in UIApplication.sharedApplication.connectedScenes) {
-        if (candidate.activationState == UISceneActivationStateForegroundActive &&
-            [candidate isKindOfClass:UIWindowScene.class]) { scene = (UIWindowScene *)candidate; break; }
-    }
-    if (!scene) return;
-    UIWindow *window = [[NeoWCCallPassthroughWindow alloc] initWithWindowScene:scene];
-    window.windowLevel = UIWindowLevelAlert + 2;
-    window.frame = scene.coordinateSpace.bounds;
-    window.backgroundColor = UIColor.clearColor;
-    UIViewController *controller = [[UIViewController alloc] init];
-    controller.view.backgroundColor = UIColor.clearColor;
+    if (!NeoWCEnhancementEnabled(NeoWCCallRecordingEnabledKey) &&
+        !NeoWCEnhancementEnabled(NeoWCCallVoiceDisguiseEnabledKey)) return;
+    UIViewController *controller = NeoWCCallVisibleInterfaceController();
+    if (!controller.viewIfLoaded.window) return;
+    if ([controller isKindOfClass:NeoWCCallVoiceLibraryViewController.class] ||
+        ([controller isKindOfClass:UINavigationController.class] &&
+         [((UINavigationController *)controller).topViewController
+             isKindOfClass:NeoWCCallVoiceLibraryViewController.class])) return;
+    if (self.hostController == controller && self.controlView.superview == controller.view) return;
+    [self.controlView removeFromSuperview];
     UIView *panel = [[UIView alloc] init];
     panel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.9];
     panel.layer.cornerRadius = 16;
     panel.layer.cornerCurve = kCACornerCurveContinuous;
+    panel.layer.zPosition = 10000.0;
     panel.translatesAutoresizingMaskIntoConstraints = NO;
     [controller.view addSubview:panel];
     UILabel *label = [[UILabel alloc] init];
-    label.text = atomic_load(&NeoWCCallRecording) ? @"● 正在录音" : @"通话音频";
+    label.text = atomic_load(&NeoWCCallRecording) ? @"● 通话自动录音中" : @"通话语音包";
     label.textColor = UIColor.whiteColor;
     label.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
     label.textAlignment = NSTextAlignmentCenter;
-    UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:@[
-        [self button:@"录音" action:@selector(toggleRecord)],
-        [self button:@"语音包" action:@selector(pickVoice)],
-        [self button:@"停止" action:@selector(stopVoice)]
-    ]];
+    UIButton *pickButton = [self button:@"选择语音包" action:@selector(pickVoice)];
+    UIButton *stopButton = [self button:@"停止播放" action:@selector(stopVoice)];
+    BOOL voiceEnabled = NeoWCEnhancementEnabled(NeoWCCallVoiceDisguiseEnabledKey);
+    UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:@[pickButton, stopButton]];
     buttons.axis = UILayoutConstraintAxisHorizontal;
     buttons.distribution = UIStackViewDistributionFillEqually;
-    UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[label, buttons]];
+    UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:
+        voiceEnabled ? @[label, buttons] : @[label]];
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 8;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     [panel addSubview:stack];
     [NSLayoutConstraint activateConstraints:@[
-        [panel.leadingAnchor constraintEqualToAnchor:controller.view.safeAreaLayoutGuide.leadingAnchor constant:12],
+        [panel.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
         [panel.topAnchor constraintEqualToAnchor:controller.view.safeAreaLayoutGuide.topAnchor constant:12],
-        [panel.widthAnchor constraintEqualToConstant:186],
-        [panel.heightAnchor constraintEqualToConstant:104],
+        [panel.widthAnchor constraintEqualToConstant:220],
+        [panel.heightAnchor constraintEqualToConstant:(voiceEnabled ? 92.0 : 44.0)],
         [stack.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:8],
         [stack.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor constant:-8],
         [stack.topAnchor constraintEqualToAnchor:panel.topAnchor constant:12],
         [stack.bottomAnchor constraintEqualToAnchor:panel.bottomAnchor constant:-12],
     ]];
-    window.rootViewController = controller;
-    window.hidden = NO;
+    self.controlView = panel;
+    self.hostController = controller;
     self.statusLabel = label;
-    self.window = window;
 }
 
 - (void)hide {
-    self.window.hidden = YES;
-    self.window = nil;
-    self.statusLabel = nil;
-}
-
-- (void)toggleRecord {
-    if (!NeoWCEnhancementEnabled(NeoWCCallRecordingEnabledKey)) {
-        self.statusLabel.text = @"请先开启通话录音";
-        return;
+    if (self.voiceLibraryController.viewIfLoaded.window) {
+        [self.voiceLibraryController dismissViewControllerAnimated:NO completion:nil];
     }
-    BOOL recording = !atomic_load(&NeoWCCallRecording);
-    atomic_store(&NeoWCCallRecording, recording);
-    self.statusLabel.text = recording ? @"● 正在录音" : @"录音已暂停";
+    self.voiceLibraryController = nil;
+    [self.controlView removeFromSuperview];
+    self.controlView = nil;
+    self.hostController = nil;
+    self.statusLabel = nil;
 }
 
 - (void)pickVoice {
     if (!NeoWCEnhancementEnabled(NeoWCCallVoiceDisguiseEnabledKey)) return;
-    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
-        initForOpeningContentTypes:@[UTTypeAudio] asCopy:YES];
-    picker.delegate = self;
-    [self.window.rootViewController presentViewController:picker animated:YES completion:nil];
+    UIViewController *presenter = self.hostController;
+    if (!presenter.viewIfLoaded.window) return;
+    NeoWCCallVoiceLibraryViewController *library = [[NeoWCCallVoiceLibraryViewController alloc]
+        initWithStyle:UITableViewStyleInsetGrouped];
+    library.audioPanel = self;
+    UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:library];
+    self.voiceLibraryController = navigation;
+    [presenter presentViewController:navigation animated:YES completion:nil];
 }
 
 - (void)stopVoice {
     atomic_store(&NeoWCVoiceActive, false);
-    self.statusLabel.text = atomic_load(&NeoWCCallRecording) ? @"● 正在录音" : @"语音包已停止";
+    atomic_store(&NeoWCVoiceFramePosition, 0);
+    self.statusLabel.text = atomic_load(&NeoWCCallRecording)
+        ? @"● 自动录音中 · 语音包已停止" : @"语音包已停止";
 }
 
-- (void)documentPicker:(UIDocumentPickerViewController *)controller
-didPickDocumentsAtURLs:(NSArray<NSURL *> *)URLs {
-    NSURL *url = URLs.firstObject;
-    if (!url) return;
-    BOOL scoped = [url startAccessingSecurityScopedResource];
-    AVAsset *asset = [AVURLAsset URLAssetWithURL:url options:nil];
-    NSError *error = nil;
-    AVAssetReader *reader = [[AVAssetReader alloc] initWithAsset:asset error:&error];
-    AVAssetTrack *track = [asset tracksWithMediaType:AVMediaTypeAudio].firstObject;
-    NSDictionary *settings = @{ AVFormatIDKey: @(kAudioFormatLinearPCM),
-                                AVSampleRateKey: @48000,
-                                AVNumberOfChannelsKey: @1,
-                                AVLinearPCMBitDepthKey: @16,
-                                AVLinearPCMIsFloatKey: @NO,
-                                AVLinearPCMIsBigEndianKey: @NO,
-                                AVLinearPCMIsNonInterleaved: @NO };
-    AVAssetReaderTrackOutput *output = track ? [[AVAssetReaderTrackOutput alloc] initWithTrack:track
-                                                                                outputSettings:settings] : nil;
-    if (!reader || !output || ![reader canAddOutput:output]) {
-        if (scoped) [url stopAccessingSecurityScopedResource];
-        self.statusLabel.text = @"语音包读取失败";
+- (void)loadVoiceItem:(NeoWCQuickReplyItem *)item {
+    NSString *sourcePath = [NeoWCQuickReplyStore.sharedStore absoluteMediaPathForItem:item];
+    if (sourcePath.length == 0) {
+        self.statusLabel.text = @"语音包文件不存在";
         return;
     }
-    [reader addOutput:output];
-    [reader startReading];
-    NSMutableData *pcm = [NSMutableData data];
-    CMSampleBufferRef sample = NULL;
-    while ((sample = [output copyNextSampleBuffer])) {
-        CMBlockBufferRef block = CMSampleBufferGetDataBuffer(sample);
-        size_t length = block ? CMBlockBufferGetDataLength(block) : 0;
-        if (length > 0) {
-            NSUInteger oldLength = pcm.length;
-            [pcm increaseLengthBy:length];
-            CMBlockBufferCopyDataBytes(block, 0, length, (uint8_t *)pcm.mutableBytes + oldLength);
+    self.statusLabel.text = @"正在准备语音包…";
+    NSString *title = item.title.length ? item.title : @"语音素材";
+    BOOL mightBeSilk = [item.metadata[@"voiceFormat"] unsignedIntegerValue] == 4 ||
+        [@[@"aud", @"silk"] containsObject:sourcePath.pathExtension.lowercaseString];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSError *error = nil;
+        NSData *pcm = NeoWCCallPCMDataAtPath(sourcePath, &error);
+        NSString *temporaryPath = nil;
+        if (!pcm.length && mightBeSilk) {
+            NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"NeoWCCallVoice"];
+            [NSFileManager.defaultManager createDirectoryAtPath:directory
+                                    withIntermediateDirectories:YES attributes:nil error:nil];
+            temporaryPath = [directory stringByAppendingPathComponent:
+                [NSUUID.UUID.UUIDString stringByAppendingPathExtension:@"wav"]];
+            if (NeoWCSilkDecodeFileToWAV(sourcePath, temporaryPath, &error)) {
+                pcm = NeoWCCallPCMDataAtPath(temporaryPath, &error);
+            }
         }
-        CFRelease(sample);
-    }
-    if (scoped) [url stopAccessingSecurityScopedResource];
-    if (reader.status != AVAssetReaderStatusCompleted || pcm.length == 0) {
-        self.statusLabel.text = @"语音包解码失败";
-        return;
-    }
-    void *copy = malloc(pcm.length);
-    if (!copy) return;
-    memcpy(copy, pcm.bytes, pcm.length);
-    atomic_store(&NeoWCVoiceByteCount, 0);
-    void *old = (void *)atomic_exchange(&NeoWCVoiceBytes, (uintptr_t)copy);
-    atomic_store(&NeoWCVoiceByteCount, pcm.length);
-    atomic_store(&NeoWCVoiceFramePosition, 0);
-    atomic_store(&NeoWCVoiceMode, [NSUserDefaults.standardUserDefaults integerForKey:NeoWCCallVoiceModeKey] == 1 ? 1 : 0);
-    atomic_store(&NeoWCVoiceActive, true);
-    if (old && NeoWCRetiredVoiceBufferCount < 32) {
-        NeoWCRetiredVoiceBuffers[NeoWCRetiredVoiceBufferCount++] = old;
-    }
-    self.statusLabel.text = [NSString stringWithFormat:@"语音包：%@", url.lastPathComponent];
+        if (temporaryPath.length) [NSFileManager.defaultManager removeItemAtPath:temporaryPath error:nil];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!atomic_load(&NeoWCCallActive) || !self.controlView.window) return;
+            if (!pcm.length) {
+                self.statusLabel.text = error.localizedDescription ?: @"语音包解码失败";
+                return;
+            }
+            void *copy = malloc(pcm.length);
+            if (!copy) {
+                self.statusLabel.text = @"语音包内存不足";
+                return;
+            }
+            memcpy(copy, pcm.bytes, pcm.length);
+            atomic_store(&NeoWCVoiceByteCount, 0);
+            void *old = (void *)atomic_exchange(&NeoWCVoiceBytes, (uintptr_t)copy);
+            atomic_store(&NeoWCVoiceByteCount, pcm.length);
+            atomic_store(&NeoWCVoiceFramePosition, 0);
+            atomic_store(&NeoWCVoiceMode,
+                [NSUserDefaults.standardUserDefaults integerForKey:NeoWCCallVoiceModeKey] == 1 ? 1 : 0);
+            atomic_store(&NeoWCVoiceActive, true);
+            if (old && NeoWCRetiredVoiceBufferCount < 32) {
+                NeoWCRetiredVoiceBuffers[NeoWCRetiredVoiceBufferCount++] = old;
+            }
+            [NeoWCQuickReplyStore.sharedStore recordUsageForIdentifier:item.identifier error:nil];
+            self.statusLabel.text = atomic_load(&NeoWCCallRecording)
+                ? [NSString stringWithFormat:@"● 录音中 · %@", title]
+                : [NSString stringWithFormat:@"语音包：%@", title];
+        });
+    });
 }
 
 @end
@@ -471,8 +636,15 @@ static void NeoWCCallDidStart(void) {
     NeoWCCallSessionPrefix = [formatter stringFromDate:NSDate.date];
     NeoWCMicRecordingPath = nil;
     NeoWCPeerRecordingPath = nil;
+    atomic_fetch_add(&NeoWCAudioActivityGeneration, 1);
     atomic_store(&NeoWCCallRecording, NeoWCEnhancementEnabled(NeoWCCallRecordingEnabledKey));
-    dispatch_async(dispatch_get_main_queue(), ^{ [[NeoWCCallAudioPanel sharedPanel] show]; });
+    for (NSNumber *delay in @[@0.0, @0.25, @0.75, @1.5]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                     (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            if (atomic_load(&NeoWCCallActive)) [[NeoWCCallAudioPanel sharedPanel] show];
+        });
+    }
     NeoWCLog(@"通话音频会话开始");
 }
 
