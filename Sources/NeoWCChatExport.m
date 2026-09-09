@@ -6,10 +6,10 @@
 #import "NeoWCPrivateAPI.h"
 #import "NeoWCQuickReplyStore.h"
 
-static NSString *const NeoWCExportTextAction = @"com.qiu7c.neowc.chat-export.text";
-static NSString *const NeoWCSaveImagesAction = @"com.qiu7c.neowc.chat-export.images";
-static NSString *const NeoWCShareCardAction = @"com.qiu7c.neowc.chat-export.card";
-static NSString *const NeoWCQuickReplyImportAction = @"com.qiu7c.neowc.quick-reply.import";
+static NSString *const NeoWCExportTextAction = @"com.qiu7c.wcatlas.chat-export.text";
+static NSString *const NeoWCSaveImagesAction = @"com.qiu7c.wcatlas.chat-export.images";
+static NSString *const NeoWCShareCardAction = @"com.qiu7c.wcatlas.chat-export.card";
+static NSString *const NeoWCQuickReplyImportAction = @"com.qiu7c.wcatlas.quick-reply.import";
 static void NeoWCShowExportMessage(UIViewController *controller, NSString *title, NSString *message);
 static NSString *NeoWCMessageBody(id wrap);
 

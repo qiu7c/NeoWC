@@ -18,7 +18,7 @@ typedef NS_ENUM(NSInteger, NeoWCQuickReplySortMode) {
     NeoWCQuickReplySortModeFrequency,
 };
 
-static NSString *const NeoWCQuickReplySortModeKey = @"com.qiu7c.neowc.quick-reply.sort-mode";
+static NSString *const NeoWCQuickReplySortModeKey = @"com.qiu7c.wcatlas.quick-reply.sort-mode";
 
 static UIImage *NeoWCQuickReplyGroupAvatar(NSString *groupUserName) {
     if (![groupUserName hasSuffix:@"@chatroom"]) return nil;
@@ -408,7 +408,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     self.voiceProgressSlider.enabled = NO;
     [self.voicePlayButton setTitle:@"正在准备…" forState:UIControlStateNormal];
     self.voiceStatusLabel.text = @"正在解码 Silk 语音";
-    NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"NeoWCVoicePreviews"];
+    NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"WCAtlasVoicePreviews"];
     NSError *directoryError = nil;
     if (![NSFileManager.defaultManager createDirectoryAtPath:directory
                                 withIntermediateDirectories:YES
@@ -619,7 +619,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     if (self.selectionHandler) return;
-    NSString *key = @"com.qiu7c.neowc.quick-reply.import-tip.shared";
+    NSString *key = @"com.qiu7c.wcatlas.quick-reply.import-tip.shared";
     if ([NSUserDefaults.standardUserDefaults boolForKey:key]) return;
     [NSUserDefaults.standardUserDefaults setBool:YES forKey:key];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"从聊天中选取消息"
@@ -662,7 +662,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     NSError *error = nil;
     NSURL *packageURL = [NeoWCQuickReplyStore.sharedStore createExportPackageWithError:&error];
     if (!packageURL) {
-        [self showError:error ?: [NSError errorWithDomain:@"NeoWC" code:3 userInfo:@{NSLocalizedDescriptionKey: @"无法创建快捷回复导出包。"}]];
+        [self showError:error ?: [NSError errorWithDomain:@"WCAtlas" code:3 userInfo:@{NSLocalizedDescriptionKey: @"无法创建快捷回复导出包。"}]];
         return;
     }
     self.pendingExportURL = packageURL;
@@ -783,11 +783,11 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
             item.type == NeoWCQuickReplyTypeVoice) mediaCount++;
     }
     if (mediaCount == 0) {
-        [self showError:[NSError errorWithDomain:@"NeoWC" code:3 userInfo:@{NSLocalizedDescriptionKey: @"消息库中没有媒体消息。"}]];
+        [self showError:[NSError errorWithDomain:@"WCAtlas" code:3 userInfo:@{NSLocalizedDescriptionKey: @"消息库中没有媒体消息。"}]];
         return;
     }
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"清理全部媒体素材？"
-                                                                   message:[NSString stringWithFormat:@"将删除 NeoWC 管理的 %lu 个图片、视频或语音副本；文字素材、聊天消息和系统相册不受影响。", (unsigned long)mediaCount]
+                                                                   message:[NSString stringWithFormat:@"将删除 WCAtlas 管理的 %lu 个图片、视频或语音副本；文字素材、聊天消息和系统相册不受影响。", (unsigned long)mediaCount]
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     __weak typeof(self) weakSelf = self;
@@ -881,7 +881,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
 
 - (void)addTapped {
     if (!NeoWCQuickReplyStore.sharedStore.isAvailable) {
-        [self showError:[NSError errorWithDomain:@"NeoWC" code:1 userInfo:@{NSLocalizedDescriptionKey: @"共享消息库暂时无法读写。"}]];
+        [self showError:[NSError errorWithDomain:@"WCAtlas" code:1 userInfo:@{NSLocalizedDescriptionKey: @"共享消息库暂时无法读写。"}]];
         return;
     }
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"添加消息库记录" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
@@ -988,7 +988,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
     [sheet addAction:[UIAlertAction actionWithTitle:@"删除文件夹" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
         NSError *error = nil;
         BOOL deleted = [NeoWCQuickReplyStore.sharedStore deleteFolderWithIdentifier:folder.identifier error:&error];
-        if (!deleted) [self showError:error ?: [NSError errorWithDomain:@"com.qiu7c.neowc.quick-reply"
+        if (!deleted) [self showError:error ?: [NSError errorWithDomain:@"com.qiu7c.wcatlas.quick-reply"
                                                                     code:1
                                                                 userInfo:@{NSLocalizedDescriptionKey: @"删除文件夹失败"}]];
         [self reloadItems];
@@ -1096,7 +1096,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
                                       folderIdentifier:self.currentFolderIdentifier
                                      sourceConversation:nil sourceMessageID:nil error:&error];
     } else {
-        error = [NSError errorWithDomain:@"NeoWC" code:2 userInfo:@{NSLocalizedDescriptionKey: @"无法读取所选媒体文件。"}];
+        error = [NSError errorWithDomain:@"WCAtlas" code:2 userInfo:@{NSLocalizedDescriptionKey: @"无法读取所选媒体文件。"}];
     }
     if (temporaryImagePath.length > 0) [NSFileManager.defaultManager removeItemAtPath:temporaryImagePath error:nil];
     __weak typeof(self) weakSelf = self;
@@ -1302,7 +1302,7 @@ static NSString *NeoWCVoicePreviewTimeText(NSTimeInterval currentTime, NSTimeInt
         UIContextualAction *deleteFolder = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"删除" handler:^(__unused UIContextualAction *action, __unused UIView *sourceView, void (^completionHandler)(BOOL)) {
             NSError *error = nil;
             BOOL deleted = [NeoWCQuickReplyStore.sharedStore deleteFolderWithIdentifier:folder.identifier error:&error];
-            if (!deleted) [weakSelf showError:error ?: [NSError errorWithDomain:@"com.qiu7c.neowc.quick-reply"
+            if (!deleted) [weakSelf showError:error ?: [NSError errorWithDomain:@"com.qiu7c.wcatlas.quick-reply"
                                                                                  code:1
                                                                              userInfo:@{NSLocalizedDescriptionKey: @"删除文件夹失败"}]];
             [weakSelf reloadItems];

@@ -12,7 +12,7 @@
 #import <stdlib.h>
 #import <string.h>
 
-static NSString *const NeoWCMomentsInteractionStateKey = @"com.qiu7c.neowc.moments.interaction-reminder.state";
+static NSString *const NeoWCMomentsInteractionStateKey = @"com.qiu7c.wcatlas.moments.interaction-reminder.state";
 
 static const char *NeoWCMomentsInteractionSkipQualifiers(const char *type) {
     while (type && strchr("rnNoORV", *type)) type++;

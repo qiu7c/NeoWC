@@ -1815,7 +1815,7 @@ static void NeoWCRecordMeMenuTitle(NSString *title) {
 
 static BOOL NeoWCHidesMeMenuTitle(NSString *title) {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    id master = [defaults objectForKey:@"com.qiu7c.neowc.enabled"];
+    id master = [defaults objectForKey:@"com.qiu7c.wcatlas.enabled"];
     return title.length > 0 && (!master || [master boolValue]) &&
            [[defaults arrayForKey:NeoWCMeMenuHiddenTitlesKey] containsObject:title];
 }
@@ -5638,7 +5638,7 @@ static NSString *NeoWCMediaToVoiceLocalPath(id message, NeoWCMediaToVoiceKind ki
 }
 
 static NSString *NeoWCMediaToVoiceTemporaryPath(NSString *extension) {
-    NSString *name = [NSString stringWithFormat:@"NeoWC-media-to-voice-%@.%@",
+    NSString *name = [NSString stringWithFormat:@"WCAtlas-media-to-voice-%@.%@",
                       NSUUID.UUID.UUIDString, extension.length > 0 ? extension : @"tmp"];
     return [NSTemporaryDirectory() stringByAppendingPathComponent:name];
 }
@@ -6236,17 +6236,23 @@ static void NeoWCRegisterPlugin(void) {
     NeoWCSettingsRegisterDefaults();
 
     Class managerClass = NSClassFromString(@"WCPluginsMgr");
-    if (!managerClass || ![managerClass respondsToSelector:@selector(sharedInstance)]) return;
-
-    WCPluginsMgr *manager = [managerClass sharedInstance];
-    if (!manager) return;
-
-    [manager registerControllerWithTitle:@"NeoWC"
-                                 version:NeoWCDisplayVersion
-                              controller:NSStringFromClass([NeoWCSettingsViewController class])];
+    WCPluginsMgr *manager = managerClass != WCAtlasPluginsMgr.class &&
+        [managerClass respondsToSelector:@selector(sharedInstance)]
+        ? [managerClass sharedInstance] : nil;
+    BOOL useBuiltInManager = NeoWCEnhancementEnabled(NeoWCPluginManagerEnabledKey);
+    if (!manager && !useBuiltInManager) return;
+    if (manager) {
+        [manager registerControllerWithTitle:@"WCAtlas"
+                                     version:NeoWCDisplayVersion
+                                  controller:NSStringFromClass([NeoWCSettingsViewController class])];
+    } else if (useBuiltInManager) {
+        [WCAtlasPluginsMgr.sharedInstance registerControllerWithTitle:@"WCAtlas"
+                                                               version:NeoWCDisplayVersion
+                                                            controller:NSStringFromClass([NeoWCSettingsViewController class])];
+    }
     NeoWCPluginManagerRegisterSavedQuickSwitches();
     NeoWCDidRegister = YES;
-    NeoWCLog(@"已注册插件管理入口与用户选择的快捷开关");
+    NeoWCLog(manager ? @"已注册到懒猫插件管理" : @"已按内置插件管理设置注册 WCAtlas");
 }
 
 static void NeoWCRefreshHighRefreshRateConfiguration(void) {
@@ -10881,7 +10887,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)neowc_toggleSendConfirmation:(UILongPressGestureRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateBegan) return;
     if (!NeoWCEnhancementEnabled(NeoWCSendConfirmationEnabledKey)) {
-        NeoWCShowTransientMessage(@"请先在 NeoWC 设置中开启发送前确认", NO);
+        NeoWCShowTransientMessage(@"请先在 WCAtlas 设置中开启发送前确认", NO);
         return;
     }
     NSString *username = NeoWCChatUserName(self);

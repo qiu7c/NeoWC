@@ -207,7 +207,7 @@
 - (NSURL *)recordingDirectory {
     NSURL *documents = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory
                                                              inDomains:NSUserDomainMask].firstObject;
-    return [documents URLByAppendingPathComponent:@"NeoWC/CallRecordings" isDirectory:YES];
+    return [documents URLByAppendingPathComponent:@"WCAtlas/CallRecordings" isDirectory:YES];
 }
 
 - (NSString *)prefixForURL:(NSURL *)URL {

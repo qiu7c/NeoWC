@@ -68,7 +68,7 @@ static void NeoWCAppendLittleEndian32(NSMutableData *data, uint32_t value) {
     NSFileManager *fileManager = NSFileManager.defaultManager;
     NSURL *supportURL = [fileManager URLsForDirectory:NSApplicationSupportDirectory
                                             inDomains:NSUserDomainMask].firstObject;
-    NSURL *directoryURL = [supportURL URLByAppendingPathComponent:@"NeoWC/Background" isDirectory:YES];
+    NSURL *directoryURL = [supportURL URLByAppendingPathComponent:@"WCAtlas/Background" isDirectory:YES];
     NSURL *audioURL = [directoryURL URLByAppendingPathComponent:@"silence.wav" isDirectory:NO];
     if ([fileManager fileExistsAtPath:audioURL.path]) return audioURL;
 

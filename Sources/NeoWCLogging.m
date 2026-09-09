@@ -1,6 +1,6 @@
 #import "NeoWCLogging.h"
 
-NSString *const NeoWCLoggingEnabledKey = @"com.qiu7c.neowc.logging.enabled";
+NSString *const NeoWCLoggingEnabledKey = @"com.qiu7c.wcatlas.logging.enabled";
 NSNotificationName const NeoWCLogDidChangeNotification = @"NeoWCLogDidChangeNotification";
 
 static NSMutableArray<NSString *> *NeoWCMutableLogEntries(void) {
@@ -27,7 +27,7 @@ static void NeoWCWriteLog(NSString *format, va_list arguments, BOOL force) {
     if (!force && [defaults objectForKey:NeoWCLoggingEnabledKey] &&
         ![defaults boolForKey:NeoWCLoggingEnabledKey]) return;
     NSString *message = [[NSString alloc] initWithFormat:format arguments:arguments];
-    NSLog(@"[NeoWC] %@", message);
+    NSLog(@"[WCAtlas] %@", message);
     NSDateFormatter *formatter = NeoWCLogDateFormatter();
     NSString *timestamp = nil;
     @synchronized (formatter) { timestamp = [formatter stringFromDate:NSDate.date]; }

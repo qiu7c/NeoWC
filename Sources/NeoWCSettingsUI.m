@@ -152,6 +152,7 @@ static UIView *NeoWCSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL exp
 
 @interface NeoWCSettingsProfileHeaderView ()
 @property (nonatomic, copy, readwrite) NSString *wxid;
+@property (nonatomic, strong) UIView *capsuleView;
 @property (nonatomic, strong) UIView *avatarView;
 @property (nonatomic, strong) UILabel *nicknameLabel;
 @property (nonatomic, strong) UILabel *wxidLabel;
@@ -171,25 +172,40 @@ static UIView *NeoWCSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL exp
     self.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.accessibilityTraits = UIAccessibilityTraitButton;
 
+    _capsuleView = [UIView new];
+    _capsuleView.translatesAutoresizingMaskIntoConstraints = NO;
+    _capsuleView.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
+    _capsuleView.layer.cornerRadius = 20.0;
+    _capsuleView.layer.cornerCurve = kCACornerCurveContinuous;
+    _capsuleView.userInteractionEnabled = NO;
+    [self addSubview:_capsuleView];
+
     _nicknameLabel = [UILabel new];
     _nicknameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _nicknameLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleTitle2]
-        scaledFontForFont:[UIFont systemFontOfSize:20.0 weight:UIFontWeightRegular]];
+        scaledFontForFont:[UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold]];
     _nicknameLabel.adjustsFontForContentSizeCategory = YES;
     _nicknameLabel.numberOfLines = 1;
-    _nicknameLabel.textAlignment = NSTextAlignmentCenter;
+    _nicknameLabel.textAlignment = NSTextAlignmentLeft;
     _nicknameLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    [self addSubview:_nicknameLabel];
+    [_capsuleView addSubview:_nicknameLabel];
 
     _wxidLabel = [UILabel new];
     _wxidLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _wxidLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody]
-        scaledFontForFont:[UIFont systemFontOfSize:15.0 weight:UIFontWeightRegular]];
+        scaledFontForFont:[UIFont systemFontOfSize:13.0 weight:UIFontWeightRegular]];
     _wxidLabel.adjustsFontForContentSizeCategory = YES;
     _wxidLabel.textColor = UIColor.secondaryLabelColor;
-    _wxidLabel.textAlignment = NSTextAlignmentCenter;
+    _wxidLabel.textAlignment = NSTextAlignmentLeft;
     _wxidLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
-    [self addSubview:_wxidLabel];
+    [_capsuleView addSubview:_wxidLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [_capsuleView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:16.0],
+        [_capsuleView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16.0],
+        [_capsuleView.topAnchor constraintEqualToAnchor:self.topAnchor constant:12.0],
+        [_capsuleView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-12.0],
+    ]];
 
     // Account values are persisted. Apply them before the header first appears
     // so it never renders an empty placeholder frame.
@@ -204,8 +220,8 @@ static UIView *NeoWCSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL exp
     fallback.contentMode = UIViewContentModeScaleAspectFill;
     fallback.clipsToBounds = YES;
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSString *cachedURL = [defaults stringForKey:@"com.qiu7c.neowc.ui.cached-avatar-url"];
-    NSData *cachedImageData = [defaults dataForKey:@"com.qiu7c.neowc.ui.cached-avatar-data"];
+    NSString *cachedURL = [defaults stringForKey:@"com.qiu7c.wcatlas.ui.cached-avatar-url"];
+    NSData *cachedImageData = [defaults dataForKey:@"com.qiu7c.wcatlas.ui.cached-avatar-data"];
     if (headURL.length > 0 && [cachedURL isEqualToString:headURL] && cachedImageData.length > 0) {
         UIImage *cachedImage = [UIImage imageWithData:cachedImageData];
         if (cachedImage) fallback.image = cachedImage;
@@ -216,8 +232,8 @@ static UIView *NeoWCSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL exp
         [[[NSURLSession sharedSession] dataTaskWithURL:URL completionHandler:^(NSData *data, __unused NSURLResponse *response, __unused NSError *error) {
             UIImage *image = data.length > 0 ? [UIImage imageWithData:data] : nil;
             if (!image) return;
-            [NSUserDefaults.standardUserDefaults setObject:headURL forKey:@"com.qiu7c.neowc.ui.cached-avatar-url"];
-            [NSUserDefaults.standardUserDefaults setObject:data forKey:@"com.qiu7c.neowc.ui.cached-avatar-data"];
+            [NSUserDefaults.standardUserDefaults setObject:headURL forKey:@"com.qiu7c.wcatlas.ui.cached-avatar-url"];
+            [NSUserDefaults.standardUserDefaults setObject:data forKey:@"com.qiu7c.wcatlas.ui.cached-avatar-data"];
             dispatch_async(dispatch_get_main_queue(), ^{ weakImageView.image = image; });
         }] resume];
     }
@@ -253,44 +269,38 @@ static UIView *NeoWCSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL exp
     UIView *avatarContent = [self makeAvatarViewWithWXID:self.wxid headURL:headURL];
     avatarContent.translatesAutoresizingMaskIntoConstraints = NO;
     avatarContent.clipsToBounds = YES;
-    avatarContent.layer.cornerRadius = 22.0;
+    avatarContent.layer.cornerRadius = 16.0;
     avatarContent.layer.cornerCurve = kCACornerCurveContinuous;
 
     self.avatarView = [UIView new];
     self.avatarView.translatesAutoresizingMaskIntoConstraints = NO;
     self.avatarView.clipsToBounds = YES;
-    self.avatarView.layer.cornerRadius = 22.0;
+    self.avatarView.layer.cornerRadius = 16.0;
     self.avatarView.layer.cornerCurve = kCACornerCurveContinuous;
     [self.avatarView addSubview:avatarContent];
-    [self addSubview:self.avatarView];
+    [self.capsuleView addSubview:self.avatarView];
     self.avatarConstraints = @[
-        [self.avatarView.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-        [self.avatarView.topAnchor constraintEqualToAnchor:self.topAnchor constant:18.0],
-        [self.avatarView.widthAnchor constraintEqualToConstant:92.0],
-        [self.avatarView.heightAnchor constraintEqualToConstant:92.0],
+        [self.avatarView.leadingAnchor constraintEqualToAnchor:self.capsuleView.leadingAnchor constant:16.0],
+        [self.avatarView.centerYAnchor constraintEqualToAnchor:self.capsuleView.centerYAnchor],
+        [self.avatarView.widthAnchor constraintEqualToConstant:64.0],
+        [self.avatarView.heightAnchor constraintEqualToConstant:64.0],
         [avatarContent.leadingAnchor constraintEqualToAnchor:self.avatarView.leadingAnchor],
         [avatarContent.trailingAnchor constraintEqualToAnchor:self.avatarView.trailingAnchor],
         [avatarContent.topAnchor constraintEqualToAnchor:self.avatarView.topAnchor],
         [avatarContent.bottomAnchor constraintEqualToAnchor:self.avatarView.bottomAnchor],
-        [self.nicknameLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.leadingAnchor constant:24.0],
-        [self.nicknameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-24.0],
-        [self.nicknameLabel.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-        [self.nicknameLabel.topAnchor constraintEqualToAnchor:self.avatarView.bottomAnchor constant:10.0],
-        [self.wxidLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.leadingAnchor constant:24.0],
-        [self.wxidLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-24.0],
-        [self.wxidLabel.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+        [self.nicknameLabel.leadingAnchor constraintEqualToAnchor:self.avatarView.trailingAnchor constant:14.0],
+        [self.nicknameLabel.trailingAnchor constraintEqualToAnchor:self.capsuleView.trailingAnchor constant:-16.0],
+        [self.nicknameLabel.bottomAnchor constraintEqualToAnchor:self.capsuleView.centerYAnchor constant:-2.0],
+        [self.wxidLabel.leadingAnchor constraintEqualToAnchor:self.nicknameLabel.leadingAnchor],
+        [self.wxidLabel.trailingAnchor constraintEqualToAnchor:self.nicknameLabel.trailingAnchor],
         [self.wxidLabel.topAnchor constraintEqualToAnchor:self.nicknameLabel.bottomAnchor constant:4.0],
-        [self.wxidLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-16.0],
     ];
     [NSLayoutConstraint activateConstraints:self.avatarConstraints];
 }
 
 - (CGFloat)preferredHeightForWidth:(CGFloat)width scale:(CGFloat)scale {
-    CGFloat textWidth = MAX(120.0, width - 48.0);
-    CGFloat nicknameHeight = [self.nicknameLabel sizeThatFits:CGSizeMake(textWidth, CGFLOAT_MAX)].height;
-    CGFloat wxidHeight = [self.wxidLabel sizeThatFits:CGSizeMake(textWidth, CGFLOAT_MAX)].height;
-    CGFloat contentHeight = 18.0 + 92.0 + 10.0 + nicknameHeight + 4.0 + wxidHeight + 16.0;
-    return MAX(contentHeight, 188.0 * scale);
+    (void)width;
+    return MAX(104.0, 104.0 * scale);
 }
 
 - (void)showCopyConfirmation {

@@ -3,17 +3,17 @@
 #import "NeoWCEnhancements.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-static NSString *const NeoWCDefaultsPrefix = @"com.qiu7c.neowc.";
+static NSString *const NeoWCDefaultsPrefix = @"com.qiu7c.wcatlas.";
 static BOOL NeoWCIsManagedDefaultsKey(NSString *key) {
     if (![key hasPrefix:NeoWCDefaultsPrefix]) return NO;
-    if ([key hasPrefix:@"com.qiu7c.neowc.authorization."]) return NO;
+    if ([key hasPrefix:@"com.qiu7c.wcatlas.authorization."]) return NO;
     static NSSet<NSString *> *excludedKeys;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         excludedKeys = [NSSet setWithArray:@[
-            @"com.qiu7c.neowc.message.anti-revoke.archive",
-            @"com.qiu7c.neowc.message.anti-revoke.local-prompt-contents",
-            @"com.qiu7c.neowc.message.anti-revoke.side-records",
+            @"com.qiu7c.wcatlas.message.anti-revoke.archive",
+            @"com.qiu7c.wcatlas.message.anti-revoke.local-prompt-contents",
+            @"com.qiu7c.wcatlas.message.anti-revoke.side-records",
         ]];
     });
     return ![excludedKeys containsObject:key];
@@ -39,7 +39,7 @@ static id NeoWCJSONValueFromDefaultsValue(id value) {
     if ([value isKindOfClass:[NSString class]] || [value isKindOfClass:[NSNumber class]] ||
         [value isKindOfClass:[NSNull class]]) return value;
     if ([value isKindOfClass:[NSDate class]]) {
-        return @{ @"$neowcType": @"date", @"value": @([(NSDate *)value timeIntervalSince1970]) };
+        return @{ @"$wcatlasType": @"date", @"value": @([(NSDate *)value timeIntervalSince1970]) };
     }
     if ([value isKindOfClass:[NSArray class]]) {
         NSMutableArray *values = [NSMutableArray array];
@@ -77,7 +77,7 @@ static id NeoWCDefaultsValueFromJSONValue(id value) {
     }
     if ([value isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dictionary = value;
-        if ([dictionary[@"$neowcType"] isEqualToString:@"date"] &&
+        if ([dictionary[@"$wcatlasType"] isEqualToString:@"date"] &&
             [dictionary[@"value"] isKindOfClass:[NSNumber class]] &&
             dictionary.count == 2) {
             return [NSDate dateWithTimeIntervalSince1970:[dictionary[@"value"] doubleValue]];
@@ -122,7 +122,7 @@ static id NeoWCDefaultsValueFromJSONValue(id value) {
 }
 
 - (NSString *)tableView:(__unused UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    return section == 0 ? @"文件只包含 NeoWC 自己的配置项，不读取或修改微信的其他设置。" : nil;
+    return section == 0 ? @"文件只包含 WCAtlas 自己的配置项，不读取或修改微信的其他设置。" : nil;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -137,10 +137,10 @@ static id NeoWCDefaultsValueFromJSONValue(id value) {
         cell.imageView.image = [UIImage systemImageNamed:@"square.and.arrow.up"];
     } else if (indexPath.section == 0) {
         cell.textLabel.text = @"导入配置";
-        cell.detailTextLabel.text = @"从 NeoWC JSON 备份恢复";
+        cell.detailTextLabel.text = @"从 WCAtlas JSON 备份恢复";
         cell.imageView.image = [UIImage systemImageNamed:@"square.and.arrow.down"];
     } else {
-        cell.textLabel.text = @"重置 NeoWC 配置";
+        cell.textLabel.text = @"重置 WCAtlas 配置";
         cell.detailTextLabel.text = @"清除全部插件设置";
         cell.textLabel.textColor = UIColor.systemRedColor;
         cell.imageView.image = [UIImage systemImageNamed:@"arrow.counterclockwise"];
@@ -165,7 +165,7 @@ static id NeoWCDefaultsValueFromJSONValue(id value) {
 
 - (void)exportConfiguration {
     NSDictionary *payload = @{
-        @"format": @"NeoWCConfig",
+        @"format": @"WCAtlasConfig",
         @"version": @1,
         @"values": [self persistentNeoWCValues],
     };
@@ -179,7 +179,7 @@ static id NeoWCDefaultsValueFromJSONValue(id value) {
     NSDateFormatter *formatter = [NSDateFormatter new];
     formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
     formatter.dateFormat = @"yyyyMMdd-HHmmss";
-    NSString *fileName = [NSString stringWithFormat:@"NeoWC-Config-%@.json", [formatter stringFromDate:[NSDate date]]];
+    NSString *fileName = [NSString stringWithFormat:@"WCAtlas-Config-%@.json", [formatter stringFromDate:[NSDate date]]];
     NSURL *url = [[NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES] URLByAppendingPathComponent:fileName];
     if (![data writeToURL:url options:NSDataWritingAtomic error:&error]) {
         [self showMessage:@"导出失败" detail:error.localizedDescription ?: @"无法写入配置文件"];
@@ -215,8 +215,8 @@ didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
     id root = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:&error] : nil;
     NSDictionary *payload = [root isKindOfClass:[NSDictionary class]] ? root : nil;
     NSDictionary *rawValues = [payload[@"values"] isKindOfClass:[NSDictionary class]] ? payload[@"values"] : nil;
-    if (!rawValues || ![payload[@"format"] isEqualToString:@"NeoWCConfig"]) {
-        [self showMessage:@"无法导入" detail:error.localizedDescription ?: @"这不是有效的 NeoWC 配置文件"];
+    if (!rawValues || ![payload[@"format"] isEqualToString:@"WCAtlasConfig"]) {
+        [self showMessage:@"无法导入" detail:error.localizedDescription ?: @"这不是有效的 WCAtlas 配置文件"];
         return;
     }
 
@@ -253,12 +253,12 @@ didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
         [defaults setObject:value forKey:key];
     }];
     [self notifyConfigurationChanged];
-    [self showMessage:@"导入完成" detail:[NSString stringWithFormat:@"已恢复 %lu 项 NeoWC 配置", (unsigned long)decodedValues.count]];
+    [self showMessage:@"导入完成" detail:[NSString stringWithFormat:@"已恢复 %lu 项 WCAtlas 配置", (unsigned long)decodedValues.count]];
 }
 
 - (void)confirmReset {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"重置 NeoWC 配置"
-                                                                   message:@"所有 NeoWC 开关、名单和界面设置都会恢复默认值。"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"重置 WCAtlas 配置"
+                                                                   message:@"所有 WCAtlas 开关、名单和界面设置都会恢复默认值。"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     [alert addAction:[UIAlertAction actionWithTitle:@"重置" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
         NSString *domainName = NSBundle.mainBundle.bundleIdentifier;
@@ -268,7 +268,7 @@ didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
             if (NeoWCIsManagedDefaultsKey(key)) [defaults removeObjectForKey:key];
         }
         [self notifyConfigurationChanged];
-        [self showMessage:@"已重置" detail:@"NeoWC 配置已恢复默认值"];
+        [self showMessage:@"已重置" detail:@"WCAtlas 配置已恢复默认值"];
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     UIPopoverPresentationController *popover = alert.popoverPresentationController;

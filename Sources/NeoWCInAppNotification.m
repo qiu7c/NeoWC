@@ -7,9 +7,9 @@ static const NSTimeInterval NeoWCInAppNotificationDuration = 4.0;
 static const NSTimeInterval NeoWCInAppNotificationDuplicateInterval = 5.0;
 static const NSTimeInterval NeoWCTransientHUDDuration = 1.6;
 
-NSString *const NeoWCInAppNotificationSymbolKey = @"com.qiu7c.neowc.in-app-notification.symbol";
-NSString *const NeoWCInAppNotificationHeightKey = @"com.qiu7c.neowc.in-app-notification.height";
-NSString *const NeoWCInAppNotificationBlurIntensityKey = @"com.qiu7c.neowc.in-app-notification.blur-intensity";
+NSString *const NeoWCInAppNotificationSymbolKey = @"com.qiu7c.wcatlas.in-app-notification.symbol";
+NSString *const NeoWCInAppNotificationHeightKey = @"com.qiu7c.wcatlas.in-app-notification.height";
+NSString *const NeoWCInAppNotificationBlurIntensityKey = @"com.qiu7c.wcatlas.in-app-notification.blur-intensity";
 CGFloat const NeoWCInAppNotificationMinimumHeight = 56.0;
 CGFloat const NeoWCInAppNotificationMaximumHeight = 90.0;
 

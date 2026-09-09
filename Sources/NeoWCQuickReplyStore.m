@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static NSString *const NeoWCQuickReplyErrorDomain = @"com.qiu7c.neowc.quick-reply";
+static NSString *const NeoWCQuickReplyErrorDomain = @"com.qiu7c.wcatlas.quick-reply";
 
 typedef NS_ENUM(NSInteger, NeoWCQuickReplyErrorCode) {
     NeoWCQuickReplyErrorInvalidValue = 1,
@@ -27,9 +27,9 @@ static NSString *const NeoWCQuickReplyItemsMigrationMarkerName = @".items-v2";
 static NSString *const NeoWCQuickReplyFoldersMigrationMarkerName = @".folders-v2";
 static NSString *const NeoWCQuickReplyItemsStableRecoveryMarkerName = @".items-v3-stable";
 static NSString *const NeoWCQuickReplyFoldersStableRecoveryMarkerName = @".folders-v3-stable";
-static NSString *const NeoWCQuickReplyItemsDefaultsKey = @"com.qiu7c.neowc.quick-reply.message-list.v3";
-static NSString *const NeoWCQuickReplyFoldersDefaultsKey = @"com.qiu7c.neowc.quick-reply.folder-list.v3";
-static NSString *const NeoWCQuickReplyDeletedFoldersDefaultsKey = @"com.qiu7c.neowc.quick-reply.deleted-folder-identifiers.v1";
+static NSString *const NeoWCQuickReplyItemsDefaultsKey = @"com.qiu7c.wcatlas.quick-reply.message-list.v3";
+static NSString *const NeoWCQuickReplyFoldersDefaultsKey = @"com.qiu7c.wcatlas.quick-reply.folder-list.v3";
+static NSString *const NeoWCQuickReplyDeletedFoldersDefaultsKey = @"com.qiu7c.wcatlas.quick-reply.deleted-folder-identifiers.v1";
 
 static NSError *NeoWCQuickReplyError(NeoWCQuickReplyErrorCode code, NSString *description) {
     return [NSError errorWithDomain:NeoWCQuickReplyErrorDomain
@@ -169,7 +169,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
 - (NSURL *)quickRepliesRootURL {
     NSURL *documents = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory
                                                             inDomains:NSUserDomainMask].firstObject;
-    return documents ? [[documents URLByAppendingPathComponent:@"NeoWC" isDirectory:YES]
+    return documents ? [[documents URLByAppendingPathComponent:@"WCAtlas" isDirectory:YES]
                         URLByAppendingPathComponent:@"QuickReplies" isDirectory:YES] : nil;
 }
 
@@ -206,7 +206,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
 - (NSURL *)legacyQuickRepliesRootURL {
     NSURL *applicationSupport = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
                                                                      inDomains:NSUserDomainMask].firstObject;
-    return applicationSupport ? [[applicationSupport URLByAppendingPathComponent:@"NeoWC" isDirectory:YES]
+    return applicationSupport ? [[applicationSupport URLByAppendingPathComponent:@"WCAtlas" isDirectory:YES]
                                  URLByAppendingPathComponent:@"QuickReplies" isDirectory:YES] : nil;
 }
 
@@ -241,7 +241,7 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
     if (legacyRoot) [self copyMissingContentsFromDirectory:[legacyRoot URLByAppendingPathComponent:@"Shared" isDirectory:YES]
                                                toDirectory:sharedDirectory];
     NSURL *documents = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
-    NSURL *legacyRecovery = documents ? [[documents URLByAppendingPathComponent:@"NeoWC" isDirectory:YES]
+    NSURL *legacyRecovery = documents ? [[documents URLByAppendingPathComponent:@"WCAtlas" isDirectory:YES]
                                          URLByAppendingPathComponent:NeoWCQuickReplyRecoveryDirectoryName isDirectory:YES] : nil;
     if (legacyRecovery) {
         [self copyMissingContentsFromDirectory:legacyRecovery toDirectory:sharedDirectory];
@@ -1630,9 +1630,9 @@ static NSData *NeoWCQuickReplyTarHeader(NSString *relativePath, unsigned long lo
         NSDateFormatter *formatter = [NSDateFormatter new];
         formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
         formatter.dateFormat = @"yyyyMMdd-HHmmss";
-        NSString *name = [NSString stringWithFormat:@"NeoWC快捷回复-%@.tar", [formatter stringFromDate:NSDate.date]];
+        NSString *name = [NSString stringWithFormat:@"WCAtlas消息库-%@.tar", [formatter stringFromDate:NSDate.date]];
         NSURL *exportsDirectory = [[NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES]
-                                   URLByAppendingPathComponent:@"NeoWCQuickReplyExports" isDirectory:YES];
+                                   URLByAppendingPathComponent:@"WCAtlasQuickReplyExports" isDirectory:YES];
         NSURL *packageURL = [exportsDirectory URLByAppendingPathComponent:name isDirectory:NO];
         NSFileManager *manager = NSFileManager.defaultManager;
         if (![manager createDirectoryAtURL:exportsDirectory withIntermediateDirectories:YES attributes:nil error:error]) return nil;

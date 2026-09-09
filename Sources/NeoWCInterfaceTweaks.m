@@ -8,14 +8,14 @@
 #import "NeoWCCompatibility.h"
 #import "NeoWCEnhancements.h"
 
-NSString *const NeoWCChatInputRoundingEnabledKey = @"com.qiu7c.neowc.interface.chat-input-rounding";
-NSString *const NeoWCChatInputInnerRoundingKey = @"com.qiu7c.neowc.interface.chat-input-rounding.inner";
-NSString *const NeoWCChatInputOuterRoundingKey = @"com.qiu7c.neowc.interface.chat-input-rounding.outer";
-NSString *const NeoWCChatInputInnerRadiusKey = @"com.qiu7c.neowc.interface.chat-input-rounding.inner-radius";
-NSString *const NeoWCChatInputOuterRadiusKey = @"com.qiu7c.neowc.interface.chat-input-rounding.outer-radius";
-NSString *const NeoWCHideChatMuteIconKey = @"com.qiu7c.neowc.interface.hide-chat-mute-icon";
-NSString *const NeoWCGlobalAvatarRoundingEnabledKey = @"com.qiu7c.neowc.interface.global-avatar-rounding";
-NSString *const NeoWCGlobalAvatarCornerPercentKey = @"com.qiu7c.neowc.interface.global-avatar-corner-percent";
+NSString *const NeoWCChatInputRoundingEnabledKey = @"com.qiu7c.wcatlas.interface.chat-input-rounding";
+NSString *const NeoWCChatInputInnerRoundingKey = @"com.qiu7c.wcatlas.interface.chat-input-rounding.inner";
+NSString *const NeoWCChatInputOuterRoundingKey = @"com.qiu7c.wcatlas.interface.chat-input-rounding.outer";
+NSString *const NeoWCChatInputInnerRadiusKey = @"com.qiu7c.wcatlas.interface.chat-input-rounding.inner-radius";
+NSString *const NeoWCChatInputOuterRadiusKey = @"com.qiu7c.wcatlas.interface.chat-input-rounding.outer-radius";
+NSString *const NeoWCHideChatMuteIconKey = @"com.qiu7c.wcatlas.interface.hide-chat-mute-icon";
+NSString *const NeoWCGlobalAvatarRoundingEnabledKey = @"com.qiu7c.wcatlas.interface.global-avatar-rounding";
+NSString *const NeoWCGlobalAvatarCornerPercentKey = @"com.qiu7c.wcatlas.interface.global-avatar-corner-percent";
 
 static UIColor *NeoWCEffectiveBackgroundColorForView(UIView *view) {
     for (UIView *candidate = view; candidate; candidate = candidate.superview) {

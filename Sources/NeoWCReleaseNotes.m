@@ -1,7 +1,7 @@
 #import "NeoWCReleaseNotes.h"
 #import "NeoWCSettingsCatalog.h"
 
-static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.neowc.ui.last-shown-release-notes-version";
+static NSString *const NeoWCLastShownReleaseNotesVersionKey = @"com.qiu7c.wcatlas.ui.last-shown-release-notes-version";
 
 @interface NeoWCReleaseNoteItem ()
 @property (nonatomic, copy, readwrite) NSString *title;
@@ -72,7 +72,7 @@ NSArray<NeoWCReleaseNote *> *NeoWCReleaseNotes(void) {
                 [NeoWCReleaseNoteItem itemWithTitle:@"通话自动免提"
                                                detail:@"新增独立开关，在微信通话音频设备启动并确认处于语音模式后自动切换扬声器；保留微信原始启动顺序。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"插件入口与分类样式"
-                                               detail:@"插件管理分类切换改为内容自适应胶囊，缩短无效留白；升级时自动清理旧版 NeoWC 调试快捷入口，同时保留其他插件、自定义分类、排序和快捷开关。"],
+                                               detail:@"插件管理分类切换改为内容自适应胶囊，缩短无效留白；整理调试快捷入口，同时保留其他插件、自定义分类、排序和快捷开关。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"媒体菜单与深色模式修复"
                                                detail:@"音频文件转语音只对真实可转换音频显示，避免所有文件误出现入口；防撤回预览在深色模式使用黑色背景，并修复多处通知、模糊动画和界面生命周期问题。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"移除未稳定的加密发送"
@@ -92,9 +92,9 @@ NSArray<NeoWCReleaseNote *> *NeoWCReleaseNotes(void) {
                 [NeoWCReleaseNoteItem itemWithTitle:@"快捷回复与媒体转语音修复"
                                                detail:@"加强素材持久化、导出、侧滑和面板布局，修正搜索框背景；补齐视频、音频文件和音乐卡片转语音菜单入口。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"设置重新分类"
-                                               detail:@"按聊天、朋友圈、界面禁用、界面优化、常用增强和插件设置重新整理；日志与配置集中到插件设置，作者主页和历史更新记录保留在设置首页底部。"],
+                                               detail:@"按聊天、朋友圈、界面禁用、界面优化、常用增强和插件设置重新整理；日志与配置集中到插件设置，官方交流群和历史更新记录保留在设置首页底部。"],
                 [NeoWCReleaseNoteItem itemWithTitle:@"精简用户版本"
-                                               detail:@"开发调试工具迁移到独立 WCDebug，并自动清理 NeoWC 旧调试快捷入口；同时移除未开放的快捷收款链接、视频解析和音乐点歌代码。"],
+                                               detail:@"开发调试工具迁移到独立 WCDebug；同时移除未开放的快捷收款链接、视频解析和音乐点歌代码。"],
             ]],
             [NeoWCReleaseNote noteWithVersion:@"0.1.5"
                                      headline:@"快捷回复与防误发"
@@ -280,7 +280,7 @@ void NeoWCMarkCurrentReleaseNotesPresented(void) {
                                                 scaledFontForFont:[UIFont systemFontOfSize:22.0 weight:UIFontWeightBold]]
                                        color:UIColor.labelColor
                                        lines:1];
-    titleLabel.text = @"NeoWC 更新";
+    titleLabel.text = @"WCAtlas 更新";
     UILabel *headlineLabel = [self labelWithFont:[UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline]
                                           color:UIColor.secondaryLabelColor
                                           lines:0];

@@ -159,7 +159,7 @@ static NSString *NeoWCFriendRelationStoragePath(void) {
                                               appropriateForURL:nil
                                                          create:YES
                                                           error:nil];
-    NSURL *directory = [base URLByAppendingPathComponent:@"NeoWC" isDirectory:YES];
+    NSURL *directory = [base URLByAppendingPathComponent:@"WCAtlas" isDirectory:YES];
     [NSFileManager.defaultManager createDirectoryAtURL:directory
                            withIntermediateDirectories:YES
                                             attributes:nil

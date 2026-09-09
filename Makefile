@@ -7,12 +7,12 @@ INSTALL_TARGET_PROCESSES = WeChat
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = NeoWC
+TWEAK_NAME = WCAtlas
 
-NeoWC_FILES = Tweak.xm $(wildcard Sources/*.m) $(wildcard Vendor/Silk/src/*.c)
-NeoWC_CFLAGS = -IVendor/Silk/interface -IVendor/Silk/src -ffunction-sections -fdata-sections
-NeoWC_OBJCFLAGS = -fobjc-arc
-NeoWC_LDFLAGS = -Wl,-dead_strip
-NeoWC_FRAMEWORKS = UIKit Foundation QuartzCore CoreImage Photos AVFoundation AudioToolbox AVKit UniformTypeIdentifiers UserNotifications JavaScriptCore
+WCAtlas_FILES = Tweak.xm $(wildcard Sources/*.m) $(wildcard Vendor/Silk/src/*.c)
+WCAtlas_CFLAGS = -IVendor/Silk/interface -IVendor/Silk/src -ffunction-sections -fdata-sections
+WCAtlas_OBJCFLAGS = -fobjc-arc
+WCAtlas_LDFLAGS = -Wl,-dead_strip
+WCAtlas_FRAMEWORKS = UIKit Foundation QuartzCore CoreImage Photos AVFoundation AudioToolbox AVKit UniformTypeIdentifiers UserNotifications JavaScriptCore
 
 include $(THEOS_MAKE_PATH)/tweak.mk

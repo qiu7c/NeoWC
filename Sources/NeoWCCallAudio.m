@@ -17,7 +17,7 @@
 extern void MSHookFunction(void *symbol, void *replacement, void **original);
 extern void MSHookMessageEx(Class cls, SEL selector, IMP replacement, IMP *original);
 
-static NSString *const NeoWCCallRecordDirectoryName = @"NeoWC/CallRecordings";
+static NSString *const NeoWCCallRecordDirectoryName = @"WCAtlas/CallRecordings";
 
 typedef struct {
     AudioFileID file;
@@ -834,7 +834,7 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
         NSData *pcm = NeoWCCallPCMDataAtPath(sourcePath, &error);
         NSString *temporaryPath = nil;
         if (!pcm.length && mightBeSilk) {
-            NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"NeoWCCallVoice"];
+            NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"WCAtlasCallVoice"];
             [NSFileManager.defaultManager createDirectoryAtPath:directory
                                     withIntermediateDirectories:YES attributes:nil error:nil];
             temporaryPath = [directory stringByAppendingPathComponent:
@@ -1097,7 +1097,7 @@ static void NeoWCInstallLifecycleHook(Class cls, NSString *name, IMP replacement
 void NeoWCCallAudioInstallHooks(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        NeoWCCallFileQueue = dispatch_queue_create("com.qiu7c.neowc.call-audio-files", DISPATCH_QUEUE_SERIAL);
+        NeoWCCallFileQueue = dispatch_queue_create("com.qiu7c.wcatlas.call-audio-files", DISPATCH_QUEUE_SERIAL);
         MSHookFunction((void *)AudioUnitRender, (void *)NeoWCAudioUnitRender,
                        (void **)&NeoWCOriginalAudioUnitRender);
         MSHookFunction((void *)AudioUnitSetProperty, (void *)NeoWCAudioUnitSetProperty,

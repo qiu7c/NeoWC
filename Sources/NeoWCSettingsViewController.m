@@ -50,7 +50,7 @@
         case NeoWCSettingsCategoryInterface: return @"界面优化";
         case NeoWCSettingsCategoryPlugin: return @"插件设置";
         case NeoWCSettingsCategoryRoot:
-        default: return @"NeoWC";
+        default: return @"WCAtlas";
     }
 }
 

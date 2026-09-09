@@ -28,7 +28,7 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionOpenInterface,
     NeoWCSettingActionOpenPlugin,
     NeoWCSettingActionConfigManager,
-    NeoWCSettingActionAuthorProfile,
+    NeoWCSettingActionOfficialTelegram,
     NeoWCSettingActionFindFriend,
     NeoWCSettingActionOpenChatByID,
     NeoWCSettingActionFriendRelationCheck,

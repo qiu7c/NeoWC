@@ -10,14 +10,15 @@
 #import "NeoWCMomentsInteractionReminder.h"
 #import "NeoWCMomentsReminder.h"
 #import "NeoWCInAppNotification.h"
+#import "NeoWCPluginManager.h"
 #import <stdlib.h>
 
-NSString *const NeoWCEnabledKey = @"com.qiu7c.neowc.enabled";
-NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.neowc.ui.collapsed-features";
-static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.neowc.ui.expanded-categories";
+NSString *const NeoWCEnabledKey = @"com.qiu7c.wcatlas.enabled";
+NSString *const NeoWCCollapsedFeaturesKey = @"com.qiu7c.wcatlas.ui.collapsed-features";
+static NSString *const NeoWCExpandedCategoriesKey = @"com.qiu7c.wcatlas.ui.expanded-categories";
 
 NSString *const NeoWCDisplayVersion = @"0.1.7";
-static NSString *const NeoWCChatGlassPseudoLiquid20MigrationKey = @"com.qiu7c.neowc.migration.chat-glass-pseudo-liquid-20-v1";
+static NSString *const NeoWCChatGlassPseudoLiquid20MigrationKey = @"com.qiu7c.wcatlas.migration.chat-glass-pseudo-liquid-20-v1";
 
 static NeoWCSettingItem *NeoWCItem(NSString *title, NSString *subtitle, NSString *symbol,
                                   NeoWCSettingRowKind kind, NSString *key, NSString *value,
@@ -82,13 +83,19 @@ void NeoWCSettingsRegenerateDailyStepTarget(NSUserDefaults *defaults) {
 void NeoWCSettingsHandleSwitchChange(NSString *key, BOOL enabled) {
     if (key.length == 0) return;
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    if ([key isEqualToString:NeoWCPluginManagerEnabledKey] && enabled) {
+        [WCAtlasPluginsMgr.sharedInstance registerControllerWithTitle:@"WCAtlas"
+                                                               version:NeoWCDisplayVersion
+                                                            controller:@"NeoWCSettingsViewController"];
+        NeoWCPluginManagerRegisterSavedQuickSwitches();
+    }
     if ([key isEqualToString:NeoWCStepOverrideEnabledKey] && enabled) {
         NeoWCSettingsRegenerateDailyStepTarget(defaults);
     }
     if ([key isEqualToString:NeoWCAntiRevokePersistRecordsKey]) {
         NeoWCAntiRevokeSetPersistenceEnabled(enabled);
     }
-    if ([key hasPrefix:@"com.qiu7c.neowc."]) {
+    if ([key hasPrefix:@"com.qiu7c.wcatlas."]) {
         [NSNotificationCenter.defaultCenter postNotificationName:NeoWCEnhancementDidChangeNotification object:key];
     }
     if ([key isEqualToString:NeoWCAntiRevokeKey]) {
@@ -113,7 +120,7 @@ void NeoWCSettingsHandleSwitchChange(NSString *key, BOOL enabled) {
 
 void NeoWCSettingsRegisterDefaults(void) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    [defaults removeObjectForKey:@"com.qiu7c.neowc.chat.top-bar-capsule.effect-style"];
+    [defaults removeObjectForKey:@"com.qiu7c.wcatlas.chat.top-bar-capsule.effect-style"];
     [defaults registerDefaults:@{
         NeoWCEnabledKey: @YES,
         NeoWCAntiRevokeKey: @YES,
@@ -244,6 +251,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCMultiSelectSaveImagesKey: @YES,
         NeoWCMultiSelectShareCardKey: @YES,
         NeoWCLoggingEnabledKey: @YES,
+        NeoWCPluginManagerEnabledKey: @NO,
         NeoWCChatInputRoundingEnabledKey: @NO,
         NeoWCChatInputInnerRoundingKey: @YES,
         NeoWCChatInputOuterRoundingKey: @YES,
@@ -270,7 +278,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
     return @[
         [NeoWCSettingSection sectionWithIdentifier:@"master" title:nil
                                              footer:@"关闭后仅保留设置入口，所有增强功能停止生效。"
-                                              items:@[NeoWCItem(@"启用 NeoWC", @"插件功能总开关", @"power", NeoWCSettingRowKindSwitch, NeoWCEnabledKey, nil, NeoWCSettingActionNone)]],
+                                              items:@[NeoWCItem(@"启用 WCAtlas", @"插件功能总开关", @"power", NeoWCSettingRowKindSwitch, NeoWCEnabledKey, nil, NeoWCSettingActionNone)]],
         [NeoWCSettingSection sectionWithIdentifier:@"categories" title:@"功能"
                                              footer:nil items:@[
             NeoWCItem(@"聊天增强", @"消息、编辑、提醒与导出", @"bubble.left.and.bubble.right", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenMessages),
@@ -281,9 +289,9 @@ static NSArray<NeoWCSettingSection *> *NeoWCRootSections(void) {
             NeoWCItem(@"插件设置", @"通知样式、日志、配置与插件入口", @"gearshape.2", NeoWCSettingRowKindDetail, nil, nil, NeoWCSettingActionOpenPlugin),
         ]],
         [NeoWCSettingSection sectionWithIdentifier:@"about" title:@"关于"
-                                             footer:[NSString stringWithFormat:@"NeoWC · %@", NeoWCDisplayVersion]
+                                             footer:[NSString stringWithFormat:@"WCAtlas · %@", NeoWCDisplayVersion]
                                               items:@[
-            NeoWCItem(@"作者主页", @"在微信中查看作者资料", @"person.crop.circle", NeoWCSettingRowKindDetail, nil, @"查看", NeoWCSettingActionAuthorProfile),
+            NeoWCItem(@"官方 Telegram 群", @"加入公告、反馈与交流频道", @"paperplane.fill", NeoWCSettingRowKindDetail, nil, @"打开", NeoWCSettingActionOfficialTelegram),
             NeoWCItem(@"版本与更新日志", @"查看当前版本和历史版本记录", @"shippingbox", NeoWCSettingRowKindDetail, nil, NeoWCDisplayVersion, NeoWCSettingActionReleaseNotes),
         ]],
     ];
@@ -668,7 +676,7 @@ static NSArray<NeoWCSettingSection *> *NeoWCInterfaceSections(NSUserDefaults *de
     CGFloat settingsScale = NeoWCScalePercentForDefaultsKey(NeoWCSettingsPageScalePercentKey, 100.0);
     NeoWCAddFeature(display, NeoWCItem(@"页面缩放", @"调整页面中的文字大小", @"textformat.size", NeoWCSettingRowKindSwitch, NeoWCPageScaleEnabledKey, nil, NeoWCSettingActionNone), @[
         NeoWCItem(@"全局页面缩放比例", @"同时调整应用界面和网页文字", @"rectangle.compress.vertical", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", globalScale], NeoWCSettingActionGlobalScale),
-        NeoWCItem(@"NeoWC 设置页缩放比例", @"仅调整本设置页", @"list.bullet.rectangle", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", settingsScale], NeoWCSettingActionSettingsScale),
+        NeoWCItem(@"WCAtlas 设置页缩放比例", @"仅调整本设置页", @"list.bullet.rectangle", NeoWCSettingRowKindDetail, nil, [NSString stringWithFormat:@"%.0f%%", settingsScale], NeoWCSettingActionSettingsScale),
     ], defaults, collapsed);
     [disabled addObjectsFromArray:@[
         NeoWCItem(@"隐藏群标题尾部", @"隐藏群人数和免打扰标记并居中群名", @"bell.slash", NeoWCSettingRowKindSwitch, NeoWCHideChatMuteIconKey, nil, NeoWCSettingActionNone),
@@ -727,13 +735,14 @@ static NSArray<NeoWCSettingSection *> *NeoWCPluginSections(NSUserDefaults *defau
         NeoWCItem(@"查看运行日志", @"查看、复制或清空本次微信运行记录", @"doc.text.magnifyingglass", NeoWCSettingRowKindDetail, nil,
                   NeoWCCountText(NeoWCLogEntries().count), NeoWCSettingActionLogRecords),
     ];
-    NSArray<NeoWCSettingItem *> *management = @[
-        NeoWCItem(@"配置管理", @"导入、导出或重置 NeoWC 配置", @"externaldrive", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionConfigManager),
-        NeoWCItem(@"插件入口管理", @"分类、排序；长按任意开关可添加快捷开关", @"square.stack.3d.up", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionPluginManager),
-    ];
-    (void)defaults;
+    NSMutableArray<NeoWCSettingItem *> *management = [NSMutableArray arrayWithObject:
+        NeoWCItem(@"配置管理", @"导入、导出或重置 WCAtlas 配置", @"externaldrive", NeoWCSettingRowKindDetail, nil, @"管理", NeoWCSettingActionConfigManager)];
+    NeoWCAddFeature(management,
+        NeoWCItem(@"内置插件管理", @"默认使用懒猫插件管理；开启后额外显示 WCAtlas 自带入口", @"square.stack.3d.up", NeoWCSettingRowKindSwitch, NeoWCPluginManagerEnabledKey, nil, NeoWCSettingActionNone),
+        @[NeoWCItem(@"打开内置插件管理", @"管理分类、排序与快捷开关", @"rectangle.stack", NeoWCSettingRowKindDetail, nil, @"打开", NeoWCSettingActionPluginManager)],
+        defaults, [NSSet setWithArray:[defaults arrayForKey:NeoWCCollapsedFeaturesKey] ?: @[]]);
     return @[
-        [NeoWCSettingSection sectionWithIdentifier:@"in-app-notifications" title:@"通知" footer:@"仅影响 NeoWC 在微信前台显示的自绘提醒。" items:notifications],
+        [NeoWCSettingSection sectionWithIdentifier:@"in-app-notifications" title:@"通知" footer:@"仅影响 WCAtlas 在微信前台显示的自绘提醒。" items:notifications],
         [NeoWCSettingSection sectionWithIdentifier:@"logging" title:@"日志" footer:@"运行日志只保存在内存中，退出微信后自动清空。" items:logging],
         [NeoWCSettingSection sectionWithIdentifier:@"plugin-management" title:@"配置与入口" footer:nil items:management],
     ];

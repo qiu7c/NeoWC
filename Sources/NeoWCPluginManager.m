@@ -4,21 +4,23 @@
 #import "NeoWCSettingsCatalog.h"
 #import <objc/message.h>
 
-static NSString *const WCPCategoriesKey = @"WCPluginsMgr.PluginCategories";
-static NSString *const WCPCustomCategoriesKey = @"WCPluginsMgr.CustomCategories";
-static NSString *const WCPNamesKey = @"WCPluginsMgr.PluginDisplayNames";
-static NSString *const WCPVersionsKey = @"WCPluginsMgr.PluginDisplayVersions";
-static NSString *const WCPOrdersKey = @"WCPluginsMgr.PluginOrderIndexes";
-static NSString *const WCPHiddenKey = @"WCPluginsMgr.HiddenPlugins";
-static NSString *const WCPPerPageKey = @"WCPluginsMgr.PluginsPerPage";
-static NSString *const WCPHeaderTitleKey = @"WCPluginsMgr.HeaderTitle";
-static NSString *const WCPHeaderSubtitleKey = @"WCPluginsMgr.HeaderSubtitle";
-static NSString *const WCPHeaderIconKey = @"WCPluginsMgr.HeaderIconImageData";
-static NSString *const WCPHeaderIconStyleKey = @"WCPluginsMgr.HeaderIconStyle";
-static NSString *const WCPHeaderRadiusKey = @"WCPluginsMgr.HeaderIconCornerRadius";
-static NSString *const WCPEntryIconStyleKey = @"WCPluginsMgr.IconStyle";
-static NSString *const WCPDidChangeNotification = @"WCPluginsMgr.RegistryDidChange";
-static NSString *const WCPNeoWCQuickSwitchesKey = @"WCPluginsMgr.NeoWCQuickSwitches";
+NSString *const NeoWCPluginManagerEnabledKey = @"com.qiu7c.wcatlas.plugin-manager.enabled";
+
+static NSString *const WCPCategoriesKey = @"com.qiu7c.wcatlas.plugin-manager.categories";
+static NSString *const WCPCustomCategoriesKey = @"com.qiu7c.wcatlas.plugin-manager.custom-categories";
+static NSString *const WCPNamesKey = @"com.qiu7c.wcatlas.plugin-manager.display-names";
+static NSString *const WCPVersionsKey = @"com.qiu7c.wcatlas.plugin-manager.display-versions";
+static NSString *const WCPOrdersKey = @"com.qiu7c.wcatlas.plugin-manager.order-indexes";
+static NSString *const WCPHiddenKey = @"com.qiu7c.wcatlas.plugin-manager.hidden-plugins";
+static NSString *const WCPPerPageKey = @"com.qiu7c.wcatlas.plugin-manager.plugins-per-page";
+static NSString *const WCPHeaderTitleKey = @"com.qiu7c.wcatlas.plugin-manager.header-title";
+static NSString *const WCPHeaderSubtitleKey = @"com.qiu7c.wcatlas.plugin-manager.header-subtitle";
+static NSString *const WCPHeaderIconKey = @"com.qiu7c.wcatlas.plugin-manager.header-icon-data";
+static NSString *const WCPHeaderIconStyleKey = @"com.qiu7c.wcatlas.plugin-manager.header-icon-style";
+static NSString *const WCPHeaderRadiusKey = @"com.qiu7c.wcatlas.plugin-manager.header-icon-radius";
+static NSString *const WCPEntryIconStyleKey = @"com.qiu7c.wcatlas.plugin-manager.entry-icon-style";
+static NSString *const WCPDidChangeNotification = @"WCAtlasPluginsMgr.RegistryDidChange";
+static NSString *const WCPNeoWCQuickSwitchesKey = @"com.qiu7c.wcatlas.plugin-manager.quick-switches";
 
 static NSArray<NSString *> *WCPPluginIconStyleNames(void) {
     return @[@"微信原生", @"灯泡", @"拼图", @"印章", @"宫格"];
@@ -79,77 +81,10 @@ static NSArray *WCPArray(NSString *key) {
     return [value isKindOfClass:NSArray.class] ? value : @[];
 }
 
-static BOOL WCPIsLegacyNeoWCDebugSwitchKey(NSString *key) {
-    return [key isKindOfClass:NSString.class] && [key hasPrefix:@"com.qiu7c.neowc.debug."];
-}
-
-static BOOL WCPIsLegacyNeoWCDebugIdentifier(NSString *identifier) {
-    if (![identifier isKindOfClass:NSString.class]) return NO;
-    if ([identifier hasPrefix:@"switch:"]) {
-        return WCPIsLegacyNeoWCDebugSwitchKey([identifier substringFromIndex:[@"switch:" length]]);
-    }
-    return [identifier isEqualToString:@"controller:NeoWCDebugShortcutViewController"] ||
-           [identifier isEqualToString:@"controller:NeoWCDebugDashboardViewController"];
-}
-
-static NSString *WCPIdentifierForModel(WCPluginModel *model) {
+static NSString *WCPIdentifierForModel(WCAtlasPluginModel *model) {
     if (model.isController && model.controller.length) return [@"controller:" stringByAppendingString:model.controller];
     if (!model.isController && model.key.length) return [@"switch:" stringByAppendingString:model.key];
     return [@"title:" stringByAppendingString:model.title ?: @""];
-}
-
-static void WCPCleanupLegacyNeoWCDebugRegistration(void) {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    BOOL changed = NO;
-
-    NSMutableDictionary *quickSwitches = WCPMutableDictionary(WCPNeoWCQuickSwitchesKey);
-    for (NSString *key in [quickSwitches.allKeys copy]) {
-        if (!WCPIsLegacyNeoWCDebugSwitchKey(key)) continue;
-        [quickSwitches removeObjectForKey:key];
-        changed = YES;
-    }
-    if (changed) [defaults setObject:quickSwitches forKey:WCPNeoWCQuickSwitchesKey];
-
-    for (NSString *storageKey in @[WCPCategoriesKey, WCPNamesKey, WCPVersionsKey, WCPOrdersKey]) {
-        NSMutableDictionary *values = WCPMutableDictionary(storageKey);
-        BOOL storageChanged = NO;
-        for (NSString *identifier in [values.allKeys copy]) {
-            if (!WCPIsLegacyNeoWCDebugIdentifier(identifier)) continue;
-            [values removeObjectForKey:identifier];
-            storageChanged = YES;
-        }
-        if (storageChanged) {
-            [defaults setObject:values forKey:storageKey];
-            changed = YES;
-        }
-    }
-
-    NSMutableArray *hidden = [NSMutableArray arrayWithArray:WCPArray(WCPHiddenKey)];
-    NSIndexSet *hiddenIndexes = [hidden indexesOfObjectsPassingTest:^BOOL(id value, NSUInteger idx, BOOL *stop) {
-        (void)idx; (void)stop;
-        return WCPIsLegacyNeoWCDebugIdentifier(value);
-    }];
-    if (hiddenIndexes.count > 0) {
-        [hidden removeObjectsAtIndexes:hiddenIndexes];
-        [defaults setObject:hidden forKey:WCPHiddenKey];
-        changed = YES;
-    }
-
-    WCPluginsMgr *manager = WCPluginsMgr.sharedInstance;
-    @synchronized (manager) {
-        NSIndexSet *modelIndexes = [manager.plugins indexesOfObjectsPassingTest:^BOOL(WCPluginModel *model, NSUInteger idx, BOOL *stop) {
-            (void)idx; (void)stop;
-            return WCPIsLegacyNeoWCDebugIdentifier(WCPIdentifierForModel(model));
-        }];
-        if (modelIndexes.count > 0) {
-            [manager.plugins removeObjectsAtIndexes:modelIndexes];
-            changed = YES;
-        }
-    }
-
-    if (!changed) return;
-    [NSNotificationCenter.defaultCenter postNotificationName:WCPDidChangeNotification object:manager];
-    NeoWCLog(@"已清理 NeoWC 旧版开发调试插件入口");
 }
 
 static void WCPShow(UIViewController *controller, UIAlertController *alert) {
@@ -171,23 +106,23 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
     return YES;
 }
 
-@implementation WCPluginModel
+@implementation WCAtlasPluginModel
 @end
 
-@implementation WCPluginsMgr
+@implementation WCAtlasPluginsMgr
 + (instancetype)sharedInstance {
-    static WCPluginsMgr *manager; static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{ manager = [WCPluginsMgr new]; manager.plugins = [NSMutableArray array]; });
+    static WCAtlasPluginsMgr *manager; static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ manager = [WCAtlasPluginsMgr new]; manager.plugins = [NSMutableArray array]; });
     return manager;
 }
-- (NSString *)identifier:(WCPluginModel *)model {
+- (NSString *)identifier:(WCAtlasPluginModel *)model {
     return WCPIdentifierForModel(model);
 }
-- (void)addModel:(WCPluginModel *)model {
+- (void)addModel:(WCAtlasPluginModel *)model {
     if (!model.title.length) return;
     NSString *identifier = [self identifier:model];
     @synchronized (self) {
-        NSUInteger index = [self.plugins indexOfObjectPassingTest:^BOOL(WCPluginModel *candidate, NSUInteger idx, BOOL *stop) { return [[self identifier:candidate] isEqualToString:identifier]; }];
+        NSUInteger index = [self.plugins indexOfObjectPassingTest:^BOOL(WCAtlasPluginModel *candidate, NSUInteger idx, BOOL *stop) { return [[self identifier:candidate] isEqualToString:identifier]; }];
         if (index == NSNotFound) [self.plugins addObject:model]; else self.plugins[index] = model;
     }
     [NSNotificationCenter.defaultCenter postNotificationName:WCPDidChangeNotification object:self];
@@ -195,17 +130,17 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
 }
 - (void)registerControllerWithTitle:(NSString *)title version:(NSString *)version controller:(NSString *)controller {
     if (!title.length || !controller.length) return;
-    WCPluginModel *model = [WCPluginModel new]; model.isController = YES; model.title = title; model.version = version ?: @""; model.controller = controller; model.key = @""; [self addModel:model];
+    WCAtlasPluginModel *model = [WCAtlasPluginModel new]; model.isController = YES; model.title = title; model.version = version ?: @""; model.controller = controller; model.key = @""; [self addModel:model];
 }
 - (void)registerSwitchWithTitle:(NSString *)title key:(NSString *)key {
     if (!title.length || !key.length) return;
-    WCPluginModel *model = [WCPluginModel new]; model.isController = NO; model.title = title; model.version = @""; model.controller = @""; model.key = key; [self addModel:model];
+    WCAtlasPluginModel *model = [WCAtlasPluginModel new]; model.isController = NO; model.title = title; model.version = @""; model.controller = @""; model.key = key; [self addModel:model];
 }
 - (void)removeSwitchWithKey:(NSString *)key {
     if (!key.length) return;
     NSString *identifier = [@"switch:" stringByAppendingString:key];
     @synchronized (self) {
-        NSIndexSet *indexes = [self.plugins indexesOfObjectsPassingTest:^BOOL(WCPluginModel *model, NSUInteger idx, BOOL *stop) {
+        NSIndexSet *indexes = [self.plugins indexesOfObjectsPassingTest:^BOOL(WCAtlasPluginModel *model, NSUInteger idx, BOOL *stop) {
             (void)idx; (void)stop;
             return [[self identifier:model] isEqualToString:identifier];
         }];
@@ -215,6 +150,20 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
 }
 @end
 
+static WCPluginsMgr *WCPExternalManager(void) {
+    Class managerClass = NSClassFromString(@"WCPluginsMgr");
+    if (!managerClass || managerClass == WCAtlasPluginsMgr.class ||
+        ![managerClass respondsToSelector:@selector(sharedInstance)]) return nil;
+    return [managerClass sharedInstance];
+}
+
+static id WCPRegistrationManager(void) {
+    WCPluginsMgr *external = WCPExternalManager();
+    if (external) return external;
+    return [NSUserDefaults.standardUserDefaults boolForKey:NeoWCPluginManagerEnabledKey]
+        ? WCAtlasPluginsMgr.sharedInstance : nil;
+}
+
 BOOL NeoWCPluginManagerIsQuickSwitchRegistered(NSString *key) {
     if (key.length == 0) return NO;
     return [WCPDictionary(WCPNeoWCQuickSwitchesKey)[key] isKindOfClass:NSString.class];
@@ -223,30 +172,36 @@ BOOL NeoWCPluginManagerIsQuickSwitchRegistered(NSString *key) {
 void NeoWCPluginManagerSetQuickSwitchRegistered(NSString *key, NSString *title, BOOL registered) {
     if (key.length == 0) return;
     NSMutableDictionary *saved = WCPMutableDictionary(WCPNeoWCQuickSwitchesKey);
+    id manager = WCPRegistrationManager();
     if (registered) {
         NSString *displayTitle = title.length ? title : key;
         saved[key] = displayTitle;
-        [WCPluginsMgr.sharedInstance registerSwitchWithTitle:displayTitle key:key];
+        if ([manager respondsToSelector:@selector(registerSwitchWithTitle:key:)]) {
+            [manager registerSwitchWithTitle:displayTitle key:key];
+        }
     } else {
         [saved removeObjectForKey:key];
-        [WCPluginsMgr.sharedInstance removeSwitchWithKey:key];
+        if ([manager respondsToSelector:@selector(removeSwitchWithKey:)]) {
+            [manager removeSwitchWithKey:key];
+        }
     }
     [NSUserDefaults.standardUserDefaults setObject:saved forKey:WCPNeoWCQuickSwitchesKey];
 }
 
 void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
-    WCPCleanupLegacyNeoWCDebugRegistration();
     NSDictionary *saved = WCPDictionary(WCPNeoWCQuickSwitchesKey);
+    id manager = WCPRegistrationManager();
+    if (!manager) return;
     [saved enumerateKeysAndObjectsUsingBlock:^(id key, id title, BOOL *stop) {
         (void)stop;
         if ([key isKindOfClass:NSString.class] && [title isKindOfClass:NSString.class] &&
             [key length] > 0 && [title length] > 0) {
-            [WCPluginsMgr.sharedInstance registerSwitchWithTitle:title key:key];
+            [manager registerSwitchWithTitle:title key:key];
         }
     }];
 }
 
-@class WCPluginsViewController;
+@class WCAtlasPluginsViewController;
 
 @interface WCPCategoryPillControl : UIControl
 @property (nonatomic, copy) NSArray<NSString *> *categories;
@@ -437,12 +392,12 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
 @end
 
 @interface WCPCategoryOrderEditorController : NeoWCCardTableViewController
-- (instancetype)initWithOwner:(WCPluginsViewController *)owner;
+- (instancetype)initWithOwner:(WCAtlasPluginsViewController *)owner;
 @end
 
-@interface WCPluginsViewController () <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
-@property (nonatomic, copy) NSArray<WCPluginModel *> *allVisibleModels;
-@property (nonatomic, copy) NSArray<WCPluginModel *> *pageModels;
+@interface WCAtlasPluginsViewController () <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@property (nonatomic, copy) NSArray<WCAtlasPluginModel *> *allVisibleModels;
+@property (nonatomic, copy) NSArray<WCAtlasPluginModel *> *pageModels;
 @property (nonatomic, copy) NSArray<NSString *> *categories;
 @property (nonatomic, copy) NSString *currentCategory;
 @property (nonatomic, assign) NSUInteger currentPage;
@@ -450,12 +405,12 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
 @property (nonatomic, strong) UILabel *heroTitle;
 @property (nonatomic, strong) UILabel *heroSubtitle;
 @property (nonatomic, strong) WCPCategoryPillControl *categoryControl;
-- (NSString *)identifierForModel:(WCPluginModel *)model;
-- (NSString *)displayNameForModel:(WCPluginModel *)model;
-- (NSString *)displayVersionForModel:(WCPluginModel *)model;
-- (NSString *)categoryForModel:(WCPluginModel *)model;
-- (BOOL)isPluginHidden:(WCPluginModel *)model;
-- (void)setPluginHidden:(BOOL)hidden forModel:(WCPluginModel *)model;
+- (NSString *)identifierForModel:(WCAtlasPluginModel *)model;
+- (NSString *)displayNameForModel:(WCAtlasPluginModel *)model;
+- (NSString *)displayVersionForModel:(WCAtlasPluginModel *)model;
+- (NSString *)categoryForModel:(WCAtlasPluginModel *)model;
+- (BOOL)isPluginHidden:(WCAtlasPluginModel *)model;
+- (void)setPluginHidden:(BOOL)hidden forModel:(WCAtlasPluginModel *)model;
 - (void)reloadTableData;
 - (void)buildHeader;
 - (void)registryChanged:(NSNotification *)note;
@@ -477,14 +432,14 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
 - (void)editHeaderIcon;
 - (void)editHeaderRadius;
 - (void)confirmReset;
-- (void)editModel:(WCPluginModel *)model;
-- (void)editOrderForModel:(WCPluginModel *)model;
-- (void)chooseCategory:(WCPluginModel *)model;
+- (void)editModel:(WCAtlasPluginModel *)model;
+- (void)editOrderForModel:(WCAtlasPluginModel *)model;
+- (void)chooseCategory:(WCAtlasPluginModel *)model;
 - (void)editEntryIcon;
 - (void)updatePaginationFooter;
 @end
 
-@implementation WCPluginsViewController
+@implementation WCAtlasPluginsViewController
 - (instancetype)init { return [self initWithStyle:UITableViewStyleInsetGrouped]; }
 - (instancetype)initWithStyle:(UITableViewStyle)style {
     self = [super initWithStyle:UITableViewStyleInsetGrouped];
@@ -531,24 +486,24 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
     self.heroIcon.tintColor = UIColor.systemGreenColor;
     CGFloat radius = [defaults objectForKey:WCPHeaderRadiusKey] ? [defaults doubleForKey:WCPHeaderRadiusKey] : 12; self.heroIcon.layer.cornerRadius = MIN(44, MAX(0, radius));
 }
-- (NSString *)identifierForModel:(WCPluginModel *)model {
+- (NSString *)identifierForModel:(WCAtlasPluginModel *)model {
     if (model.isController && model.controller.length) return [@"controller:" stringByAppendingString:model.controller];
     if (!model.isController && model.key.length) return [@"switch:" stringByAppendingString:model.key];
     return [@"title:" stringByAppendingString:model.title ?: @""];
 }
-- (NSString *)displayNameForModel:(WCPluginModel *)model { return WCPDictionary(WCPNamesKey)[[self identifierForModel:model]] ?: model.title ?: @"插件"; }
-- (NSString *)displayVersionForModel:(WCPluginModel *)model { return WCPDictionary(WCPVersionsKey)[[self identifierForModel:model]] ?: model.version ?: @""; }
-- (NSString *)categoryForModel:(WCPluginModel *)model {
+- (NSString *)displayNameForModel:(WCAtlasPluginModel *)model { return WCPDictionary(WCPNamesKey)[[self identifierForModel:model]] ?: model.title ?: @"插件"; }
+- (NSString *)displayVersionForModel:(WCAtlasPluginModel *)model { return WCPDictionary(WCPVersionsKey)[[self identifierForModel:model]] ?: model.version ?: @""; }
+- (NSString *)categoryForModel:(WCAtlasPluginModel *)model {
     NSString *stored = WCPDictionary(WCPCategoriesKey)[[self identifierForModel:model]];
     if ([self.categories containsObject:stored]) return stored;
     BOOL isNeoWC = (model.isController && [model.controller isEqualToString:@"NeoWCSettingsViewController"]) ||
-                   (!model.isController && [model.key hasPrefix:@"com.qiu7c.neowc."]);
+                   (!model.isController && [model.key hasPrefix:@"com.qiu7c.wcatlas."]);
     NSString *preferred = isNeoWC ? @"定制" : @"功能";
     if ([self.categories containsObject:preferred]) return preferred;
     return self.categories.firstObject ?: preferred;
 }
-- (BOOL)isPluginHidden:(WCPluginModel *)model { return [WCPArray(WCPHiddenKey) containsObject:[self identifierForModel:model]]; }
-- (void)setPluginHidden:(BOOL)hidden forModel:(WCPluginModel *)model {
+- (BOOL)isPluginHidden:(WCAtlasPluginModel *)model { return [WCPArray(WCPHiddenKey) containsObject:[self identifierForModel:model]]; }
+- (void)setPluginHidden:(BOOL)hidden forModel:(WCAtlasPluginModel *)model {
     NSMutableArray *items = [NSMutableArray arrayWithArray:WCPArray(WCPHiddenKey)]; NSString *identifier = [self identifierForModel:model]; [items removeObject:identifier]; if (hidden) [items addObject:identifier]; [NSUserDefaults.standardUserDefaults setObject:items forKey:WCPHiddenKey]; [self reloadTableData];
 }
 - (void)reloadCategories {
@@ -564,9 +519,9 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
     }
 }
 - (void)reloadTableData {
-    [self reloadCategories]; NSArray *models; @synchronized (WCPluginsMgr.sharedInstance) { models = [WCPluginsMgr.sharedInstance.plugins copy]; }
-    NSMutableArray *filtered = [NSMutableArray array]; for (WCPluginModel *model in models) if (![self isPluginHidden:model] && [[self categoryForModel:model] isEqualToString:self.currentCategory]) [filtered addObject:model];
-    NSDictionary *orders = WCPDictionary(WCPOrdersKey); [filtered sortUsingComparator:^NSComparisonResult(WCPluginModel *left, WCPluginModel *right) { NSNumber *l = orders[[self identifierForModel:left]], *r = orders[[self identifierForModel:right]]; if (l && r && l.integerValue != r.integerValue) return l.integerValue < r.integerValue ? NSOrderedAscending : NSOrderedDescending; if (l) return NSOrderedAscending; if (r) return NSOrderedDescending; return [[self displayNameForModel:left] localizedCompare:[self displayNameForModel:right]]; }];
+    [self reloadCategories]; NSArray *models; @synchronized (WCAtlasPluginsMgr.sharedInstance) { models = [WCAtlasPluginsMgr.sharedInstance.plugins copy]; }
+    NSMutableArray *filtered = [NSMutableArray array]; for (WCAtlasPluginModel *model in models) if (![self isPluginHidden:model] && [[self categoryForModel:model] isEqualToString:self.currentCategory]) [filtered addObject:model];
+    NSDictionary *orders = WCPDictionary(WCPOrdersKey); [filtered sortUsingComparator:^NSComparisonResult(WCAtlasPluginModel *left, WCAtlasPluginModel *right) { NSNumber *l = orders[[self identifierForModel:left]], *r = orders[[self identifierForModel:right]]; if (l && r && l.integerValue != r.integerValue) return l.integerValue < r.integerValue ? NSOrderedAscending : NSOrderedDescending; if (l) return NSOrderedAscending; if (r) return NSOrderedDescending; return [[self displayNameForModel:left] localizedCompare:[self displayNameForModel:right]]; }];
     self.allVisibleModels = filtered; NSUInteger perPage = MAX(1, [NSUserDefaults.standardUserDefaults integerForKey:WCPPerPageKey] ?: 10); NSUInteger pages = MAX((NSUInteger)1, (filtered.count + perPage - 1) / perPage); if (self.currentPage >= pages) self.currentPage = pages - 1; NSUInteger start = MIN(self.currentPage * perPage, filtered.count); NSUInteger length = MIN(perPage, filtered.count - start); self.pageModels = length ? [filtered subarrayWithRange:NSMakeRange(start, length)] : @[]; [self updateHeader]; [self updatePaginationFooter]; [self.tableView reloadData];
 }
 - (void)categoryChanged:(WCPCategoryPillControl *)sender { if (sender.selectedSegmentIndex < 0 || sender.selectedSegmentIndex >= (NSInteger)self.categories.count) return; self.currentCategory = self.categories[sender.selectedSegmentIndex]; self.currentPage = 0; [self reloadTableData]; }
@@ -574,7 +529,7 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section { return self.allVisibleModels.count ? nil : @"暂无已注册的插件"; }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PluginValueCell"]; if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"PluginValueCell"];
-    WCPluginModel *model = self.pageModels[indexPath.row]; cell.textLabel.text = [self displayNameForModel:model]; cell.textLabel.font = WCPScaledFont(UIFontTextStyleBody, 16.0, UIFontWeightRegular); cell.textLabel.adjustsFontForContentSizeCategory = YES; NSString *version = [self displayVersionForModel:model]; cell.detailTextLabel.text = version.length ? version : nil; cell.detailTextLabel.font = WCPScaledFont(UIFontTextStyleSubheadline, 15.0, UIFontWeightRegular); cell.detailTextLabel.adjustsFontForContentSizeCategory = YES; cell.imageView.image = nil;
+    WCAtlasPluginModel *model = self.pageModels[indexPath.row]; cell.textLabel.text = [self displayNameForModel:model]; cell.textLabel.font = WCPScaledFont(UIFontTextStyleBody, 16.0, UIFontWeightRegular); cell.textLabel.adjustsFontForContentSizeCategory = YES; NSString *version = [self displayVersionForModel:model]; cell.detailTextLabel.text = version.length ? version : nil; cell.detailTextLabel.font = WCPScaledFont(UIFontTextStyleSubheadline, 15.0, UIFontWeightRegular); cell.detailTextLabel.adjustsFontForContentSizeCategory = YES; cell.imageView.image = nil;
     BOOL firstRow = indexPath.row == 0;
     BOOL lastRow = indexPath.row + 1 == (NSInteger)self.pageModels.count;
     CACornerMask corners = 0;
@@ -596,11 +551,11 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
     if (model.isController) { cell.accessoryView = nil; cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator; } else { UISwitch *toggle = [UISwitch new]; toggle.on = [NSUserDefaults.standardUserDefaults boolForKey:model.key]; toggle.tag = indexPath.row; [toggle addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged]; cell.accessoryView = toggle; cell.accessoryType = UITableViewCellAccessoryNone; }
     if (!cell.gestureRecognizers.count) [cell addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(rowLongPressed:)]]; return cell;
 }
-- (void)switchChanged:(UISwitch *)sender { if (sender.tag < 0 || sender.tag >= (NSInteger)self.pageModels.count) return; WCPluginModel *model = self.pageModels[sender.tag]; if (!model.isController && model.key.length) { [NSUserDefaults.standardUserDefaults setBool:sender.on forKey:model.key]; NeoWCSettingsHandleSwitchChange(model.key, sender.on); } }
+- (void)switchChanged:(UISwitch *)sender { if (sender.tag < 0 || sender.tag >= (NSInteger)self.pageModels.count) return; WCAtlasPluginModel *model = self.pageModels[sender.tag]; if (!model.isController && model.key.length) { [NSUserDefaults.standardUserDefaults setBool:sender.on forKey:model.key]; NeoWCSettingsHandleSwitchChange(model.key, sender.on); } }
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.row < 0 || indexPath.row >= (NSInteger)self.pageModels.count) return;
-    WCPluginModel *model = self.pageModels[indexPath.row];
+    WCAtlasPluginModel *model = self.pageModels[indexPath.row];
     if (!model.isController) return;
     Class cls = NSClassFromString(model.controller);
     if (!cls || ![cls isSubclassOfClass:UIViewController.class]) {
@@ -617,17 +572,17 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
 }
 - (void)headerLongPressed:(UILongPressGestureRecognizer *)gesture { if (gesture.state == UIGestureRecognizerStateBegan) [self presentSettingsMenu]; }
 - (void)rowLongPressed:(UILongPressGestureRecognizer *)gesture {
-    if (gesture.state != UIGestureRecognizerStateBegan) return; NSIndexPath *path = [self.tableView indexPathForRowAtPoint:[gesture locationInView:self.tableView]]; if (!path) return; WCPluginModel *model = self.pageModels[path.row]; UIAlertController *sheet = [UIAlertController alertControllerWithTitle:[self displayNameForModel:model] message:nil preferredStyle:UIAlertControllerStyleActionSheet]; __weak typeof(self) weakSelf = self;
+    if (gesture.state != UIGestureRecognizerStateBegan) return; NSIndexPath *path = [self.tableView indexPathForRowAtPoint:[gesture locationInView:self.tableView]]; if (!path) return; WCAtlasPluginModel *model = self.pageModels[path.row]; UIAlertController *sheet = [UIAlertController alertControllerWithTitle:[self displayNameForModel:model] message:nil preferredStyle:UIAlertControllerStyleActionSheet]; __weak typeof(self) weakSelf = self;
     [sheet addAction:[UIAlertAction actionWithTitle:@"修改插件信息" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf editModel:model]; }]]; [sheet addAction:[UIAlertAction actionWithTitle:@"修改排序序号" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf editOrderForModel:model]; }]]; [sheet addAction:[UIAlertAction actionWithTitle:@"选择收纳位置" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [weakSelf chooseCategory:model]; }]]; [sheet addAction:[UIAlertAction actionWithTitle:@"隐藏此项目" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) { [weakSelf setPluginHidden:YES forModel:model]; }]]; [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; WCPShow(self, sheet);
 }
-- (void)editModel:(WCPluginModel *)model {
+- (void)editModel:(WCAtlasPluginModel *)model {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"修改插件信息" message:nil preferredStyle:UIAlertControllerStyleAlert]; [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"插件名字"; field.text = [self displayNameForModel:model]; }]; [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"版本号"; field.text = [self displayVersionForModel:model]; }]; [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; __weak typeof(self) weakSelf = self;
     [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { NSString *identifier = [weakSelf identifierForModel:model]; NSMutableDictionary *names = WCPMutableDictionary(WCPNamesKey), *versions = WCPMutableDictionary(WCPVersionsKey); NSString *name = [alert.textFields[0].text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet], *version = [alert.textFields[1].text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]; if (name.length) names[identifier] = name; else [names removeObjectForKey:identifier]; if (version.length) versions[identifier] = version; else [versions removeObjectForKey:identifier]; [NSUserDefaults.standardUserDefaults setObject:names forKey:WCPNamesKey]; [NSUserDefaults.standardUserDefaults setObject:versions forKey:WCPVersionsKey]; [weakSelf reloadTableData]; }]]; [self presentViewController:alert animated:YES completion:nil];
 }
-- (void)editOrderForModel:(WCPluginModel *)model {
+- (void)editOrderForModel:(WCAtlasPluginModel *)model {
     NSUInteger count = self.allVisibleModels.count; NSDictionary *orders = WCPDictionary(WCPOrdersKey); NSInteger current = [orders[[self identifierForModel:model]] integerValue] + 1; if (current <= 0) current = [self.allVisibleModels indexOfObject:model] + 1; UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"修改排序序号" message:[NSString stringWithFormat:@"当前分类共 %lu 个插件", (unsigned long)count] preferredStyle:UIAlertControllerStyleAlert]; [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"序号"; field.keyboardType = UIKeyboardTypeNumberPad; field.text = [NSString stringWithFormat:@"%ld", (long)current]; }]; [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; __weak typeof(self) weakSelf = self; [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { NSInteger value = MIN((NSInteger)MAX(count, (NSUInteger)1), MAX(1, alert.textFields.firstObject.text.integerValue)); NSMutableDictionary *updated = WCPMutableDictionary(WCPOrdersKey); updated[[weakSelf identifierForModel:model]] = @(value - 1); [NSUserDefaults.standardUserDefaults setObject:updated forKey:WCPOrdersKey]; [weakSelf reloadTableData]; }]]; [self presentViewController:alert animated:YES completion:nil];
 }
-- (void)chooseCategory:(WCPluginModel *)model {
+- (void)chooseCategory:(WCAtlasPluginModel *)model {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择收纳位置" message:nil preferredStyle:UIAlertControllerStyleActionSheet]; __weak typeof(self) weakSelf = self; for (NSString *category in self.categories) [sheet addAction:[UIAlertAction actionWithTitle:category style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { NSMutableDictionary *mapping = WCPMutableDictionary(WCPCategoriesKey); mapping[[weakSelf identifierForModel:model]] = category; [NSUserDefaults.standardUserDefaults setObject:mapping forKey:WCPCategoriesKey]; [weakSelf reloadTableData]; }]]; [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]]; WCPShow(self, sheet);
 }
 
@@ -683,8 +638,8 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
         }
         NSMutableDictionary *mapping = WCPMutableDictionary(WCPCategoriesKey);
         if (oldIndex != NSNotFound) {
-            NSArray *models = [WCPluginsMgr.sharedInstance.plugins copy];
-            for (WCPluginModel *model in models) {
+            NSArray *models = [WCAtlasPluginsMgr.sharedInstance.plugins copy];
+            for (WCAtlasPluginModel *model in models) {
                 if ([[weakSelf categoryForModel:model] isEqualToString:oldName]) mapping[[weakSelf identifierForModel:model]] = name;
             }
             categories[oldIndex] = name;
@@ -710,8 +665,8 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
         [categories removeObjectAtIndex:deletedIndex];
         NSString *destination = categories[MIN(deletedIndex, categories.count - 1)];
         NSMutableDictionary *mapping = WCPMutableDictionary(WCPCategoriesKey);
-        NSArray *models = [WCPluginsMgr.sharedInstance.plugins copy];
-        for (WCPluginModel *model in models) {
+        NSArray *models = [WCAtlasPluginsMgr.sharedInstance.plugins copy];
+        for (WCAtlasPluginModel *model in models) {
             if ([[weakSelf categoryForModel:model] isEqualToString:deleted]) mapping[[weakSelf identifierForModel:model]] = destination;
         }
         [NSUserDefaults.standardUserDefaults setObject:categories forKey:WCPCustomCategoriesKey];
@@ -763,13 +718,13 @@ void NeoWCPluginManagerRegisterSavedQuickSwitches(void) {
 @end
 
 @interface WCPCategoryOrderEditorController ()
-@property (nonatomic, weak) WCPluginsViewController *owner;
+@property (nonatomic, weak) WCAtlasPluginsViewController *owner;
 @property (nonatomic, strong) NSMutableArray<NSString *> *items;
 @end
 
 @implementation WCPCategoryOrderEditorController
 
-- (instancetype)initWithOwner:(WCPluginsViewController *)owner {
+- (instancetype)initWithOwner:(WCAtlasPluginsViewController *)owner {
     self = [super initWithStyle:UITableViewStyleInsetGrouped];
     if (self) {
         _owner = owner;
@@ -829,23 +784,23 @@ moveRowAtIndexPath:(NSIndexPath *)sourceIndexPath
 @end
 
 @interface WCPPluginOrderEditorController ()
-@property (nonatomic, weak) WCPluginsViewController *owner;
-@property (nonatomic, strong) NSMutableArray<WCPluginModel *> *shown;
-@property (nonatomic, strong) NSMutableArray<WCPluginModel *> *hidden;
+@property (nonatomic, weak) WCAtlasPluginsViewController *owner;
+@property (nonatomic, strong) NSMutableArray<WCAtlasPluginModel *> *shown;
+@property (nonatomic, strong) NSMutableArray<WCAtlasPluginModel *> *hidden;
 - (void)reloadModels;
 @end
 
 @implementation WCPPluginOrderEditorController
-- (instancetype)initWithOwner:(WCPluginsViewController *)owner { self = [super initWithStyle:UITableViewStyleInsetGrouped]; if (self) _owner = owner; return self; }
+- (instancetype)initWithOwner:(WCAtlasPluginsViewController *)owner { self = [super initWithStyle:UITableViewStyleInsetGrouped]; if (self) _owner = owner; return self; }
 - (void)viewDidLoad { [super viewDidLoad]; self.title = @"编辑插件顺序"; self.navigationItem.rightBarButtonItem = self.editButtonItem; self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone; [self reloadModels]; }
 - (void)viewWillDisappear:(BOOL)animated { [super viewWillDisappear:animated]; [self.owner reloadTableData]; }
-- (void)reloadModels { self.shown = [NSMutableArray array]; self.hidden = [NSMutableArray array]; NSArray *models = [WCPluginsMgr.sharedInstance.plugins copy]; NSDictionary *orders = WCPDictionary(WCPOrdersKey); models = [models sortedArrayUsingComparator:^NSComparisonResult(WCPluginModel *left, WCPluginModel *right) { NSNumber *l = orders[[self.owner identifierForModel:left]], *r = orders[[self.owner identifierForModel:right]]; if (l && r && l.integerValue != r.integerValue) return l.integerValue < r.integerValue ? NSOrderedAscending : NSOrderedDescending; if (l) return NSOrderedAscending; if (r) return NSOrderedDescending; return [[self.owner displayNameForModel:left] localizedCompare:[self.owner displayNameForModel:right]]; }]; for (WCPluginModel *model in models) { if (![[self.owner categoryForModel:model] isEqualToString:self.owner.currentCategory]) continue; if ([self.owner isPluginHidden:model]) [self.hidden addObject:model]; else [self.shown addObject:model]; } [self.tableView reloadData]; }
+- (void)reloadModels { self.shown = [NSMutableArray array]; self.hidden = [NSMutableArray array]; NSArray *models = [WCAtlasPluginsMgr.sharedInstance.plugins copy]; NSDictionary *orders = WCPDictionary(WCPOrdersKey); models = [models sortedArrayUsingComparator:^NSComparisonResult(WCAtlasPluginModel *left, WCAtlasPluginModel *right) { NSNumber *l = orders[[self.owner identifierForModel:left]], *r = orders[[self.owner identifierForModel:right]]; if (l && r && l.integerValue != r.integerValue) return l.integerValue < r.integerValue ? NSOrderedAscending : NSOrderedDescending; if (l) return NSOrderedAscending; if (r) return NSOrderedDescending; return [[self.owner displayNameForModel:left] localizedCompare:[self.owner displayNameForModel:right]]; }]; for (WCAtlasPluginModel *model in models) { if (![[self.owner categoryForModel:model] isEqualToString:self.owner.currentCategory]) continue; if ([self.owner isPluginHidden:model]) [self.hidden addObject:model]; else [self.shown addObject:model]; } [self.tableView reloadData]; }
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 2; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return section == 0 ? self.shown.count : self.hidden.count; }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section { return section == 0 ? @"当前显示" : @"已隐藏的插件"; }
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)path { UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"OrderCell"]; if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"OrderCell"]; WCPluginModel *model = path.section == 0 ? self.shown[path.row] : self.hidden[path.row]; cell.textLabel.text = [self.owner displayNameForModel:model]; cell.detailTextLabel.text = [self.owner displayVersionForModel:model]; cell.showsReorderControl = path.section == 0; cell.accessoryType = path.section == 1 ? UITableViewCellAccessoryDetailButton : UITableViewCellAccessoryNone; return cell; }
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)path { UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"OrderCell"]; if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"OrderCell"]; WCAtlasPluginModel *model = path.section == 0 ? self.shown[path.row] : self.hidden[path.row]; cell.textLabel.text = [self.owner displayNameForModel:model]; cell.detailTextLabel.text = [self.owner displayVersionForModel:model]; cell.showsReorderControl = path.section == 0; cell.accessoryType = path.section == 1 ? UITableViewCellAccessoryDetailButton : UITableViewCellAccessoryNone; return cell; }
 - (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)path { return path.section == 0; }
-- (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)source toIndexPath:(NSIndexPath *)destination { if (source.section || destination.section) return; WCPluginModel *model = self.shown[source.row]; [self.shown removeObjectAtIndex:source.row]; [self.shown insertObject:model atIndex:destination.row]; NSMutableDictionary *orders = WCPMutableDictionary(WCPOrdersKey); [self.shown enumerateObjectsUsingBlock:^(WCPluginModel *item, NSUInteger idx, BOOL *stop) { orders[[self.owner identifierForModel:item]] = @(idx); }]; [NSUserDefaults.standardUserDefaults setObject:orders forKey:WCPOrdersKey]; }
+- (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)source toIndexPath:(NSIndexPath *)destination { if (source.section || destination.section) return; WCAtlasPluginModel *model = self.shown[source.row]; [self.shown removeObjectAtIndex:source.row]; [self.shown insertObject:model atIndex:destination.row]; NSMutableDictionary *orders = WCPMutableDictionary(WCPOrdersKey); [self.shown enumerateObjectsUsingBlock:^(WCAtlasPluginModel *item, NSUInteger idx, BOOL *stop) { orders[[self.owner identifierForModel:item]] = @(idx); }]; [NSUserDefaults.standardUserDefaults setObject:orders forKey:WCPOrdersKey]; }
 - (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)path { return path.section == 0; }
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)style forRowAtIndexPath:(NSIndexPath *)path { if (style != UITableViewCellEditingStyleDelete || path.section) return; [self.owner setPluginHidden:YES forModel:self.shown[path.row]]; [self reloadModels]; }
 - (void)tableView:(UITableView *)tableView accessoryButtonTappedForRowWithIndexPath:(NSIndexPath *)path { if (path.section != 1) return; [self.owner setPluginHidden:NO forModel:self.hidden[path.row]]; [self reloadModels]; }
@@ -854,9 +809,9 @@ moveRowAtIndexPath:(NSIndexPath *)sourceIndexPath
 static UIImage *WCPEntryIcon(void) { return WCPBuiltinPluginIcon([NSUserDefaults.standardUserDefaults integerForKey:WCPEntryIconStyleKey]); }
 
 void NeoWCInstallPluginManagerEntry(id moreViewController) {
-    if (!moreViewController) return; id tableManager = nil; @try { tableManager = [moreViewController valueForKey:@"m_tableViewMgr"]; } @catch (__unused NSException *exception) {} if (!tableManager || ![tableManager respondsToSelector:NSSelectorFromString(@"getSectionAt:")]) return; Class cellClass = NSClassFromString(@"WCTableViewCellManager"); UIImage *icon = WCPEntryIcon(); id cell = nil; SEL factory = NSSelectorFromString(@"normalCellForSel:target:leftImage:title:WithDisclosureIndicator:"); if ([cellClass respondsToSelector:factory]) cell = ((id (*)(id, SEL, SEL, id, UIImage *, NSString *, BOOL))objc_msgSend)(cellClass, factory, @selector(pushPluginController), moreViewController, icon, @"插件", YES); else { factory = NSSelectorFromString(@"normalCellForSel:target:leftImage:title:pathKey:"); if ([cellClass respondsToSelector:factory]) cell = ((id (*)(id, SEL, SEL, id, UIImage *, NSString *, NSString *))objc_msgSend)(cellClass, factory, @selector(pushPluginController), moreViewController, icon, @"插件", nil); } if (!cell) return; id section = ((id (*)(id, SEL, NSUInteger))objc_msgSend)(tableManager, NSSelectorFromString(@"getSectionAt:"), 2); if (section && [section respondsToSelector:NSSelectorFromString(@"addCell:")]) ((void (*)(id, SEL, id))objc_msgSend)(section, NSSelectorFromString(@"addCell:"), cell); id tableView = nil; if ([tableManager respondsToSelector:NSSelectorFromString(@"getTableView")]) tableView = ((id (*)(id, SEL))objc_msgSend)(tableManager, NSSelectorFromString(@"getTableView")); if ([tableView respondsToSelector:@selector(reloadData)]) [tableView reloadData];
+    if (!moreViewController || ![NSUserDefaults.standardUserDefaults boolForKey:NeoWCPluginManagerEnabledKey]) return; id tableManager = nil; @try { tableManager = [moreViewController valueForKey:@"m_tableViewMgr"]; } @catch (__unused NSException *exception) {} if (!tableManager || ![tableManager respondsToSelector:NSSelectorFromString(@"getSectionAt:")]) return; Class cellClass = NSClassFromString(@"WCTableViewCellManager"); UIImage *icon = WCPEntryIcon(); id cell = nil; SEL factory = NSSelectorFromString(@"normalCellForSel:target:leftImage:title:WithDisclosureIndicator:"); if ([cellClass respondsToSelector:factory]) cell = ((id (*)(id, SEL, SEL, id, UIImage *, NSString *, BOOL))objc_msgSend)(cellClass, factory, @selector(pushPluginController), moreViewController, icon, @"插件", YES); else { factory = NSSelectorFromString(@"normalCellForSel:target:leftImage:title:pathKey:"); if ([cellClass respondsToSelector:factory]) cell = ((id (*)(id, SEL, SEL, id, UIImage *, NSString *, NSString *))objc_msgSend)(cellClass, factory, @selector(pushPluginController), moreViewController, icon, @"插件", nil); } if (!cell) return; id section = ((id (*)(id, SEL, NSUInteger))objc_msgSend)(tableManager, NSSelectorFromString(@"getSectionAt:"), 2); if (section && [section respondsToSelector:NSSelectorFromString(@"addCell:")]) ((void (*)(id, SEL, id))objc_msgSend)(section, NSSelectorFromString(@"addCell:"), cell); id tableView = nil; if ([tableManager respondsToSelector:NSSelectorFromString(@"getTableView")]) tableView = ((id (*)(id, SEL))objc_msgSend)(tableManager, NSSelectorFromString(@"getTableView")); if ([tableView respondsToSelector:@selector(reloadData)]) [tableView reloadData];
 }
 
 void NeoWCPushPluginManager(id sender) {
-    WCPluginsViewController *controller = [WCPluginsViewController new]; controller.hidesBottomBarWhenPushed = YES; UINavigationController *navigation = nil; Class managerClass = NSClassFromString(@"CAppViewControllerManager"); SEL current = NSSelectorFromString(@"getCurrentNavigationController"); if ([managerClass respondsToSelector:current]) navigation = ((id (*)(id, SEL))objc_msgSend)(managerClass, current); if (!navigation && [sender isKindOfClass:UIViewController.class]) navigation = [(UIViewController *)sender navigationController]; WCPPushViewController(navigation, controller, YES);
+    WCAtlasPluginsViewController *controller = [WCAtlasPluginsViewController new]; controller.hidesBottomBarWhenPushed = YES; UINavigationController *navigation = nil; Class managerClass = NSClassFromString(@"CAppViewControllerManager"); SEL current = NSSelectorFromString(@"getCurrentNavigationController"); if ([managerClass respondsToSelector:current]) navigation = ((id (*)(id, SEL))objc_msgSend)(managerClass, current); if (!navigation && [sender isKindOfClass:UIViewController.class]) navigation = [(UIViewController *)sender navigationController]; WCPPushViewController(navigation, controller, YES);
 }

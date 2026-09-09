@@ -1,7 +1,7 @@
 #import "NeoWCTTSGenerator.h"
 #import <AVFoundation/AVFoundation.h>
 
-static NSString *const NeoWCTTSErrorDomain = @"com.qiu7c.neowc.tts";
+static NSString *const NeoWCTTSErrorDomain = @"com.qiu7c.wcatlas.tts";
 
 @interface NeoWCTTSRequest : NSObject
 @property (nonatomic, strong) AVSpeechSynthesizer *synthesizer;
@@ -48,7 +48,7 @@ static NSError *NeoWCTTSError(NSInteger code, NSString *message) {
 }
 
 - (void)startWithText:(NSString *)text {
-    NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"NeoWCTTS"];
+    NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"WCAtlasTTS"];
     NSError *directoryError = nil;
     if (![NSFileManager.defaultManager createDirectoryAtPath:directory
                                  withIntermediateDirectories:YES

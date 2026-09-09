@@ -7,8 +7,8 @@
 #import <JavaScriptCore/JavaScriptCore.h>
 #import <UIKit/UIKit.h>
 
-static NSString *const NeoWCAutomationTasksKey = @"com.qiu7c.neowc.automation.tasks.v1";
-static NSString *const NeoWCAutomationSeedVersionKey = @"com.qiu7c.neowc.automation.seed-version";
+static NSString *const NeoWCAutomationTasksKey = @"com.qiu7c.wcatlas.automation.tasks.v1";
+static NSString *const NeoWCAutomationSeedVersionKey = @"com.qiu7c.wcatlas.automation.seed-version";
 static const NSUInteger NeoWCAutomationMaximumResponseBytes = 1024 * 1024;
 
 @implementation NeoWCAutomationTask
@@ -75,7 +75,7 @@ static const NSUInteger NeoWCAutomationMaximumResponseBytes = 1024 * 1024;
 - (instancetype)init {
     self = [super init];
     if (!self) return nil;
-    _scriptQueue = dispatch_queue_create("com.qiu7c.neowc.automation-scripts", DISPATCH_QUEUE_SERIAL);
+    _scriptQueue = dispatch_queue_create("com.qiu7c.wcatlas.automation-scripts", DISPATCH_QUEUE_SERIAL);
     _completionHandlers = [NSMutableDictionary dictionary];
     _mutableTasks = [NSMutableArray array];
     _recentIncomingMessages = [NSMutableDictionary dictionary];

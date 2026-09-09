@@ -373,7 +373,7 @@ void NeoWCConfigureConversationPickerCompletion(UIViewController *picker,
 
 - (void)addConversation {
     if (NeoWCCurrentUserWXID().length == 0) {
-        [self showMessage:@"尚未识别当前微信账号，请返回 NeoWC 设置后重试。" title:@"无法添加"];
+        [self showMessage:@"尚未识别当前微信账号，请返回 WCAtlas 设置后重试。" title:@"无法添加"];
         return;
     }
     UIViewController *picker = NeoWCCreateConversationPicker(@"选择好友或群聊",

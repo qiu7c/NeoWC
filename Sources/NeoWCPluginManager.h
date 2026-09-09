@@ -2,7 +2,9 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface WCPluginModel : NSObject
+FOUNDATION_EXPORT NSString *const NeoWCPluginManagerEnabledKey;
+
+@interface WCAtlasPluginModel : NSObject
 @property (nonatomic, assign) BOOL isController;
 @property (nonatomic, copy) NSString *title;
 @property (nonatomic, copy) NSString *version;
@@ -11,18 +13,24 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 @interface WCPluginsMgr : NSObject
-@property (nonatomic, strong) NSMutableArray<WCPluginModel *> *plugins;
++ (instancetype)sharedInstance;
+- (void)registerControllerWithTitle:(NSString *)title version:(nullable NSString *)version controller:(NSString *)controller;
+- (void)registerSwitchWithTitle:(NSString *)title key:(NSString *)key;
+@end
+
+@interface WCAtlasPluginsMgr : NSObject
+@property (nonatomic, strong) NSMutableArray<WCAtlasPluginModel *> *plugins;
 + (instancetype)sharedInstance;
 - (void)registerControllerWithTitle:(NSString *)title version:(nullable NSString *)version controller:(NSString *)controller;
 - (void)registerSwitchWithTitle:(NSString *)title key:(NSString *)key;
 - (void)removeSwitchWithKey:(NSString *)key;
 @end
 
-@interface WCPluginsViewController : UITableViewController
+@interface WCAtlasPluginsViewController : UITableViewController
 @end
 
 @interface WCPPluginOrderEditorController : NeoWCCardTableViewController
-- (instancetype)initWithOwner:(WCPluginsViewController *)owner;
+- (instancetype)initWithOwner:(WCAtlasPluginsViewController *)owner;
 @end
 
 FOUNDATION_EXPORT void NeoWCInstallPluginManagerEntry(id moreViewController);

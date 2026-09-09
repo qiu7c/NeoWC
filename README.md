@@ -1,18 +1,20 @@
-# NeoWC
+# WCAtlas
 
-NeoWC is a native UIKit WeChat enhancement tweak. Version `0.1.7` adds the native chat search entry and aligns its navigation with WeChat's own search flow, while retaining the Moments reminders, quick replies, and media-to-voice improvements.
+WCAtlas is a native UIKit WeChat enhancement tweak. Version `0.1.7` includes native chat navigation, Moments enhancements, a reusable message library, automations, call recording, and call-audio tools.
 
-The settings page groups features into Chat, Moments, Interface Disable, Interface Optimization, Common Enhancements, and Plugin Settings. Category expansion state is remembered locally. NeoWC uses a transparent, single-stroke monogram that combines the letter N with a conversation tail; `Assets/NeoWCIcon.svg` is the matching scalable design source.
+The settings page groups features into Chat, Moments, Interface Disable, Interface Optimization, Common Enhancements, and Plugin Settings. Category expansion state is remembered locally. `Assets/WCAtlas-Icon-1024.png` is the release artwork.
 
 ## Logs and development tools
 
-Plugin Settings contains a bounded in-memory runtime log viewer and configuration import/export. Runtime inspection and developer tooling live in the separate WCDebug plugin and are not included in NeoWC.
+Plugin Settings contains a bounded in-memory runtime log viewer and WCAtlas-only configuration import/export. Runtime inspection and developer tooling live in the separate WCDebug plugin and are not included in WCAtlas.
+
+WCAtlas registers its settings controller and optional quick switches through the external `WCPluginsMgr` API when available. The built-in plugin manager page is disabled by default; enabling it adds the WCAtlas-owned management entry inside WeChat.
 
 ## Entry
 
-When `WCPluginsMgr` is available, NeoWC registers:
+When `WCPluginsMgr` is available, WCAtlas registers:
 
-- Title: `NeoWC`
+- Title: `WCAtlas`
 - Version: `0.1.7`
 - Controller: `NeoWCSettingsViewController`
 

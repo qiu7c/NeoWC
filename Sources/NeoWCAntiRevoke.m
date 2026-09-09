@@ -11,9 +11,9 @@
 static NSUInteger NeoWCUIntegerValue(id object, NSString *key);
 
 NSString *const NeoWCAntiRevokePromptDidChangeNotification = @"NeoWCAntiRevokePromptDidChangeNotification";
-static NSString *const NeoWCAntiRevokeSidePromptRecordsKey = @"com.qiu7c.neowc.message.anti-revoke.side-records";
-static NSString *const NeoWCAntiRevokeArchiveKey = @"com.qiu7c.neowc.message.anti-revoke.archive";
-static NSString *const NeoWCAntiRevokeLocalPromptContentsKey = @"com.qiu7c.neowc.message.anti-revoke.local-prompt-contents";
+static NSString *const NeoWCAntiRevokeSidePromptRecordsKey = @"com.qiu7c.wcatlas.message.anti-revoke.side-records";
+static NSString *const NeoWCAntiRevokeArchiveKey = @"com.qiu7c.wcatlas.message.anti-revoke.archive";
+static NSString *const NeoWCAntiRevokeLocalPromptContentsKey = @"com.qiu7c.wcatlas.message.anti-revoke.local-prompt-contents";
 
 static NSMutableArray<NSDictionary *> *NeoWCAntiRevokeMemoryRecords(void) {
     static NSMutableArray<NSDictionary *> *records;

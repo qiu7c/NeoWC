@@ -11,7 +11,7 @@
 #import <objc/runtime.h>
 #import <string.h>
 
-static NSString *const NeoWCMomentsReminderSeenItemsKey = @"com.qiu7c.neowc.moments.reminder.seen-items";
+static NSString *const NeoWCMomentsReminderSeenItemsKey = @"com.qiu7c.wcatlas.moments.reminder.seen-items";
 
 static id NeoWCMomentsReminderService(const char *className) {
     Class contextClass = objc_getClass("MMContext");

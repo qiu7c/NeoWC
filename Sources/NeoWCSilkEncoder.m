@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static NSString *const NeoWCSilkEncoderErrorDomain = @"com.qiu7c.neowc.silk-encoder";
+static NSString *const NeoWCSilkEncoderErrorDomain = @"com.qiu7c.wcatlas.silk-encoder";
 
 enum {
     NeoWCSilkInputSampleRate = 16000,

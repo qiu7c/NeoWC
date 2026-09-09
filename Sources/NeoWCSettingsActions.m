@@ -26,8 +26,7 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
-static char NeoWCAuthorSearchLogicKey;
-static NSString *const NeoWCAuthorUserName = @"ic7ouo";
+static char NeoWCContactSearchLogicKey;
 
 @interface NeoWCSettingsActions () <UIColorPickerViewControllerDelegate>
 @property (nonatomic, weak) UIViewController *viewController;
@@ -79,7 +78,7 @@ static NSString *const NeoWCAuthorUserName = @"ic7ouo";
         ? ((id (*)(id, SEL, id, id))objc_msgSend)([searchClass alloc], initializer, sourceController, nil)
         : nil;
     if (searchLogic && [searchLogic respondsToSelector:searchSelector]) {
-        objc_setAssociatedObject(sourceController, &NeoWCAuthorSearchLogicKey,
+        objc_setAssociatedObject(sourceController, &NeoWCContactSearchLogicKey,
                                  searchLogic, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         ((void (*)(id, SEL, id, NSUInteger, NSUInteger, id))objc_msgSend)(searchLogic,
                                                                           searchSelector,
@@ -106,8 +105,18 @@ static NSString *const NeoWCAuthorUserName = @"ic7ouo";
     [sourceController presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)openAuthorProfile {
-    [self openProfileForUserName:NeoWCAuthorUserName];
+- (void)openOfficialTelegram {
+    NSURL *URL = [NSURL URLWithString:@"https://t.me/WCAtlas"];
+    UIApplication *application = UIApplication.sharedApplication;
+    if (!URL || ![application canOpenURL:URL]) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"无法打开 Telegram"
+                                                                       message:@"请稍后重试，或在浏览器中访问 t.me/WCAtlas。"
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+        [self.viewController presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    [application openURL:URL options:@{} completionHandler:nil];
 }
 
 - (void)presentFindFriend {
@@ -652,7 +661,7 @@ static NSString *const NeoWCAuthorUserName = @"ic7ouo";
 - (void)performActionForItem:(NeoWCSettingItem *)item {
     switch (item.action) {
         case NeoWCSettingActionConfigManager: [self push:[NeoWCConfigManagerViewController new]]; break;
-        case NeoWCSettingActionAuthorProfile: [self openAuthorProfile]; break;
+        case NeoWCSettingActionOfficialTelegram: [self openOfficialTelegram]; break;
         case NeoWCSettingActionFindFriend: [self presentFindFriend]; break;
         case NeoWCSettingActionOpenChatByID: [self presentOpenChatByID]; break;
         case NeoWCSettingActionFriendRelationCheck: [self push:[NeoWCFriendRelationCheckViewController new]]; break;
@@ -673,7 +682,11 @@ static NSString *const NeoWCAuthorUserName = @"ic7ouo";
         case NeoWCSettingActionInnerRadius: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 40 之间的数值；0 表示直角" key:NeoWCChatInputInnerRadiusKey minimum:0 maximum:40 notifyChange:NO applyScale:NO]; break;
         case NeoWCSettingActionOuterRadius: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 40 之间的数值；0 表示直角" key:NeoWCChatInputOuterRadiusKey minimum:0 maximum:40 notifyChange:NO applyScale:NO]; break;
         case NeoWCSettingActionMomentsDateFormat: [self presentMomentsDateFormatEditor]; break;
-        case NeoWCSettingActionMomentsTailPicker: [self push:NeoWCMomentsTailPicker(NO, ^{ [self reload]; })]; break;
+        case NeoWCSettingActionMomentsTailPicker: {
+            __weak typeof(self) weakSelf = self;
+            [self push:NeoWCMomentsTailPicker(NO, ^{ [weakSelf reload]; })];
+            break;
+        }
         case NeoWCSettingActionMessageTimeFormat: [self presentMessageTimeFormatEditor]; break;
         case NeoWCSettingActionMessageTimeFontSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 8 到 18 之间的字号" key:NeoWCChatMessageTimeFontSizeKey minimum:8 maximum:18 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionMessageTimeMode: [self presentMessageTimeModePicker]; break;
@@ -683,9 +696,11 @@ static NSString *const NeoWCAuthorUserName = @"ic7ouo";
         case NeoWCSettingActionPluginManager: [self push:[WCPluginsViewController new]]; break;
         case NeoWCSettingActionInAppNotificationAppearance: [self push:[NeoWCInAppNotificationSettingsViewController new]]; break;
         case NeoWCSettingActionCallRecordings: [self push:[NeoWCCallRecordingsViewController new]]; break;
-        case NeoWCSettingActionCallVoiceEffect:
-            NeoWCPresentCallVoiceEffectPicker(self.viewController, ^{ [self reload]; });
+        case NeoWCSettingActionCallVoiceEffect: {
+            __weak typeof(self) weakSelf = self;
+            NeoWCPresentCallVoiceEffectPicker(self.viewController, ^{ [weakSelf reload]; });
             break;
+        }
         case NeoWCSettingActionAutomations: [self push:[NeoWCAutomationViewController new]]; break;
         case NeoWCSettingActionHapticIntensity: [self presentHapticIntensityPicker]; break;
         case NeoWCSettingActionStepMode: [self presentStepModePicker]; break;

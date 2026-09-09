@@ -2,9 +2,9 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
-static NSString *const NeoWCCachedWXIDKey = @"com.qiu7c.neowc.authorization.cached-wxid";
-static NSString *const NeoWCCachedNicknameKey = @"com.qiu7c.neowc.authorization.cached-nickname";
-static NSString *const NeoWCCachedHeadImageURLKey = @"com.qiu7c.neowc.authorization.cached-head-image-url";
+static NSString *const NeoWCCachedWXIDKey = @"com.qiu7c.wcatlas.authorization.cached-wxid";
+static NSString *const NeoWCCachedNicknameKey = @"com.qiu7c.wcatlas.authorization.cached-nickname";
+static NSString *const NeoWCCachedHeadImageURLKey = @"com.qiu7c.wcatlas.authorization.cached-head-image-url";
 
 static id NeoWCServiceCenterFromCurrentContext(id self, SEL command) {
     (void)self;
