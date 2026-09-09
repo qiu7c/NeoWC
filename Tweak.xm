@@ -21,6 +21,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/NeoWCMomentsInteractionReminder.h"
 #import "Sources/NeoWCMomentsPrewarmer.h"
 #import "Sources/NeoWCMomentsCommentAntiDelete.h"
+#import "Sources/NeoWCMomentsTail.h"
 #import "Sources/NeoWCAccount.h"
 #import "Sources/NeoWCAntiRevoke.h"
 #import "Sources/NeoWCChatExport.h"
@@ -13627,6 +13628,7 @@ static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
     %init;
     NeoWCAutomationStart();
     NeoWCMomentsCommentAntiDeleteInstallHooks();
+    NeoWCMomentsTailInstallHooks();
     NeoWCCallAudioInstallHooks();
     NeoWCInstallAutoSpeakerphoneHook();
     NeoWCInstallExclusiveRedEnvelopeHooks();

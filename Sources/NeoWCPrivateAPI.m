@@ -28,6 +28,10 @@ static BOOL NeoWCPrivateTypeIsVoid(const char *type) {
     return NeoWCPrivateUnqualifiedType(type)[0] == 'v';
 }
 
+static BOOL NeoWCPrivateTypeIsSelector(const char *type) {
+    return NeoWCPrivateUnqualifiedType(type)[0] == ':';
+}
+
 static NSMethodSignature *NeoWCPrivateSignature(id receiver,
                                                 SEL selector,
                                                 NSUInteger argumentCount) {
@@ -372,6 +376,127 @@ NSArray *NeoWCPrivateGroupContactList(void) {
     id cachedGroups = NeoWCPrivateNoArgumentObject(dataLogic, @"getChatRoomContacts");
     for (id contact in NeoWCPrivateEnumerableSnapshot(cachedGroups)) appendContact(contact);
     return groups;
+}
+
+#pragma mark - Moments Upload Metadata
+
+id NeoWCPrivateCreateMomentsAppInfo(NSString *appID, NSString *appName) {
+    NSString *resolvedID = NeoWCPrivateNonemptyString(appID);
+    NSString *resolvedName = NeoWCPrivateNonemptyString(appName);
+    Class appInfoClass = NSClassFromString(@"WCAppInfo");
+    if (!appInfoClass || resolvedID.length == 0 || resolvedName.length == 0) return nil;
+
+    SEL initSelector = @selector(init);
+    SEL appIDSelector = NSSelectorFromString(@"setAppID:");
+    SEL appNameSelector = NSSelectorFromString(@"setAppName:");
+    NSMethodSignature *initSignature = [appInfoClass instanceMethodSignatureForSelector:initSelector];
+    NSMethodSignature *appIDSignature = [appInfoClass instanceMethodSignatureForSelector:appIDSelector];
+    NSMethodSignature *appNameSignature = [appInfoClass instanceMethodSignatureForSelector:appNameSelector];
+    if (!initSignature || initSignature.numberOfArguments != 2 ||
+        !NeoWCPrivateTypeIsObject(initSignature.methodReturnType) ||
+        !appIDSignature || appIDSignature.numberOfArguments != 3 ||
+        !NeoWCPrivateTypeIsVoid(appIDSignature.methodReturnType) ||
+        !NeoWCPrivateTypeIsObject([appIDSignature getArgumentTypeAtIndex:2]) ||
+        !appNameSignature || appNameSignature.numberOfArguments != 3 ||
+        !NeoWCPrivateTypeIsVoid(appNameSignature.methodReturnType) ||
+        !NeoWCPrivateTypeIsObject([appNameSignature getArgumentTypeAtIndex:2])) return nil;
+
+    @try {
+        id info = [[appInfoClass alloc] init];
+        if (!info) return nil;
+        ((void (*)(id, SEL, id))objc_msgSend)(info, appIDSelector, resolvedID);
+        ((void (*)(id, SEL, id))objc_msgSend)(info, appNameSelector, resolvedName);
+        return info;
+    } @catch (__unused NSException *exception) {
+        return nil;
+    }
+}
+
+static char NeoWCPrivateMomentsTailCellKey;
+static char NeoWCPrivateMomentsTailManagerKey;
+
+static id NeoWCPrivateMomentsTableManager(id composer) {
+    if (!composer) return nil;
+    @try { return [composer valueForKey:@"m_tableViewManager"]; }
+    @catch (__unused NSException *exception) { return nil; }
+}
+
+static id NeoWCPrivateCreateMomentsTailCell(id composer, SEL action, NSString *rightValue) {
+    Class cellClass = NSClassFromString(@"WCTableViewCellManager");
+    if (!cellClass || !action || rightValue.length == 0) return nil;
+    SEL selector = NSSelectorFromString(@"normalCellForSel:target:leftImage:title:titleColor:badge:rightValue:rightImage:withRightRedDot:selected:");
+    NSMethodSignature *signature = [cellClass methodSignatureForSelector:selector];
+    if (signature.numberOfArguments == 12 && NeoWCPrivateTypeIsObject(signature.methodReturnType) &&
+        NeoWCPrivateTypeIsSelector([signature getArgumentTypeAtIndex:2]) &&
+        NeoWCPrivateObjectArguments(signature, NSMakeRange(3, 7)) &&
+        NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:10]) &&
+        NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:11])) {
+        return ((id (*)(id, SEL, SEL, id, id, id, id, id, id, id, BOOL, BOOL))objc_msgSend)(
+            cellClass, selector, action, composer, nil, @"发圈尾巴", nil, nil, rightValue, nil, NO, NO);
+    }
+    selector = NSSelectorFromString(@"normalCellForSel:target:title:rightValue:canRightValueCopy:");
+    signature = [cellClass methodSignatureForSelector:selector];
+    if (signature.numberOfArguments == 7 && NeoWCPrivateTypeIsObject(signature.methodReturnType) &&
+        NeoWCPrivateTypeIsSelector([signature getArgumentTypeAtIndex:2]) &&
+        NeoWCPrivateObjectArguments(signature, NSMakeRange(3, 3)) &&
+        NeoWCPrivateTypeIsInteger([signature getArgumentTypeAtIndex:6])) {
+        return ((id (*)(id, SEL, SEL, id, id, id, BOOL))objc_msgSend)(
+            cellClass, selector, action, composer, @"发圈尾巴", rightValue, NO);
+    }
+    return nil;
+}
+
+BOOL NeoWCPrivateInstallMomentsTailCell(id composer, SEL action, NSString *rightValue) {
+    if (!NSThread.isMainThread || !composer || objc_getAssociatedObject(composer, &NeoWCPrivateMomentsTailCellKey)) return NO;
+    @try {
+        id manager = NeoWCPrivateMomentsTableManager(composer);
+        SEL countSelector = NSSelectorFromString(@"getSectionCount");
+        SEL sectionSelector = NSSelectorFromString(@"getSectionAt:");
+        NSMethodSignature *countSignature = NeoWCPrivateSignature(manager, countSelector, 2);
+        NSMethodSignature *sectionSignature = NeoWCPrivateSignature(manager, sectionSelector, 3);
+        if (!NeoWCPrivateTypeIsInteger(countSignature.methodReturnType) ||
+            !NeoWCPrivateTypeIsObject(sectionSignature.methodReturnType) ||
+            !NeoWCPrivateTypeIsInteger([sectionSignature getArgumentTypeAtIndex:2])) return NO;
+        NSUInteger count = ((NSUInteger (*)(id, SEL))objc_msgSend)(manager, countSelector);
+        if (count == 0) return NO;
+        id section = ((id (*)(id, SEL, NSUInteger))objc_msgSend)(manager, sectionSelector, 0);
+        id cell = NeoWCPrivateCreateMomentsTailCell(composer, action, rightValue);
+        SEL addSelector = NSSelectorFromString(@"addCell:");
+        NSMethodSignature *addSignature = NeoWCPrivateSignature(section, addSelector, 3);
+        if (!cell || !NeoWCPrivateTypeIsObject(addSignature.methodReturnType) ||
+            !NeoWCPrivateTypeIsObject([addSignature getArgumentTypeAtIndex:2])) return NO;
+        ((void (*)(id, SEL, id))objc_msgSend)(section, addSelector, cell);
+        objc_setAssociatedObject(composer, &NeoWCPrivateMomentsTailCellKey, cell, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(composer, &NeoWCPrivateMomentsTailManagerKey, manager, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NeoWCPrivateReloadMomentsTailCell(composer, rightValue);
+        return YES;
+    } @catch (__unused NSException *exception) {
+        return NO;
+    }
+}
+
+void NeoWCPrivateReloadMomentsTailCell(id composer, NSString *rightValue) {
+    if (!NSThread.isMainThread || !composer || rightValue.length == 0) return;
+    id cell = objc_getAssociatedObject(composer, &NeoWCPrivateMomentsTailCellKey);
+    id manager = objc_getAssociatedObject(composer, &NeoWCPrivateMomentsTailManagerKey);
+    if (!cell || !manager) return;
+    @try {
+        for (NSString *keyPath in @[@"cellConfig.rightConfig.title", @"m_rightValue", @"rightValue"]) {
+            @try { [cell setValue:rightValue forKeyPath:keyPath]; break; }
+            @catch (__unused NSException *exception) {}
+        }
+        id tableView = NeoWCPrivateNoArgumentObject(manager, @"tableView");
+        if ([tableView respondsToSelector:@selector(reloadData)]) [tableView reloadData];
+    } @catch (__unused NSException *exception) {}
+}
+
+void NeoWCPrivateResignMomentsComposerInput(id composer) {
+    if (!NSThread.isMainThread || !composer) return;
+    SEL selector = NSSelectorFromString(@"resignInput");
+    NSMethodSignature *signature = NeoWCPrivateSignature(composer, selector, 2);
+    if (!signature || !NeoWCPrivateTypeIsVoid(signature.methodReturnType)) return;
+    @try { ((void (*)(id, SEL))objc_msgSend)(composer, selector); }
+    @catch (__unused NSException *exception) {}
 }
 
 #pragma mark - Native Navigation

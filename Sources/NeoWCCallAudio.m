@@ -3,6 +3,8 @@
 #import "NeoWCLogging.h"
 #import "NeoWCQuickReplyStore.h"
 #import "NeoWCSilkDecoder.h"
+#import "NeoWCTTSGenerator.h"
+#import "NeoWCVoiceEffectProcessor.h"
 #import <AudioToolbox/AudioToolbox.h>
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
@@ -242,6 +244,7 @@ static OSStatus NeoWCAudioUnitRender(AudioUnit unit, AudioUnitRenderActionFlags 
     if (status != noErr || !atomic_load(&NeoWCCallActive)) return status;
     atomic_fetch_add(&NeoWCAudioActivityGeneration, 1);
     AudioStreamBasicDescription format = NeoWCFormatForUnit(unit, kAudioUnitScope_Output, bus);
+    NeoWCVoiceEffectProcess(format, frames, buffers);
     NeoWCApplyVoice(format, frames, buffers);
     NeoWCWriteBuffers(&NeoWCMicWriter, @"mic", &NeoWCMicWriterLock, format, frames, buffers);
     return status;
@@ -333,6 +336,8 @@ static OSStatus NeoWCAudioComponentInstanceDispose(AudioComponentInstance instan
 - (void)loadVoiceItem:(NeoWCQuickReplyItem *)item;
 - (void)voiceDidFinish;
 - (void)stopCurrentRecording;
+- (void)pickVoiceEffect;
+- (void)pickTTS;
 @end
 
 static void NeoWCCallCollectLabels(UIView *view, NSMutableArray<UILabel *> *labels) {
@@ -612,7 +617,8 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
 
 - (void)show {
     if (!NeoWCEnhancementEnabled(NeoWCCallRecordingEnabledKey) &&
-        !NeoWCEnhancementEnabled(NeoWCCallVoiceDisguiseEnabledKey)) return;
+        !NeoWCEnhancementEnabled(NeoWCCallVoiceDisguiseEnabledKey) &&
+        !NeoWCEnhancementEnabled(NeoWCCallRealtimeVoiceEffectEnabledKey)) return;
     UIViewController *controller = NeoWCCallVisibleInterfaceController();
     if (!controller.viewIfLoaded.window) return;
     if ([controller isKindOfClass:NeoWCCallVoiceLibraryViewController.class] ||
@@ -620,16 +626,18 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
          [((UINavigationController *)controller).topViewController
              isKindOfClass:NeoWCCallVoiceLibraryViewController.class])) return;
     BOOL voiceEnabled = NeoWCEnhancementEnabled(NeoWCCallVoiceDisguiseEnabledKey);
+    BOOL effectEnabled = NeoWCEnhancementEnabled(NeoWCCallRealtimeVoiceEffectEnabledKey);
+    BOOL hasAudioControls = voiceEnabled || effectEnabled;
     if (self.hostController == controller) {
         [self installRecordingIndicatorInController:controller];
-        if (!voiceEnabled || self.controlView.superview == controller.view) return;
+        if (!hasAudioControls || self.controlView.superview == controller.view) return;
     }
     [self.controlView removeFromSuperview];
     [self.menuView removeFromSuperview];
     [self.recordingDot removeFromSuperview];
     self.hostController = controller;
     [self installRecordingIndicatorInController:controller];
-    if (!voiceEnabled) return;
+    if (!hasAudioControls) return;
 
     UIButton *voiceButton = [UIButton buttonWithType:UIButtonTypeSystem];
     voiceButton.backgroundColor = [UIColor colorWithWhite:0.12 alpha:0.82];
@@ -654,13 +662,22 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
     [controller.view insertSubview:menu belowSubview:voiceButton];
 
     UILabel *label = [[UILabel alloc] init];
-    label.text = @"语音包未播放";
+    label.text = effectEnabled
+        ? [NSString stringWithFormat:@"实时变声：%@", NeoWCVoiceEffectName(NeoWCVoiceEffectPreset())]
+        : @"语音包未播放";
     label.textColor = UIColor.whiteColor;
     label.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
     label.textAlignment = NSTextAlignmentLeft;
-    UIButton *pickButton = [self button:@"选择语音包" action:@selector(pickVoice)];
-    UIButton *stopButton = [self button:@"停止播放" action:@selector(stopVoice)];
-    UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:@[pickButton, stopButton]];
+    NSMutableArray<UIButton *> *audioButtons = [NSMutableArray array];
+    if (voiceEnabled) {
+        [audioButtons addObject:[self button:@"选择语音包" action:@selector(pickVoice)]];
+        [audioButtons addObject:[self button:@"TTS" action:@selector(pickTTS)]];
+        [audioButtons addObject:[self button:@"停止播放" action:@selector(stopVoice)]];
+    }
+    if (effectEnabled) {
+        [audioButtons addObject:[self button:@"变声效果" action:@selector(pickVoiceEffect)]];
+    }
+    UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:audioButtons];
     buttons.axis = UILayoutConstraintAxisHorizontal;
     buttons.distribution = UIStackViewDistributionFillEqually;
     UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[label, buttons]];
@@ -668,6 +685,9 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
     stack.spacing = 5;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     [menu addSubview:stack];
+    CGFloat desiredMenuWidth = audioButtons.count >= 4 ? 304.0 :
+                               (audioButtons.count == 3 ? 248.0 : 190.0);
+    CGFloat availableMenuWidth = MAX(190.0, CGRectGetWidth(controller.view.bounds) - 76.0);
     [NSLayoutConstraint activateConstraints:@[
         [voiceButton.leadingAnchor constraintEqualToAnchor:controller.view.safeAreaLayoutGuide.leadingAnchor constant:12],
         [voiceButton.centerYAnchor constraintEqualToAnchor:controller.view.centerYAnchor],
@@ -675,7 +695,7 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
         [voiceButton.heightAnchor constraintEqualToConstant:44],
         [menu.leadingAnchor constraintEqualToAnchor:voiceButton.trailingAnchor constant:8],
         [menu.centerYAnchor constraintEqualToAnchor:voiceButton.centerYAnchor],
-        [menu.widthAnchor constraintEqualToConstant:190],
+        [menu.widthAnchor constraintEqualToConstant:MIN(desiredMenuWidth, availableMenuWidth)],
         [menu.heightAnchor constraintEqualToConstant:78],
         [stack.leadingAnchor constraintEqualToAnchor:menu.leadingAnchor constant:10],
         [stack.trailingAnchor constraintEqualToAnchor:menu.trailingAnchor constant:-8],
@@ -719,12 +739,84 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
 - (void)stopVoice {
     atomic_store(&NeoWCVoiceActive, false);
     atomic_store(&NeoWCVoiceFramePosition, 0);
-    self.statusLabel.text = @"语音包已停止";
+    self.statusLabel.text = NeoWCEnhancementEnabled(NeoWCCallRealtimeVoiceEffectEnabledKey)
+        ? [NSString stringWithFormat:@"实时变声：%@", NeoWCVoiceEffectName(NeoWCVoiceEffectPreset())]
+        : @"语音包已停止";
 }
 
 - (void)voiceDidFinish {
     if (atomic_load(&NeoWCVoiceActive)) return;
-    self.statusLabel.text = @"语音包已播完";
+    self.statusLabel.text = NeoWCEnhancementEnabled(NeoWCCallRealtimeVoiceEffectEnabledKey)
+        ? [NSString stringWithFormat:@"实时变声：%@", NeoWCVoiceEffectName(NeoWCVoiceEffectPreset())]
+        : @"语音包已播完";
+}
+
+- (void)pickVoiceEffect {
+    UIViewController *presenter = self.hostController;
+    if (!presenter.viewIfLoaded.window) return;
+    __weak typeof(self) weakSelf = self;
+    NeoWCPresentCallVoiceEffectPicker(presenter, ^{
+        weakSelf.statusLabel.text = [NSString stringWithFormat:@"实时变声：%@",
+            NeoWCVoiceEffectName(NeoWCVoiceEffectPreset())];
+    });
+}
+
+- (void)pickTTS {
+    UIViewController *presenter = self.hostController;
+    if (!presenter.viewIfLoaded.window ||
+        !NeoWCEnhancementEnabled(NeoWCCallVoiceDisguiseEnabledKey)) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"生成通话语音"
+        message:@"使用系统普通话音色生成，完成后自动保存到消息库并播放给对端。"
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"输入要说的话";
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel
+                                           handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"生成并播放" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            NSString *text = alert.textFields.firstObject.text ?: @"";
+            weakSelf.statusLabel.text = @"正在生成 TTS…";
+            NeoWCGenerateLocalSpeech(text, ^(NSURL *outputURL, NSError *generationError) {
+                if (generationError || !outputURL) {
+                    weakSelf.statusLabel.text = generationError.localizedDescription ?: @"TTS 生成失败";
+                    return;
+                }
+                dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+                    NSError *storeError = nil;
+                    NSString *titleText = [text stringByTrimmingCharactersInSet:
+                        NSCharacterSet.whitespaceAndNewlineCharacterSet];
+                    if (titleText.length > 24) {
+                        NSRange range = [titleText rangeOfComposedCharacterSequencesForRange:
+                            NSMakeRange(0, 24)];
+                        titleText = [titleText substringWithRange:range];
+                    }
+                    NSString *displayText = titleText.length ? titleText : @"语音";
+                    NSString *title = [@"TTS · " stringByAppendingString:displayText];
+                    NeoWCQuickReplyItem *item = [NeoWCQuickReplyStore.sharedStore
+                        addMediaAtURL:outputURL type:NeoWCQuickReplyTypeVoice title:title
+                        folderIdentifier:nil sourceConversation:nil sourceMessageID:nil
+                        error:&storeError];
+                    [NSFileManager.defaultManager removeItemAtURL:outputURL error:nil];
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        NeoWCCallAudioPanel *strongSelf = weakSelf;
+                        if (!strongSelf) return;
+                        if (!item) {
+                            strongSelf.statusLabel.text = storeError.localizedDescription ?: @"TTS 保存失败";
+                            return;
+                        }
+                        if (!atomic_load(&NeoWCCallActive) || !strongSelf.controlView.window) {
+                            strongSelf.statusLabel.text = @"TTS 已保存到消息库";
+                            return;
+                        }
+                        [strongSelf loadVoiceItem:item];
+                    });
+                });
+            });
+        }]];
+    [presenter presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)loadVoiceItem:(NeoWCQuickReplyItem *)item {
@@ -782,12 +874,57 @@ static NSData *NeoWCCallPCMDataAtPath(NSString *path, NSError **error) {
 
 @end
 
+void NeoWCPresentCallVoiceEffectPicker(UIViewController *presenter,
+                                       void (^completion)(void)) {
+    if (!presenter) return;
+    if (!NSThread.isMainThread) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NeoWCPresentCallVoiceEffectPicker(presenter, completion);
+        });
+        return;
+    }
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSInteger selected = [defaults integerForKey:NeoWCCallRealtimeVoiceEffectPresetKey];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"实时通话变声"
+        message:@"效果直接处理本次通话的上行麦克风声音"
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    for (NSInteger value = NeoWCRealtimeVoiceEffectOff;
+         value <= NeoWCRealtimeVoiceEffectElectronic; value++) {
+        NeoWCRealtimeVoiceEffect effect = (NeoWCRealtimeVoiceEffect)value;
+        NSString *name = NeoWCVoiceEffectName(effect);
+        NSString *title = selected == value ? [@"✓  " stringByAppendingString:name] : name;
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *action) {
+                [defaults setInteger:value forKey:NeoWCCallRealtimeVoiceEffectPresetKey];
+                BOOL enabled = [defaults boolForKey:NeoWCCallRealtimeVoiceEffectEnabledKey];
+                NeoWCVoiceEffectSetPreset(enabled && atomic_load(&NeoWCCallActive)
+                    ? effect : NeoWCRealtimeVoiceEffectOff);
+                NeoWCVoiceEffectReset();
+                if (completion) completion();
+            }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel
+                                           handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    popover.sourceView = presenter.view;
+    popover.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
+                                    CGRectGetMidY(presenter.view.bounds), 1.0, 1.0);
+    [presenter presentViewController:sheet animated:YES completion:nil];
+}
+
 static void NeoWCCallVoiceDidFinish(void) {
     [[NeoWCCallAudioPanel sharedPanel] voiceDidFinish];
 }
 
 static void NeoWCCallDidStart(void) {
     if (atomic_exchange(&NeoWCCallActive, true)) return;
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NeoWCRealtimeVoiceEffect effect = NeoWCRealtimeVoiceEffectOff;
+    if ([defaults boolForKey:NeoWCCallRealtimeVoiceEffectEnabledKey]) {
+        effect = (NeoWCRealtimeVoiceEffect)[defaults integerForKey:NeoWCCallRealtimeVoiceEffectPresetKey];
+    }
+    NeoWCVoiceEffectSetPreset(effect);
+    NeoWCVoiceEffectReset();
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
     formatter.dateFormat = @"yyyyMMdd-HHmmss";
@@ -848,6 +985,8 @@ static void NeoWCFinalizeCurrentRecording(void) {
 
 static void NeoWCCallDidStop(void) {
     if (!atomic_exchange(&NeoWCCallActive, false)) return;
+    NeoWCVoiceEffectSetPreset(NeoWCRealtimeVoiceEffectOff);
+    NeoWCVoiceEffectReset();
     atomic_store(&NeoWCVoiceActive, false);
     atomic_store(&NeoWCVoiceByteCount, 0);
     void *voiceBytes = (void *)atomic_exchange(&NeoWCVoiceBytes, 0);

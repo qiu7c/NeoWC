@@ -143,6 +143,7 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCMomentsForwardEnabledKey: @NO,
         NeoWCMomentsSaveImagesEnabledKey: @NO,
         NeoWCMomentsOriginalMediaPostEnabledKey: @NO,
+        NeoWCMomentsTailEnabledKey: @NO,
         NeoWCReplySwipeEnabledKey: @NO,
         NeoWCReplySwipeSelfActionKey: @(NeoWCReplySwipeActionQuote),
         NeoWCReplySwipeOtherActionKey: @(NeoWCReplySwipeActionQuote),
@@ -184,6 +185,8 @@ void NeoWCSettingsRegisterDefaults(void) {
         NeoWCCallRecordingEnabledKey: @NO,
         NeoWCCallVoiceDisguiseEnabledKey: @NO,
         NeoWCCallVoiceModeKey: @0,
+        NeoWCCallRealtimeVoiceEffectEnabledKey: @NO,
+        NeoWCCallRealtimeVoiceEffectPresetKey: @1,
         NeoWCQRCodeCameraSourceEnabledKey: @NO,
         NeoWCAutoOriginalImageEnabledKey: @NO,
         NeoWCAutoCombineSendEnabledKey: @NO,
@@ -472,6 +475,10 @@ static NSArray<NeoWCSettingSection *> *NeoWCMessageSections(NSUserDefaults *defa
         NeoWCItem(@"已保存的通话录音", @"查看、试听或删除本地录音文件", @"waveform", NeoWCSettingRowKindDetail, nil, @"查看", NeoWCSettingActionCallRecordings),
         NeoWCItem(@"通话语音伪装", @"在通话页面从消息库选择语音素材，替换上行麦克风输入", @"waveform.badge.mic", NeoWCSettingRowKindSwitch, NeoWCCallVoiceDisguiseEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"语音包混合麦克风", @"开启后保留部分现场麦克风声音；关闭时完全替换", @"slider.horizontal.3", NeoWCSettingRowKindSwitch, NeoWCCallVoiceModeKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"实时通话变声", @"在麦克风上行 PCM 中低延迟处理，不影响对端下行声音", @"waveform.badge.mic", NeoWCSettingRowKindSwitch, NeoWCCallRealtimeVoiceEffectEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"实时变声效果", @"选择原声、明亮女声、低沉男声、机器人或电音", @"slider.horizontal.3", NeoWCSettingRowKindDetail, nil,
+                  NeoWCCurrentSelection(@[@"原声", @"明亮女声", @"低沉男声", @"机器人", @"电音"][MIN(4, MAX(0, [defaults integerForKey:NeoWCCallRealtimeVoiceEffectPresetKey]))]),
+                  NeoWCSettingActionCallVoiceEffect),
         NeoWCItem(@"通知直达聊天", @"点击通知后进入对应会话", @"bubble.left.and.arrow.forward", NeoWCSettingRowKindSwitch, NeoWCNotificationDirectChatEnabledKey, nil, NeoWCSettingActionNone),
     ]];
 
@@ -586,6 +593,10 @@ static NSArray<NeoWCSettingSection *> *NeoWCEnhancementSections(NSUserDefaults *
         NeoWCItem(@"朋友圈转发", @"点击进入朋友圈转发发布页", @"arrowshape.turn.up.right", NeoWCSettingRowKindSwitch, NeoWCMomentsForwardEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"保存朋友圈媒体", @"在朋友圈操作菜单中保存图片、视频和实况照片", @"square.and.arrow.down", NeoWCSettingRowKindSwitch, NeoWCMomentsSaveImagesEnabledKey, nil, NeoWCSettingActionNone),
         NeoWCItem(@"朋友圈高清发送", @"从相机菜单选择高清图片或原视频", @"photo.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCMomentsOriginalMediaPostEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"朋友圈小尾巴", @"通过 WCAppInfo 设置来源应用尾巴，不修改正文或设备型号", @"tag", NeoWCSettingRowKindSwitch, NeoWCMomentsTailEnabledKey, nil, NeoWCSettingActionNone),
+        NeoWCItem(@"默认发圈尾巴", @"选择已注册 AppID；发布时仍可为单条朋友圈更改", @"app.badge", NeoWCSettingRowKindDetail, nil,
+                  NeoWCCurrentSelection([defaults stringForKey:NeoWCMomentsTailAppIDKey] ?: @"无小尾巴"),
+                  NeoWCSettingActionMomentsTailPicker),
         NeoWCItem(@"朋友圈头像快捷权限", @"长按头像切换朋友权限", @"person.crop.circle.badge.checkmark", NeoWCSettingRowKindSwitch, NeoWCMomentsQuickPermissionsKey, nil, NeoWCSettingActionNone),
     ]];
     NSString *dateFormat = NeoWCNormalizedMomentsDateFormat([defaults stringForKey:NeoWCMomentsPreciseTimeFormatKey]) ?: NeoWCMomentsPreciseTimeDefaultFormat;

@@ -127,6 +127,46 @@ FOUNDATION_EXPORT NSArray *NeoWCPrivateContactList(void);
 /// suffix remains the cross-version fallback. Missing services and failed sources are skipped.
 FOUNDATION_EXPORT NSArray *NeoWCPrivateGroupContactList(void);
 
+#pragma mark - Moments Upload Metadata
+
+/// Builds WeChat's native Moments source-application metadata object.
+/// @param appID A nonempty registered WeChat application identifier.
+/// @param appName The corresponding nonempty application display name.
+/// @return A configured `WCAppInfo` instance, or nil when this WeChat version is unsupported.
+/// @discussion May be called on WeChat's upload thread. The current implementation verifies the
+/// zero-argument object initializer and the object ABIs of `setAppID:` and `setAppName:` before
+/// calling them in that order. Missing classes/selectors, mismatched ABIs, empty fields, and
+/// Objective-C exceptions fail closed; older versions receive no fabricated fallback object.
+FOUNDATION_EXPORT id _Nullable NeoWCPrivateCreateMomentsAppInfo(NSString * _Nullable appID,
+                                                                NSString * _Nullable appName);
+
+/// Adds the native “发圈尾巴” row to a Moments composer.
+/// @param composer A live `WCNewCommitViewController` instance.
+/// @param action No-argument action implemented by the composer class.
+/// @param rightValue Current source application name, or “无小尾巴”.
+/// @return YES after a native cell is created and appended to section zero.
+/// @discussion Main-thread only. Verifies the table-manager getters, integer section ABI, native
+/// cell factory, and object `addCell:` ABI before preserving WeChat's manager/section/reload order.
+/// Current long-form factory is preferred; the evidenced five-argument factory is the only
+/// fallback. Unsupported layouts, missing section zero, duplicate installation, and exceptions
+/// return NO without creating a UIKit replacement row.
+FOUNDATION_EXPORT BOOL NeoWCPrivateInstallMomentsTailCell(id _Nullable composer,
+                                                          SEL action,
+                                                          NSString *rightValue);
+
+/// Updates and reloads a previously installed native Moments-tail row.
+/// @param composer The composer passed to `NeoWCPrivateInstallMomentsTailCell`.
+/// @param rightValue New source application name, or “无小尾巴”.
+/// @discussion Main-thread only. Updates only the retained native cell manager and reloads its
+/// owning table. Missing fields and version-specific KVC failures are ignored; no new row is added.
+FOUNDATION_EXPORT void NeoWCPrivateReloadMomentsTailCell(id _Nullable composer,
+                                                         NSString *rightValue);
+
+/// Asks a Moments composer to dismiss its native text input before presenting another page.
+/// @discussion Main-thread only. Calls the verified no-argument void `resignInput` selector.
+/// Unsupported WeChat versions and exceptions are treated as a no-op.
+FOUNDATION_EXPORT void NeoWCPrivateResignMomentsComposerInput(id _Nullable composer);
+
 /// Builds and pushes WeChat's native profile controller.
 /// @param source Visible source controller whose navigation controller performs the push.
 /// @param userName WeChat username to resolve and inject into the native controller.

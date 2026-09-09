@@ -18,7 +18,9 @@
 #import "NeoWCFriendRelationCheckViewController.h"
 #import "NeoWCSendConfirmationViewController.h"
 #import "NeoWCMomentsReminder.h"
+#import "NeoWCMomentsTail.h"
 #import "NeoWCCallRecordingsViewController.h"
+#import "NeoWCCallAudio.h"
 #import "NeoWCAutomationViewController.h"
 #import <math.h>
 #import <objc/message.h>
@@ -671,6 +673,7 @@ static NSString *const NeoWCAuthorUserName = @"ic7ouo";
         case NeoWCSettingActionInnerRadius: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 40 之间的数值；0 表示直角" key:NeoWCChatInputInnerRadiusKey minimum:0 maximum:40 notifyChange:NO applyScale:NO]; break;
         case NeoWCSettingActionOuterRadius: [self presentNumberEditorWithTitle:item.title message:@"请输入 0 到 40 之间的数值；0 表示直角" key:NeoWCChatInputOuterRadiusKey minimum:0 maximum:40 notifyChange:NO applyScale:NO]; break;
         case NeoWCSettingActionMomentsDateFormat: [self presentMomentsDateFormatEditor]; break;
+        case NeoWCSettingActionMomentsTailPicker: [self push:NeoWCMomentsTailPicker(NO, ^{ [self reload]; })]; break;
         case NeoWCSettingActionMessageTimeFormat: [self presentMessageTimeFormatEditor]; break;
         case NeoWCSettingActionMessageTimeFontSize: [self presentNumberEditorWithTitle:item.title message:@"请输入 8 到 18 之间的字号" key:NeoWCChatMessageTimeFontSizeKey minimum:8 maximum:18 notifyChange:YES applyScale:NO]; break;
         case NeoWCSettingActionMessageTimeMode: [self presentMessageTimeModePicker]; break;
@@ -680,6 +683,9 @@ static NSString *const NeoWCAuthorUserName = @"ic7ouo";
         case NeoWCSettingActionPluginManager: [self push:[WCPluginsViewController new]]; break;
         case NeoWCSettingActionInAppNotificationAppearance: [self push:[NeoWCInAppNotificationSettingsViewController new]]; break;
         case NeoWCSettingActionCallRecordings: [self push:[NeoWCCallRecordingsViewController new]]; break;
+        case NeoWCSettingActionCallVoiceEffect:
+            NeoWCPresentCallVoiceEffectPicker(self.viewController, ^{ [self reload]; });
+            break;
         case NeoWCSettingActionAutomations: [self push:[NeoWCAutomationViewController new]]; break;
         case NeoWCSettingActionHapticIntensity: [self presentHapticIntensityPicker]; break;
         case NeoWCSettingActionStepMode: [self presentStepModePicker]; break;

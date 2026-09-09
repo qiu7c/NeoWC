@@ -49,6 +49,7 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionInnerRadius,
     NeoWCSettingActionOuterRadius,
     NeoWCSettingActionMomentsDateFormat,
+    NeoWCSettingActionMomentsTailPicker,
     NeoWCSettingActionMessageTimeFormat,
     NeoWCSettingActionMessageTimeFontSize,
     NeoWCSettingActionMessageTimeMode,
@@ -82,6 +83,7 @@ typedef NS_ENUM(NSInteger, NeoWCSettingAction) {
     NeoWCSettingActionMomentsCommentAntiDeleteFontSize,
     NeoWCSettingActionInAppNotificationAppearance,
     NeoWCSettingActionCallRecordings,
+    NeoWCSettingActionCallVoiceEffect,
     NeoWCSettingActionAutomations,
 };
 
