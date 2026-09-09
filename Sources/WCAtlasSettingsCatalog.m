@@ -88,6 +88,7 @@ void WCAtlasSettingsHandleSwitchChange(NSString *key, BOOL enabled) {
             [defaults setBool:NO forKey:WCAtlasPluginManagerEnabledKey];
             return;
         }
+        WCAtlasInstallPluginRegistryBridge();
         [WCAtlasPluginsMgr.sharedInstance registerControllerWithTitle:@"WCAtlas"
                                                                version:WCAtlasDisplayVersion
                                                             controller:@"WCAtlasSettingsViewController"];
@@ -747,7 +748,7 @@ static NSArray<WCAtlasSettingSection *> *WCAtlasPluginSections(NSUserDefaults *d
     NSMutableArray<WCAtlasSettingItem *> *management = [NSMutableArray arrayWithObject:
         WCAtlasItem(@"配置管理", @"导入、导出或重置 WCAtlas 配置", @"externaldrive", WCAtlasSettingRowKindDetail, nil, @"管理", WCAtlasSettingActionConfigManager)];
     WCAtlasAddFeature(management,
-        WCAtlasItem(@"内置插件管理", @"与懒猫插件管理不兼容；使用前必须先卸载懒猫", @"square.stack.3d.up", WCAtlasSettingRowKindSwitch, WCAtlasPluginManagerEnabledKey, nil, WCAtlasSettingActionNone),
+        WCAtlasItem(@"内置插件管理", @"与懒猫插件管理不兼容；开启后重启微信以收录其他插件", @"square.stack.3d.up", WCAtlasSettingRowKindSwitch, WCAtlasPluginManagerEnabledKey, nil, WCAtlasSettingActionNone),
         @[WCAtlasItem(@"打开内置插件管理", @"管理分类、排序与快捷开关", @"rectangle.stack", WCAtlasSettingRowKindDetail, nil, @"打开", WCAtlasSettingActionPluginManager)],
         defaults, [NSSet setWithArray:[defaults arrayForKey:WCAtlasCollapsedFeaturesKey] ?: @[]]);
     return @[

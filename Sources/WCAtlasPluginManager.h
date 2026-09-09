@@ -37,6 +37,10 @@ FOUNDATION_EXPORT void WCAtlasInstallPluginManagerEntry(id moreViewController);
 FOUNDATION_EXPORT void WCAtlasPushPluginManager(id sender);
 /// Returns YES only when the external LazyCat WCPluginsMgr service is available.
 FOUNDATION_EXPORT BOOL WCAtlasExternalPluginManagerAvailable(void);
+/// Installs the shared `WCPluginsMgr` registration ABI for the built-in manager.
+/// Returns YES when the bridge is available. It is never installed while an external
+/// manager owns the class name, and only installs when the built-in manager is enabled.
+FOUNDATION_EXPORT BOOL WCAtlasInstallPluginRegistryBridge(void);
 /// Adds a direct WCAtlas row to WeChat's settings page when LazyCat is unavailable.
 /// Must be called on the main thread after NewSettingViewController has appeared.
 FOUNDATION_EXPORT void WCAtlasInstallSettingsFallbackEntry(id settingsController);

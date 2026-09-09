@@ -23,6 +23,7 @@ static NSString *const WCPHeaderRadiusKey = @"com.qiu7c.wcatlas.plugin-manager.h
 static NSString *const WCPEntryIconStyleKey = @"com.qiu7c.wcatlas.plugin-manager.entry-icon-style";
 static NSString *const WCPDidChangeNotification = @"WCAtlasPluginsMgr.RegistryDidChange";
 static NSString *const WCPWCAtlasQuickSwitchesKey = @"com.qiu7c.wcatlas.plugin-manager.quick-switches";
+static Class WCPRuntimeBridgeClass;
 
 static NSArray<NSString *> *WCPPluginIconStyleNames(void) {
     return @[@"微信原生", @"灯泡", @"拼图", @"印章", @"宫格"];
@@ -152,9 +153,63 @@ static BOOL WCPPushViewController(UINavigationController *navigation,
 }
 @end
 
+static id WCPBridgeSharedInstance(id receiver, SEL selector) {
+    (void)receiver;
+    (void)selector;
+    return WCAtlasPluginsMgr.sharedInstance;
+}
+
+static void WCPBridgeRegisterController(id receiver, SEL selector, NSString *title,
+                                        NSString *version, NSString *controller) {
+    (void)receiver;
+    (void)selector;
+    [WCAtlasPluginsMgr.sharedInstance registerControllerWithTitle:title
+                                                          version:version
+                                                       controller:controller];
+}
+
+static void WCPBridgeRegisterSwitch(id receiver, SEL selector, NSString *title, NSString *key) {
+    (void)receiver;
+    (void)selector;
+    [WCAtlasPluginsMgr.sharedInstance registerSwitchWithTitle:title key:key];
+}
+
+static void WCPBridgeRemoveSwitch(id receiver, SEL selector, NSString *key) {
+    (void)receiver;
+    (void)selector;
+    [WCAtlasPluginsMgr.sharedInstance removeSwitchWithKey:key];
+}
+
+BOOL WCAtlasInstallPluginRegistryBridge(void) {
+    if (![NSUserDefaults.standardUserDefaults boolForKey:WCAtlasPluginManagerEnabledKey]) return NO;
+    Class existingClass = objc_getClass("WCPluginsMgr");
+    if (existingClass) return existingClass == WCPRuntimeBridgeClass;
+
+    Class bridgeClass = objc_allocateClassPair(NSObject.class, "WCPluginsMgr", 0);
+    if (!bridgeClass) return NO;
+    Class metaClass = object_getClass(bridgeClass);
+    BOOL complete = class_addMethod(metaClass, @selector(sharedInstance),
+                                    (IMP)WCPBridgeSharedInstance, "@@:") &&
+        class_addMethod(bridgeClass, @selector(registerControllerWithTitle:version:controller:),
+                        (IMP)WCPBridgeRegisterController, "v@:@@@") &&
+        class_addMethod(bridgeClass, @selector(registerSwitchWithTitle:key:),
+                        (IMP)WCPBridgeRegisterSwitch, "v@:@@") &&
+        class_addMethod(bridgeClass, @selector(removeSwitchWithKey:),
+                        (IMP)WCPBridgeRemoveSwitch, "v@:@");
+    if (!complete) {
+        objc_disposeClassPair(bridgeClass);
+        return NO;
+    }
+    objc_registerClassPair(bridgeClass);
+    WCPRuntimeBridgeClass = bridgeClass;
+    WCAtlasLog(@"已安装 WCPluginsMgr 内置注册兼容桥");
+    return YES;
+}
+
 static WCPluginsMgr *WCPExternalManager(void) {
     Class managerClass = NSClassFromString(@"WCPluginsMgr");
-    if (!managerClass || managerClass == WCAtlasPluginsMgr.class ||
+    if (!managerClass || managerClass == WCPRuntimeBridgeClass ||
+        managerClass == WCAtlasPluginsMgr.class ||
         ![managerClass respondsToSelector:@selector(sharedInstance)]) return nil;
     return [managerClass sharedInstance];
 }

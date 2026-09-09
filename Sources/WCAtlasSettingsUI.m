@@ -1,4 +1,5 @@
 #import "WCAtlasSettingsUI.h"
+#import "WCAtlasIdentityBadge.h"
 #import "WCAtlasAccount.h"
 #import "WCAtlasSettingsCatalog.h"
 #import <math.h>
@@ -150,11 +151,14 @@ static UIView *WCAtlasSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL e
 
 @end
 
-@interface WCAtlasSettingsProfileHeaderView ()
+@interface WCAtlasSettingsProfileHeaderView () <UIGestureRecognizerDelegate>
 @property (nonatomic, copy, readwrite) NSString *wxid;
 @property (nonatomic, strong) UIView *capsuleView;
 @property (nonatomic, strong) UIView *avatarView;
 @property (nonatomic, strong) UILabel *nicknameLabel;
+@property (nonatomic, strong) UILabel *badgeLabel;
+@property (nonatomic, strong) UIStackView *identityRow;
+@property (nonatomic, strong) UITapGestureRecognizer *profileTapGesture;
 @property (nonatomic, strong) UILabel *wxidLabel;
 @property (nonatomic, copy) NSArray<NSLayoutConstraint *> *avatarConstraints;
 @property (nonatomic, copy) NSString *appliedAvatarWXID;
@@ -162,7 +166,45 @@ static UIView *WCAtlasSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL e
 - (void)applyProfileWithWXID:(nullable NSString *)wxid
                     nickname:(nullable NSString *)nickname
                      headURL:(nullable NSString *)headURL;
+- (void)applyIdentityBadge:(nullable WCAtlasIdentityBadge *)badge;
 @end
+
+@interface WCAtlasIdentityBadgeLabel : UILabel
+@end
+
+@implementation WCAtlasIdentityBadgeLabel
+
+- (void)drawTextInRect:(CGRect)rect {
+    [super drawTextInRect:UIEdgeInsetsInsetRect(rect, UIEdgeInsetsMake(2.0, 6.0, 2.0, 6.0))];
+}
+
+- (CGSize)intrinsicContentSize {
+    CGSize size = super.intrinsicContentSize;
+    return CGSizeMake(size.width + 12.0, size.height + 4.0);
+}
+
+@end
+
+static UIColor *WCAtlasIdentityBadgeColor(NSString *code) {
+    NSString *hex = [[code ?: @"" stringByReplacingOccurrencesOfString:@"#" withString:@""] uppercaseString];
+    if (hex.length == 3) {
+        unichar characters[6];
+        for (NSUInteger index = 0; index < 3; index++) {
+            unichar value = [hex characterAtIndex:index];
+            characters[index * 2] = value;
+            characters[index * 2 + 1] = value;
+        }
+        hex = [NSString stringWithCharacters:characters length:6];
+    }
+    if (hex.length != 6 && hex.length != 8) return nil;
+    unsigned long long value = 0;
+    if (![[NSScanner scannerWithString:hex] scanHexLongLong:&value]) return nil;
+    CGFloat red = ((value >> (hex.length == 8 ? 24 : 16)) & 0xFF) / 255.0;
+    CGFloat green = ((value >> (hex.length == 8 ? 16 : 8)) & 0xFF) / 255.0;
+    CGFloat blue = ((value >> (hex.length == 8 ? 8 : 0)) & 0xFF) / 255.0;
+    CGFloat alpha = hex.length == 8 ? (value & 0xFF) / 255.0 : 1.0;
+    return [UIColor colorWithRed:red green:green blue:blue alpha:alpha];
+}
 
 @implementation WCAtlasSettingsProfileHeaderView
 
@@ -177,8 +219,13 @@ static UIView *WCAtlasSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL e
     _capsuleView.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
     _capsuleView.layer.cornerRadius = 20.0;
     _capsuleView.layer.cornerCurve = kCACornerCurveContinuous;
-    _capsuleView.userInteractionEnabled = NO;
+    _capsuleView.userInteractionEnabled = YES;
     [self addSubview:_capsuleView];
+
+    _profileTapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self
+                                                                 action:@selector(profileAreaTapped)];
+    _profileTapGesture.delegate = self;
+    [_capsuleView addGestureRecognizer:_profileTapGesture];
 
     _nicknameLabel = [UILabel new];
     _nicknameLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -188,7 +235,27 @@ static UIView *WCAtlasSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL e
     _nicknameLabel.numberOfLines = 1;
     _nicknameLabel.textAlignment = NSTextAlignmentLeft;
     _nicknameLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    [_capsuleView addSubview:_nicknameLabel];
+
+    _badgeLabel = [WCAtlasIdentityBadgeLabel new];
+    _badgeLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleCaption1]
+        scaledFontForFont:[UIFont systemFontOfSize:11.0 weight:UIFontWeightSemibold]];
+    _badgeLabel.adjustsFontForContentSizeCategory = YES;
+    _badgeLabel.layer.cornerRadius = 6.0;
+    _badgeLabel.layer.cornerCurve = kCACornerCurveContinuous;
+    _badgeLabel.layer.masksToBounds = YES;
+    _badgeLabel.hidden = YES;
+    _badgeLabel.userInteractionEnabled = YES;
+    [_badgeLabel addGestureRecognizer:[[UITapGestureRecognizer alloc]
+        initWithTarget:self action:@selector(badgeTapped)]];
+    [_badgeLabel setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                                 forAxis:UILayoutConstraintAxisHorizontal];
+
+    _identityRow = [[UIStackView alloc] initWithArrangedSubviews:@[_nicknameLabel, _badgeLabel]];
+    _identityRow.translatesAutoresizingMaskIntoConstraints = NO;
+    _identityRow.axis = UILayoutConstraintAxisHorizontal;
+    _identityRow.alignment = UIStackViewAlignmentCenter;
+    _identityRow.spacing = 8.0;
+    [_capsuleView addSubview:_identityRow];
 
     _wxidLabel = [UILabel new];
     _wxidLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -255,7 +322,21 @@ static UIView *WCAtlasSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL e
     self.nicknameLabel.textColor = UIColor.labelColor;
     self.nicknameLabel.text = displayNickname;
     self.wxidLabel.text = self.wxid.length > 0 ? self.wxid : @"wxid 未获取";
-    self.accessibilityLabel = [NSString stringWithFormat:@"%@，%@", displayNickname, self.wxidLabel.text];
+    self.badgeLabel.hidden = YES;
+    self.badgeLabel.text = nil;
+    if (self.wxid.length) {
+        [self applyIdentityBadge:nil];
+        NSString *requestedWXID = self.wxid;
+        __weak typeof(self) weakSelf = self;
+        WCAtlasFetchIdentityBadge(requestedWXID, ^(WCAtlasIdentityBadge *badge) {
+            WCAtlasSettingsProfileHeaderView *strongSelf = weakSelf;
+            if (!strongSelf || ![strongSelf.wxid isEqualToString:requestedWXID] || !badge) return;
+            [strongSelf applyIdentityBadge:badge];
+        });
+    }
+    self.accessibilityLabel = self.wxid.length
+        ? [NSString stringWithFormat:@"%@，普通用户，%@", displayNickname, self.wxidLabel.text]
+        : [NSString stringWithFormat:@"%@，%@", displayNickname, self.wxidLabel.text];
     self.accessibilityHint = self.wxid.length > 0 ? @"轻点复制 wxid" : nil;
 
     BOOL avatarNeedsUpdate = !self.avatarView ||
@@ -288,14 +369,56 @@ static UIView *WCAtlasSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL e
         [avatarContent.trailingAnchor constraintEqualToAnchor:self.avatarView.trailingAnchor],
         [avatarContent.topAnchor constraintEqualToAnchor:self.avatarView.topAnchor],
         [avatarContent.bottomAnchor constraintEqualToAnchor:self.avatarView.bottomAnchor],
-        [self.nicknameLabel.leadingAnchor constraintEqualToAnchor:self.avatarView.trailingAnchor constant:14.0],
-        [self.nicknameLabel.trailingAnchor constraintEqualToAnchor:self.capsuleView.trailingAnchor constant:-16.0],
-        [self.nicknameLabel.bottomAnchor constraintEqualToAnchor:self.capsuleView.centerYAnchor constant:-2.0],
-        [self.wxidLabel.leadingAnchor constraintEqualToAnchor:self.nicknameLabel.leadingAnchor],
-        [self.wxidLabel.trailingAnchor constraintEqualToAnchor:self.nicknameLabel.trailingAnchor],
-        [self.wxidLabel.topAnchor constraintEqualToAnchor:self.nicknameLabel.bottomAnchor constant:4.0],
+        [self.identityRow.leadingAnchor constraintEqualToAnchor:self.avatarView.trailingAnchor constant:14.0],
+        [self.identityRow.trailingAnchor constraintLessThanOrEqualToAnchor:self.capsuleView.trailingAnchor constant:-16.0],
+        [self.identityRow.bottomAnchor constraintEqualToAnchor:self.capsuleView.centerYAnchor constant:-2.0],
+        [self.wxidLabel.leadingAnchor constraintEqualToAnchor:self.identityRow.leadingAnchor],
+        [self.wxidLabel.trailingAnchor constraintEqualToAnchor:self.capsuleView.trailingAnchor constant:-16.0],
+        [self.wxidLabel.topAnchor constraintEqualToAnchor:self.identityRow.bottomAnchor constant:4.0],
     ];
     [NSLayoutConstraint activateConstraints:self.avatarConstraints];
+}
+
+- (void)applyIdentityBadge:(WCAtlasIdentityBadge *)badge {
+    NSString *text = badge.text.length ? badge.text : @"普通用户";
+    UIColor *backgroundColor = WCAtlasIdentityBadgeColor(
+        badge.colorCode.length ? badge.colorCode : @"#8E8E93");
+    CGFloat red = 0, green = 0, blue = 0, alpha = 0;
+    [backgroundColor getRed:&red green:&green blue:&blue alpha:&alpha];
+    CGFloat luminance = 0.299 * red + 0.587 * green + 0.114 * blue;
+    self.badgeLabel.text = text;
+    self.badgeLabel.backgroundColor = backgroundColor;
+    self.badgeLabel.textColor = luminance > 0.68 ? UIColor.blackColor : UIColor.whiteColor;
+    self.badgeLabel.hidden = NO;
+    self.accessibilityLabel = [NSString stringWithFormat:@"%@，%@，%@",
+        self.nicknameLabel.text ?: @"微信用户", text, self.wxidLabel.text ?: @"wxid 未获取"];
+}
+
+- (void)profileAreaTapped {
+    [self sendActionsForControlEvents:UIControlEventTouchUpInside];
+}
+
+- (void)badgeTapped {
+    if (!self.wxid.length) return;
+    NSString *requestedWXID = self.wxid;
+    self.badgeLabel.text = @"刷新中…";
+    __weak typeof(self) weakSelf = self;
+    WCAtlasRefreshIdentityBadge(requestedWXID, ^(WCAtlasIdentityBadge *badge) {
+        WCAtlasSettingsProfileHeaderView *strongSelf = weakSelf;
+        if (!strongSelf || ![strongSelf.wxid isEqualToString:requestedWXID]) return;
+        [strongSelf applyIdentityBadge:badge];
+    });
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
+        shouldReceiveTouch:(UITouch *)touch {
+    if (gestureRecognizer != self.profileTapGesture) return YES;
+    UIView *view = touch.view;
+    while (view && view != self.capsuleView) {
+        if (view == self.badgeLabel) return NO;
+        view = view.superview;
+    }
+    return YES;
 }
 
 - (CGFloat)preferredHeightForWidth:(CGFloat)width scale:(CGFloat)scale {

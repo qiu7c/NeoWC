@@ -6235,13 +6235,9 @@ static void WCAtlasRegisterPlugin(void) {
 
     WCAtlasSettingsRegisterDefaults();
 
-    Class managerClass = NSClassFromString(@"WCPluginsMgr");
-    WCPluginsMgr *manager = managerClass != WCAtlasPluginsMgr.class &&
-        [managerClass respondsToSelector:@selector(sharedInstance)]
-        ? [managerClass sharedInstance] : nil;
-    if (![manager respondsToSelector:@selector(registerControllerWithTitle:version:controller:)]) {
-        manager = nil;
-    }
+    BOOL hasExternalManager = WCAtlasExternalPluginManagerAvailable();
+    Class managerClass = hasExternalManager ? NSClassFromString(@"WCPluginsMgr") : Nil;
+    WCPluginsMgr *manager = managerClass ? [managerClass sharedInstance] : nil;
     BOOL useBuiltInManager = WCAtlasEnhancementEnabled(WCAtlasPluginManagerEnabledKey);
     if (manager && useBuiltInManager) {
         [NSUserDefaults.standardUserDefaults setBool:NO forKey:WCAtlasPluginManagerEnabledKey];
@@ -6253,6 +6249,7 @@ static void WCAtlasRegisterPlugin(void) {
                                      version:WCAtlasDisplayVersion
                                   controller:NSStringFromClass([WCAtlasSettingsViewController class])];
     } else if (useBuiltInManager) {
+        WCAtlasInstallPluginRegistryBridge();
         [WCAtlasPluginsMgr.sharedInstance registerControllerWithTitle:@"WCAtlas"
                                                                version:WCAtlasDisplayVersion
                                                             controller:NSStringFromClass([WCAtlasSettingsViewController class])];
@@ -13649,6 +13646,7 @@ static void WCAtlasInstallExclusiveRedEnvelopeHooks(void) {
 %end
 
 %ctor {
+    WCAtlasInstallPluginRegistryBridge();
     %init;
     WCAtlasAutomationStart();
     WCAtlasMomentsCommentAntiDeleteInstallHooks();
