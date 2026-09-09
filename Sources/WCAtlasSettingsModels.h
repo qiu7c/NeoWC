@@ -85,6 +85,7 @@ typedef NS_ENUM(NSInteger, WCAtlasSettingAction) {
     WCAtlasSettingActionCallRecordings,
     WCAtlasSettingActionCallVoiceEffect,
     WCAtlasSettingActionAutomations,
+    WCAtlasSettingActionKeywordReplies,
 };
 
 @interface WCAtlasSettingItem : NSObject

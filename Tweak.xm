@@ -6239,7 +6239,14 @@ static void WCAtlasRegisterPlugin(void) {
     WCPluginsMgr *manager = managerClass != WCAtlasPluginsMgr.class &&
         [managerClass respondsToSelector:@selector(sharedInstance)]
         ? [managerClass sharedInstance] : nil;
+    if (![manager respondsToSelector:@selector(registerControllerWithTitle:version:controller:)]) {
+        manager = nil;
+    }
     BOOL useBuiltInManager = WCAtlasEnhancementEnabled(WCAtlasPluginManagerEnabledKey);
+    if (manager && useBuiltInManager) {
+        [NSUserDefaults.standardUserDefaults setBool:NO forKey:WCAtlasPluginManagerEnabledKey];
+        useBuiltInManager = NO;
+    }
     if (!manager && !useBuiltInManager) return;
     if (manager) {
         [manager registerControllerWithTitle:@"WCAtlas"
@@ -6508,6 +6515,17 @@ static BOOL WCAtlasViewLooksLikeGlobalSeparator(UIView *view) {
 - (void)viewDidLoad {
     %orig;
     WCAtlasRegisterPlugin();
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    %orig(animated);
+    WCAtlasRegisterPlugin();
+    WCAtlasInstallSettingsFallbackEntry(self);
+}
+
+%new
+- (void)wcatlas_openSettings {
+    WCAtlasPushSettingsController(self);
 }
 
 %end

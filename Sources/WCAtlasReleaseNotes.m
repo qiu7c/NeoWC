@@ -44,82 +44,11 @@ NSArray<WCAtlasReleaseNote *> *WCAtlasReleaseNotes(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         notes = @[
-            [WCAtlasReleaseNote noteWithVersion:@"0.1.7"
-                                     headline:@"通知、胶囊顶栏、好友检测与消息库重构"
+            [WCAtlasReleaseNote noteWithVersion:@"1.0.0"
+                                     headline:@"首个正式版本"
                                         items:@[
-                [WCAtlasReleaseNoteItem itemWithTitle:@"检测单删好友"
-                                               detail:@"复用微信支付转账前置校验，按好友串行检测并随机等待；选择页支持全选和反选，检测时显示当前好友、完成进度、正常、疑似单删和待核查数量，并支持暂停、后台保护、断点恢复和结果复检。修复兼容判断导致请求未发出却立即显示完成的问题；网络与解析异常不会误判为单删。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"微信风格应用内通知"
-                                               detail:@"朋友圈特别关注、点赞和评论在微信前台使用非阻塞横幅提醒；支持自定义左侧图标、56–90 pt 高度和背景模糊度，并复用于自动登录与游戏授权结果提示。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"聊天胶囊顶栏"
-                                               detail:@"隐藏微信整条顶栏背景，左右按钮改为独立玻璃胶囊；本次更新统一迁移为伪液态与 20% 强度，之后仍可自行调整。置顶消息独立锁定磨砂玻璃并严格裁入固定胶囊边界，同时修复返回手势、前后台切换、头像缩放偏移及展开时的背景溢出。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"消息时间稳定性"
-                                               detail:@"消息时间改为绑定当前真实消息 Cell，并在微信完成布局后同步对齐头像或气泡；失效复用前一条消息的延迟任务，修复快速滑动时错位、跳动和消失。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"好友检测结果"
-                                               detail:@"结果页补充微信原生头像与安全资料页入口，疑似单删支持多选、全选、复检、移出结果及确认后批量删除；检测期间用单个顶部进度胶囊持续更新，完成后精简提示，并说明未实名等待核查原因。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"消息 +1"
-                                               detail:@"新增独立开关，在可复读消息的长按菜单中显示“+1”；点击后复用微信原生转发与语音上传链发送到当前会话，并继续遵守发送前确认。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"原生聊天记录搜索"
-                                               detail:@"从聊天顶栏进入微信原生 MsgSearchHelper/WCSearcher 搜索链路，使用官方结果页；补齐取消、返回按钮、右滑退出和搜索框清理，减少残留顶栏与重复退出。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"非好友资料与精确添加时间"
-                                               detail:@"非好友详细资料页增加共同群聊，并可进入对应群聊列表；好友添加时间改用微信详细资料来源，显示更完整的精确时间。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"群成员历史聊天记录"
-                                               detail:@"在群聊中通过头像快捷手势打开指定成员的历史聊天记录，直接查看该成员在当前群里的既往消息。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"移出群成员"
-                                               detail:@"头像快捷菜单增加移出群聊操作；自己邀请入群的成员可直接移出，其他成员继续遵循微信原生群管理权限。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"消息库真实存储"
-                                               detail:@"快捷回复改为直接枚举 Documents 中的真实分类目录和条目文件，搜索索引仅作为可重建缓存；旧版数据首次无损迁移。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"通话自动免提"
-                                               detail:@"新增独立开关，在微信通话音频设备启动并确认处于语音模式后自动切换扬声器；保留微信原始启动顺序。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"插件入口与分类样式"
-                                               detail:@"插件管理分类切换改为内容自适应胶囊，缩短无效留白；整理调试快捷入口，同时保留其他插件、自定义分类、排序和快捷开关。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"媒体菜单与深色模式修复"
-                                               detail:@"音频文件转语音只对真实可转换音频显示，避免所有文件误出现入口；防撤回预览在深色模式使用黑色背景，并修复多处通知、模糊动画和界面生命周期问题。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"移除未稳定的加密发送"
-                                               detail:@"完整移除实验性的文字密文、图片和视频加密发送、解密预览及相关设置，恢复微信原生相册选择、预览和发送链路；该功能将在重新验证兼容性后再设计。"],
-            ]],
-            [WCAtlasReleaseNote noteWithVersion:@"0.1.6"
-                                     headline:@"朋友圈提醒、设置重组与稳定性更新"
-                                        items:@[
-                [WCAtlasReleaseNoteItem itemWithTitle:@"朋友圈特别关注提醒"
-                                               detail:@"支持选择特别关注好友、调整检测间隔，并可把文字转发到自己的聊天框或文件传输助手；图片和视频按需单独开启。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"朋友圈互动提醒"
-                                               detail:@"补充点赞和评论提醒、系统通知与进入朋友圈初始化；可关闭详细信息，仅显示收到新的评论或点赞。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"朋友圈评论防删除"
-                                               detail:@"保留本次微信运行中已加载后被删除的评论，并支持调整删除标识文字、字号和颜色。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"好友与群聊信息卡片"
-                                               detail:@"优化昵称、备注、原始账号、添加时间、添加天数和共同群聊顺序；共同群聊和群内好友支持进入对应页面与长按复制。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"快捷回复与媒体转语音修复"
-                                               detail:@"加强素材持久化、导出、侧滑和面板布局，修正搜索框背景；补齐视频、音频文件和音乐卡片转语音菜单入口。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"设置重新分类"
-                                               detail:@"按聊天、朋友圈、界面禁用、界面优化、常用增强和插件设置重新整理；日志与配置集中到插件设置，官方交流群和历史更新记录保留在设置首页底部。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"精简用户版本"
-                                               detail:@"开发调试工具迁移到独立 WCDebug；同时移除未开放的快捷收款链接、视频解析和音乐点歌代码。"],
-            ]],
-            [WCAtlasReleaseNote noteWithVersion:@"0.1.5"
-                                     headline:@"快捷回复与防误发"
-                                        items:@[
-                [WCAtlasReleaseNoteItem itemWithTitle:@"快捷回复"
-                                               detail:@"支持文字、图片、视频和语音消息，全账号共享，并提供备注、文件夹、搜索、置顶、自定义/最近使用/使用频率排序与清理；Silk 语音可按需解码预览。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"文件传输助手导入"
-                                              detail:@"可通过单条长按或微信多选，把已下载的文字、图片、视频文件和语音加入消息库，并在导入时设置备注与文件夹。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"聊天页快捷入口"
-                                               detail:@"长按聊天输入栏的加号打开快捷回复；可切换点击秒发送，点击与长按在四种消息上保持一致。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"指定会话发送前确认"
-                                              detail:@"按好友和群聊分区显示头像并勾选受保护会话，发送按钮与已证实文字入口双层拦截，并在会话失效或进入后台时取消发送。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"朋友圈实况保存优化"
-                                              detail:@"调整冷缓存下载完成后的媒体路径获取顺序，继续由微信原生实况配对流程保存。"],
-            ]],
-            [WCAtlasReleaseNote noteWithVersion:@"0.1.4"
-                                     headline:@"朋友圈、交互与流畅度全面升级"
-                                        items:@[
-                [WCAtlasReleaseNoteItem itemWithTitle:@"朋友圈高清发布" detail:@"新增高清图片和原视频入口，减少发布过程中的画质损失。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"保存朋友圈媒体" detail:@"支持保存朋友圈图片、视频和实况照片，并提供保存结果提示。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"滑动屏幕高刷" detail:@"前台滑动时使用设备支持的最高刷新率，浏览更加顺滑。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"主页右滑扩展" detail:@"增加备注、朋友圈、折叠群聊、勿扰和置顶等快捷操作。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"流畅度与手势优化" detail:@"减少多处卡顿，并解决消息手势与页面返回手势之间的冲突。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"编辑图片快捷发送" detail:@"优化图片和当前会话识别，编辑后可通过确认页发送到当前聊天。"],
-                [WCAtlasReleaseNoteItem itemWithTitle:@"语音转发" detail:@"在语音长按菜单中新增转发入口，补齐语音消息转发流程。"],
+                [WCAtlasReleaseNoteItem itemWithTitle:@"WCAtlas"
+                                               detail:@"作为首个版本发布，提供聊天、朋友圈、消息库、自动化与通话等实用增强。"],
             ]],
         ];
     });
@@ -143,7 +72,7 @@ void WCAtlasMarkCurrentReleaseNotesPresented(void) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"更新日志";
+    self.title = @"版本介绍";
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 84.0;
 }
@@ -307,7 +236,7 @@ void WCAtlasMarkCurrentReleaseNotesPresented(void) {
     closeButton.titleLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleFootnote]
         scaledFontForFont:[UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold]];
     closeButton.tintColor = UIColor.tertiaryLabelColor;
-    closeButton.accessibilityLabel = @"关闭更新日志";
+    closeButton.accessibilityLabel = @"关闭版本介绍";
     [closeButton addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
 
     UIScrollView *scrollView = [UIScrollView new];

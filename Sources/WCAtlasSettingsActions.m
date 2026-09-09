@@ -702,6 +702,7 @@ static char WCAtlasContactSearchLogicKey;
             break;
         }
         case WCAtlasSettingActionAutomations: [self push:[WCAtlasAutomationViewController new]]; break;
+        case WCAtlasSettingActionKeywordReplies: [self push:[WCAtlasKeywordReplyViewController new]]; break;
         case WCAtlasSettingActionHapticIntensity: [self presentHapticIntensityPicker]; break;
         case WCAtlasSettingActionStepMode: [self presentStepModePicker]; break;
         case WCAtlasSettingActionFixedSteps: [self presentFixedStepsEditor]; break;

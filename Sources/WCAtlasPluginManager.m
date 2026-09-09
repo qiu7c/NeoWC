@@ -2,7 +2,9 @@
 #import "WCAtlasLogging.h"
 #import "WCAtlasEnhancements.h"
 #import "WCAtlasSettingsCatalog.h"
+#import "WCAtlasSettingsViewController.h"
 #import <objc/message.h>
+#import <objc/runtime.h>
 
 NSString *const WCAtlasPluginManagerEnabledKey = @"com.qiu7c.wcatlas.plugin-manager.enabled";
 
@@ -155,6 +157,12 @@ static WCPluginsMgr *WCPExternalManager(void) {
     if (!managerClass || managerClass == WCAtlasPluginsMgr.class ||
         ![managerClass respondsToSelector:@selector(sharedInstance)]) return nil;
     return [managerClass sharedInstance];
+}
+
+BOOL WCAtlasExternalPluginManagerAvailable(void) {
+    WCPluginsMgr *manager = WCPExternalManager();
+    return manager && [manager respondsToSelector:
+        @selector(registerControllerWithTitle:version:controller:)];
 }
 
 static id WCPRegistrationManager(void) {
@@ -809,9 +817,89 @@ moveRowAtIndexPath:(NSIndexPath *)sourceIndexPath
 static UIImage *WCPEntryIcon(void) { return WCPBuiltinPluginIcon([NSUserDefaults.standardUserDefaults integerForKey:WCPEntryIconStyleKey]); }
 
 void WCAtlasInstallPluginManagerEntry(id moreViewController) {
-    if (!moreViewController || ![NSUserDefaults.standardUserDefaults boolForKey:WCAtlasPluginManagerEnabledKey]) return; id tableManager = nil; @try { tableManager = [moreViewController valueForKey:@"m_tableViewMgr"]; } @catch (__unused NSException *exception) {} if (!tableManager || ![tableManager respondsToSelector:NSSelectorFromString(@"getSectionAt:")]) return; Class cellClass = NSClassFromString(@"WCTableViewCellManager"); UIImage *icon = WCPEntryIcon(); id cell = nil; SEL factory = NSSelectorFromString(@"normalCellForSel:target:leftImage:title:WithDisclosureIndicator:"); if ([cellClass respondsToSelector:factory]) cell = ((id (*)(id, SEL, SEL, id, UIImage *, NSString *, BOOL))objc_msgSend)(cellClass, factory, @selector(pushPluginController), moreViewController, icon, @"插件", YES); else { factory = NSSelectorFromString(@"normalCellForSel:target:leftImage:title:pathKey:"); if ([cellClass respondsToSelector:factory]) cell = ((id (*)(id, SEL, SEL, id, UIImage *, NSString *, NSString *))objc_msgSend)(cellClass, factory, @selector(pushPluginController), moreViewController, icon, @"插件", nil); } if (!cell) return; id section = ((id (*)(id, SEL, NSUInteger))objc_msgSend)(tableManager, NSSelectorFromString(@"getSectionAt:"), 2); if (section && [section respondsToSelector:NSSelectorFromString(@"addCell:")]) ((void (*)(id, SEL, id))objc_msgSend)(section, NSSelectorFromString(@"addCell:"), cell); id tableView = nil; if ([tableManager respondsToSelector:NSSelectorFromString(@"getTableView")]) tableView = ((id (*)(id, SEL))objc_msgSend)(tableManager, NSSelectorFromString(@"getTableView")); if ([tableView respondsToSelector:@selector(reloadData)]) [tableView reloadData];
+    if (!moreViewController) return;
+    if (WCAtlasExternalPluginManagerAvailable()) {
+        [NSUserDefaults.standardUserDefaults setBool:NO forKey:WCAtlasPluginManagerEnabledKey];
+        return;
+    }
+    if (![NSUserDefaults.standardUserDefaults boolForKey:WCAtlasPluginManagerEnabledKey]) return; id tableManager = nil; @try { tableManager = [moreViewController valueForKey:@"m_tableViewMgr"]; } @catch (__unused NSException *exception) {} if (!tableManager || ![tableManager respondsToSelector:NSSelectorFromString(@"getSectionAt:")]) return; Class cellClass = NSClassFromString(@"WCTableViewCellManager"); UIImage *icon = WCPEntryIcon(); id cell = nil; SEL factory = NSSelectorFromString(@"normalCellForSel:target:leftImage:title:WithDisclosureIndicator:"); if ([cellClass respondsToSelector:factory]) cell = ((id (*)(id, SEL, SEL, id, UIImage *, NSString *, BOOL))objc_msgSend)(cellClass, factory, @selector(pushPluginController), moreViewController, icon, @"插件", YES); else { factory = NSSelectorFromString(@"normalCellForSel:target:leftImage:title:pathKey:"); if ([cellClass respondsToSelector:factory]) cell = ((id (*)(id, SEL, SEL, id, UIImage *, NSString *, NSString *))objc_msgSend)(cellClass, factory, @selector(pushPluginController), moreViewController, icon, @"插件", nil); } if (!cell) return; id section = ((id (*)(id, SEL, NSUInteger))objc_msgSend)(tableManager, NSSelectorFromString(@"getSectionAt:"), 2); if (section && [section respondsToSelector:NSSelectorFromString(@"addCell:")]) ((void (*)(id, SEL, id))objc_msgSend)(section, NSSelectorFromString(@"addCell:"), cell); id tableView = nil; if ([tableManager respondsToSelector:NSSelectorFromString(@"getTableView")]) tableView = ((id (*)(id, SEL))objc_msgSend)(tableManager, NSSelectorFromString(@"getTableView")); if ([tableView respondsToSelector:@selector(reloadData)]) [tableView reloadData];
 }
 
 void WCAtlasPushPluginManager(id sender) {
     WCAtlasPluginsViewController *controller = [WCAtlasPluginsViewController new]; controller.hidesBottomBarWhenPushed = YES; UINavigationController *navigation = nil; Class managerClass = NSClassFromString(@"CAppViewControllerManager"); SEL current = NSSelectorFromString(@"getCurrentNavigationController"); if ([managerClass respondsToSelector:current]) navigation = ((id (*)(id, SEL))objc_msgSend)(managerClass, current); if (!navigation && [sender isKindOfClass:UIViewController.class]) navigation = [(UIViewController *)sender navigationController]; WCPPushViewController(navigation, controller, YES);
+}
+
+static char WCPSettingsFallbackAddedKey;
+
+static id WCPSettingsTableManager(id controller) {
+    if (!controller) return nil;
+    for (NSString *name in @[@"m_tableViewMgr", @"_tableViewMgr", @"m_tableMgr", @"_tableMgr"]) {
+        Ivar ivar = NULL;
+        for (Class cls = [controller class]; cls && !ivar; cls = class_getSuperclass(cls)) {
+            ivar = class_getInstanceVariable(cls, name.UTF8String);
+        }
+        if (ivar) {
+            id manager = object_getIvar(controller, ivar);
+            if (manager) return manager;
+        }
+    }
+    for (NSString *key in @[@"m_tableViewMgr", @"tableViewMgr", @"m_tableMgr", @"tableMgr"]) {
+        @try {
+            id manager = [controller valueForKey:key];
+            if (manager) return manager;
+        } @catch (__unused NSException *exception) {}
+    }
+    return nil;
+}
+
+void WCAtlasInstallSettingsFallbackEntry(id settingsController) {
+    if (!settingsController || WCAtlasExternalPluginManagerAvailable() ||
+        objc_getAssociatedObject(settingsController, &WCPSettingsFallbackAddedKey)) return;
+
+    id tableManager = WCPSettingsTableManager(settingsController);
+    SEL sectionSelector = NSSelectorFromString(@"getSectionAt:");
+    if (!tableManager || ![tableManager respondsToSelector:sectionSelector]) return;
+    id section = ((id (*)(id, SEL, NSInteger))objc_msgSend)(tableManager, sectionSelector, 0);
+    SEL addSelector = NSSelectorFromString(@"addCell:");
+    if (!section || ![section respondsToSelector:addSelector]) return;
+
+    Class cellClass = NSClassFromString(@"WCTableViewNormalCellManager");
+    if (!cellClass) cellClass = NSClassFromString(@"WCTableViewCellManager");
+    SEL factory = NSSelectorFromString(@"normalCellForSel:target:title:rightValue:accessoryType:");
+    id cell = nil;
+    if ([cellClass respondsToSelector:factory]) {
+        cell = ((id (*)(id, SEL, SEL, id, NSString *, NSString *, int))objc_msgSend)(
+            cellClass, factory, NSSelectorFromString(@"wcatlas_openSettings"),
+            settingsController, @"WCAtlas", WCAtlasDisplayVersion, 1);
+    }
+    if (!cell) return;
+
+    ((void (*)(id, SEL, id))objc_msgSend)(section, addSelector, cell);
+    SEL reloadSelector = NSSelectorFromString(@"reloadTableView");
+    if ([tableManager respondsToSelector:reloadSelector]) {
+        ((void (*)(id, SEL))objc_msgSend)(tableManager, reloadSelector);
+    } else {
+        SEL tableSelector = NSSelectorFromString(@"getTableView");
+        id tableView = [tableManager respondsToSelector:tableSelector]
+            ? ((id (*)(id, SEL))objc_msgSend)(tableManager, tableSelector) : nil;
+        if ([tableView respondsToSelector:@selector(reloadData)]) [tableView reloadData];
+    }
+    objc_setAssociatedObject(settingsController, &WCPSettingsFallbackAddedKey,
+                             @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    WCAtlasLog(@"懒猫插件管理不可用，已注入微信设置页备用入口");
+}
+
+void WCAtlasPushSettingsController(id sender) {
+    WCAtlasSettingsViewController *controller = [WCAtlasSettingsViewController new];
+    controller.hidesBottomBarWhenPushed = YES;
+    UINavigationController *navigation = nil;
+    Class managerClass = NSClassFromString(@"CAppViewControllerManager");
+    SEL currentSelector = NSSelectorFromString(@"getCurrentNavigationController");
+    if ([managerClass respondsToSelector:currentSelector]) {
+        navigation = ((id (*)(id, SEL))objc_msgSend)(managerClass, currentSelector);
+    }
+    if (!navigation && [sender isKindOfClass:UIViewController.class]) {
+        navigation = [(UIViewController *)sender navigationController];
+    }
+    WCPPushViewController(navigation, controller, YES);
 }

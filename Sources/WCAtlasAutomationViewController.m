@@ -94,28 +94,33 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
 @property (nonatomic, strong) UITextView *contentView;
 @property (nonatomic, strong) UISegmentedControl *repeatControl;
 @property (nonatomic, strong) UIDatePicker *datePicker;
-@property (nonatomic, strong) UISegmentedControl *triggerControl;
 @property (nonatomic, strong) UITextField *keywordField;
+@property (nonatomic, strong) UISegmentedControl *keywordScopeControl;
+@property (nonatomic, assign) WCAtlasAutomationTriggerMode triggerMode;
 @property (nonatomic, assign) WCAtlasAutomationSourceType displayedSource;
 @property (nonatomic, copy) void (^saveHandler)(WCAtlasAutomationTask *task);
 - (instancetype)initWithTask:(WCAtlasAutomationTask *)task
+                  triggerMode:(WCAtlasAutomationTriggerMode)triggerMode
                   saveHandler:(void (^)(WCAtlasAutomationTask *task))saveHandler;
 @end
 
 @implementation WCAtlasAutomationEditorViewController
 
 - (instancetype)initWithTask:(WCAtlasAutomationTask *)task
+                  triggerMode:(WCAtlasAutomationTriggerMode)triggerMode
                   saveHandler:(void (^)(WCAtlasAutomationTask *))saveHandler {
     self = [super initWithStyle:UITableViewStyleInsetGrouped];
     if (!self) return nil;
     _task = task.copy;
+    _triggerMode = triggerMode;
+    _task.triggerMode = triggerMode;
     _saveHandler = [saveHandler copy];
     return self;
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"自动消息任务";
+    self.title = self.triggerMode == WCAtlasAutomationTriggerModeKeyword ? @"关键词回复" : @"定时消息";
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
         initWithBarButtonSystemItem:UIBarButtonSystemItemSave target:self action:@selector(saveTask)];
 
@@ -136,10 +141,10 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
     self.contentView.delegate = self;
     self.repeatControl = [[UISegmentedControl alloc] initWithItems:@[@"仅一次", @"每天"]];
     self.repeatControl.selectedSegmentIndex = self.task.repeatMode;
-    self.triggerControl = [[UISegmentedControl alloc] initWithItems:@[@"定时", @"关键词"]];
-    self.triggerControl.selectedSegmentIndex = self.task.triggerMode;
-    [self.triggerControl addTarget:self action:@selector(triggerChanged:) forControlEvents:UIControlEventValueChanged];
     self.keywordField = [self fieldWithPlaceholder:@"收到消息包含的关键词" text:self.task.triggerKeyword];
+    self.keywordScopeControl = [[UISegmentedControl alloc] initWithItems:@[@"白名单", @"黑名单"]];
+    self.keywordScopeControl.selectedSegmentIndex = self.task.keywordScopeMode;
+    [self.keywordScopeControl addTarget:self action:@selector(keywordScopeChanged:) forControlEvents:UIControlEventValueChanged];
     self.datePicker = [UIDatePicker new];
     self.datePicker.datePickerMode = UIDatePickerModeDateAndTime;
     if (@available(iOS 13.4, *)) self.datePicker.preferredDatePickerStyle = UIDatePickerStyleCompact;
@@ -163,24 +168,33 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
     (void)tableView;
     if (section == 1) return 2;
     if (section == 2) return 2;
-    if (section == 3) return self.triggerControl.selectedSegmentIndex == WCAtlasAutomationTriggerModeKeyword ? 2 : 3;
+    if (section == 3) return 2;
     return 1;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     (void)tableView;
-    return @[@"状态", @"任务与目标", @"内容来源", @"触发方式", @"说明"][section];
+    if (section == 2) return self.triggerMode == WCAtlasAutomationTriggerModeKeyword ? @"回复内容" : @"发送内容";
+    return @[@"状态", @"任务与会话范围", @"", @"触发设置", @"说明"][section];
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView;
-    if (section == 1) return @"可同时选择多个好友或群聊；脚本不能更改发送对象。";
+    if (section == 1) {
+        if (self.triggerMode != WCAtlasAutomationTriggerModeKeyword)
+            return @"可同时选择多个好友或群聊；脚本不能更改发送对象。";
+        return self.keywordScopeControl.selectedSegmentIndex == WCAtlasAutomationKeywordScopeModeWhitelist
+            ? @"白名单：只回复所选好友或群聊，至少选择一个会话。"
+            : @"黑名单：回复未选中的会话；不选择表示不排除任何会话。";
+    }
     if (section == 2 && self.sourceControl.selectedSegmentIndex == WCAtlasAutomationSourceTypeJavaScript)
         return @"main(input) 可返回文字，或 {type:'text|image|video|voice', text/url/path}；URL 可直接指向 PHP 等媒体响应。";
-    if (section == 3) return self.triggerControl.selectedSegmentIndex == WCAtlasAutomationTriggerModeKeyword
-        ? @"仅匹配所选会话收到的文字消息，并自动忽略本人消息与重复回调。"
+    if (section == 3) return self.triggerMode == WCAtlasAutomationTriggerModeKeyword
+        ? @"匹配收到的普通文字消息，并自动忽略本人消息与重复回调。好友与群聊统一按黑白名单判断。"
         : @"微信被系统挂起或结束后无法保证整点执行；恢复运行时会补跑逾期任务。";
-    if (section == 4) return @"启用任务后会自动复用“保持后台运行”。单次任务完成后自动关闭。";
+    if (section == 4) return self.triggerMode == WCAtlasAutomationTriggerModeKeyword
+        ? @"关键词回复与定时消息独立保存、独立启用；两项功能可以同时工作。"
+        : @"启用任务后会自动复用“保持后台运行”。单次任务完成后自动关闭。";
     return nil;
 }
 
@@ -211,8 +225,18 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
     if (indexPath.section == 1) {
         UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"targets"];
         if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"targets"];
-        cell.textLabel.text = @"选择好友或群聊";
-        cell.detailTextLabel.text = self.selectedTargets.count ? [NSString stringWithFormat:@"已选 %lu 个", (unsigned long)self.selectedTargets.count] : @"未选择";
+        cell.textLabel.text = self.triggerMode == WCAtlasAutomationTriggerModeKeyword &&
+            self.keywordScopeControl.selectedSegmentIndex == WCAtlasAutomationKeywordScopeModeBlacklist
+            ? @"选择要排除的会话" : @"选择好友或群聊";
+        BOOL blacklist = self.triggerMode == WCAtlasAutomationTriggerModeKeyword &&
+            self.keywordScopeControl.selectedSegmentIndex == WCAtlasAutomationKeywordScopeModeBlacklist;
+        if (self.selectedTargets.count) {
+            cell.detailTextLabel.text = blacklist
+                ? [NSString stringWithFormat:@"已排除 %lu 个", (unsigned long)self.selectedTargets.count]
+                : [NSString stringWithFormat:@"已选 %lu 个", (unsigned long)self.selectedTargets.count];
+        } else {
+            cell.detailTextLabel.text = blacklist ? @"不排除会话" : @"未选择";
+        }
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         return cell;
     }
@@ -229,17 +253,19 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
         }
         return [self controlCell:self.contentView identifier:@"content"];
     }
-    if (indexPath.section == 3 && indexPath.row == 0)
-        return [self controlCell:self.triggerControl identifier:@"trigger"];
-    if (indexPath.section == 3 && self.triggerControl.selectedSegmentIndex == WCAtlasAutomationTriggerModeKeyword)
-        return [self controlCell:self.keywordField identifier:@"keyword"];
+    if (indexPath.section == 3 && self.triggerMode == WCAtlasAutomationTriggerModeKeyword) {
+        if (indexPath.row == 0) return [self controlCell:self.keywordField identifier:@"keyword"];
+        return [self controlCell:self.keywordScopeControl identifier:@"keyword-scope"];
+    }
     if (indexPath.section == 3)
-        return [self controlCell:indexPath.row == 1 ? self.repeatControl : self.datePicker
-                       identifier:indexPath.row == 1 ? @"repeat" : @"date"];
+        return [self controlCell:indexPath.row == 0 ? self.repeatControl : self.datePicker
+                       identifier:indexPath.row == 0 ? @"repeat" : @"date"];
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"notice"];
     if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"notice"];
-    cell.textLabel.text = @"进程内定时调度";
-    cell.detailTextLabel.text = @"不会建立系统级定时任务，也不会绕过 iOS 后台限制。";
+    cell.textLabel.text = self.triggerMode == WCAtlasAutomationTriggerModeKeyword ? @"收到消息时触发" : @"进程内定时调度";
+    cell.detailTextLabel.text = self.triggerMode == WCAtlasAutomationTriggerModeKeyword
+        ? @"只处理微信传入的普通文字消息，不会根据历史消息补发。"
+        : @"不会建立系统级定时任务，也不会绕过 iOS 后台限制。";
     cell.detailTextLabel.numberOfLines = 0;
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
     return cell;
@@ -278,7 +304,10 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
 - (void)presentTargetPicker {
     __weak typeof(self) weakSelf = self;
     __block UIViewController *picker = nil;
-    picker = WCAtlasCreateConversationPicker(@"选择接收会话", @"可多选好友和群聊，完成后返回任务编辑页。",
+    BOOL blacklist = self.triggerMode == WCAtlasAutomationTriggerModeKeyword &&
+        self.keywordScopeControl.selectedSegmentIndex == WCAtlasAutomationKeywordScopeModeBlacklist;
+    picker = WCAtlasCreateConversationPicker(blacklist ? @"选择排除会话" : @"选择接收会话",
+        blacklist ? @"所选好友或群聊不会触发此关键词回复。" : @"可多选好友和群聊，完成后返回任务编辑页。",
         ^BOOL(NSString *userName) { return [weakSelf.selectedTargets containsObject:userName]; },
         ^(NSString *userName) {
             if ([weakSelf.selectedTargets containsObject:userName]) [weakSelf.selectedTargets removeObject:userName];
@@ -293,9 +322,9 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
     [self.navigationController pushViewController:picker animated:YES];
 }
 
-- (void)triggerChanged:(UISegmentedControl *)sender {
+- (void)keywordScopeChanged:(UISegmentedControl *)sender {
     (void)sender;
-    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:3]
+    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:1]
                   withRowAnimation:UITableViewRowAnimationFade];
 }
 
@@ -333,18 +362,23 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
     NSString *(^trim)(NSString *) = ^NSString *(NSString *value) {
         return [value ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     };
-    if (self.selectedTargets.count == 0) { [self showError:@"请至少选择一个好友或群聊。"] ; return; }
+    BOOL keywordWhitelist = self.triggerMode == WCAtlasAutomationTriggerModeKeyword &&
+        self.keywordScopeControl.selectedSegmentIndex == WCAtlasAutomationKeywordScopeModeWhitelist;
+    if (self.selectedTargets.count == 0 &&
+        (self.triggerMode == WCAtlasAutomationTriggerModeScheduled || keywordWhitelist)) {
+        [self showError:@"请至少选择一个好友或群聊。"]; return;
+    }
     WCAtlasAutomationSourceType source = self.sourceControl.selectedSegmentIndex;
     if (source == WCAtlasAutomationSourceTypeLibraryText && self.task.libraryItemIdentifier.length == 0) {
         [self showError:@"请选择消息库素材。"]; return;
     }
-    if (self.triggerControl.selectedSegmentIndex == WCAtlasAutomationTriggerModeKeyword &&
+    if (self.triggerMode == WCAtlasAutomationTriggerModeKeyword &&
         trim(self.keywordField.text).length == 0) { [self showError:@"触发关键词不能为空。"]; return; }
     if (source != WCAtlasAutomationSourceTypeLibraryText && trim(self.contentView.text).length == 0) {
         [self showError:source == WCAtlasAutomationSourceTypeJavaScript ? @"JS 脚本不能为空。" : @"发送文字不能为空。"]; return;
     }
     self.task.name = trim(self.nameField.text).length ? trim(self.nameField.text) :
-        (self.triggerControl.selectedSegmentIndex == WCAtlasAutomationTriggerModeKeyword ? @"关键词回复" : @"定时消息");
+        (self.triggerMode == WCAtlasAutomationTriggerModeKeyword ? @"关键词回复" : @"定时消息");
     self.task.targetUserNames = self.selectedTargets.array;
     self.task.targetUserName = self.selectedTargets.array.firstObject ?: @"";
     self.task.enabled = self.enabledSwitch.isOn;
@@ -353,8 +387,9 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
     if (source == WCAtlasAutomationSourceTypeJavaScript) self.task.script = self.contentView.text ?: @"";
     self.task.repeatMode = self.repeatControl.selectedSegmentIndex;
     self.task.nextFireDate = self.datePicker.date;
-    self.task.triggerMode = self.triggerControl.selectedSegmentIndex;
+    self.task.triggerMode = self.triggerMode;
     self.task.triggerKeyword = trim(self.keywordField.text);
+    self.task.keywordScopeMode = self.keywordScopeControl.selectedSegmentIndex;
     if (self.saveHandler) self.saveHandler(self.task);
     [self.navigationController popViewControllerAnimated:YES];
 }
@@ -363,15 +398,24 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
 
 @interface WCAtlasAutomationViewController ()
 @property (nonatomic, copy) NSArray<WCAtlasAutomationTask *> *tasks;
+@property (nonatomic, assign) WCAtlasAutomationTriggerMode triggerMode;
+- (instancetype)initWithTriggerMode:(WCAtlasAutomationTriggerMode)triggerMode;
 @end
 
 @implementation WCAtlasAutomationViewController
 
-- (instancetype)init { return [self initWithStyle:UITableViewStyleInsetGrouped]; }
+- (instancetype)init { return [self initWithTriggerMode:WCAtlasAutomationTriggerModeScheduled]; }
+
+- (instancetype)initWithTriggerMode:(WCAtlasAutomationTriggerMode)triggerMode {
+    self = [super initWithStyle:UITableViewStyleInsetGrouped];
+    if (!self) return nil;
+    _triggerMode = triggerMode;
+    return self;
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"自动消息与脚本";
+    self.title = self.triggerMode == WCAtlasAutomationTriggerModeKeyword ? @"关键词回复" : @"定时消息";
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
         initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(addTask)];
 }
@@ -382,7 +426,12 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
 }
 
 - (void)reloadTasks {
-    self.tasks = WCAtlasAutomationManager.sharedManager.tasks;
+    NSPredicate *predicate = [NSPredicate predicateWithBlock:^BOOL(WCAtlasAutomationTask *task,
+                                                                     NSDictionary *bindings) {
+        (void)bindings;
+        return task.triggerMode == self.triggerMode;
+    }];
+    self.tasks = [WCAtlasAutomationManager.sharedManager.tasks filteredArrayUsingPredicate:predicate];
     [self.tableView reloadData];
 }
 
@@ -393,7 +442,9 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView; (void)section;
-    return @"启用任务会自动请求微信后台保活。右滑可立即试跑，左滑可删除；示例模板删除后不会恢复。";
+    return self.triggerMode == WCAtlasAutomationTriggerModeKeyword
+        ? @"关键词回复与定时消息互相独立。右滑可试跑回复内容，左滑可删除。"
+        : @"启用任务会自动请求微信后台保活。右滑可立即试跑，左滑可删除；示例模板删除后不会恢复。";
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView
@@ -417,13 +468,20 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
     });
     cell.textLabel.text = task.name;
     NSString *schedule = task.triggerMode == WCAtlasAutomationTriggerModeKeyword
-        ? [NSString stringWithFormat:@"关键词：%@", task.triggerKeyword.length ? task.triggerKeyword : @"未设置"]
+        ? [NSString stringWithFormat:@"%@：%@",
+            task.keywordScopeMode == WCAtlasAutomationKeywordScopeModeBlacklist ? @"黑名单" : @"白名单",
+            task.triggerKeyword.length ? task.triggerKeyword : @"未设置"]
         : (task.repeatMode == WCAtlasAutomationRepeatModeDaily
         ? [@"每天 " stringByAppendingString:[[formatter stringFromDate:task.nextFireDate] substringFromIndex:6]]
         : [formatter stringFromDate:task.nextFireDate]);
     NSUInteger targetCount = task.targetUserNames.count ?: (task.targetUserName.length ? 1 : 0);
-    cell.detailTextLabel.text = [NSString stringWithFormat:@"%lu 个会话 · %@ · %@%@", (unsigned long)targetCount,
-        WCAtlasAutomationSourceName(task.sourceType), schedule, task.lastResult.length ? [@" · " stringByAppendingString:task.lastResult] : @""];
+    NSString *targetSummary = task.triggerMode == WCAtlasAutomationTriggerModeKeyword &&
+        task.keywordScopeMode == WCAtlasAutomationKeywordScopeModeBlacklist
+        ? [NSString stringWithFormat:@"排除 %lu 个会话", (unsigned long)targetCount]
+        : [NSString stringWithFormat:@"%lu 个会话", (unsigned long)targetCount];
+    cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ · %@ · %@%@", targetSummary,
+        WCAtlasAutomationSourceName(task.sourceType), schedule,
+        task.lastResult.length ? [@" · " stringByAppendingString:task.lastResult] : @""];
     cell.detailTextLabel.numberOfLines = 2;
     UISwitch *toggle = [UISwitch new];
     toggle.on = task.isEnabled;
@@ -434,12 +492,17 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
     return cell;
 }
 
-- (void)addTask { [self editTask:[WCAtlasAutomationTask new]]; }
+- (void)addTask {
+    WCAtlasAutomationTask *task = [WCAtlasAutomationTask new];
+    task.triggerMode = self.triggerMode;
+    task.name = self.triggerMode == WCAtlasAutomationTriggerModeKeyword ? @"关键词回复" : @"定时消息";
+    [self editTask:task];
+}
 
 - (void)editTask:(WCAtlasAutomationTask *)task {
     __weak typeof(self) weakSelf = self;
     WCAtlasAutomationEditorViewController *editor = [[WCAtlasAutomationEditorViewController alloc]
-        initWithTask:task saveHandler:^(WCAtlasAutomationTask *saved) {
+        initWithTask:task triggerMode:self.triggerMode saveHandler:^(WCAtlasAutomationTask *saved) {
         [WCAtlasAutomationManager.sharedManager saveTask:saved];
         [weakSelf reloadTasks];
     }];
@@ -454,7 +517,9 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
 - (void)toggleChanged:(UISwitch *)sender {
     if (sender.tag >= self.tasks.count) return;
     WCAtlasAutomationTask *task = self.tasks[sender.tag].copy;
-    if (sender.isOn && task.targetUserNames.count == 0 && task.targetUserName.length == 0) {
+    BOOL requiresTargets = task.triggerMode == WCAtlasAutomationTriggerModeScheduled ||
+        task.keywordScopeMode == WCAtlasAutomationKeywordScopeModeWhitelist;
+    if (sender.isOn && requiresTargets && task.targetUserNames.count == 0 && task.targetUserName.length == 0) {
         sender.on = NO;
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"请先编辑任务"
             message:@"启用前需要至少选择一个好友或群聊。"
@@ -501,5 +566,11 @@ static NSString *WCAtlasAutomationSourceName(WCAtlasAutomationSourceType type) {
     run.backgroundColor = UIColor.systemBlueColor;
     return [UISwipeActionsConfiguration configurationWithActions:@[run]];
 }
+
+@end
+
+@implementation WCAtlasKeywordReplyViewController
+
+- (instancetype)init { return [super initWithTriggerMode:WCAtlasAutomationTriggerModeKeyword]; }
 
 @end

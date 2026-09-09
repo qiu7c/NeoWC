@@ -1,6 +1,6 @@
 # WCAtlas
 
-WCAtlas is a native UIKit WeChat enhancement tweak. Version `0.1.7` includes native chat navigation, Moments enhancements, a reusable message library, automations, call recording, and call-audio tools.
+WCAtlas is a native UIKit WeChat enhancement tweak. Version `1.0.0` is the first public release, combining chat, Moments, message-library, automation, call-recording, and call-audio enhancements.
 
 The settings page groups features into Chat, Moments, Interface Disable, Interface Optimization, Common Enhancements, and Plugin Settings. Category expansion state is remembered locally. `Assets/WCAtlas-Icon-1024.png` is the release artwork.
 
@@ -15,7 +15,7 @@ WCAtlas registers its settings controller and optional quick switches through th
 When `WCPluginsMgr` is available, WCAtlas registers:
 
 - Title: `WCAtlas`
-- Version: `0.1.7`
+- Version: `1.0.0`
 - Controller: `WCAtlasSettingsViewController`
 
 ## Build

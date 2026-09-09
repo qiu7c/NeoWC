@@ -205,6 +205,17 @@
 - (void)switchItem:(WCAtlasSettingItem *)item changedTo:(BOOL)enabled {
     if (item.defaultsKey.length == 0) return;
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    if (enabled && [item.defaultsKey isEqualToString:WCAtlasPluginManagerEnabledKey] &&
+        WCAtlasExternalPluginManagerAvailable()) {
+        [defaults setBool:NO forKey:WCAtlasPluginManagerEnabledKey];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"不兼容"
+                                                                        message:@"检测到懒猫插件管理。WCAtlas 内置插件管理不能与其同时启用，请先卸载懒猫插件后再开启。"
+                                                                 preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        [self reloadSettingsPreservingPositionApplyScale:NO];
+        return;
+    }
     [defaults setBool:enabled forKey:item.defaultsKey];
     if (enabled && item.hasChildren) {
         [self.collapsedFeatureKeys removeObject:item.defaultsKey];

@@ -17,7 +17,7 @@ NSString *const WCAtlasEnabledKey = @"com.qiu7c.wcatlas.enabled";
 NSString *const WCAtlasCollapsedFeaturesKey = @"com.qiu7c.wcatlas.ui.collapsed-features";
 static NSString *const WCAtlasExpandedCategoriesKey = @"com.qiu7c.wcatlas.ui.expanded-categories";
 
-NSString *const WCAtlasDisplayVersion = @"0.1.7";
+NSString *const WCAtlasDisplayVersion = @"1.0.0";
 static NSString *const WCAtlasChatGlassPseudoLiquid20MigrationKey = @"com.qiu7c.wcatlas.migration.chat-glass-pseudo-liquid-20-v1";
 
 static WCAtlasSettingItem *WCAtlasItem(NSString *title, NSString *subtitle, NSString *symbol,
@@ -84,6 +84,10 @@ void WCAtlasSettingsHandleSwitchChange(NSString *key, BOOL enabled) {
     if (key.length == 0) return;
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     if ([key isEqualToString:WCAtlasPluginManagerEnabledKey] && enabled) {
+        if (WCAtlasExternalPluginManagerAvailable()) {
+            [defaults setBool:NO forKey:WCAtlasPluginManagerEnabledKey];
+            return;
+        }
         [WCAtlasPluginsMgr.sharedInstance registerControllerWithTitle:@"WCAtlas"
                                                                version:WCAtlasDisplayVersion
                                                             controller:@"WCAtlasSettingsViewController"];
@@ -292,7 +296,7 @@ static NSArray<WCAtlasSettingSection *> *WCAtlasRootSections(void) {
                                              footer:[NSString stringWithFormat:@"WCAtlas · %@", WCAtlasDisplayVersion]
                                               items:@[
             WCAtlasItem(@"官方 Telegram 群", @"加入公告、反馈与交流频道", @"paperplane.fill", WCAtlasSettingRowKindDetail, nil, @"打开", WCAtlasSettingActionOfficialTelegram),
-            WCAtlasItem(@"版本与更新日志", @"查看当前版本和历史版本记录", @"shippingbox", WCAtlasSettingRowKindDetail, nil, WCAtlasDisplayVersion, WCAtlasSettingActionReleaseNotes),
+            WCAtlasItem(@"版本介绍", @"WCAtlas 首个正式版本", @"shippingbox", WCAtlasSettingRowKindDetail, nil, WCAtlasDisplayVersion, WCAtlasSettingActionReleaseNotes),
         ]],
     ];
 }
@@ -514,7 +518,8 @@ static NSArray<WCAtlasSettingSection *> *WCAtlasEnhancementSections(NSUserDefaul
                                                                  NSSet<NSString *> *collapsed,
                                                                  BOOL momentsOnly) {
     NSMutableArray *automation = [NSMutableArray arrayWithArray:@[
-        WCAtlasItem(@"定时消息与脚本", @"发送固定文字、消息库文字或 HTTP/JS 处理结果", @"clock.badge.checkmark", WCAtlasSettingRowKindDetail, nil, @"管理", WCAtlasSettingActionAutomations),
+        WCAtlasItem(@"定时消息", @"按指定时间发送文字、消息库素材或 HTTP/JS 处理结果", @"clock.badge.checkmark", WCAtlasSettingRowKindDetail, nil, @"管理", WCAtlasSettingActionAutomations),
+        WCAtlasItem(@"关键词回复", @"按关键词自动回复，支持好友和群聊黑白名单", @"text.bubble", WCAtlasSettingRowKindDetail, nil, @"管理", WCAtlasSettingActionKeywordReplies),
         WCAtlasItem(@"保持后台运行", @"尽量维持微信后台活跃，供朋友圈提醒等周期功能使用", @"moon.zzz", WCAtlasSettingRowKindSwitch, WCAtlasBackgroundKeepAliveEnabledKey, nil, WCAtlasSettingActionNone),
         WCAtlasItem(@"设备扫码自动登录", @"自动确认电脑、平板等设备登录", @"desktopcomputer", WCAtlasSettingRowKindSwitch, WCAtlasAutoDeviceLoginKey, nil, WCAtlasSettingActionNone),
         WCAtlasItem(@"游戏授权自动允许", @"自动确认游戏扫码授权", @"gamecontroller", WCAtlasSettingRowKindSwitch, WCAtlasAutoGameAuthorizeKey, nil, WCAtlasSettingActionNone),
@@ -722,6 +727,10 @@ static NSArray<WCAtlasSettingSection *> *WCAtlasInterfaceSections(NSUserDefaults
 }
 
 static NSArray<WCAtlasSettingSection *> *WCAtlasPluginSections(NSUserDefaults *defaults) {
+    if (WCAtlasExternalPluginManagerAvailable() &&
+        [defaults boolForKey:WCAtlasPluginManagerEnabledKey]) {
+        [defaults setBool:NO forKey:WCAtlasPluginManagerEnabledKey];
+    }
     NSString *notificationSymbol = [defaults stringForKey:WCAtlasInAppNotificationSymbolKey] ?: @"automatic";
     NSString *notificationValue = [notificationSymbol isEqualToString:@"automatic"]
         ? @"跟随类型" : @"自定义";
@@ -738,7 +747,7 @@ static NSArray<WCAtlasSettingSection *> *WCAtlasPluginSections(NSUserDefaults *d
     NSMutableArray<WCAtlasSettingItem *> *management = [NSMutableArray arrayWithObject:
         WCAtlasItem(@"配置管理", @"导入、导出或重置 WCAtlas 配置", @"externaldrive", WCAtlasSettingRowKindDetail, nil, @"管理", WCAtlasSettingActionConfigManager)];
     WCAtlasAddFeature(management,
-        WCAtlasItem(@"内置插件管理", @"默认使用懒猫插件管理；开启后额外显示 WCAtlas 自带入口", @"square.stack.3d.up", WCAtlasSettingRowKindSwitch, WCAtlasPluginManagerEnabledKey, nil, WCAtlasSettingActionNone),
+        WCAtlasItem(@"内置插件管理", @"与懒猫插件管理不兼容；使用前必须先卸载懒猫", @"square.stack.3d.up", WCAtlasSettingRowKindSwitch, WCAtlasPluginManagerEnabledKey, nil, WCAtlasSettingActionNone),
         @[WCAtlasItem(@"打开内置插件管理", @"管理分类、排序与快捷开关", @"rectangle.stack", WCAtlasSettingRowKindDetail, nil, @"打开", WCAtlasSettingActionPluginManager)],
         defaults, [NSSet setWithArray:[defaults arrayForKey:WCAtlasCollapsedFeaturesKey] ?: @[]]);
     return @[

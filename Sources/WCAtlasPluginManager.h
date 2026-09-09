@@ -35,6 +35,14 @@ FOUNDATION_EXPORT NSString *const WCAtlasPluginManagerEnabledKey;
 
 FOUNDATION_EXPORT void WCAtlasInstallPluginManagerEntry(id moreViewController);
 FOUNDATION_EXPORT void WCAtlasPushPluginManager(id sender);
+/// Returns YES only when the external LazyCat WCPluginsMgr service is available.
+FOUNDATION_EXPORT BOOL WCAtlasExternalPluginManagerAvailable(void);
+/// Adds a direct WCAtlas row to WeChat's settings page when LazyCat is unavailable.
+/// Must be called on the main thread after NewSettingViewController has appeared.
+FOUNDATION_EXPORT void WCAtlasInstallSettingsFallbackEntry(id settingsController);
+/// Pushes the WCAtlas settings controller from the native WeChat settings page.
+/// Must be called on the main thread.
+FOUNDATION_EXPORT void WCAtlasPushSettingsController(id sender);
 FOUNDATION_EXPORT BOOL WCAtlasPluginManagerIsQuickSwitchRegistered(NSString *key);
 FOUNDATION_EXPORT void WCAtlasPluginManagerSetQuickSwitchRegistered(NSString *key, NSString *title, BOOL registered);
 FOUNDATION_EXPORT void WCAtlasPluginManagerRegisterSavedQuickSwitches(void);

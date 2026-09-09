@@ -28,6 +28,7 @@ static const NSUInteger WCAtlasAutomationMaximumResponseBytes = 1024 * 1024;
     _repeatMode = WCAtlasAutomationRepeatModeOnce;
     _triggerMode = WCAtlasAutomationTriggerModeScheduled;
     _triggerKeyword = @"";
+    _keywordScopeMode = WCAtlasAutomationKeywordScopeModeWhitelist;
     return self;
 }
 
@@ -46,6 +47,7 @@ static const NSUInteger WCAtlasAutomationMaximumResponseBytes = 1024 * 1024;
     task.repeatMode = self.repeatMode;
     task.triggerMode = self.triggerMode;
     task.triggerKeyword = self.triggerKeyword;
+    task.keywordScopeMode = self.keywordScopeMode;
     task.lastRunDate = self.lastRunDate;
     task.lastResult = self.lastResult;
     return task;
@@ -116,6 +118,8 @@ static NSString *WCAtlasAutomationString(id value) {
     task.triggerMode = [dictionary[@"trigger"] integerValue] == WCAtlasAutomationTriggerModeKeyword
         ? WCAtlasAutomationTriggerModeKeyword : WCAtlasAutomationTriggerModeScheduled;
     task.triggerKeyword = WCAtlasAutomationString(dictionary[@"keyword"]);
+    task.keywordScopeMode = [dictionary[@"keywordScope"] integerValue] == WCAtlasAutomationKeywordScopeModeBlacklist
+        ? WCAtlasAutomationKeywordScopeModeBlacklist : WCAtlasAutomationKeywordScopeModeWhitelist;
     NSTimeInterval lastRun = [dictionary[@"lastRun"] doubleValue];
     task.lastRunDate = lastRun > 0 ? [NSDate dateWithTimeIntervalSince1970:lastRun] : nil;
     task.lastResult = [dictionary[@"lastResult"] isKindOfClass:NSString.class]
@@ -137,6 +141,7 @@ static NSString *WCAtlasAutomationString(id value) {
         @"repeat": @(task.repeatMode),
         @"trigger": @(task.triggerMode),
         @"keyword": task.triggerKeyword ?: @"",
+        @"keywordScope": @(task.keywordScopeMode),
     } mutableCopy];
     if (task.libraryItemIdentifier.length) dictionary[@"library"] = task.libraryItemIdentifier;
     if (task.lastRunDate) dictionary[@"lastRun"] = @(task.lastRunDate.timeIntervalSince1970);
@@ -653,7 +658,12 @@ static NSString *WCAtlasAutomationDownloadURL(NSString *URLString, NSString *typ
         if (!keyword.length || [content rangeOfString:keyword options:NSCaseInsensitiveSearch].location == NSNotFound) continue;
         NSArray *configuredTargets = stored.targetUserNames.count ? stored.targetUserNames :
             (stored.targetUserName.length ? @[stored.targetUserName] : @[]);
-        if (configuredTargets.count && ![configuredTargets containsObject:session]) continue;
+        BOOL selected = [configuredTargets containsObject:session];
+        if (stored.keywordScopeMode == WCAtlasAutomationKeywordScopeModeWhitelist) {
+            if (!selected) continue;
+        } else if (selected) {
+            continue;
+        }
         WCAtlasAutomationTask *task = stored.copy;
         task.targetUserNames = @[session];
         task.targetUserName = session;

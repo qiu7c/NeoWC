@@ -18,6 +18,13 @@ typedef NS_ENUM(NSInteger, WCAtlasAutomationTriggerMode) {
     WCAtlasAutomationTriggerModeKeyword = 1,
 };
 
+typedef NS_ENUM(NSInteger, WCAtlasAutomationKeywordScopeMode) {
+    /// Reply only in the selected conversations.
+    WCAtlasAutomationKeywordScopeModeWhitelist = 0,
+    /// Reply in every conversation except the selected conversations.
+    WCAtlasAutomationKeywordScopeModeBlacklist = 1,
+};
+
 @interface WCAtlasAutomationTask : NSObject <NSCopying>
 @property (nonatomic, copy) NSString *identifier;
 @property (nonatomic, copy) NSString *name;
@@ -32,6 +39,7 @@ typedef NS_ENUM(NSInteger, WCAtlasAutomationTriggerMode) {
 @property (nonatomic, assign) WCAtlasAutomationRepeatMode repeatMode;
 @property (nonatomic, assign) WCAtlasAutomationTriggerMode triggerMode;
 @property (nonatomic, copy) NSString *triggerKeyword;
+@property (nonatomic, assign) WCAtlasAutomationKeywordScopeMode keywordScopeMode;
 @property (nonatomic, strong, nullable) NSDate *lastRunDate;
 @property (nonatomic, copy, nullable) NSString *lastResult;
 @end
