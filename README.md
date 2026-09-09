@@ -16,7 +16,7 @@ When `WCPluginsMgr` is available, WCAtlas registers:
 
 - Title: `WCAtlas`
 - Version: `0.1.7`
-- Controller: `NeoWCSettingsViewController`
+- Controller: `WCAtlasSettingsViewController`
 
 ## Build
 

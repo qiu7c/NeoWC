@@ -1,7 +1,6 @@
 Package: com.qiu7c.wcatlas
 Name: WCAtlas
 Depends: mobilesubstrate
-Conflicts: com.qiu7c.neowc
 Version: 0.1.7
 Architecture: iphoneos-arm
 Description: A focused and modern WeChat enhancement tweak.

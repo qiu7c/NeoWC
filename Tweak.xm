@@ -13,38 +13,38 @@
 
 extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
-#import "Sources/NeoWCSettingsViewController.h"
-#import "Sources/NeoWCSettingsCatalog.h"
-#import "Sources/NeoWCBackgroundKeeper.h"
-#import "Sources/NeoWCAutomation.h"
-#import "Sources/NeoWCMomentsReminder.h"
-#import "Sources/NeoWCMomentsInteractionReminder.h"
-#import "Sources/NeoWCMomentsPrewarmer.h"
-#import "Sources/NeoWCMomentsCommentAntiDelete.h"
-#import "Sources/NeoWCMomentsTail.h"
-#import "Sources/NeoWCAccount.h"
-#import "Sources/NeoWCAntiRevoke.h"
-#import "Sources/NeoWCChatExport.h"
-#import "Sources/NeoWCCompatibility.h"
-#import "Sources/NeoWCLogging.h"
-#import "Sources/NeoWCEnhancements.h"
-#import "Sources/NeoWCPluginManager.h"
-#import "Sources/NeoWCPrivateAPI.h"
-#import "Sources/NeoWCCallAudio.h"
-#import "Sources/NeoWCRuntimeFeatures.h"
-#import "Sources/NeoWCInterfaceTweaks.h"
-#import "Sources/NeoWCMessageTime.h"
-#import "Sources/NeoWCGlassCapsuleView.h"
-#import "Sources/NeoWCQuickReplyStore.h"
-#import "Sources/NeoWCQuickReplyViewController.h"
-#import "Sources/NeoWCSendConfirmation.h"
-#import "Sources/NeoWCMessageBlock.h"
-#import "Sources/NeoWCAvatarQuickPanel.h"
-#import "Sources/NeoWCContactInfoCard.h"
-#import "Sources/NeoWCFriendRelationChecker.h"
-#import "Sources/NeoWCInfoListViewController.h"
-#import "Sources/NeoWCSilkEncoder.h"
-#import "Sources/NeoWCInAppNotification.h"
+#import "Sources/WCAtlasSettingsViewController.h"
+#import "Sources/WCAtlasSettingsCatalog.h"
+#import "Sources/WCAtlasBackgroundKeeper.h"
+#import "Sources/WCAtlasAutomation.h"
+#import "Sources/WCAtlasMomentsReminder.h"
+#import "Sources/WCAtlasMomentsInteractionReminder.h"
+#import "Sources/WCAtlasMomentsPrewarmer.h"
+#import "Sources/WCAtlasMomentsCommentAntiDelete.h"
+#import "Sources/WCAtlasMomentsTail.h"
+#import "Sources/WCAtlasAccount.h"
+#import "Sources/WCAtlasAntiRevoke.h"
+#import "Sources/WCAtlasChatExport.h"
+#import "Sources/WCAtlasCompatibility.h"
+#import "Sources/WCAtlasLogging.h"
+#import "Sources/WCAtlasEnhancements.h"
+#import "Sources/WCAtlasPluginManager.h"
+#import "Sources/WCAtlasPrivateAPI.h"
+#import "Sources/WCAtlasCallAudio.h"
+#import "Sources/WCAtlasRuntimeFeatures.h"
+#import "Sources/WCAtlasInterfaceTweaks.h"
+#import "Sources/WCAtlasMessageTime.h"
+#import "Sources/WCAtlasGlassCapsuleView.h"
+#import "Sources/WCAtlasQuickReplyStore.h"
+#import "Sources/WCAtlasQuickReplyViewController.h"
+#import "Sources/WCAtlasSendConfirmation.h"
+#import "Sources/WCAtlasMessageBlock.h"
+#import "Sources/WCAtlasAvatarQuickPanel.h"
+#import "Sources/WCAtlasContactInfoCard.h"
+#import "Sources/WCAtlasFriendRelationChecker.h"
+#import "Sources/WCAtlasInfoListViewController.h"
+#import "Sources/WCAtlasSilkEncoder.h"
+#import "Sources/WCAtlasInAppNotification.h"
 
 @interface WCActionSheet : NSObject
 - (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
@@ -91,9 +91,9 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 - (void)updateWithDataItem:(id)dataItem actionAreaVM:(id)actionAreaVM;
 - (void)onAccessibilityLike;
 - (id)operateBtnImage:(BOOL)spring isSpringStyle:(BOOL)springStyle;
-- (void)neowc_handleMomentsDoubleTap;
-- (void)neowc_handleMomentsForward:(id)sender;
-- (void)neowc_handleMomentsSaveImages:(id)sender;
+- (void)wcatlas_handleMomentsDoubleTap;
+- (void)wcatlas_handleMomentsForward:(id)sender;
+- (void)wcatlas_handleMomentsSaveImages:(id)sender;
 @end
 
 @interface WCTimeLineOperateButtonView : UIButton
@@ -105,15 +105,15 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 @interface WCOperateFloatView : UIView
 - (void)showWithItemData:(id)item tipPoint:(CGPoint)tipPoint;
 - (void)hide;
-- (void)neowc_handleMomentsForward:(id)sender;
-- (void)neowc_handleMomentsSaveImages:(id)sender;
+- (void)wcatlas_handleMomentsForward:(id)sender;
+- (void)wcatlas_handleMomentsSaveImages:(id)sender;
 @end
 
 @interface CommonMessageCellView : UIView
-- (void)neowc_refreshAntiRevokeSidePrompt;
-- (void)neowc_scheduleAntiRevokeSidePromptRefresh;
-- (void)neowc_handleReplyPan:(UIPanGestureRecognizer *)recognizer;
-- (void)neowc_handleMessageTapAction:(UITapGestureRecognizer *)recognizer;
+- (void)wcatlas_refreshAntiRevokeSidePrompt;
+- (void)wcatlas_scheduleAntiRevokeSidePromptRefresh;
+- (void)wcatlas_handleReplyPan:(UIPanGestureRecognizer *)recognizer;
+- (void)wcatlas_handleMessageTapAction:(UITapGestureRecognizer *)recognizer;
 - (void)handleTapReferMessage;
 - (void)handleTapForReferMsg:(id)sender;
 - (void)onReturnToOriginalMsg;
@@ -129,9 +129,9 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 @interface BaseMsgContentViewController : UIViewController
 - (id)GetContact;
 - (void)returnToOriginalMsg:(id)message;
-- (void)neowc_openChatSearch:(id)sender;
-- (void)neowc_handleChatSearchEdgePan:(UIScreenEdgePanGestureRecognizer *)recognizer;
-- (void)neowc_toggleSendConfirmation:(UILongPressGestureRecognizer *)recognizer;
+- (void)wcatlas_openChatSearch:(id)sender;
+- (void)wcatlas_handleChatSearchEdgePan:(UIScreenEdgePanGestureRecognizer *)recognizer;
+- (void)wcatlas_toggleSendConfirmation:(UILongPressGestureRecognizer *)recognizer;
 @end
 
 @interface BaseMsgContentLogicController : NSObject
@@ -184,13 +184,13 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 @end
 
 @interface WeixinContactInfoAssist : NSObject
-- (void)neowc_copyRawContactID;
-- (void)neowc_openInfoCard;
+- (void)wcatlas_copyRawContactID;
+- (void)wcatlas_openInfoCard;
 @end
 
 @interface ChatRoomInfoViewController : UIViewController
-- (void)neowc_copyRawContactID;
-- (void)neowc_openInfoCard;
+- (void)wcatlas_copyRawContactID;
+- (void)wcatlas_openInfoCard;
 @end
 
 @interface SocialInfomationViewController : UIViewController
@@ -211,16 +211,16 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
 @interface SystemMessageCellView : UIView
 - (id)getRichTextView;
-- (void)neowc_applyAntiRevokeTextColor;
+- (void)wcatlas_applyAntiRevokeTextColor;
 @end
 
 @interface MMGrowTextView : UIView
-- (void)neowc_handleInputSwipeLeft:(UISwipeGestureRecognizer *)recognizer;
-- (void)neowc_handleInputSwipeRight:(UISwipeGestureRecognizer *)recognizer;
+- (void)wcatlas_handleInputSwipeLeft:(UISwipeGestureRecognizer *)recognizer;
+- (void)wcatlas_handleInputSwipeRight:(UISwipeGestureRecognizer *)recognizer;
 @end
 
 @interface MMInputToolView : UIView
-- (void)neowc_handleQuickReplyPlusLongPress:(UILongPressGestureRecognizer *)recognizer;
+- (void)wcatlas_handleQuickReplyPlusLongPress:(UILongPressGestureRecognizer *)recognizer;
 - (void)sendMsgWithText:(id)text;
 @end
 
@@ -311,300 +311,300 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 - (BOOL)launchShow;
 @end
 
-static BOOL NeoWCDidRegister = NO;
-static NSTimeInterval NeoWCVoiceRepeatForwardDeadline = 0;
-static std::atomic_bool NeoWCHighRefreshRateEnabled(false);
-static std::atomic_bool NeoWCHighRefreshRateApplicationActive(false);
-static std::atomic_int NeoWCHighRefreshRateScreenMaximum(60);
-static char NeoWCDeviceCardDidConfirmKey;
-static char NeoWCGameDidAuthorizeKey;
-static char NeoWCMomentsDoubleTapRecognizerKey;
-static char NeoWCMomentsForwardButtonKey;
-static char NeoWCMomentsSaveButtonKey;
-static char NeoWCMomentsOriginalOperateFrameKey;
-static char NeoWCMomentsFloatForwardButtonKey;
-static char NeoWCMomentsFloatSaveButtonKey;
-static char NeoWCMomentsFloatSeparatorKey;
-static char NeoWCMomentsFloatSaveSeparatorKey;
-static char NeoWCMomentsFloatDataItemKey;
-static char NeoWCMomentsFloatSnapshotKey;
-static char NeoWCMomentsForwardTaskKey;
-static char NeoWCMomentsSaveTaskKey;
-static char NeoWCMomentsDataItemSaveTaskKey;
-static char NeoWCMediaToVoiceInProgressKey;
-static char NeoWCMomentsHighQualityMenuKey;
-static char NeoWCImageJokerPickerDelegateKey;
-static char NeoWCEmoticonPreviewLongPressKey;
-static char NeoWCMomentsOriginalTimeTextKey;
-static char NeoWCMomentsOriginalTimeLinesKey;
-static char NeoWCMomentsPreciseTimeAppliedKey;
-static id NeoWCPendingMomentsPermissionDataItem;
-static __weak id NeoWCPendingMomentsCameraController;
-static id NeoWCActiveMomentsMediaSaveTask;
-static char NeoWCGameSelectorPresentedKey;
-static char NeoWCChatExportBuildingMenuKey;
-static char NeoWCAntiRevokeSideLabelKey;
-static char NeoWCAntiRevokeSideRefreshScheduledKey;
-static char NeoWCAntiRevokeOriginalSystemTextColorKey;
-static char NeoWCAntiRevokeSystemColorAppliedKey;
-static char NeoWCEditedImageKey;
-static char NeoWCEditConversationUserNameKey;
-static char NeoWCEditPresenterControllerKey;
-static char NeoWCQuickSendPendingImageKey;
-static char NeoWCInputSwipeLeftRecognizerKey;
-static char NeoWCInputSwipeRightRecognizerKey;
-static char NeoWCQuickReplyPlusRecognizerKey;
-static char NeoWCQuickReplyPlusDelegateKey;
-static char NeoWCAutoCombineSendAppliedKey;
-static char NeoWCWalletGestureRecognizerKey;
-static char NeoWCReplyPanRecognizerKey;
-static char NeoWCReplyPanDelegateKey;
-static char NeoWCMessageDoubleTapRecognizerKey;
-static char NeoWCMessageTripleTapRecognizerKey;
-static char NeoWCAvatarQuickHeadViewKey;
-static char NeoWCAvatarQuickDoubleTapRecognizerKey;
-static char NeoWCAvatarQuickGestureProxyKey;
-static char NeoWCAvatarNativeDoubleTapTargetKey;
-static char NeoWCAvatarNativeDoubleTapActionKey;
-static char NeoWCAvatarNativeDoubleTapOwnedKey;
-static char NeoWCOfficialInfoCardBoxKey;
-static char NeoWCOfficialInfoBaseRowsKey;
-static char NeoWCInfoCardOfficialControllerKey;
-static char NeoWCOfficialRelatedGroupLogicKey;
-static char NeoWCExclusiveRedEnvelopeContactKey;
-static char NeoWCExclusiveRedEnvelopeViewContactKey;
-static char NeoWCExclusiveRedEnvelopeViewDataKey;
-static BOOL NeoWCUpdatingAvatarNativeDoubleTap = NO;
-static BOOL NeoWCPerformingNativeAvatarLongPress = NO;
-static id NeoWCPendingExclusiveRedEnvelopeContact;
-static NSString *NeoWCPendingExclusiveRedEnvelopeGroupID;
-static CFTimeInterval NeoWCPendingExclusiveRedEnvelopeDeadline;
-static NSUInteger NeoWCPendingExclusiveRedEnvelopeGeneration;
-static char NeoWCReplyOriginalTransformKey;
-static char NeoWCReplyTransformSnapshotsKey;
-static char NeoWCReplyFeedbackGeneratorKey;
-static char NeoWCReplyFeedbackTriggeredKey;
-static char NeoWCReplyPanRightwardKey;
-static char NeoWCSeparatorOriginalHiddenKey;
-static char NeoWCVoiceTranscriptionScheduledKey;
-static char NeoWCVoiceTranscriptionDoneKey;
-static char NeoWCVoiceTranscriptionInProgressKey;
-static char NeoWCVoiceTranscriptionAttemptedKey;
-static char NeoWCChatTopProfileItemKey;
-static char NeoWCChatTopCapsuleItemKey;
-static char NeoWCChatSearchItemKey;
-static char NeoWCChatSearchActiveKey;
-static char NeoWCChatSearchCleanupKey;
-static char NeoWCChatSearchEdgePanKey;
-static char NeoWCChatTopOriginalLeftItemsKey;
-static char NeoWCChatTopOriginalRightItemsKey;
-static char NeoWCChatTopOriginalTitleViewKey;
-static char NeoWCChatTopOriginalSupplementKey;
-static char NeoWCChatTopMoreProxyKey;
-static char NeoWCChatTopBackProxyKey;
-static char NeoWCChatTopOriginalStandardAppearanceKey;
-static char NeoWCChatTopOriginalCompactAppearanceKey;
-static char NeoWCChatTopOriginalScrollEdgeAppearanceKey;
-static char NeoWCChatTopOriginalCompactScrollEdgeAppearanceKey;
-static char NeoWCChatTopBackgroundOriginalAlphaKey;
-static char NeoWCChatTopPlaceholderTitleViewKey;
-static char NeoWCChatTopOriginalNavigationStandardAppearanceKey;
-static char NeoWCChatTopOriginalNavigationCompactAppearanceKey;
-static char NeoWCChatTopOriginalNavigationScrollEdgeAppearanceKey;
-static char NeoWCChatTopOriginalNavigationCompactScrollEdgeAppearanceKey;
-static char NeoWCChatTopOriginalNavigationTranslucentKey;
-static char NeoWCChatTopOriginalEdgesForExtendedLayoutKey;
-static char NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey;
-static char NeoWCChatTopContainerOriginalBackgroundColorKey;
-static char NeoWCChatTopBackgroundOriginalHiddenKey;
-static char NeoWCChatTopGlassEffectMarkerKey;
-static char NeoWCChatTopTypingActiveKey;
-static char NeoWCChatTopStableDisplayNameKey;
-static char NeoWCChatTypingStatusLabelMarkerKey;
-static char NeoWCChatTopOriginalClipsToBoundsKey;
-static char NeoWCChatTopOriginalBorderWidthKey;
-static char NeoWCChatTopOriginalCornerRadiusKey;
-static char NeoWCChatTopContentNavigationBarKey;
-static char NeoWCChatTopOriginalVisualEffectKey;
-static char NeoWCChatTopOriginalVisualEffectMaskKey;
-static char NeoWCChatTopOriginalBackgroundMaskKey;
-static char NeoWCChatTopFadeBackgroundMaskKey;
-static char NeoWCChatSearchTransitionKey;
-static char NeoWCChatPinnedBlurViewKey;
-static char NeoWCChatPinnedOriginalBackgroundColorKey;
-static char NeoWCChatPinnedOriginalShadowOpacityKey;
-static char NeoWCChatPinnedOriginalShadowRadiusKey;
-static char NeoWCChatPinnedOriginalShadowOffsetKey;
-static char NeoWCChatPinnedOriginalShadowColorKey;
-static char NeoWCChatPinnedOriginalBorderWidthKey;
-static char NeoWCChatPinnedOriginalBorderColorKey;
-static char NeoWCRedEnvelopeOriginalAttributedTextKey;
-static char NeoWCCallVoiceConfirmedKey;
-static char NeoWCCallVideoConfirmedKey;
-static char NeoWCSendConfirmationNativeBypassKey;
-static NSString *NeoWCSendConfirmationImageBypassUsername;
-static CFTimeInterval NeoWCSendConfirmationImageBypassDeadline;
-static NSString *NeoWCSendConfirmationVideoBypassUsername;
-static CFTimeInterval NeoWCSendConfirmationVideoBypassDeadline;
-static NSString *NeoWCSendConfirmationRepeatBypassUsername;
-static CFTimeInterval NeoWCSendConfirmationRepeatBypassDeadline;
-static NSInteger NeoWCSendConfirmationRepeatBypassMessageType;
-static __weak BaseMsgContentViewController *NeoWCVisibleChatController;
-static __weak BaseMsgContentViewController *NeoWCSendConfirmationChatController;
-static __weak id NeoWCCurrentEditImageLogicController;
-static __weak UIViewController *NeoWCActiveMomentsDetailController;
-static BOOL NeoWCMomentsDispatchingQuickComment = NO;
+static BOOL WCAtlasDidRegister = NO;
+static NSTimeInterval WCAtlasVoiceRepeatForwardDeadline = 0;
+static std::atomic_bool WCAtlasHighRefreshRateEnabled(false);
+static std::atomic_bool WCAtlasHighRefreshRateApplicationActive(false);
+static std::atomic_int WCAtlasHighRefreshRateScreenMaximum(60);
+static char WCAtlasDeviceCardDidConfirmKey;
+static char WCAtlasGameDidAuthorizeKey;
+static char WCAtlasMomentsDoubleTapRecognizerKey;
+static char WCAtlasMomentsForwardButtonKey;
+static char WCAtlasMomentsSaveButtonKey;
+static char WCAtlasMomentsOriginalOperateFrameKey;
+static char WCAtlasMomentsFloatForwardButtonKey;
+static char WCAtlasMomentsFloatSaveButtonKey;
+static char WCAtlasMomentsFloatSeparatorKey;
+static char WCAtlasMomentsFloatSaveSeparatorKey;
+static char WCAtlasMomentsFloatDataItemKey;
+static char WCAtlasMomentsFloatSnapshotKey;
+static char WCAtlasMomentsForwardTaskKey;
+static char WCAtlasMomentsSaveTaskKey;
+static char WCAtlasMomentsDataItemSaveTaskKey;
+static char WCAtlasMediaToVoiceInProgressKey;
+static char WCAtlasMomentsHighQualityMenuKey;
+static char WCAtlasImageJokerPickerDelegateKey;
+static char WCAtlasEmoticonPreviewLongPressKey;
+static char WCAtlasMomentsOriginalTimeTextKey;
+static char WCAtlasMomentsOriginalTimeLinesKey;
+static char WCAtlasMomentsPreciseTimeAppliedKey;
+static id WCAtlasPendingMomentsPermissionDataItem;
+static __weak id WCAtlasPendingMomentsCameraController;
+static id WCAtlasActiveMomentsMediaSaveTask;
+static char WCAtlasGameSelectorPresentedKey;
+static char WCAtlasChatExportBuildingMenuKey;
+static char WCAtlasAntiRevokeSideLabelKey;
+static char WCAtlasAntiRevokeSideRefreshScheduledKey;
+static char WCAtlasAntiRevokeOriginalSystemTextColorKey;
+static char WCAtlasAntiRevokeSystemColorAppliedKey;
+static char WCAtlasEditedImageKey;
+static char WCAtlasEditConversationUserNameKey;
+static char WCAtlasEditPresenterControllerKey;
+static char WCAtlasQuickSendPendingImageKey;
+static char WCAtlasInputSwipeLeftRecognizerKey;
+static char WCAtlasInputSwipeRightRecognizerKey;
+static char WCAtlasQuickReplyPlusRecognizerKey;
+static char WCAtlasQuickReplyPlusDelegateKey;
+static char WCAtlasAutoCombineSendAppliedKey;
+static char WCAtlasWalletGestureRecognizerKey;
+static char WCAtlasReplyPanRecognizerKey;
+static char WCAtlasReplyPanDelegateKey;
+static char WCAtlasMessageDoubleTapRecognizerKey;
+static char WCAtlasMessageTripleTapRecognizerKey;
+static char WCAtlasAvatarQuickHeadViewKey;
+static char WCAtlasAvatarQuickDoubleTapRecognizerKey;
+static char WCAtlasAvatarQuickGestureProxyKey;
+static char WCAtlasAvatarNativeDoubleTapTargetKey;
+static char WCAtlasAvatarNativeDoubleTapActionKey;
+static char WCAtlasAvatarNativeDoubleTapOwnedKey;
+static char WCAtlasOfficialInfoCardBoxKey;
+static char WCAtlasOfficialInfoBaseRowsKey;
+static char WCAtlasInfoCardOfficialControllerKey;
+static char WCAtlasOfficialRelatedGroupLogicKey;
+static char WCAtlasExclusiveRedEnvelopeContactKey;
+static char WCAtlasExclusiveRedEnvelopeViewContactKey;
+static char WCAtlasExclusiveRedEnvelopeViewDataKey;
+static BOOL WCAtlasUpdatingAvatarNativeDoubleTap = NO;
+static BOOL WCAtlasPerformingNativeAvatarLongPress = NO;
+static id WCAtlasPendingExclusiveRedEnvelopeContact;
+static NSString *WCAtlasPendingExclusiveRedEnvelopeGroupID;
+static CFTimeInterval WCAtlasPendingExclusiveRedEnvelopeDeadline;
+static NSUInteger WCAtlasPendingExclusiveRedEnvelopeGeneration;
+static char WCAtlasReplyOriginalTransformKey;
+static char WCAtlasReplyTransformSnapshotsKey;
+static char WCAtlasReplyFeedbackGeneratorKey;
+static char WCAtlasReplyFeedbackTriggeredKey;
+static char WCAtlasReplyPanRightwardKey;
+static char WCAtlasSeparatorOriginalHiddenKey;
+static char WCAtlasVoiceTranscriptionScheduledKey;
+static char WCAtlasVoiceTranscriptionDoneKey;
+static char WCAtlasVoiceTranscriptionInProgressKey;
+static char WCAtlasVoiceTranscriptionAttemptedKey;
+static char WCAtlasChatTopProfileItemKey;
+static char WCAtlasChatTopCapsuleItemKey;
+static char WCAtlasChatSearchItemKey;
+static char WCAtlasChatSearchActiveKey;
+static char WCAtlasChatSearchCleanupKey;
+static char WCAtlasChatSearchEdgePanKey;
+static char WCAtlasChatTopOriginalLeftItemsKey;
+static char WCAtlasChatTopOriginalRightItemsKey;
+static char WCAtlasChatTopOriginalTitleViewKey;
+static char WCAtlasChatTopOriginalSupplementKey;
+static char WCAtlasChatTopMoreProxyKey;
+static char WCAtlasChatTopBackProxyKey;
+static char WCAtlasChatTopOriginalStandardAppearanceKey;
+static char WCAtlasChatTopOriginalCompactAppearanceKey;
+static char WCAtlasChatTopOriginalScrollEdgeAppearanceKey;
+static char WCAtlasChatTopOriginalCompactScrollEdgeAppearanceKey;
+static char WCAtlasChatTopBackgroundOriginalAlphaKey;
+static char WCAtlasChatTopPlaceholderTitleViewKey;
+static char WCAtlasChatTopOriginalNavigationStandardAppearanceKey;
+static char WCAtlasChatTopOriginalNavigationCompactAppearanceKey;
+static char WCAtlasChatTopOriginalNavigationScrollEdgeAppearanceKey;
+static char WCAtlasChatTopOriginalNavigationCompactScrollEdgeAppearanceKey;
+static char WCAtlasChatTopOriginalNavigationTranslucentKey;
+static char WCAtlasChatTopOriginalEdgesForExtendedLayoutKey;
+static char WCAtlasChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey;
+static char WCAtlasChatTopContainerOriginalBackgroundColorKey;
+static char WCAtlasChatTopBackgroundOriginalHiddenKey;
+static char WCAtlasChatTopGlassEffectMarkerKey;
+static char WCAtlasChatTopTypingActiveKey;
+static char WCAtlasChatTopStableDisplayNameKey;
+static char WCAtlasChatTypingStatusLabelMarkerKey;
+static char WCAtlasChatTopOriginalClipsToBoundsKey;
+static char WCAtlasChatTopOriginalBorderWidthKey;
+static char WCAtlasChatTopOriginalCornerRadiusKey;
+static char WCAtlasChatTopContentNavigationBarKey;
+static char WCAtlasChatTopOriginalVisualEffectKey;
+static char WCAtlasChatTopOriginalVisualEffectMaskKey;
+static char WCAtlasChatTopOriginalBackgroundMaskKey;
+static char WCAtlasChatTopFadeBackgroundMaskKey;
+static char WCAtlasChatSearchTransitionKey;
+static char WCAtlasChatPinnedBlurViewKey;
+static char WCAtlasChatPinnedOriginalBackgroundColorKey;
+static char WCAtlasChatPinnedOriginalShadowOpacityKey;
+static char WCAtlasChatPinnedOriginalShadowRadiusKey;
+static char WCAtlasChatPinnedOriginalShadowOffsetKey;
+static char WCAtlasChatPinnedOriginalShadowColorKey;
+static char WCAtlasChatPinnedOriginalBorderWidthKey;
+static char WCAtlasChatPinnedOriginalBorderColorKey;
+static char WCAtlasRedEnvelopeOriginalAttributedTextKey;
+static char WCAtlasCallVoiceConfirmedKey;
+static char WCAtlasCallVideoConfirmedKey;
+static char WCAtlasSendConfirmationNativeBypassKey;
+static NSString *WCAtlasSendConfirmationImageBypassUsername;
+static CFTimeInterval WCAtlasSendConfirmationImageBypassDeadline;
+static NSString *WCAtlasSendConfirmationVideoBypassUsername;
+static CFTimeInterval WCAtlasSendConfirmationVideoBypassDeadline;
+static NSString *WCAtlasSendConfirmationRepeatBypassUsername;
+static CFTimeInterval WCAtlasSendConfirmationRepeatBypassDeadline;
+static NSInteger WCAtlasSendConfirmationRepeatBypassMessageType;
+static __weak BaseMsgContentViewController *WCAtlasVisibleChatController;
+static __weak BaseMsgContentViewController *WCAtlasSendConfirmationChatController;
+static __weak id WCAtlasCurrentEditImageLogicController;
+static __weak UIViewController *WCAtlasActiveMomentsDetailController;
+static BOOL WCAtlasMomentsDispatchingQuickComment = NO;
 
-static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
-static void NeoWCRefreshChatTopBarAfterWechatUpdate(BaseMsgContentViewController *controller);
-static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView);
-static BaseMsgContentViewController *NeoWCResolveVisibleChatController(void);
-static void NeoWCPresentQuickReplyLibrary(BaseMsgContentViewController *controller);
-static NSString *NeoWCChatUserName(id controller);
-static void NeoWCShowTransientMessage(NSString *message, BOOL success);
-static BOOL NeoWCMethodReturnsVoid(Method method);
-static BOOL NeoWCMethodReturnsObject(Method method);
-static BOOL NeoWCMethodReturnsInteger(Method method);
-static BOOL NeoWCMethodArgumentIsObject(Method method, unsigned int index);
-static BOOL NeoWCMethodArgumentIsIntegerScalar(Method method, unsigned int index);
-static BOOL NeoWCMethodArgumentIsSelector(Method method, unsigned int index);
-static BOOL NeoWCMomentCanSaveMedia(id dataItem);
-static void NeoWCSaveMomentMedia(id dataItem, UIViewController *presenter);
-@class NeoWCReplyTransformSnapshot;
-static NSArray<NeoWCReplyTransformSnapshot *> *NeoWCReplyTransformSnapshots(CommonMessageCellView *sourceCell);
-static void NeoWCApplyReplyTransform(NSArray<NeoWCReplyTransformSnapshot *> *snapshots, CGFloat offset);
-static void NeoWCRestoreReplyTransforms(NSArray<NeoWCReplyTransformSnapshot *> *snapshots);
+static void WCAtlasUpdateChatTopBar(BaseMsgContentViewController *controller);
+static void WCAtlasRefreshChatTopBarAfterWechatUpdate(BaseMsgContentViewController *controller);
+static void WCAtlasUpdatePinnedMessageGlass(UIView *tipsView);
+static BaseMsgContentViewController *WCAtlasResolveVisibleChatController(void);
+static void WCAtlasPresentQuickReplyLibrary(BaseMsgContentViewController *controller);
+static NSString *WCAtlasChatUserName(id controller);
+static void WCAtlasShowTransientMessage(NSString *message, BOOL success);
+static BOOL WCAtlasMethodReturnsVoid(Method method);
+static BOOL WCAtlasMethodReturnsObject(Method method);
+static BOOL WCAtlasMethodReturnsInteger(Method method);
+static BOOL WCAtlasMethodArgumentIsObject(Method method, unsigned int index);
+static BOOL WCAtlasMethodArgumentIsIntegerScalar(Method method, unsigned int index);
+static BOOL WCAtlasMethodArgumentIsSelector(Method method, unsigned int index);
+static BOOL WCAtlasMomentCanSaveMedia(id dataItem);
+static void WCAtlasSaveMomentMedia(id dataItem, UIViewController *presenter);
+@class WCAtlasReplyTransformSnapshot;
+static NSArray<WCAtlasReplyTransformSnapshot *> *WCAtlasReplyTransformSnapshots(CommonMessageCellView *sourceCell);
+static void WCAtlasApplyReplyTransform(NSArray<WCAtlasReplyTransformSnapshot *> *snapshots, CGFloat offset);
+static void WCAtlasRestoreReplyTransforms(NSArray<WCAtlasReplyTransformSnapshot *> *snapshots);
 
-@interface NeoWCBarButtonActionProxy : NSObject
+@interface WCAtlasBarButtonActionProxy : NSObject
 @property (nonatomic, strong) UIBarButtonItem *originalItem;
 @property (nonatomic, weak) UIViewController *fallbackController;
 @property (nonatomic, assign) BOOL popsNavigationController;
 - (void)invoke:(id)sender;
 @end
 
-static id NeoWCTweakSafeValue(id object, NSString *key);
-static void NeoWCTweakSetValue(id object, NSString *key, id value);
-static id NeoWCTweakValueForSelectorNames(id object, NSArray<NSString *> *selectorNames);
-static id NeoWCMessageManager(void);
-static id NeoWCMessageWrapForCell(id cell);
-static id NeoWCMessageForCellViewModel(id viewModel);
-static id NeoWCImageJokerMessageForObject(id object);
-static id NeoWCContactForUserName(NSString *userName);
-static void NeoWCOpenHomeRemark(id owner, id contact, BOOL group);
-static void NeoWCOpenHomeMoments(id owner, id contact);
-static void NeoWCSynchronizeAvatarQuickGesture(CommonMessageCellView *cell);
-static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *headView);
-static NSInteger NeoWCGroupMemberRemovalScene(id groupContact,
+static id WCAtlasTweakSafeValue(id object, NSString *key);
+static void WCAtlasTweakSetValue(id object, NSString *key, id value);
+static id WCAtlasTweakValueForSelectorNames(id object, NSArray<NSString *> *selectorNames);
+static id WCAtlasMessageManager(void);
+static id WCAtlasMessageWrapForCell(id cell);
+static id WCAtlasMessageForCellViewModel(id viewModel);
+static id WCAtlasImageJokerMessageForObject(id object);
+static id WCAtlasContactForUserName(NSString *userName);
+static void WCAtlasOpenHomeRemark(id owner, id contact, BOOL group);
+static void WCAtlasOpenHomeMoments(id owner, id contact);
+static void WCAtlasSynchronizeAvatarQuickGesture(CommonMessageCellView *cell);
+static BOOL WCAtlasPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *headView);
+static NSInteger WCAtlasGroupMemberRemovalScene(id groupContact,
                                                id memberContact,
                                                NSString *memberUserName);
-static void NeoWCConfirmRemoveGroupMember(UIViewController *presenter,
+static void WCAtlasConfirmRemoveGroupMember(UIViewController *presenter,
                                           id groupContact,
                                           id memberContact,
                                           NSString *memberUserName,
                                           NSInteger scene);
-static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id contact, BOOL group);
-static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCGroupMemberInfoRows(id contact,
+static NSArray<NSDictionary<NSString *, NSString *> *> *WCAtlasProfileInfoRows(id contact, BOOL group);
+static NSArray<NSDictionary<NSString *, NSString *> *> *WCAtlasGroupMemberInfoRows(id contact,
                                                                                    id groupContact,
                                                                                    NSString *userName);
-static void NeoWCAddInfoCardRow(NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows,
+static void WCAtlasAddInfoCardRow(NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows,
                                 NSString *title,
                                 id value);
-static UIViewController *NeoWCCreateOfficialSocialInformation(id contact);
-static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCOfficialSocialInformationRows(id controller);
-static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCMergeInfoCardRows(NSArray *baseRows,
+static UIViewController *WCAtlasCreateOfficialSocialInformation(id contact);
+static NSArray<NSDictionary<NSString *, NSString *> *> *WCAtlasOfficialSocialInformationRows(id controller);
+static NSArray<NSDictionary<NSString *, NSString *> *> *WCAtlasMergeInfoCardRows(NSArray *baseRows,
                                                                                 NSArray *officialRows);
-static void NeoWCRefreshInfoCardFromOfficialController(id officialController);
-static void NeoWCConfigureInfoCardSwitches(NeoWCContactInfoCardViewController *card,
+static void WCAtlasRefreshInfoCardFromOfficialController(id officialController);
+static void WCAtlasConfigureInfoCardSwitches(WCAtlasContactInfoCardViewController *card,
                                            NSString *username,
                                            BOOL group);
-static void NeoWCConfigureInfoCardDetailActions(NeoWCContactInfoCardViewController *card,
+static void WCAtlasConfigureInfoCardDetailActions(WCAtlasContactInfoCardViewController *card,
                                                 id contact,
                                                 id groupContact,
                                                 NSString *username,
                                                 id officialController);
-static UIViewController *NeoWCSendConfirmationPresenterForTarget(NSString *target);
-static BOOL NeoWCSendConfirmationValidateTarget(NSString *target);
-static BOOL NeoWCSendConfirmationMessageIsAppEmoticon(id wrap);
+static UIViewController *WCAtlasSendConfirmationPresenterForTarget(NSString *target);
+static BOOL WCAtlasSendConfirmationValidateTarget(NSString *target);
+static BOOL WCAtlasSendConfirmationMessageIsAppEmoticon(id wrap);
 
-static void NeoWCArmRepeatSendConfirmationBypass(NSString *target, NSInteger messageType) {
-    NeoWCSendConfirmationRepeatBypassUsername = [target copy];
-    NeoWCSendConfirmationRepeatBypassMessageType = messageType;
-    NeoWCSendConfirmationRepeatBypassDeadline = CACurrentMediaTime() + 3.0;
+static void WCAtlasArmRepeatSendConfirmationBypass(NSString *target, NSInteger messageType) {
+    WCAtlasSendConfirmationRepeatBypassUsername = [target copy];
+    WCAtlasSendConfirmationRepeatBypassMessageType = messageType;
+    WCAtlasSendConfirmationRepeatBypassDeadline = CACurrentMediaTime() + 3.0;
 }
 
-static void NeoWCClearRepeatSendConfirmationBypass(void) {
-    NeoWCSendConfirmationRepeatBypassUsername = nil;
-    NeoWCSendConfirmationRepeatBypassDeadline = 0.0;
-    NeoWCSendConfirmationRepeatBypassMessageType = 0;
+static void WCAtlasClearRepeatSendConfirmationBypass(void) {
+    WCAtlasSendConfirmationRepeatBypassUsername = nil;
+    WCAtlasSendConfirmationRepeatBypassDeadline = 0.0;
+    WCAtlasSendConfirmationRepeatBypassMessageType = 0;
 }
 
-static BOOL NeoWCConsumeRepeatSendConfirmationBypass(NSString *target,
+static BOOL WCAtlasConsumeRepeatSendConfirmationBypass(NSString *target,
                                                        NSInteger messageType,
                                                        BOOL keepForImageSecondStage) {
     CFTimeInterval now = CACurrentMediaTime();
-    if (now > NeoWCSendConfirmationRepeatBypassDeadline) {
-        NeoWCClearRepeatSendConfirmationBypass();
+    if (now > WCAtlasSendConfirmationRepeatBypassDeadline) {
+        WCAtlasClearRepeatSendConfirmationBypass();
         return NO;
     }
     BOOL videoTypeMatches = (messageType == 43 || messageType == 62) &&
-                            (NeoWCSendConfirmationRepeatBypassMessageType == 43 ||
-                             NeoWCSendConfirmationRepeatBypassMessageType == 62);
+                            (WCAtlasSendConfirmationRepeatBypassMessageType == 43 ||
+                             WCAtlasSendConfirmationRepeatBypassMessageType == 62);
     BOOL matches = target.length > 0 &&
-                   [NeoWCSendConfirmationRepeatBypassUsername isEqualToString:target] &&
-                   (NeoWCSendConfirmationRepeatBypassMessageType == messageType || videoTypeMatches);
+                   [WCAtlasSendConfirmationRepeatBypassUsername isEqualToString:target] &&
+                   (WCAtlasSendConfirmationRepeatBypassMessageType == messageType || videoTypeMatches);
     if (matches && !keepForImageSecondStage) {
-        NeoWCClearRepeatSendConfirmationBypass();
+        WCAtlasClearRepeatSendConfirmationBypass();
     }
     return matches;
 }
 
-static BOOL NeoWCMessageCellIsSender(CommonMessageCellView *cell) {
+static BOOL WCAtlasMessageCellIsSender(CommonMessageCellView *cell) {
     if (!cell) return NO;
-    id viewModel = NeoWCTweakSafeValue(cell, @"viewModel") ?: NeoWCTweakSafeValue(cell, @"m_viewModel");
-    id senderValue = NeoWCTweakSafeValue(viewModel, @"isSender");
+    id viewModel = WCAtlasTweakSafeValue(cell, @"viewModel") ?: WCAtlasTweakSafeValue(cell, @"m_viewModel");
+    id senderValue = WCAtlasTweakSafeValue(viewModel, @"isSender");
     if ([senderValue respondsToSelector:@selector(boolValue)] && [senderValue boolValue]) return YES;
-    id message = NeoWCMessageWrapForCell(cell);
-    senderValue = NeoWCTweakSafeValue(message, @"isSender");
+    id message = WCAtlasMessageWrapForCell(cell);
+    senderValue = WCAtlasTweakSafeValue(message, @"isSender");
     if ([senderValue respondsToSelector:@selector(boolValue)] && [senderValue boolValue]) return YES;
-    NSString *fromUser = NeoWCTweakSafeValue(message, @"m_nsFromUsr");
-    NSString *currentUser = NeoWCCurrentUserWXID();
+    NSString *fromUser = WCAtlasTweakSafeValue(message, @"m_nsFromUsr");
+    NSString *currentUser = WCAtlasCurrentUserWXID();
     return fromUser.length > 0 && currentUser.length > 0 && [fromUser isEqualToString:currentUser];
 }
 
-static NeoWCReplySwipeAction NeoWCMessageGestureAction(CommonMessageCellView *cell,
+static WCAtlasReplySwipeAction WCAtlasMessageGestureAction(CommonMessageCellView *cell,
                                                         NSString *selfKey,
                                                         NSString *otherKey) {
-    BOOL selfMessage = NeoWCMessageCellIsSender(cell);
+    BOOL selfMessage = WCAtlasMessageCellIsSender(cell);
     NSInteger action = [[NSUserDefaults standardUserDefaults] integerForKey:selfMessage ? selfKey : otherKey];
-    if (action < NeoWCReplySwipeActionNone || action > NeoWCReplySwipeActionRepeat) return NeoWCReplySwipeActionNone;
-    if (!selfMessage && action == NeoWCReplySwipeActionRevoke) return NeoWCReplySwipeActionNone;
-    return (NeoWCReplySwipeAction)action;
+    if (action < WCAtlasReplySwipeActionNone || action > WCAtlasReplySwipeActionRepeat) return WCAtlasReplySwipeActionNone;
+    if (!selfMessage && action == WCAtlasReplySwipeActionRevoke) return WCAtlasReplySwipeActionNone;
+    return (WCAtlasReplySwipeAction)action;
 }
 
-static NeoWCReplySwipeAction NeoWCMessageSwipeAction(CommonMessageCellView *cell, BOOL rightward) {
-    return NeoWCMessageGestureAction(cell,
-                                     rightward ? NeoWCReplySwipeRightSelfActionKey : NeoWCReplySwipeSelfActionKey,
-                                     rightward ? NeoWCReplySwipeRightOtherActionKey : NeoWCReplySwipeOtherActionKey);
+static WCAtlasReplySwipeAction WCAtlasMessageSwipeAction(CommonMessageCellView *cell, BOOL rightward) {
+    return WCAtlasMessageGestureAction(cell,
+                                     rightward ? WCAtlasReplySwipeRightSelfActionKey : WCAtlasReplySwipeSelfActionKey,
+                                     rightward ? WCAtlasReplySwipeRightOtherActionKey : WCAtlasReplySwipeOtherActionKey);
 }
 
-static CGFloat NeoWCReplySwipeTriggerDistance(void) {
-    CGFloat value = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCReplySwipeTriggerDistanceKey];
+static CGFloat WCAtlasReplySwipeTriggerDistance(void) {
+    CGFloat value = [[NSUserDefaults standardUserDefaults] doubleForKey:WCAtlasReplySwipeTriggerDistanceKey];
     if (value <= 0.0) value = 56.0;
     return MIN(100.0, MAX(36.0, value));
 }
 
-static UIControl *NeoWCFirstControlInView(UIView *view) {
+static UIControl *WCAtlasFirstControlInView(UIView *view) {
     if (!view) return nil;
-    id button = NeoWCTweakSafeValue(view, @"m_btn");
+    id button = WCAtlasTweakSafeValue(view, @"m_btn");
     if ([button isKindOfClass:[UIControl class]]) return button;
     for (UIView *subview in view.subviews) {
-        UIControl *control = NeoWCFirstControlInView(subview);
+        UIControl *control = WCAtlasFirstControlInView(subview);
         if (control) return control;
     }
     return [view isKindOfClass:[UIControl class]] ? (UIControl *)view : nil;
 }
 
-@implementation NeoWCBarButtonActionProxy
+@implementation WCAtlasBarButtonActionProxy
 
 - (void)invoke:(id)sender {
     UIBarButtonItem *item = self.originalItem;
@@ -614,7 +614,7 @@ static UIControl *NeoWCFirstControlInView(UIView *view) {
         }
         return;
     }
-    UIControl *control = NeoWCFirstControlInView(item.customView);
+    UIControl *control = WCAtlasFirstControlInView(item.customView);
     if (control) {
         [control sendActionsForControlEvents:UIControlEventTouchUpInside];
         return;
@@ -631,7 +631,7 @@ static UIControl *NeoWCFirstControlInView(UIView *view) {
 
 @end
 
-@interface NeoWCMomentsFloatMenuSnapshot : NSObject
+@interface WCAtlasMomentsFloatMenuSnapshot : NSObject
 @property (nonatomic, assign) CGRect baseFrame;
 @property (nonatomic, assign) CGFloat addedWidth;
 @property (nonatomic, strong) UIView *container;
@@ -648,10 +648,10 @@ static UIControl *NeoWCFirstControlInView(UIView *view) {
 @property (nonatomic, assign) BOOL applying;
 @end
 
-@implementation NeoWCMomentsFloatMenuSnapshot
+@implementation WCAtlasMomentsFloatMenuSnapshot
 @end
 
-static UIViewController *NeoWCViewControllerForResponder(id responderObject) {
+static UIViewController *WCAtlasViewControllerForResponder(id responderObject) {
     UIResponder *responder = [responderObject isKindOfClass:[UIResponder class]] ? (UIResponder *)responderObject : nil;
     while (responder) {
         if ([responder isKindOfClass:[UIViewController class]]) return (UIViewController *)responder;
@@ -660,11 +660,11 @@ static UIViewController *NeoWCViewControllerForResponder(id responderObject) {
     return nil;
 }
 
-static BOOL NeoWCMomentsIsNativeDetailContext(id responderObject) {
+static BOOL WCAtlasMomentsIsNativeDetailContext(id responderObject) {
     Class detailClass = NSClassFromString(@"WCCommentDetailViewControllerFB");
     if (!detailClass) return NO;
-    UIViewController *controller = NeoWCViewControllerForResponder(responderObject);
-    UIViewController *activeDetail = NeoWCActiveMomentsDetailController;
+    UIViewController *controller = WCAtlasViewControllerForResponder(responderObject);
+    UIViewController *activeDetail = WCAtlasActiveMomentsDetailController;
     if ([activeDetail isKindOfClass:detailClass] && !controller) return YES;
     for (UIViewController *current = controller; current; current = current.parentViewController) {
         if ([current isKindOfClass:detailClass] || current == activeDetail) return YES;
@@ -672,8 +672,8 @@ static BOOL NeoWCMomentsIsNativeDetailContext(id responderObject) {
     return [controller.navigationController.topViewController isKindOfClass:detailClass];
 }
 
-static NSArray<UIGestureRecognizer *> *NeoWCNavigationReturnGesturesForView(UIView *view) {
-    UIViewController *controller = NeoWCViewControllerForResponder(view);
+static NSArray<UIGestureRecognizer *> *WCAtlasNavigationReturnGesturesForView(UIView *view) {
+    UIViewController *controller = WCAtlasViewControllerForResponder(view);
     UINavigationController *navigationController = controller.navigationController;
     if (!navigationController || navigationController.viewControllers.count <= 1) return @[];
 
@@ -698,35 +698,35 @@ static NSArray<UIGestureRecognizer *> *NeoWCNavigationReturnGesturesForView(UIVi
     return gestures;
 }
 
-static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIView *view) {
+static BOOL WCAtlasIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIView *view) {
     if (!candidate) return NO;
-    return [NeoWCNavigationReturnGesturesForView(view) containsObject:candidate];
+    return [WCAtlasNavigationReturnGesturesForView(view) containsObject:candidate];
 }
 
-@interface NeoWCReplyPanGestureDelegate : NSObject <UIGestureRecognizerDelegate>
+@interface WCAtlasReplyPanGestureDelegate : NSObject <UIGestureRecognizerDelegate>
 @property (nonatomic, weak) UIView *cell;
 @property (nonatomic, assign) CGFloat initialWindowX;
 @end
 
-@interface NeoWCAvatarQuickGestureProxy : NSObject <UIGestureRecognizerDelegate>
+@interface WCAtlasAvatarQuickGestureProxy : NSObject <UIGestureRecognizerDelegate>
 @property (nonatomic, weak) CommonMessageCellView *cell;
 @property (nonatomic, weak) UIView *headView;
 - (void)handleGesture:(UIGestureRecognizer *)recognizer;
 @end
 
-@interface NeoWCWeakObjectBox : NSObject
+@interface WCAtlasWeakObjectBox : NSObject
 @property (nonatomic, weak) id object;
 @end
 
-@interface NeoWCReplyTransformSnapshot : NSObject
+@interface WCAtlasReplyTransformSnapshot : NSObject
 @property (nonatomic, strong) UIView *view;
 @property (nonatomic, assign) CGAffineTransform transform;
 @end
 
-@implementation NeoWCReplyTransformSnapshot
+@implementation WCAtlasReplyTransformSnapshot
 @end
 
-@implementation NeoWCAvatarQuickGestureProxy
+@implementation WCAtlasAvatarQuickGestureProxy
 
 - (void)handleGesture:(UIGestureRecognizer *)recognizer {
     if ([recognizer isKindOfClass:UILongPressGestureRecognizer.class] &&
@@ -736,13 +736,13 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
     CommonMessageCellView *cell = self.cell;
     UIView *headView = self.headView;
     if (!cell.window || !headView.window) return;
-    (void)NeoWCPresentAvatarQuickMenu(cell, headView);
+    (void)WCAtlasPresentAvatarQuickMenu(cell, headView);
 }
 
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
     (void)gestureRecognizer;
     return self.cell.window && self.headView.window &&
-           NeoWCEnhancementEnabled(NeoWCAvatarQuickMenuGestureKey);
+           WCAtlasEnhancementEnabled(WCAtlasAvatarQuickMenuGestureKey);
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
@@ -754,23 +754,23 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
 
 @end
 
-@implementation NeoWCWeakObjectBox
+@implementation WCAtlasWeakObjectBox
 @end
 
-@interface NeoWCQuickReplyPlusGestureDelegate : NSObject <UIGestureRecognizerDelegate>
+@interface WCAtlasQuickReplyPlusGestureDelegate : NSObject <UIGestureRecognizerDelegate>
 @property (nonatomic, weak) MMInputToolView *toolView;
 @end
 
-@implementation NeoWCQuickReplyPlusGestureDelegate
+@implementation WCAtlasQuickReplyPlusGestureDelegate
 
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
     MMInputToolView *toolView = self.toolView;
     if (!toolView) return NO;
-    BOOL quickReplyEnabled = NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey);
+    BOOL quickReplyEnabled = WCAtlasEnhancementEnabled(WCAtlasQuickReplyEnabledKey);
     if (!quickReplyEnabled) return NO;
     UIView *candidate = [toolView hitTest:[gestureRecognizer locationInView:toolView] withEvent:nil];
-    UIView *sendButton = NeoWCTweakValueForSelectorNames(toolView, @[@"sendButton", @"_sendButton"]);
-    UIView *attachmentButton = NeoWCTweakValueForSelectorNames(toolView, @[@"attachmentButton", @"_attachmentButton"]);
+    UIView *sendButton = WCAtlasTweakValueForSelectorNames(toolView, @[@"sendButton", @"_sendButton"]);
+    UIView *attachmentButton = WCAtlasTweakValueForSelectorNames(toolView, @[@"attachmentButton", @"_attachmentButton"]);
     while (candidate && candidate != toolView) {
         if (candidate == sendButton) return NO;
         if (candidate == attachmentButton) return quickReplyEnabled;
@@ -799,17 +799,17 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
 
 
 
-@implementation NeoWCReplyPanGestureDelegate
+@implementation WCAtlasReplyPanGestureDelegate
 
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)recognizer {
-    if (!NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey) ||
+    if (!WCAtlasEnhancementEnabled(WCAtlasReplySwipeEnabledKey) ||
         !self.cell.window ||
         ![recognizer isKindOfClass:[UIPanGestureRecognizer class]]) return NO;
     UIPanGestureRecognizer *pan = (UIPanGestureRecognizer *)recognizer;
     CGPoint velocity = [pan velocityInView:self.cell];
     if (fabs(velocity.x) <= fabs(velocity.y)) return NO;
-    if (NeoWCMessageSwipeAction((CommonMessageCellView *)self.cell, velocity.x > 0.0) == NeoWCReplySwipeActionNone) return NO;
-    if (velocity.x > 0.0 && NeoWCNavigationReturnGesturesForView(self.cell).count > 0) {
+    if (WCAtlasMessageSwipeAction((CommonMessageCellView *)self.cell, velocity.x > 0.0) == WCAtlasReplySwipeActionNone) return NO;
+    if (velocity.x > 0.0 && WCAtlasNavigationReturnGesturesForView(self.cell).count > 0) {
         CGFloat edgeWidth = MAX(50.0, self.cell.window.safeAreaInsets.left + 32.0);
         if (self.initialWindowX <= edgeWidth) return NO;
     }
@@ -822,7 +822,7 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
        shouldReceiveTouch:(UITouch *)touch {
     UIWindow *window = self.cell.window;
     self.initialWindowX = window ? [touch locationInView:window].x : CGFLOAT_MAX;
-    if (!window || NeoWCNavigationReturnGesturesForView(self.cell).count == 0) return YES;
+    if (!window || WCAtlasNavigationReturnGesturesForView(self.cell).count == 0) return YES;
     CGFloat edgeWidth = MAX(50.0, window.safeAreaInsets.left + 32.0);
     // The decision is based on the original touch, not the later point at which
     // UIKit asks shouldBegin. This prevents an edge-back drag from entering a
@@ -833,7 +833,7 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
     shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
     (void)gestureRecognizer;
-    return NeoWCIsNavigationReturnGesture(otherGestureRecognizer, self.cell);
+    return WCAtlasIsNavigationReturnGesture(otherGestureRecognizer, self.cell);
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
@@ -845,101 +845,101 @@ static BOOL NeoWCIsNavigationReturnGesture(UIGestureRecognizer *candidate, UIVie
 
 @end
 
-static void NeoWCSynchronizeReplyGesture(CommonMessageCellView *cell) {
+static void WCAtlasSynchronizeReplyGesture(CommonMessageCellView *cell) {
     if (!cell) return;
-    UIPanGestureRecognizer *panRecognizer = objc_getAssociatedObject(cell, &NeoWCReplyPanRecognizerKey);
-    UITapGestureRecognizer *doubleRecognizer = objc_getAssociatedObject(cell, &NeoWCMessageDoubleTapRecognizerKey);
-    UITapGestureRecognizer *tripleRecognizer = objc_getAssociatedObject(cell, &NeoWCMessageTripleTapRecognizerKey);
-    BOOL enabled = NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey) && cell.window;
-    NeoWCReplySwipeAction leftSwipeAction = enabled ? NeoWCMessageSwipeAction(cell, NO) : NeoWCReplySwipeActionNone;
-    NeoWCReplySwipeAction rightSwipeAction = enabled ? NeoWCMessageSwipeAction(cell, YES) : NeoWCReplySwipeActionNone;
-    BOOL hasSwipeAction = leftSwipeAction != NeoWCReplySwipeActionNone || rightSwipeAction != NeoWCReplySwipeActionNone;
-    NeoWCReplySwipeAction doubleAction = enabled
-        ? NeoWCMessageGestureAction(cell, NeoWCMessageDoubleTapSelfActionKey, NeoWCMessageDoubleTapOtherActionKey)
-        : NeoWCReplySwipeActionNone;
-    NeoWCReplySwipeAction tripleAction = enabled
-        ? NeoWCMessageGestureAction(cell, NeoWCMessageTripleTapSelfActionKey, NeoWCMessageTripleTapOtherActionKey)
-        : NeoWCReplySwipeActionNone;
+    UIPanGestureRecognizer *panRecognizer = objc_getAssociatedObject(cell, &WCAtlasReplyPanRecognizerKey);
+    UITapGestureRecognizer *doubleRecognizer = objc_getAssociatedObject(cell, &WCAtlasMessageDoubleTapRecognizerKey);
+    UITapGestureRecognizer *tripleRecognizer = objc_getAssociatedObject(cell, &WCAtlasMessageTripleTapRecognizerKey);
+    BOOL enabled = WCAtlasEnhancementEnabled(WCAtlasReplySwipeEnabledKey) && cell.window;
+    WCAtlasReplySwipeAction leftSwipeAction = enabled ? WCAtlasMessageSwipeAction(cell, NO) : WCAtlasReplySwipeActionNone;
+    WCAtlasReplySwipeAction rightSwipeAction = enabled ? WCAtlasMessageSwipeAction(cell, YES) : WCAtlasReplySwipeActionNone;
+    BOOL hasSwipeAction = leftSwipeAction != WCAtlasReplySwipeActionNone || rightSwipeAction != WCAtlasReplySwipeActionNone;
+    WCAtlasReplySwipeAction doubleAction = enabled
+        ? WCAtlasMessageGestureAction(cell, WCAtlasMessageDoubleTapSelfActionKey, WCAtlasMessageDoubleTapOtherActionKey)
+        : WCAtlasReplySwipeActionNone;
+    WCAtlasReplySwipeAction tripleAction = enabled
+        ? WCAtlasMessageGestureAction(cell, WCAtlasMessageTripleTapSelfActionKey, WCAtlasMessageTripleTapOtherActionKey)
+        : WCAtlasReplySwipeActionNone;
 
     if (!hasSwipeAction) {
         if (panRecognizer) {
-            NSArray *snapshots = objc_getAssociatedObject(cell, &NeoWCReplyTransformSnapshotsKey);
-            if (snapshots.count) NeoWCRestoreReplyTransforms(snapshots);
+            NSArray *snapshots = objc_getAssociatedObject(cell, &WCAtlasReplyTransformSnapshotsKey);
+            if (snapshots.count) WCAtlasRestoreReplyTransforms(snapshots);
             else {
-                NSValue *originalTransform = objc_getAssociatedObject(cell, &NeoWCReplyOriginalTransformKey);
+                NSValue *originalTransform = objc_getAssociatedObject(cell, &WCAtlasReplyOriginalTransformKey);
                 if (originalTransform) cell.transform = originalTransform.CGAffineTransformValue;
             }
             [cell removeGestureRecognizer:panRecognizer];
         }
-        objc_setAssociatedObject(cell, &NeoWCReplyPanRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(cell, &NeoWCReplyPanDelegateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(cell, &NeoWCReplyOriginalTransformKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(cell, &NeoWCReplyTransformSnapshotsKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(cell, &NeoWCReplyFeedbackGeneratorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(cell, &NeoWCReplyFeedbackTriggeredKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(cell, &NeoWCReplyPanRightwardKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasReplyPanRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasReplyPanDelegateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasReplyOriginalTransformKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasReplyTransformSnapshotsKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasReplyFeedbackGeneratorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasReplyFeedbackTriggeredKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasReplyPanRightwardKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         panRecognizer = nil;
     }
     if (!panRecognizer && hasSwipeAction) {
-        NeoWCReplyPanGestureDelegate *delegate = [NeoWCReplyPanGestureDelegate new];
+        WCAtlasReplyPanGestureDelegate *delegate = [WCAtlasReplyPanGestureDelegate new];
         delegate.cell = cell;
-        panRecognizer = [[UIPanGestureRecognizer alloc] initWithTarget:cell action:@selector(neowc_handleReplyPan:)];
+        panRecognizer = [[UIPanGestureRecognizer alloc] initWithTarget:cell action:@selector(wcatlas_handleReplyPan:)];
         panRecognizer.delegate = delegate;
         panRecognizer.maximumNumberOfTouches = 1;
         panRecognizer.cancelsTouchesInView = YES;
         panRecognizer.delaysTouchesBegan = NO;
         panRecognizer.delaysTouchesEnded = NO;
         [cell addGestureRecognizer:panRecognizer];
-        for (UIGestureRecognizer *returnGesture in NeoWCNavigationReturnGesturesForView(cell)) {
+        for (UIGestureRecognizer *returnGesture in WCAtlasNavigationReturnGesturesForView(cell)) {
             if (returnGesture != panRecognizer) [panRecognizer requireGestureRecognizerToFail:returnGesture];
         }
-        objc_setAssociatedObject(cell, &NeoWCReplyPanRecognizerKey, panRecognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(cell, &NeoWCReplyPanDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasReplyPanRecognizerKey, panRecognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasReplyPanDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 
-    if (doubleAction == NeoWCReplySwipeActionNone && doubleRecognizer) {
+    if (doubleAction == WCAtlasReplySwipeActionNone && doubleRecognizer) {
         [cell removeGestureRecognizer:doubleRecognizer];
-        objc_setAssociatedObject(cell, &NeoWCMessageDoubleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasMessageDoubleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         doubleRecognizer = nil;
     }
-    if (tripleAction == NeoWCReplySwipeActionNone && tripleRecognizer) {
+    if (tripleAction == WCAtlasReplySwipeActionNone && tripleRecognizer) {
         [cell removeGestureRecognizer:tripleRecognizer];
-        objc_setAssociatedObject(cell, &NeoWCMessageTripleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasMessageTripleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         tripleRecognizer = nil;
         // Recreate double tap so it no longer retains a failure dependency on the removed triple tap.
         if (doubleRecognizer) {
             [cell removeGestureRecognizer:doubleRecognizer];
-            objc_setAssociatedObject(cell, &NeoWCMessageDoubleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(cell, &WCAtlasMessageDoubleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             doubleRecognizer = nil;
         }
     }
-    if (!doubleRecognizer && doubleAction != NeoWCReplySwipeActionNone) {
-        doubleRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:cell action:@selector(neowc_handleMessageTapAction:)];
+    if (!doubleRecognizer && doubleAction != WCAtlasReplySwipeActionNone) {
+        doubleRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:cell action:@selector(wcatlas_handleMessageTapAction:)];
         doubleRecognizer.numberOfTapsRequired = 2;
         doubleRecognizer.numberOfTouchesRequired = 1;
         doubleRecognizer.cancelsTouchesInView = YES;
         [cell addGestureRecognizer:doubleRecognizer];
-        objc_setAssociatedObject(cell, &NeoWCMessageDoubleTapRecognizerKey, doubleRecognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasMessageDoubleTapRecognizerKey, doubleRecognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (!tripleRecognizer && tripleAction != NeoWCReplySwipeActionNone) {
-        tripleRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:cell action:@selector(neowc_handleMessageTapAction:)];
+    if (!tripleRecognizer && tripleAction != WCAtlasReplySwipeActionNone) {
+        tripleRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:cell action:@selector(wcatlas_handleMessageTapAction:)];
         tripleRecognizer.numberOfTapsRequired = 3;
         tripleRecognizer.numberOfTouchesRequired = 1;
         tripleRecognizer.cancelsTouchesInView = YES;
         [cell addGestureRecognizer:tripleRecognizer];
-        objc_setAssociatedObject(cell, &NeoWCMessageTripleTapRecognizerKey, tripleRecognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasMessageTripleTapRecognizerKey, tripleRecognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     if (doubleRecognizer && tripleRecognizer) [doubleRecognizer requireGestureRecognizerToFail:tripleRecognizer];
 }
 
-static NSMutableSet *NeoWCActiveQuickSendSessions(void) {
+static NSMutableSet *WCAtlasActiveQuickSendSessions(void) {
     static NSMutableSet *sessions;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{ sessions = [NSMutableSet set]; });
     return sessions;
 }
 
-static id NeoWCTweakSafeValue(id object, NSString *key) {
+static id WCAtlasTweakSafeValue(id object, NSString *key) {
     if (!object || key.length == 0) return nil;
     @try {
         return [object valueForKey:key];
@@ -948,12 +948,12 @@ static id NeoWCTweakSafeValue(id object, NSString *key) {
     }
 }
 
-static BOOL NeoWCUsesAntiRevokeSidePrompt(void) {
-    return NeoWCEnhancementEnabled(NeoWCAntiRevokeKey) &&
-           [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCAntiRevokePromptStyleKey] == 1;
+static BOOL WCAtlasUsesAntiRevokeSidePrompt(void) {
+    return WCAtlasEnhancementEnabled(WCAtlasAntiRevokeKey) &&
+           [[NSUserDefaults standardUserDefaults] integerForKey:WCAtlasAntiRevokePromptStyleKey] == 1;
 }
 
-static void NeoWCTweakSetValue(id object, NSString *key, id value) {
+static void WCAtlasTweakSetValue(id object, NSString *key, id value) {
     if (!object || key.length == 0) return;
     @try {
         [object setValue:value forKey:key];
@@ -961,7 +961,7 @@ static void NeoWCTweakSetValue(id object, NSString *key, id value) {
     }
 }
 
-static BOOL NeoWCInvokeFirstMessageCellAction(CommonMessageCellView *cell, NSArray<NSString *> *selectorNames) {
+static BOOL WCAtlasInvokeFirstMessageCellAction(CommonMessageCellView *cell, NSArray<NSString *> *selectorNames) {
     for (NSString *selectorName in selectorNames) {
         SEL selector = NSSelectorFromString(selectorName);
         if (![cell respondsToSelector:selector]) continue;
@@ -971,7 +971,7 @@ static BOOL NeoWCInvokeFirstMessageCellAction(CommonMessageCellView *cell, NSArr
     return NO;
 }
 
-@interface NeoWCMessageRepeatSession : NSObject
+@interface WCAtlasMessageRepeatSession : NSObject
 @property (nonatomic, strong) id forwardLogic;
 @property (nonatomic, strong) id message;
 @property (nonatomic, strong) id contact;
@@ -980,12 +980,12 @@ static BOOL NeoWCInvokeFirstMessageCellAction(CommonMessageCellView *cell, NSArr
 - (void)finishSession;
 @end
 
-@implementation NeoWCMessageRepeatSession
+@implementation WCAtlasMessageRepeatSession
 
 - (void)finishSession {
     if (self.finished) return;
     self.finished = YES;
-    [NeoWCActiveQuickSendSessions() removeObject:self];
+    [WCAtlasActiveQuickSendSessions() removeObject:self];
     self.forwardLogic = nil;
     self.message = nil;
     self.contact = nil;
@@ -1001,31 +1001,31 @@ static BOOL NeoWCInvokeFirstMessageCellAction(CommonMessageCellView *cell, NSArr
 
 @end
 
-static id NeoWCMessageManager(void) {
+static id WCAtlasMessageManager(void) {
     Class managerClass = objc_getClass("CMessageMgr");
-    return NeoWCServiceForClass(managerClass);
+    return WCAtlasServiceForClass(managerClass);
 }
 
-static NSString *NeoWCSessionForMessage(id message) {
+static NSString *WCAtlasSessionForMessage(id message) {
     SEL selector = NSSelectorFromString(@"GetChatName");
     if ([message respondsToSelector:selector]) {
         id value = ((id (*)(id, SEL))objc_msgSend)(message, selector);
         if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
     }
-    NSString *fromUser = NeoWCTweakSafeValue(message, @"m_nsFromUsr");
-    NSString *toUser = NeoWCTweakSafeValue(message, @"m_nsToUsr");
-    NSString *currentUser = NeoWCCurrentUserWXID();
+    NSString *fromUser = WCAtlasTweakSafeValue(message, @"m_nsFromUsr");
+    NSString *toUser = WCAtlasTweakSafeValue(message, @"m_nsToUsr");
+    NSString *currentUser = WCAtlasCurrentUserWXID();
     if ([fromUser hasSuffix:@"@chatroom"]) return fromUser;
     if ([toUser hasSuffix:@"@chatroom"]) return toUser;
     if (currentUser.length > 0 && [fromUser isEqualToString:currentUser]) return toUser;
     return fromUser.length > 0 ? fromUser : toUser;
 }
 
-static BOOL NeoWCRepeatPlainTextMessageFallback(CommonMessageCellView *cell) {
-    id source = NeoWCMessageWrapForCell(cell);
-    NSInteger messageType = [NeoWCTweakSafeValue(source, @"m_uiMessageType") integerValue];
-    NSString *content = NeoWCTweakSafeValue(source, @"m_nsContent");
-    NSString *session = NeoWCSessionForMessage(source);
+static BOOL WCAtlasRepeatPlainTextMessageFallback(CommonMessageCellView *cell) {
+    id source = WCAtlasMessageWrapForCell(cell);
+    NSInteger messageType = [WCAtlasTweakSafeValue(source, @"m_uiMessageType") integerValue];
+    NSString *content = WCAtlasTweakSafeValue(source, @"m_nsContent");
+    NSString *session = WCAtlasSessionForMessage(source);
     if (messageType != 1 || content.length == 0 || session.length == 0) return NO;
 
     Class wrapClass = objc_getClass("CMessageWrap");
@@ -1033,27 +1033,27 @@ static BOOL NeoWCRepeatPlainTextMessageFallback(CommonMessageCellView *cell) {
     if (!wrapClass || ![wrapClass instancesRespondToSelector:initSelector]) return NO;
     id repeated = ((id (*)(id, SEL, NSUInteger))objc_msgSend)([wrapClass alloc], initSelector, 1);
     if (!repeated) return NO;
-    NeoWCTweakSetValue(repeated, @"m_nsFromUsr", NeoWCCurrentUserWXID() ?: @"");
-    NeoWCTweakSetValue(repeated, @"m_nsToUsr", session);
-    NeoWCTweakSetValue(repeated, @"m_nsContent", content);
-    NeoWCTweakSetValue(repeated, @"m_uiStatus", @1);
-    NeoWCTweakSetValue(repeated, @"m_uiCreateTime", @((NSUInteger)NSDate.date.timeIntervalSince1970));
+    WCAtlasTweakSetValue(repeated, @"m_nsFromUsr", WCAtlasCurrentUserWXID() ?: @"");
+    WCAtlasTweakSetValue(repeated, @"m_nsToUsr", session);
+    WCAtlasTweakSetValue(repeated, @"m_nsContent", content);
+    WCAtlasTweakSetValue(repeated, @"m_uiStatus", @1);
+    WCAtlasTweakSetValue(repeated, @"m_uiCreateTime", @((NSUInteger)NSDate.date.timeIntervalSince1970));
 
-    id manager = NeoWCMessageManager();
+    id manager = WCAtlasMessageManager();
     SEL sendSelector = sel_registerName("AddMsg:MsgWrap:");
     if (!manager || ![manager respondsToSelector:sendSelector]) return NO;
     ((void (*)(id, SEL, NSString *, id))objc_msgSend)(manager, sendSelector, session, repeated);
     return YES;
 }
 
-static BOOL NeoWCVoiceRepeatUploadIsActive(void) {
-    return NeoWCVoiceRepeatForwardDeadline > NSDate.date.timeIntervalSince1970;
+static BOOL WCAtlasVoiceRepeatUploadIsActive(void) {
+    return WCAtlasVoiceRepeatForwardDeadline > NSDate.date.timeIntervalSince1970;
 }
 
-static BOOL NeoWCSendVoiceMessage(id source, NSString *sourcePathOverride, NSString *session) {
+static BOOL WCAtlasSendVoiceMessage(id source, NSString *sourcePathOverride, NSString *session) {
     if (!source || session.length == 0) return NO;
 
-    id manager = NeoWCMessageManager();
+    id manager = WCAtlasMessageManager();
     SEL voicePathSelector = sel_registerName("getVoicePath");
     SEL destinationPathSelector = sel_registerName("getPathOfAudio:");
     SEL addLocalSelector = sel_registerName("AddLocalMsg:MsgWrap:");
@@ -1062,14 +1062,14 @@ static BOOL NeoWCSendVoiceMessage(id source, NSString *sourcePathOverride, NSStr
     SEL uploaderSelector = sel_registerName("uploaderForMsgWrap:");
     Class messageWrapClass = objc_getClass("CMessageWrap");
     Class audioSenderClass = objc_getClass("AudioSender");
-    id audioSender = audioSenderClass ? NeoWCServiceForClass(audioSenderClass) : nil;
+    id audioSender = audioSenderClass ? WCAtlasServiceForClass(audioSenderClass) : nil;
     if ((sourcePathOverride.length == 0 && ![source respondsToSelector:voicePathSelector]) ||
         !manager ||
         ![manager respondsToSelector:addLocalSelector] ||
         !messageWrapClass ||
         ![messageWrapClass respondsToSelector:destinationPathSelector] ||
         !audioSender) {
-        NeoWCLog(@"语音复读入口不完整，取消发送");
+        WCAtlasLog(@"语音复读入口不完整，取消发送");
         return NO;
     }
 
@@ -1077,7 +1077,7 @@ static BOOL NeoWCSendVoiceMessage(id source, NSString *sourcePathOverride, NSStr
     if (sourcePath.length == 0) sourcePath = ((id (*)(id, SEL))objc_msgSend)(source, voicePathSelector);
     if (![sourcePath isKindOfClass:[NSString class]] || sourcePath.length == 0 ||
         ![[NSFileManager defaultManager] fileExistsAtPath:sourcePath]) {
-        NeoWCLog(@"语音复读找不到本地语音文件");
+        WCAtlasLog(@"语音复读找不到本地语音文件");
         return NO;
     }
 
@@ -1086,24 +1086,24 @@ static BOOL NeoWCSendVoiceMessage(id source, NSString *sourcePathOverride, NSStr
         repeated = [source copy];
         if (!repeated) return NO;
 
-        NeoWCTweakSetValue(repeated, @"m_uiMesLocalID", @0);
-        NeoWCTweakSetValue(repeated, @"m_n64MesSvrID", @0);
+        WCAtlasTweakSetValue(repeated, @"m_uiMesLocalID", @0);
+        WCAtlasTweakSetValue(repeated, @"m_n64MesSvrID", @0);
         SEL resetLocalIDSelector = sel_registerName("resetLocalId");
         if ([repeated respondsToSelector:resetLocalIDSelector]) {
             ((void (*)(id, SEL))objc_msgSend)(repeated, resetLocalIDSelector);
         }
 
-        NSString *currentUser = NeoWCCurrentUserWXID() ?: @"";
+        NSString *currentUser = WCAtlasCurrentUserWXID() ?: @"";
         NSUInteger now = (NSUInteger)NSDate.date.timeIntervalSince1970;
-        NeoWCTweakSetValue(repeated, @"m_nsFromUsr", currentUser);
-        NeoWCTweakSetValue(repeated, @"m_nsRealChatUsr", currentUser);
-        NeoWCTweakSetValue(repeated, @"m_nsToUsr", session);
-        NeoWCTweakSetValue(repeated, @"m_uiCreateTime", @(now));
-        NeoWCTweakSetValue(repeated, @"m_uiSendTime", @(now));
-        NeoWCTweakSetValue(repeated, @"m_uiStatus", @1);
-        NeoWCTweakSetValue(repeated, @"m_uiVoiceForwardFlag", @1);
-        id extendInfo = NeoWCTweakSafeValue(repeated, @"m_extendInfoWithMsgType");
-        NeoWCTweakSetValue(extendInfo, @"m_uiVoiceForwardFlag", @1);
+        WCAtlasTweakSetValue(repeated, @"m_nsFromUsr", currentUser);
+        WCAtlasTweakSetValue(repeated, @"m_nsRealChatUsr", currentUser);
+        WCAtlasTweakSetValue(repeated, @"m_nsToUsr", session);
+        WCAtlasTweakSetValue(repeated, @"m_uiCreateTime", @(now));
+        WCAtlasTweakSetValue(repeated, @"m_uiSendTime", @(now));
+        WCAtlasTweakSetValue(repeated, @"m_uiStatus", @1);
+        WCAtlasTweakSetValue(repeated, @"m_uiVoiceForwardFlag", @1);
+        id extendInfo = WCAtlasTweakSafeValue(repeated, @"m_extendInfoWithMsgType");
+        WCAtlasTweakSetValue(extendInfo, @"m_uiVoiceForwardFlag", @1);
 
         // AddLocalMsg assigns the new local message ID. WeChat derives the
         // audio destination path from that ID, so this must happen first.
@@ -1113,7 +1113,7 @@ static BOOL NeoWCSendVoiceMessage(id source, NSString *sourcePathOverride, NSStr
                                                                         destinationPathSelector,
                                                                         repeated);
         if (![destinationPath isKindOfClass:[NSString class]] || destinationPath.length == 0) {
-            NeoWCLog(@"语音复读无法生成目标文件路径");
+            WCAtlasLog(@"语音复读无法生成目标文件路径");
             return NO;
         }
 
@@ -1145,7 +1145,7 @@ static BOOL NeoWCSendVoiceMessage(id source, NSString *sourcePathOverride, NSStr
                                                     error:nil];
             unsigned long long destinationSize = [destinationAttributes[NSFileSize] unsignedLongLongValue];
             if (!voiceSaved || destinationSize == 0) {
-                NeoWCLog(@"语音复读保存语音失败：%@", copyError.localizedDescription ?: @"未知错误");
+                WCAtlasLog(@"语音复读保存语音失败：%@", copyError.localizedDescription ?: @"未知错误");
                 return NO;
             }
         }
@@ -1156,40 +1156,40 @@ static BOOL NeoWCSendVoiceMessage(id source, NSString *sourcePathOverride, NSStr
             resendTarget = ((id (*)(id, SEL, id))objc_msgSend)(audioSender, uploaderSelector, repeated);
         }
         if (![resendTarget respondsToSelector:resendSelector]) {
-            NeoWCLog(@"语音复读找不到微信语音上传入口");
+            WCAtlasLog(@"语音复读找不到微信语音上传入口");
             return NO;
         }
         // WeChatX keeps the native upload pipeline in forwarding mode for a
         // short, repeat-scoped window. The setter hooks below never affect
         // ordinary voice recording or forwarding outside this window.
-        NeoWCVoiceRepeatForwardDeadline = NSDate.date.timeIntervalSince1970 + 12.0;
+        WCAtlasVoiceRepeatForwardDeadline = NSDate.date.timeIntervalSince1970 + 12.0;
         ((void (*)(id, SEL, id, id))objc_msgSend)(resendTarget, resendSelector, session, repeated);
         return YES;
     } @catch (NSException *exception) {
-        NeoWCLog(@"语音复读调用失败：%@", exception.reason ?: exception.name);
+        WCAtlasLog(@"语音复读调用失败：%@", exception.reason ?: exception.name);
         return NO;
     }
 }
 
-static BOOL NeoWCRepeatVoiceMessage(id source, NSString *session) {
-    return NeoWCSendVoiceMessage(source, nil, session);
+static BOOL WCAtlasRepeatVoiceMessage(id source, NSString *session) {
+    return WCAtlasSendVoiceMessage(source, nil, session);
 }
 
-static NSString *NeoWCVoiceForwardSessionForContact(id contact) {
+static NSString *WCAtlasVoiceForwardSessionForContact(id contact) {
     if (!contact) return nil;
     if ([contact isKindOfClass:[NSString class]] && [contact length] > 0) return contact;
-    return NeoWCPrivateContactUserName(contact);
+    return WCAtlasPrivateContactUserName(contact);
 }
 
 // WeChat's stock forward controller accepts voice messages into its local
 // result flow, but current versions do not start a usable voice upload for
 // them. Match WeChatX by consuming voice wraps before the stock forward path
 // and sending each one through AudioSender's native resend pipeline.
-static NSArray *NeoWCForwardMessagesBySendingVoices(NSArray *messages,
+static NSArray *WCAtlasForwardMessagesBySendingVoices(NSArray *messages,
                                                     NSArray *contacts,
                                                     NSIndexSet **handledIndexes) {
     if (handledIndexes) *handledIndexes = nil;
-    if (!NeoWCEnhancementEnabled(NeoWCVoiceForwardEnabledKey) ||
+    if (!WCAtlasEnhancementEnabled(WCAtlasVoiceForwardEnabledKey) ||
         ![messages isKindOfClass:[NSArray class]] || messages.count == 0 ||
         ![contacts isKindOfClass:[NSArray class]] || contacts.count == 0) {
         return messages;
@@ -1199,22 +1199,22 @@ static NSArray *NeoWCForwardMessagesBySendingVoices(NSArray *messages,
     NSMutableIndexSet *handled = [NSMutableIndexSet indexSet];
     [messages enumerateObjectsUsingBlock:^(id message, NSUInteger index, BOOL *stop) {
         (void)stop;
-        if ([NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue] != 34) {
+        if ([WCAtlasTweakSafeValue(message, @"m_uiMessageType") integerValue] != 34) {
             [remaining addObject:message];
             return;
         }
 
         BOOL sentToEveryContact = YES;
         for (id contact in contacts) {
-            NSString *session = NeoWCVoiceForwardSessionForContact(contact);
-            if (session.length == 0 || !NeoWCRepeatVoiceMessage(message, session)) {
+            NSString *session = WCAtlasVoiceForwardSessionForContact(contact);
+            if (session.length == 0 || !WCAtlasRepeatVoiceMessage(message, session)) {
                 sentToEveryContact = NO;
                 break;
             }
         }
         if (sentToEveryContact) {
             [handled addIndex:index];
-            NeoWCCompatibilityMarkTriggered(@"voice-forward");
+            WCAtlasCompatibilityMarkTriggered(@"voice-forward");
         } else {
             [remaining addObject:message];
         }
@@ -1223,7 +1223,7 @@ static NSArray *NeoWCForwardMessagesBySendingVoices(NSArray *messages,
     return remaining;
 }
 
-static NSArray *NeoWCVoiceForwardFilteredOrigins(NSArray *origins, NSIndexSet *handledIndexes) {
+static NSArray *WCAtlasVoiceForwardFilteredOrigins(NSArray *origins, NSIndexSet *handledIndexes) {
     if (![origins isKindOfClass:[NSArray class]] || handledIndexes.count == 0) return origins;
     NSMutableArray *remaining = [origins mutableCopy];
     [handledIndexes enumerateIndexesWithOptions:NSEnumerationReverse
@@ -1234,12 +1234,12 @@ static NSArray *NeoWCVoiceForwardFilteredOrigins(NSArray *origins, NSIndexSet *h
     return remaining;
 }
 
-static BOOL NeoWCRepeatMessage(CommonMessageCellView *cell) {
-    id source = NeoWCMessageWrapForCell(cell);
-    NSString *chatName = NeoWCSessionForMessage(source);
-    NSInteger messageType = [NeoWCTweakSafeValue(source, @"m_uiMessageType") integerValue];
-    if (messageType == 34) return NeoWCRepeatVoiceMessage(source, chatName);
-    id contact = NeoWCContactForUserName(chatName);
+static BOOL WCAtlasRepeatMessage(CommonMessageCellView *cell) {
+    id source = WCAtlasMessageWrapForCell(cell);
+    NSString *chatName = WCAtlasSessionForMessage(source);
+    NSInteger messageType = [WCAtlasTweakSafeValue(source, @"m_uiMessageType") integerValue];
+    if (messageType == 34) return WCAtlasRepeatVoiceMessage(source, chatName);
+    id contact = WCAtlasContactForUserName(chatName);
     Class forwardClass = objc_getClass("ForwardMessageLogicController");
     SEL forwardSelector = sel_registerName("forwardNoConfirmForMsgList:toContacts:");
     SEL delegateSelector = sel_registerName("setDelegate:");
@@ -1252,86 +1252,86 @@ static BOOL NeoWCRepeatMessage(CommonMessageCellView *cell) {
         }
         id logic = canForward ? [forwardClass new] : nil;
         if (logic && [logic respondsToSelector:forwardSelector] && [logic respondsToSelector:delegateSelector]) {
-            NeoWCMessageRepeatSession *repeatSession = [NeoWCMessageRepeatSession new];
+            WCAtlasMessageRepeatSession *repeatSession = [WCAtlasMessageRepeatSession new];
             repeatSession.forwardLogic = logic;
             repeatSession.message = source;
             repeatSession.contact = contact;
-            repeatSession.presenter = NeoWCVisibleChatController;
+            repeatSession.presenter = WCAtlasVisibleChatController;
             ((void (*)(id, SEL, id))objc_msgSend)(logic, delegateSelector, repeatSession);
-            [NeoWCActiveQuickSendSessions() addObject:repeatSession];
+            [WCAtlasActiveQuickSendSessions() addObject:repeatSession];
             @try {
                 ((void (*)(id, SEL, id, id))objc_msgSend)(logic, forwardSelector, @[source], @[contact]);
             } @catch (NSException *exception) {
-                NeoWCLog(@"复读调用微信转发引擎失败：%@", exception.reason ?: exception.name);
+                WCAtlasLog(@"复读调用微信转发引擎失败：%@", exception.reason ?: exception.name);
                 [repeatSession finishSession];
-                return NeoWCRepeatPlainTextMessageFallback(cell);
+                return WCAtlasRepeatPlainTextMessageFallback(cell);
             }
-            __weak NeoWCMessageRepeatSession *weakSession = repeatSession;
+            __weak WCAtlasMessageRepeatSession *weakSession = repeatSession;
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60.0 * NSEC_PER_SEC)),
                            dispatch_get_main_queue(), ^{
-                NeoWCMessageRepeatSession *activeSession = weakSession;
+                WCAtlasMessageRepeatSession *activeSession = weakSession;
                 if (activeSession && !activeSession.finished) [activeSession finishSession];
             });
             return YES;
         }
     }
-    return NeoWCRepeatPlainTextMessageFallback(cell);
+    return WCAtlasRepeatPlainTextMessageFallback(cell);
 }
 
-static NSString *NeoWCRepeatConfirmationSummary(id message) {
-    NSInteger messageType = [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue];
+static NSString *WCAtlasRepeatConfirmationSummary(id message) {
+    NSInteger messageType = [WCAtlasTweakSafeValue(message, @"m_uiMessageType") integerValue];
     if (messageType == 1) {
-        NSString *content = NeoWCTweakSafeValue(message, @"m_nsContent");
+        NSString *content = WCAtlasTweakSafeValue(message, @"m_nsContent");
         if (content.length > 40) content = [[content substringToIndex:40] stringByAppendingString:@"…"];
         return content.length > 0 ? [NSString stringWithFormat:@"复读文字：%@", content] : @"复读文字消息";
     }
     if (messageType == 3) return @"复读图片消息";
     if (messageType == 34) return @"复读语音消息";
     if (messageType == 43 || messageType == 62) return @"复读视频消息";
-    if (messageType == 47 || NeoWCSendConfirmationMessageIsAppEmoticon(message)) return @"复读表情消息";
+    if (messageType == 47 || WCAtlasSendConfirmationMessageIsAppEmoticon(message)) return @"复读表情消息";
     return @"复读这条消息";
 }
 
-static BOOL NeoWCRepeatMessageWithConfirmation(CommonMessageCellView *cell) {
-    id source = NeoWCMessageWrapForCell(cell);
-    NSString *target = NeoWCSessionForMessage(source);
-    UIViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
-    if (!presenter) return NeoWCRepeatMessage(cell);
+static BOOL WCAtlasRepeatMessageWithConfirmation(CommonMessageCellView *cell) {
+    id source = WCAtlasMessageWrapForCell(cell);
+    NSString *target = WCAtlasSessionForMessage(source);
+    UIViewController *presenter = WCAtlasSendConfirmationPresenterForTarget(target);
+    if (!presenter) return WCAtlasRepeatMessage(cell);
     __weak CommonMessageCellView *weakCell = cell;
     id retainedSource = source;
-    BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter,
+    BOOL held = WCAtlasPresentSendConfirmationIfNeeded(presenter,
                                                       target,
-                                                      NeoWCRepeatConfirmationSummary(source),
+                                                      WCAtlasRepeatConfirmationSummary(source),
                                                       ^BOOL{
         CommonMessageCellView *strongCell = weakCell;
-        return strongCell && NeoWCSendConfirmationValidateTarget(target) &&
-               NeoWCMessageWrapForCell(strongCell) == retainedSource;
+        return strongCell && WCAtlasSendConfirmationValidateTarget(target) &&
+               WCAtlasMessageWrapForCell(strongCell) == retainedSource;
     }, ^{
         CommonMessageCellView *strongCell = weakCell;
-        if (strongCell && NeoWCMessageWrapForCell(strongCell) == retainedSource) {
-            NSInteger messageType = [NeoWCTweakSafeValue(retainedSource, @"m_uiMessageType") integerValue];
+        if (strongCell && WCAtlasMessageWrapForCell(strongCell) == retainedSource) {
+            NSInteger messageType = [WCAtlasTweakSafeValue(retainedSource, @"m_uiMessageType") integerValue];
             if (messageType == 1 || messageType == 3 || messageType == 43 ||
                 messageType == 47 || messageType == 49 || messageType == 62) {
-                NeoWCArmRepeatSendConfirmationBypass(target, messageType);
+                WCAtlasArmRepeatSendConfirmationBypass(target, messageType);
             }
             @try {
-                (void)NeoWCRepeatMessage(strongCell);
+                (void)WCAtlasRepeatMessage(strongCell);
             } @finally {
                 // The exemption belongs only to this synchronous repeat dispatch.
                 // If WeChat defers the real send, the downstream hook will ask again
                 // instead of allowing an unrelated message through later.
-                NeoWCClearRepeatSendConfirmationBypass();
+                WCAtlasClearRepeatSendConfirmationBypass();
             }
         }
     });
-    return held ? YES : NeoWCRepeatMessage(cell);
+    return held ? YES : WCAtlasRepeatMessage(cell);
 }
 
-static BOOL NeoWCMessageCanRepeat(CommonMessageCellView *cell) {
-    if (!NeoWCEnhancementEnabled(NeoWCMessageRepeatMenuEnabledKey) || !cell) return NO;
-    id message = NeoWCMessageWrapForCell(cell);
-    if (!message || NeoWCSessionForMessage(message).length == 0) return NO;
-    NSInteger messageType = [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue];
+static BOOL WCAtlasMessageCanRepeat(CommonMessageCellView *cell) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasMessageRepeatMenuEnabledKey) || !cell) return NO;
+    id message = WCAtlasMessageWrapForCell(cell);
+    if (!message || WCAtlasSessionForMessage(message).length == 0) return NO;
+    NSInteger messageType = [WCAtlasTweakSafeValue(message, @"m_uiMessageType") integerValue];
     if (messageType == 34) {
         SEL voicePathSelector = sel_registerName("getVoicePath");
         if (![message respondsToSelector:voicePathSelector]) return NO;
@@ -1344,13 +1344,13 @@ static BOOL NeoWCMessageCanRepeat(CommonMessageCellView *cell) {
     if ([utilityClass respondsToSelector:canForwardSelector]) {
         return ((BOOL (*)(id, SEL, id))objc_msgSend)(utilityClass, canForwardSelector, message);
     }
-    return messageType == 1 && [NeoWCTweakSafeValue(message, @"m_nsContent") length] > 0;
+    return messageType == 1 && [WCAtlasTweakSafeValue(message, @"m_nsContent") length] > 0;
 }
 
-static NSArray *NeoWCOperationMenuItemsWithRepeat(CommonMessageCellView *target, NSArray *originalItems) {
-    if (![originalItems isKindOfClass:[NSArray class]] || !NeoWCMessageCanRepeat(target)) return originalItems;
+static NSArray *WCAtlasOperationMenuItemsWithRepeat(CommonMessageCellView *target, NSArray *originalItems) {
+    if (![originalItems isKindOfClass:[NSArray class]] || !WCAtlasMessageCanRepeat(target)) return originalItems;
     for (id item in originalItems) {
-        if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"+1"]) return originalItems;
+        if ([WCAtlasTweakSafeValue(item, @"title") isEqualToString:@"+1"]) return originalItems;
     }
     Class itemClass = objc_getClass("MMMenuItem");
     SEL initializer = @selector(initWithTitle:icon:target:action:);
@@ -1361,49 +1361,49 @@ static NSArray *NeoWCOperationMenuItemsWithRepeat(CommonMessageCellView *target,
                     [UIImage systemImageNamed:@"plus" withConfiguration:configuration];
     icon = [icon imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
     MMMenuItem *repeatItem = [[itemClass alloc] initWithTitle:@"+1" icon:icon
-                                                       target:target action:@selector(neowc_repeatMessage:)];
+                                                       target:target action:@selector(wcatlas_repeatMessage:)];
     if (!repeatItem) return originalItems;
     NSMutableArray *items = [originalItems mutableCopy];
     [items insertObject:repeatItem atIndex:0];
     return items;
 }
 
-static BOOL NeoWCPerformMessageGestureAction(CommonMessageCellView *cell, NeoWCReplySwipeAction action) {
-    if (!cell.window || action == NeoWCReplySwipeActionNone) return NO;
+static BOOL WCAtlasPerformMessageGestureAction(CommonMessageCellView *cell, WCAtlasReplySwipeAction action) {
+    if (!cell.window || action == WCAtlasReplySwipeActionNone) return NO;
     BOOL performed = NO;
     switch (action) {
-        case NeoWCReplySwipeActionQuote:
-            performed = NeoWCInvokeFirstMessageCellAction(cell, @[@"onShowMsgReplyMenuItem:"]);
+        case WCAtlasReplySwipeActionQuote:
+            performed = WCAtlasInvokeFirstMessageCellAction(cell, @[@"onShowMsgReplyMenuItem:"]);
             break;
-        case NeoWCReplySwipeActionRevoke:
-            if (!NeoWCMessageCellIsSender(cell)) return NO;
-            performed = NeoWCInvokeFirstMessageCellAction(cell, @[@"onRevokeMsg:"]);
+        case WCAtlasReplySwipeActionRevoke:
+            if (!WCAtlasMessageCellIsSender(cell)) return NO;
+            performed = WCAtlasInvokeFirstMessageCellAction(cell, @[@"onRevokeMsg:"]);
             break;
-        case NeoWCReplySwipeActionCopy:
-            performed = NeoWCInvokeFirstMessageCellAction(cell, @[@"onCopy:"]);
+        case WCAtlasReplySwipeActionCopy:
+            performed = WCAtlasInvokeFirstMessageCellAction(cell, @[@"onCopy:"]);
             if (!performed) {
-                NSString *content = NeoWCTweakSafeValue(NeoWCMessageWrapForCell(cell), @"m_nsContent");
+                NSString *content = WCAtlasTweakSafeValue(WCAtlasMessageWrapForCell(cell), @"m_nsContent");
                 if (content.length > 0) {
                     UIPasteboard.generalPasteboard.string = content;
                     performed = YES;
                 }
             }
             break;
-        case NeoWCReplySwipeActionDelete:
-            performed = NeoWCInvokeFirstMessageCellAction(cell, @[@"onDelete:", @"onDeleteMessage:"]);
+        case WCAtlasReplySwipeActionDelete:
+            performed = WCAtlasInvokeFirstMessageCellAction(cell, @[@"onDelete:", @"onDeleteMessage:"]);
             break;
-        case NeoWCReplySwipeActionRepeat:
-            performed = NeoWCRepeatMessageWithConfirmation(cell);
+        case WCAtlasReplySwipeActionRepeat:
+            performed = WCAtlasRepeatMessageWithConfirmation(cell);
             break;
-        case NeoWCReplySwipeActionNone:
+        case WCAtlasReplySwipeActionNone:
             break;
     }
-    if (performed) NeoWCCompatibilityMarkTriggered(@"reply-swipe");
-    else NeoWCLog(@"消息手势动作不可用，action=%ld cell=%@", (long)action, NSStringFromClass(cell.class));
+    if (performed) WCAtlasCompatibilityMarkTriggered(@"reply-swipe");
+    else WCAtlasLog(@"消息手势动作不可用，action=%ld cell=%@", (long)action, NSStringFromClass(cell.class));
     return performed;
 }
 
-static unsigned int NeoWCGradualStepCountForTarget(NSInteger target, NSDate *date) {
+static unsigned int WCAtlasGradualStepCountForTarget(NSInteger target, NSDate *date) {
     NSDateComponents *components = [[NSCalendar currentCalendar]
         components:(NSCalendarUnitHour | NSCalendarUnitMinute)
           fromDate:date];
@@ -1427,46 +1427,46 @@ static unsigned int NeoWCGradualStepCountForTarget(NSInteger target, NSDate *dat
     return (unsigned int)MIN(100000, MAX(1, value));
 }
 
-static unsigned int NeoWCConfiguredDailyStepCount(void) {
-    if (!NeoWCEnhancementEnabled(NeoWCStepOverrideEnabledKey)) return 0;
+static unsigned int WCAtlasConfiguredDailyStepCount(void) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasStepOverrideEnabledKey)) return 0;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NeoWCStepMode mode = (NeoWCStepMode)[defaults integerForKey:NeoWCStepModeKey];
-    if (mode != NeoWCStepModeDailyRandom) mode = NeoWCStepModeDailyFixed;
+    WCAtlasStepMode mode = (WCAtlasStepMode)[defaults integerForKey:WCAtlasStepModeKey];
+    if (mode != WCAtlasStepModeDailyRandom) mode = WCAtlasStepModeDailyFixed;
     NSCalendar *calendar = [NSCalendar currentCalendar];
     NSDate *now = [NSDate date];
     NSInteger dailyTarget = 0;
     @synchronized (defaults) {
-        NSDate *configuredDate = [defaults objectForKey:NeoWCStepCountDateKey];
-        dailyTarget = [defaults integerForKey:NeoWCStepDailyTargetKey];
+        NSDate *configuredDate = [defaults objectForKey:WCAtlasStepCountDateKey];
+        dailyTarget = [defaults integerForKey:WCAtlasStepDailyTargetKey];
         BOOL targetIsCurrent = [configuredDate isKindOfClass:[NSDate class]] &&
                                [calendar isDateInToday:configuredDate] && dailyTarget > 0;
         if (!targetIsCurrent) {
-            if (mode == NeoWCStepModeDailyRandom) {
-                NSInteger minimum = MIN(100000, MAX(1, [defaults integerForKey:NeoWCStepRandomMinimumKey]));
-                NSInteger maximum = MIN(100000, MAX(minimum, [defaults integerForKey:NeoWCStepRandomMaximumKey]));
+            if (mode == WCAtlasStepModeDailyRandom) {
+                NSInteger minimum = MIN(100000, MAX(1, [defaults integerForKey:WCAtlasStepRandomMinimumKey]));
+                NSInteger maximum = MIN(100000, MAX(minimum, [defaults integerForKey:WCAtlasStepRandomMaximumKey]));
                 dailyTarget = minimum + (NSInteger)arc4random_uniform((uint32_t)(maximum - minimum + 1));
             } else {
-                dailyTarget = MIN(100000, MAX(0, [defaults integerForKey:NeoWCStepCountKey]));
+                dailyTarget = MIN(100000, MAX(0, [defaults integerForKey:WCAtlasStepCountKey]));
             }
             if (dailyTarget > 0) {
-                [defaults setInteger:dailyTarget forKey:NeoWCStepDailyTargetKey];
-                [defaults setObject:now forKey:NeoWCStepCountDateKey];
+                [defaults setInteger:dailyTarget forKey:WCAtlasStepDailyTargetKey];
+                [defaults setObject:now forKey:WCAtlasStepCountDateKey];
             }
         }
     }
     if (dailyTarget <= 0) return 0;
-    if ([defaults boolForKey:NeoWCStepGradualEnabledKey]) {
-        return NeoWCGradualStepCountForTarget(dailyTarget, now);
+    if ([defaults boolForKey:WCAtlasStepGradualEnabledKey]) {
+        return WCAtlasGradualStepCountForTarget(dailyTarget, now);
     }
     return (unsigned int)MIN(100000, dailyTarget);
 }
 
-static CGFloat NeoWCGlobalPageScaleFactor(void) {
-    return NeoWCScalePercentForDefaultsKey(NeoWCPageScaleGlobalPercentKey, 100.0) / 100.0;
+static CGFloat WCAtlasGlobalPageScaleFactor(void) {
+    return WCAtlasScalePercentForDefaultsKey(WCAtlasPageScaleGlobalPercentKey, 100.0) / 100.0;
 }
 
-static BOOL NeoWCThemeValueShouldScale(id property, id ruleSet) {
-    if (!NeoWCEnhancementEnabled(NeoWCPageScaleEnabledKey) ||
+static BOOL WCAtlasThemeValueShouldScale(id property, id ruleSet) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasPageScaleEnabledKey) ||
         ![property isKindOfClass:[NSString class]] ||
         ![ruleSet isKindOfClass:[NSString class]]) return NO;
     if (![(NSString *)ruleSet isEqualToString:@"#font_set"]) return NO;
@@ -1474,13 +1474,13 @@ static BOOL NeoWCThemeValueShouldScale(id property, id ruleSet) {
            [(NSString *)property isEqualToString:@"chatLevel"];
 }
 
-static id NeoWCScaledThemeValue(id originalValue, id property, id ruleSet) {
-    if (!NeoWCThemeValueShouldScale(property, ruleSet) ||
+static id WCAtlasScaledThemeValue(id originalValue, id property, id ruleSet) {
+    if (!WCAtlasThemeValueShouldScale(property, ruleSet) ||
         ![originalValue isKindOfClass:[NSArray class]] ||
         [(NSArray *)originalValue count] == 0) return originalValue;
     id firstValue = [(NSArray *)originalValue firstObject];
     id scaledValue = nil;
-    CGFloat scale = NeoWCGlobalPageScaleFactor();
+    CGFloat scale = WCAtlasGlobalPageScaleFactor();
     if ([firstValue isKindOfClass:[NSNumber class]]) {
         scaledValue = @([(NSNumber *)firstValue doubleValue] * scale);
     } else if ([firstValue isKindOfClass:[NSString class]]) {
@@ -1495,19 +1495,19 @@ static id NeoWCScaledThemeValue(id originalValue, id property, id ruleSet) {
     if (!scaledValue) return originalValue;
     NSMutableArray *values = [(NSArray *)originalValue mutableCopy];
     values[0] = scaledValue;
-    NeoWCCompatibilityMarkTriggered(@"page-scale");
+    WCAtlasCompatibilityMarkTriggered(@"page-scale");
     return values;
 }
 
-static void NeoWCApplyWebViewTextScale(id webView) {
-    if (!NeoWCEnhancementEnabled(NeoWCPageScaleEnabledKey) || !webView) return;
+static void WCAtlasApplyWebViewTextScale(id webView) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasPageScaleEnabledKey) || !webView) return;
     SEL selector = NSSelectorFromString(@"_setTextZoomFactor:");
     if (![webView respondsToSelector:selector]) return;
-    ((void (*)(id, SEL, CGFloat))objc_msgSend)(webView, selector, NeoWCGlobalPageScaleFactor());
-    NeoWCCompatibilityMarkTriggered(@"page-scale");
+    ((void (*)(id, SEL, CGFloat))objc_msgSend)(webView, selector, WCAtlasGlobalPageScaleFactor());
+    WCAtlasCompatibilityMarkTriggered(@"page-scale");
 }
 
-static NSString *NeoWCMomentsUserNameForDataItem(id dataItem) {
+static NSString *WCAtlasMomentsUserNameForDataItem(id dataItem) {
     SEL selector = NSSelectorFromString(@"username");
     if (!dataItem || ![dataItem respondsToSelector:selector]) return nil;
     @try {
@@ -1518,14 +1518,14 @@ static NSString *NeoWCMomentsUserNameForDataItem(id dataItem) {
     }
 }
 
-static NSMutableDictionary<NSString *, id> *NeoWCMomentsPermissionsControllerCache(void) {
+static NSMutableDictionary<NSString *, id> *WCAtlasMomentsPermissionsControllerCache(void) {
     static NSMutableDictionary<NSString *, id> *cache;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{ cache = [NSMutableDictionary dictionary]; });
     return cache;
 }
 
-static id NeoWCMomentsPermissionsController(NSString *userName, id delegate) {
+static id WCAtlasMomentsPermissionsController(NSString *userName, id delegate) {
     if (userName.length == 0) return nil;
     Class controllerClass = NSClassFromString(@"WCSetPermissionsViewController");
     SEL initSelector = NSSelectorFromString(@"initWithUserName:");
@@ -1549,7 +1549,7 @@ static id NeoWCMomentsPermissionsController(NSString *userName, id delegate) {
         return nil;
     }
 
-    NSMutableDictionary<NSString *, id> *cache = NeoWCMomentsPermissionsControllerCache();
+    NSMutableDictionary<NSString *, id> *cache = WCAtlasMomentsPermissionsControllerCache();
     cache[userName] = controller;
     NSString *cacheKey = [userName copy];
     __weak id weakController = controller;
@@ -1560,11 +1560,11 @@ static id NeoWCMomentsPermissionsController(NSString *userName, id delegate) {
     return controller;
 }
 
-static NSString *NeoWCMomentsCheckedPermissionTitle(NSString *title, BOOL checked) {
+static NSString *WCAtlasMomentsCheckedPermissionTitle(NSString *title, BOOL checked) {
     return checked ? [NSString stringWithFormat:@"✓ %@", title] : title;
 }
 
-static WCActionSheetItem *NeoWCMomentsPermissionItem(NSString *title,
+static WCActionSheetItem *WCAtlasMomentsPermissionItem(NSString *title,
                                                      BOOL enabled,
                                                      BOOL destructive,
                                                      void (^eventAction)(void)) {
@@ -1584,11 +1584,11 @@ static WCActionSheetItem *NeoWCMomentsPermissionItem(NSString *title,
     return item;
 }
 
-static void NeoWCPerformMomentsPermissionAction(NSString *userName,
+static void WCAtlasPerformMomentsPermissionAction(NSString *userName,
                                                 id delegate,
                                                 NSString *selectorName,
                                                 NSNumber *switchState) {
-    id controller = NeoWCMomentsPermissionsController(userName, delegate);
+    id controller = WCAtlasMomentsPermissionsController(userName, delegate);
     SEL selector = NSSelectorFromString(selectorName);
     if (!controller || ![controller respondsToSelector:selector]) return;
     @try {
@@ -1603,18 +1603,18 @@ static void NeoWCPerformMomentsPermissionAction(NSString *userName,
     }
 }
 
-static BOOL NeoWCConfigureMomentsPermissionsActionSheet(WCActionSheet *sheet, id dataItem) {
-    if (!sheet || !dataItem || !NeoWCEnhancementEnabled(NeoWCMomentsQuickPermissionsKey)) return NO;
-    NSArray *buttonTitleList = NeoWCTweakSafeValue(sheet, @"buttonTitleList");
+static BOOL WCAtlasConfigureMomentsPermissionsActionSheet(WCActionSheet *sheet, id dataItem) {
+    if (!sheet || !dataItem || !WCAtlasEnhancementEnabled(WCAtlasMomentsQuickPermissionsKey)) return NO;
+    NSArray *buttonTitleList = WCAtlasTweakSafeValue(sheet, @"buttonTitleList");
     if (![buttonTitleList isKindOfClass:[NSArray class]] || buttonTitleList.count != 2) return NO;
-    NSString *firstTitle = NeoWCTweakSafeValue(buttonTitleList.firstObject, @"title");
-    NSString *lastTitle = NeoWCTweakSafeValue(buttonTitleList.lastObject, @"title");
+    NSString *firstTitle = WCAtlasTweakSafeValue(buttonTitleList.firstObject, @"title");
+    NSString *lastTitle = WCAtlasTweakSafeValue(buttonTitleList.lastObject, @"title");
     if ((! [firstTitle isEqualToString:@"设置权限"] && ![firstTitle isEqualToString:@"设置"]) ||
         ![lastTitle isEqualToString:@"投诉"]) return NO;
 
-    NSString *userName = NeoWCMomentsUserNameForDataItem(dataItem);
-    id delegate = NeoWCTweakSafeValue(sheet, @"delegate");
-    id controller = NeoWCMomentsPermissionsController(userName, delegate);
+    NSString *userName = WCAtlasMomentsUserNameForDataItem(dataItem);
+    id delegate = WCAtlasTweakSafeValue(sheet, @"delegate");
+    id controller = WCAtlasMomentsPermissionsController(userName, delegate);
     SEL contactSelector = NSSelectorFromString(@"m_contact");
     if (userName.length == 0 || !delegate || !controller || ![controller respondsToSelector:contactSelector]) return NO;
     id contact = ((id (*)(id, SEL))objc_msgSend)(controller, contactSelector);
@@ -1655,23 +1655,23 @@ static BOOL NeoWCConfigureMomentsPermissionsActionSheet(WCActionSheet *sheet, id
     __weak id weakDelegate = delegate;
     __weak WCActionSheet *weakSheet = sheet;
     NSString *capturedUserName = [userName copy];
-    WCActionSheetItem *allItem = NeoWCMomentsPermissionItem(
-        NeoWCMomentsCheckedPermissionTitle(@"聊天、朋友圈、微信运动等", !onlyChat), YES, NO, ^{
-            NeoWCPerformMomentsPermissionAction(capturedUserName, weakDelegate, @"opAllPermission", nil);
+    WCActionSheetItem *allItem = WCAtlasMomentsPermissionItem(
+        WCAtlasMomentsCheckedPermissionTitle(@"聊天、朋友圈、微信运动等", !onlyChat), YES, NO, ^{
+            WCAtlasPerformMomentsPermissionAction(capturedUserName, weakDelegate, @"opAllPermission", nil);
         });
-    WCActionSheetItem *onlyChatItem = NeoWCMomentsPermissionItem(
-        NeoWCMomentsCheckedPermissionTitle(@"仅聊天", onlyChat), YES, NO, ^{
-            NeoWCPerformMomentsPermissionAction(capturedUserName, weakDelegate, @"opSocialBlackPermission", nil);
+    WCActionSheetItem *onlyChatItem = WCAtlasMomentsPermissionItem(
+        WCAtlasMomentsCheckedPermissionTitle(@"仅聊天", onlyChat), YES, NO, ^{
+            WCAtlasPerformMomentsPermissionAction(capturedUserName, weakDelegate, @"opSocialBlackPermission", nil);
         });
-    WCActionSheetItem *outsiderItem = NeoWCMomentsPermissionItem(
-        NeoWCMomentsCheckedPermissionTitle([NSString stringWithFormat:@"不让%@看", pronoun], outsider), !onlyChat, NO, ^{
-            NeoWCPerformMomentsPermissionAction(capturedUserName, weakDelegate, @"opOutsider:", @(!outsider));
+    WCActionSheetItem *outsiderItem = WCAtlasMomentsPermissionItem(
+        WCAtlasMomentsCheckedPermissionTitle([NSString stringWithFormat:@"不让%@看", pronoun], outsider), !onlyChat, NO, ^{
+            WCAtlasPerformMomentsPermissionAction(capturedUserName, weakDelegate, @"opOutsider:", @(!outsider));
         });
-    WCActionSheetItem *blacklistItem = NeoWCMomentsPermissionItem(
-        NeoWCMomentsCheckedPermissionTitle([NSString stringWithFormat:@"不看%@", pronoun], blacklist), !onlyChat, NO, ^{
-            NeoWCPerformMomentsPermissionAction(capturedUserName, weakDelegate, @"opWCBlacklist:", @(!blacklist));
+    WCActionSheetItem *blacklistItem = WCAtlasMomentsPermissionItem(
+        WCAtlasMomentsCheckedPermissionTitle([NSString stringWithFormat:@"不看%@", pronoun], blacklist), !onlyChat, NO, ^{
+            WCAtlasPerformMomentsPermissionAction(capturedUserName, weakDelegate, @"opWCBlacklist:", @(!blacklist));
         });
-    WCActionSheetItem *complaintItem = NeoWCMomentsPermissionItem(@"投诉", YES, YES, ^{
+    WCActionSheetItem *complaintItem = WCAtlasMomentsPermissionItem(@"投诉", YES, YES, ^{
         id strongDelegate = weakDelegate;
         WCActionSheet *strongSheet = weakSheet;
         SEL selector = NSSelectorFromString(@"actionSheet:clickedButtonAtIndex:");
@@ -1694,44 +1694,44 @@ static BOOL NeoWCConfigureMomentsPermissionsActionSheet(WCActionSheet *sheet, id
     ((void (*)(id, SEL, NSInteger))objc_msgSend)(sheet, countSelector, 5);
     ((void (*)(id, SEL, NSInteger))objc_msgSend)(sheet, firstSelector, 0);
     ((void (*)(id, SEL, NSInteger))objc_msgSend)(sheet, destructiveSelector, 4);
-    NeoWCCompatibilityMarkTriggered(@"moments-quick-permissions");
+    WCAtlasCompatibilityMarkTriggered(@"moments-quick-permissions");
     return YES;
 }
 
-static void NeoWCOpenMomentsHighQualityPicker(UIViewController *timelineController) {
+static void WCAtlasOpenMomentsHighQualityPicker(UIViewController *timelineController) {
     SEL selector = NSSelectorFromString(@"showImagePicker:");
     if (!timelineController || ![timelineController respondsToSelector:selector]) {
-        NeoWCShowTransientMessage(@"当前微信版本不支持朋友圈原生媒体选择", NO);
+        WCAtlasShowTransientMessage(@"当前微信版本不支持朋友圈原生媒体选择", NO);
         return;
     }
     ((void (*)(id, SEL, id))objc_msgSend)(timelineController, selector, nil);
 }
 
-static void NeoWCPrepareMomentsHighQualityMenu(WCActionSheet *sheet) {
-    if (!sheet || !NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey) ||
-        !NeoWCPendingMomentsCameraController ||
-        objc_getAssociatedObject(sheet, &NeoWCMomentsHighQualityMenuKey)) return;
-    __weak UIViewController *weakController = NeoWCPendingMomentsCameraController;
-    objc_setAssociatedObject(sheet, &NeoWCMomentsHighQualityMenuKey, @YES,
+static void WCAtlasPrepareMomentsHighQualityMenu(WCActionSheet *sheet) {
+    if (!sheet || !WCAtlasEnhancementEnabled(WCAtlasMomentsOriginalMediaPostEnabledKey) ||
+        !WCAtlasPendingMomentsCameraController ||
+        objc_getAssociatedObject(sheet, &WCAtlasMomentsHighQualityMenuKey)) return;
+    __weak UIViewController *weakController = WCAtlasPendingMomentsCameraController;
+    objc_setAssociatedObject(sheet, &WCAtlasMomentsHighQualityMenuKey, @YES,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     BOOL added = NO;
     @try {
         [sheet addButtonWithTitle:@"选择高清图片/原视频" eventAction:^{
-            NeoWCOpenMomentsHighQualityPicker(weakController);
+            WCAtlasOpenMomentsHighQualityPicker(weakController);
         }];
         added = YES;
     } @catch (NSException *exception) {
-        NeoWCLog(@"增加朋友圈高清入口失败：%@", exception.reason ?: @"未知异常");
+        WCAtlasLog(@"增加朋友圈高清入口失败：%@", exception.reason ?: @"未知异常");
     }
     if (!added) {
-        objc_setAssociatedObject(sheet, &NeoWCMomentsHighQualityMenuKey, nil,
+        objc_setAssociatedObject(sheet, &WCAtlasMomentsHighQualityMenuKey, nil,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
-    NeoWCLog(@"已在朋友圈相机菜单增加高清入口");
+    WCAtlasLog(@"已在朋友圈相机菜单增加高清入口");
 }
 
-static id NeoWCTweakValueForSelectorNames(id object, NSArray<NSString *> *selectorNames) {
+static id WCAtlasTweakValueForSelectorNames(id object, NSArray<NSString *> *selectorNames) {
     for (NSString *selectorName in selectorNames) {
         SEL selector = NSSelectorFromString(selectorName);
         if ([object respondsToSelector:selector]) return ((id (*)(id, SEL))objc_msgSend)(object, selector);
@@ -1739,20 +1739,20 @@ static id NeoWCTweakValueForSelectorNames(id object, NSArray<NSString *> *select
     return nil;
 }
 
-static long long NeoWCLongLongDefaultForKey(NSString *key) {
+static long long WCAtlasLongLongDefaultForKey(NSString *key) {
     id value = [[NSUserDefaults standardUserDefaults] objectForKey:key];
     return [value respondsToSelector:@selector(longLongValue)] ? [value longLongValue] : 0;
 }
 
-static unsigned long long NeoWCWalletBalanceFenOverride(void) {
-    if (!NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey)) return 0;
-    long long fen = NeoWCLongLongDefaultForKey(NeoWCWalletBalanceFenKey);
+static unsigned long long WCAtlasWalletBalanceFenOverride(void) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasWalletBalanceEnabledKey)) return 0;
+    long long fen = WCAtlasLongLongDefaultForKey(WCAtlasWalletBalanceFenKey);
     return fen > 0 ? (unsigned long long)fen : 0;
 }
 
-static NSString *NeoWCContactsCountTextForOriginal(NSString *original) {
-    if (!NeoWCEnhancementEnabled(NeoWCContactsCountEnabledKey)) return nil;
-    NSInteger count = [[NSUserDefaults standardUserDefaults] integerForKey:NeoWCContactsCountKey];
+static NSString *WCAtlasContactsCountTextForOriginal(NSString *original) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasContactsCountEnabledKey)) return nil;
+    NSInteger count = [[NSUserDefaults standardUserDefaults] integerForKey:WCAtlasContactsCountKey];
     if (count <= 0 || ![original isKindOfClass:[NSString class]]) return nil;
     NSString *trimmed = [original stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     if ([trimmed hasSuffix:@" 个朋友"]) return [NSString stringWithFormat:@"%ld 个朋友", (long)count];
@@ -1768,7 +1768,7 @@ static NSString *NeoWCContactsCountTextForOriginal(NSString *original) {
     return nil;
 }
 
-static BOOL NeoWCResponderIsInsideControllerClass(UIResponder *responder, NSString *className) {
+static BOOL WCAtlasResponderIsInsideControllerClass(UIResponder *responder, NSString *className) {
     Class controllerClass = NSClassFromString(className);
     if (!controllerClass) return NO;
     while (responder) {
@@ -1778,139 +1778,139 @@ static BOOL NeoWCResponderIsInsideControllerClass(UIResponder *responder, NSStri
     return NO;
 }
 
-static id NeoWCMessageWrapForCell(id cell) {
+static id WCAtlasMessageWrapForCell(id cell) {
     // PKC resolves the visible native text cell through this WeChat selector.
     // Prefer it over guessing the internal view-model layout.
-    id currentMessage = NeoWCTweakValueForSelectorNames(cell,
+    id currentMessage = WCAtlasTweakValueForSelectorNames(cell,
         @[@"getCurrentMessageWrap", @"currentMessageWrap"]);
     if (currentMessage) return currentMessage;
-    id directMessage = NeoWCImageJokerMessageForObject(cell);
+    id directMessage = WCAtlasImageJokerMessageForObject(cell);
     if (directMessage) return directMessage;
-    id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel", @"m_viewModel"]);
+    id viewModel = WCAtlasTweakValueForSelectorNames(cell, @[@"viewModel", @"m_viewModel"]);
     // Some WeChat builds expose the wrap directly as the view model rather
     // than under messageWrap; accept it when the content ivar is present.
-    id directContent = NeoWCTweakSafeValue(viewModel, @"m_nsContent");
+    id directContent = WCAtlasTweakSafeValue(viewModel, @"m_nsContent");
     if ([directContent isKindOfClass:NSString.class]) return viewModel;
-    id message = NeoWCTweakValueForSelectorNames(viewModel, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
+    id message = WCAtlasTweakValueForSelectorNames(viewModel, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
     if (message) return message;
-    id parentModel = NeoWCTweakSafeValue(viewModel, @"parentModel");
-    message = NeoWCTweakValueForSelectorNames(parentModel, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
+    id parentModel = WCAtlasTweakSafeValue(viewModel, @"parentModel");
+    message = WCAtlasTweakValueForSelectorNames(parentModel, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
     if (message) return message;
-    return NeoWCTweakValueForSelectorNames(cell, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap", @"message"]);
+    return WCAtlasTweakValueForSelectorNames(cell, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap", @"message"]);
 }
 
-static NSString *NeoWCImageJokerKeyForMessage(id message);
+static NSString *WCAtlasImageJokerKeyForMessage(id message);
 
-static void NeoWCRecordMeMenuTitle(NSString *title) {
+static void WCAtlasRecordMeMenuTitle(NSString *title) {
     if (title.length == 0 || [title isEqualToString:@"插件"]) return;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     @synchronized (defaults) {
-        NSMutableArray<NSString *> *known = [[defaults arrayForKey:NeoWCMeMenuKnownTitlesKey] mutableCopy] ?: [NSMutableArray array];
+        NSMutableArray<NSString *> *known = [[defaults arrayForKey:WCAtlasMeMenuKnownTitlesKey] mutableCopy] ?: [NSMutableArray array];
         if (![known containsObject:title]) {
             [known addObject:title];
-            [defaults setObject:known forKey:NeoWCMeMenuKnownTitlesKey];
+            [defaults setObject:known forKey:WCAtlasMeMenuKnownTitlesKey];
         }
     }
 }
 
-static BOOL NeoWCHidesMeMenuTitle(NSString *title) {
+static BOOL WCAtlasHidesMeMenuTitle(NSString *title) {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     id master = [defaults objectForKey:@"com.qiu7c.wcatlas.enabled"];
     return title.length > 0 && (!master || [master boolValue]) &&
-           [[defaults arrayForKey:NeoWCMeMenuHiddenTitlesKey] containsObject:title];
+           [[defaults arrayForKey:WCAtlasMeMenuHiddenTitlesKey] containsObject:title];
 }
 
-static BOOL NeoWCVoiceMessageIsGroup(id message) {
-    NSString *from = NeoWCTweakValueForSelectorNames(message, @[@"m_nsFromUsr", @"fromUser"]);
-    NSString *to = NeoWCTweakValueForSelectorNames(message, @[@"m_nsToUsr", @"toUser"]);
+static BOOL WCAtlasVoiceMessageIsGroup(id message) {
+    NSString *from = WCAtlasTweakValueForSelectorNames(message, @[@"m_nsFromUsr", @"fromUser"]);
+    NSString *to = WCAtlasTweakValueForSelectorNames(message, @[@"m_nsToUsr", @"toUser"]);
     return [from hasSuffix:@"@chatroom"] || [to hasSuffix:@"@chatroom"];
 }
 
-static BOOL NeoWCVoiceTranscriptionHasResult(id cell, id message) {
+static BOOL WCAtlasVoiceTranscriptionHasResult(id cell, id message) {
     SEL resultSelector = NSSelectorFromString(@"hasLocalTranslateResult");
     if ([message respondsToSelector:resultSelector] &&
         ((BOOL (*)(id, SEL))objc_msgSend)(message, resultSelector)) return YES;
     for (NSString *key in @[@"m_textTranslateView", @"m_textTranslateLabel", @"m_translateResultLabel"]) {
-        UIView *view = NeoWCTweakSafeValue(cell, key);
+        UIView *view = WCAtlasTweakSafeValue(cell, key);
         if ([view isKindOfClass:[UIView class]] && !view.hidden && view.alpha > 0.01) return YES;
     }
     return NO;
 }
 
-static BOOL NeoWCVoiceTranscriptionIsActive(id cell) {
-    if ([NeoWCTweakSafeValue(cell, @"m_isTranslating") boolValue]) return YES;
+static BOOL WCAtlasVoiceTranscriptionIsActive(id cell) {
+    if ([WCAtlasTweakSafeValue(cell, @"m_isTranslating") boolValue]) return YES;
     for (NSString *key in @[@"m_translatingView", @"m_textTranslateLoadingView"]) {
-        UIView *view = NeoWCTweakSafeValue(cell, key);
+        UIView *view = WCAtlasTweakSafeValue(cell, key);
         if ([view isKindOfClass:[UIView class]] && !view.hidden && view.alpha > 0.01) return YES;
     }
     return NO;
 }
 
-static BOOL NeoWCShouldAutoTranscribeVoiceCell(id cell, id message) {
-    if (!NeoWCEnhancementEnabled(NeoWCAutoVoiceTranscriptionEnabledKey) || !message) return NO;
+static BOOL WCAtlasShouldAutoTranscribeVoiceCell(id cell, id message) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasAutoVoiceTranscriptionEnabledKey) || !message) return NO;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    BOOL group = NeoWCVoiceMessageIsGroup(message);
-    if (group && [defaults boolForKey:NeoWCAutoVoiceTranscriptionIgnoreGroupKey]) return NO;
-    if (!group && [defaults boolForKey:NeoWCAutoVoiceTranscriptionIgnorePrivateKey]) return NO;
-    id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel", @"m_viewModel"]);
-    BOOL isSender = [NeoWCTweakSafeValue(viewModel, @"isSender") boolValue] ||
-                    [NeoWCTweakSafeValue(message, @"isSender") boolValue];
-    if (isSender && [defaults boolForKey:NeoWCAutoVoiceTranscriptionIgnoreSelfKey]) return NO;
-    if ([objc_getAssociatedObject(message, &NeoWCVoiceTranscriptionDoneKey) boolValue] ||
-        [objc_getAssociatedObject(message, &NeoWCVoiceTranscriptionInProgressKey) boolValue] ||
-        [objc_getAssociatedObject(message, &NeoWCVoiceTranscriptionAttemptedKey) boolValue]) return NO;
-    if (NeoWCVoiceTranscriptionHasResult(cell, message)) {
-        objc_setAssociatedObject(message, &NeoWCVoiceTranscriptionDoneKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    BOOL group = WCAtlasVoiceMessageIsGroup(message);
+    if (group && [defaults boolForKey:WCAtlasAutoVoiceTranscriptionIgnoreGroupKey]) return NO;
+    if (!group && [defaults boolForKey:WCAtlasAutoVoiceTranscriptionIgnorePrivateKey]) return NO;
+    id viewModel = WCAtlasTweakValueForSelectorNames(cell, @[@"viewModel", @"m_viewModel"]);
+    BOOL isSender = [WCAtlasTweakSafeValue(viewModel, @"isSender") boolValue] ||
+                    [WCAtlasTweakSafeValue(message, @"isSender") boolValue];
+    if (isSender && [defaults boolForKey:WCAtlasAutoVoiceTranscriptionIgnoreSelfKey]) return NO;
+    if ([objc_getAssociatedObject(message, &WCAtlasVoiceTranscriptionDoneKey) boolValue] ||
+        [objc_getAssociatedObject(message, &WCAtlasVoiceTranscriptionInProgressKey) boolValue] ||
+        [objc_getAssociatedObject(message, &WCAtlasVoiceTranscriptionAttemptedKey) boolValue]) return NO;
+    if (WCAtlasVoiceTranscriptionHasResult(cell, message)) {
+        objc_setAssociatedObject(message, &WCAtlasVoiceTranscriptionDoneKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return NO;
     }
-    return !NeoWCVoiceTranscriptionIsActive(cell);
+    return !WCAtlasVoiceTranscriptionIsActive(cell);
 }
 
-static void NeoWCScheduleVoiceTranscription(VoiceMessageCellView *cell, id message) {
-    if (!cell.window || !NeoWCShouldAutoTranscribeVoiceCell(cell, message)) return;
-    if ([objc_getAssociatedObject(cell, &NeoWCVoiceTranscriptionScheduledKey) boolValue]) return;
-    objc_setAssociatedObject(cell, &NeoWCVoiceTranscriptionScheduledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+static void WCAtlasScheduleVoiceTranscription(VoiceMessageCellView *cell, id message) {
+    if (!cell.window || !WCAtlasShouldAutoTranscribeVoiceCell(cell, message)) return;
+    if ([objc_getAssociatedObject(cell, &WCAtlasVoiceTranscriptionScheduledKey) boolValue]) return;
+    objc_setAssociatedObject(cell, &WCAtlasVoiceTranscriptionScheduledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     __weak VoiceMessageCellView *weakCell = cell;
     __weak id weakMessage = message;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         VoiceMessageCellView *strongCell = weakCell;
         id strongMessage = weakMessage;
         if (!strongCell) return;
-        objc_setAssociatedObject(strongCell, &NeoWCVoiceTranscriptionScheduledKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        id currentMessage = NeoWCImageJokerMessageForObject(strongCell);
-        if (currentMessage != strongMessage || !NeoWCShouldAutoTranscribeVoiceCell(strongCell, strongMessage)) return;
+        objc_setAssociatedObject(strongCell, &WCAtlasVoiceTranscriptionScheduledKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        id currentMessage = WCAtlasImageJokerMessageForObject(strongCell);
+        if (currentMessage != strongMessage || !WCAtlasShouldAutoTranscribeVoiceCell(strongCell, strongMessage)) return;
         SEL selector = NSSelectorFromString(@"onVoiceTrans:");
         if (![strongCell respondsToSelector:selector]) return;
-        id button = NeoWCTweakSafeValue(strongCell, @"m_quickTransTipButton") ?: strongCell;
-        objc_setAssociatedObject(strongMessage, &NeoWCVoiceTranscriptionAttemptedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(strongMessage, &NeoWCVoiceTranscriptionInProgressKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        id button = WCAtlasTweakSafeValue(strongCell, @"m_quickTransTipButton") ?: strongCell;
+        objc_setAssociatedObject(strongMessage, &WCAtlasVoiceTranscriptionAttemptedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(strongMessage, &WCAtlasVoiceTranscriptionInProgressKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         ((void (*)(id, SEL, id))objc_msgSend)(strongCell, selector, button);
-        NeoWCCompatibilityMarkTriggered(@"auto-voice-transcription");
+        WCAtlasCompatibilityMarkTriggered(@"auto-voice-transcription");
         __weak VoiceMessageCellView *checkingCell = strongCell;
         __weak id checkingMessage = strongMessage;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             VoiceMessageCellView *cellToCheck = checkingCell;
             id messageToCheck = checkingMessage;
             if (!messageToCheck) return;
-            if (cellToCheck && NeoWCVoiceTranscriptionHasResult(cellToCheck, messageToCheck)) {
-                objc_setAssociatedObject(messageToCheck, &NeoWCVoiceTranscriptionDoneKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            if (cellToCheck && WCAtlasVoiceTranscriptionHasResult(cellToCheck, messageToCheck)) {
+                objc_setAssociatedObject(messageToCheck, &WCAtlasVoiceTranscriptionDoneKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             }
-            objc_setAssociatedObject(messageToCheck, &NeoWCVoiceTranscriptionInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(messageToCheck, &WCAtlasVoiceTranscriptionInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         });
     });
 }
 
-static BOOL NeoWCMessageIsText(id message) {
+static BOOL WCAtlasMessageIsText(id message) {
     SEL selector = NSSelectorFromString(@"IsTextMsg");
     return message && [message respondsToSelector:selector] && ((BOOL (*)(id, SEL))objc_msgSend)(message, selector);
 }
 
-static BOOL NeoWCMessageIsRefer(id message) {
+static BOOL WCAtlasMessageIsRefer(id message) {
     SEL selector = NSSelectorFromString(@"isReferMsgType");
     return message && [message respondsToSelector:selector] && ((BOOL (*)(id, SEL))objc_msgSend)(message, selector);
 }
 
-static id NeoWCPayInfoItemForMessage(id message) {
+static id WCAtlasPayInfoItemForMessage(id message) {
     if (!message) return nil;
     SEL parseSelector = NSSelectorFromString(@"parseWCPayInfoItemIfNeed");
     if ([message respondsToSelector:parseSelector]) ((void (*)(id, SEL))objc_msgSend)(message, parseSelector);
@@ -1920,8 +1920,8 @@ static id NeoWCPayInfoItemForMessage(id message) {
     return ((id (*)(id, SEL))objc_msgSend)(message, payItemSelector);
 }
 
-static BOOL NeoWCMessageIsTransfer(id message) {
-    id payItem = NeoWCPayInfoItemForMessage(message);
+static BOOL WCAtlasMessageIsTransfer(id message) {
+    id payItem = WCAtlasPayInfoItemForMessage(message);
     if (!payItem) return NO;
 
     unsigned int subType = 0;
@@ -1938,38 +1938,38 @@ static BOOL NeoWCMessageIsTransfer(id message) {
     return [transferID isKindOfClass:[NSString class]] && transferID.length > 0;
 }
 
-static BOOL NeoWCMessageCanJokerEdit(id message) {
-    return NeoWCMessageIsText(message) || NeoWCMessageIsRefer(message) || NeoWCMessageIsTransfer(message);
+static BOOL WCAtlasMessageCanJokerEdit(id message) {
+    return WCAtlasMessageIsText(message) || WCAtlasMessageIsRefer(message) || WCAtlasMessageIsTransfer(message);
 }
 
-static NSString *NeoWCTransferDisplayText(id message) {
-    id payItem = NeoWCPayInfoItemForMessage(message);
+static NSString *WCAtlasTransferDisplayText(id message) {
+    id payItem = WCAtlasPayInfoItemForMessage(message);
     SEL feeDescSelector = NSSelectorFromString(@"m_nsFeeDesc");
     id value = payItem ? ((id (*)(id, SEL))objc_msgSend)(payItem, feeDescSelector) : nil;
     return [value isKindOfClass:[NSString class]] ? value : @"";
 }
 
-static NSString *NeoWCDisplayTextForJokerMessage(id message) {
-    if (NeoWCMessageIsText(message)) {
+static NSString *WCAtlasDisplayTextForJokerMessage(id message) {
+    if (WCAtlasMessageIsText(message)) {
         SEL contentSelector = NSSelectorFromString(@"GetDisplayContent");
         id value = ((id (*)(id, SEL))objc_msgSend)(message, contentSelector);
         if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
-    } else if (NeoWCMessageIsRefer(message)) {
+    } else if (WCAtlasMessageIsRefer(message)) {
         SEL titleSelector = NSSelectorFromString(@"m_nsTitle");
         id value = ((id (*)(id, SEL))objc_msgSend)(message, titleSelector);
         if ([value isKindOfClass:[NSString class]] && [value length] > 0) return value;
-    } else if (NeoWCMessageIsTransfer(message)) {
-        return NeoWCTransferDisplayText(message);
+    } else if (WCAtlasMessageIsTransfer(message)) {
+        return WCAtlasTransferDisplayText(message);
     }
     return @"";
 }
 
-static UIViewController *NeoWCJokerPresenterForCell(id cell) {
-    return NeoWCViewControllerForResponder(cell);
+static UIViewController *WCAtlasJokerPresenterForCell(id cell) {
+    return WCAtlasViewControllerForResponder(cell);
 }
 
-static void NeoWCReloadJokerCell(id cell, id message, UIViewController *controller) {
-    if (!controller) controller = NeoWCJokerPresenterForCell(cell);
+static void WCAtlasReloadJokerCell(id cell, id message, UIViewController *controller) {
+    if (!controller) controller = WCAtlasJokerPresenterForCell(cell);
     if (!controller || !message) return;
     SEL clearSelector = NSSelectorFromString(@"clearNodeLayoutCache");
     if ([controller respondsToSelector:clearSelector]) ((void (*)(id, SEL))objc_msgSend)(controller, clearSelector);
@@ -1991,7 +1991,7 @@ static void NeoWCReloadJokerCell(id cell, id message, UIViewController *controll
     }
 }
 
-static NSString *NeoWCJokerSanitizedAmountText(NSString *text) {
+static NSString *WCAtlasJokerSanitizedAmountText(NSString *text) {
     NSMutableString *result = [NSMutableString string];
     for (NSUInteger index = 0; index < text.length; index++) {
         unichar character = [text characterAtIndex:index];
@@ -2002,38 +2002,38 @@ static NSString *NeoWCJokerSanitizedAmountText(NSString *text) {
     return result.length > 0 ? result : nil;
 }
 
-static void NeoWCApplyJokerText(id cell,
+static void WCAtlasApplyJokerText(id cell,
                                 id message,
                                 UIViewController *controller,
                                 NSString *text,
                                 BOOL transferContext) {
-    BOOL isText = !transferContext && NeoWCMessageIsText(message);
-    BOOL isRefer = !transferContext && !isText && NeoWCMessageIsRefer(message);
-    BOOL isTransfer = transferContext || (!isText && !isRefer && NeoWCMessageIsTransfer(message));
+    BOOL isText = !transferContext && WCAtlasMessageIsText(message);
+    BOOL isRefer = !transferContext && !isText && WCAtlasMessageIsRefer(message);
+    BOOL isTransfer = transferContext || (!isText && !isRefer && WCAtlasMessageIsTransfer(message));
     if (!message || (!isText && !isRefer && !isTransfer)) return;
     BOOL changed = NO;
     if (isText) {
-        NSString *original = NeoWCDisplayTextForJokerMessage(message);
+        NSString *original = WCAtlasDisplayTextForJokerMessage(message);
         if (text.length > 0 && ![text isEqualToString:original]) {
             ((void (*)(id, SEL, id))objc_msgSend)(message, NSSelectorFromString(@"setM_nsContent:"), text);
             changed = YES;
         }
     } else if (isRefer) {
-        NSString *original = NeoWCDisplayTextForJokerMessage(message);
+        NSString *original = WCAtlasDisplayTextForJokerMessage(message);
         if (text.length > 0 && ![text isEqualToString:original]) {
             ((void (*)(id, SEL, id))objc_msgSend)(message, NSSelectorFromString(@"setM_nsTitle:"), text);
             changed = YES;
         }
     } else if (isTransfer) {
         if (text.length == 0) return;
-        NSString *original = NeoWCTransferDisplayText(message);
+        NSString *original = WCAtlasTransferDisplayText(message);
         if ([original hasPrefix:@"¥"] || [original hasPrefix:@"￥"]) {
             original = [original substringFromIndex:1];
         }
         if ([text isEqualToString:original]) return;
-        NSString *amount = NeoWCJokerSanitizedAmountText(text);
+        NSString *amount = WCAtlasJokerSanitizedAmountText(text);
         if (amount.length == 0) return;
-        id payItem = NeoWCPayInfoItemForMessage(message);
+        id payItem = WCAtlasPayInfoItemForMessage(message);
         NSString *feeDesc = [@"¥" stringByAppendingString:amount];
         if (payItem) {
             ((void (*)(id, SEL, id))objc_msgSend)(payItem, NSSelectorFromString(@"setM_nsFeeDesc:"), feeDesc);
@@ -2043,39 +2043,39 @@ static void NeoWCApplyJokerText(id cell,
         }
     }
     if (!changed) return;
-    NeoWCReloadJokerCell(cell, message, controller);
-    NeoWCLog(@"聊天记录小丑已修改当前页面显示");
+    WCAtlasReloadJokerCell(cell, message, controller);
+    WCAtlasLog(@"聊天记录小丑已修改当前页面显示");
 }
 
-static NSObject *NeoWCImageJokerCacheLock(void) {
+static NSObject *WCAtlasImageJokerCacheLock(void) {
     static NSObject *lock;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{ lock = [NSObject new]; });
     return lock;
 }
 
-static NSMutableDictionary<NSString *, UIImage *> *NeoWCImageJokerImages(void) {
+static NSMutableDictionary<NSString *, UIImage *> *WCAtlasImageJokerImages(void) {
     static NSMutableDictionary<NSString *, UIImage *> *images;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{ images = [NSMutableDictionary dictionary]; });
     return images;
 }
 
-static NSMutableDictionary<NSString *, NSData *> *NeoWCImageJokerData(void) {
+static NSMutableDictionary<NSString *, NSData *> *WCAtlasImageJokerData(void) {
     static NSMutableDictionary<NSString *, NSData *> *data;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{ data = [NSMutableDictionary dictionary]; });
     return data;
 }
 
-static NSMutableDictionary<NSString *, NSString *> *NeoWCImageJokerPaths(void) {
+static NSMutableDictionary<NSString *, NSString *> *WCAtlasImageJokerPaths(void) {
     static NSMutableDictionary<NSString *, NSString *> *paths;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{ paths = [NSMutableDictionary dictionary]; });
     return paths;
 }
 
-static NSString *NeoWCImageJokerKeyForMessage(id message) {
+static NSString *WCAtlasImageJokerKeyForMessage(id message) {
     if (!message) return nil;
     SEL combinedSelector = NSSelectorFromString(@"combineChatNameWithLocalId");
     if ([message respondsToSelector:combinedSelector]) {
@@ -2091,30 +2091,30 @@ static NSString *NeoWCImageJokerKeyForMessage(id message) {
     return localID > 0 ? [NSString stringWithFormat:@"%@_%u", chatName, localID] : nil;
 }
 
-static void NeoWCCollectReplyTransformTargets(UIView *view,
+static void WCAtlasCollectReplyTransformTargets(UIView *view,
                                                NSString *messageKey,
-                                               NSMutableArray<NeoWCReplyTransformSnapshot *> *snapshots) {
+                                               NSMutableArray<WCAtlasReplyTransformSnapshot *> *snapshots) {
     if (!view || !messageKey.length) return;
-    id message = NeoWCMessageWrapForCell(view);
-    NSString *candidateKey = NeoWCImageJokerKeyForMessage(message);
+    id message = WCAtlasMessageWrapForCell(view);
+    NSString *candidateKey = WCAtlasImageJokerKeyForMessage(message);
     if ([candidateKey isEqualToString:messageKey]) {
-        NeoWCReplyTransformSnapshot *snapshot = [NeoWCReplyTransformSnapshot new];
+        WCAtlasReplyTransformSnapshot *snapshot = [WCAtlasReplyTransformSnapshot new];
         snapshot.view = view;
         snapshot.transform = view.transform;
         [snapshots addObject:snapshot];
         return;
     }
-    for (UIView *subview in view.subviews) NeoWCCollectReplyTransformTargets(subview, messageKey, snapshots);
+    for (UIView *subview in view.subviews) WCAtlasCollectReplyTransformTargets(subview, messageKey, snapshots);
 }
 
-static NSArray<NeoWCReplyTransformSnapshot *> *NeoWCReplyTransformSnapshots(CommonMessageCellView *sourceCell) {
-    NSString *messageKey = NeoWCImageJokerKeyForMessage(NeoWCMessageWrapForCell(sourceCell));
-    NSMutableArray<NeoWCReplyTransformSnapshot *> *snapshots = [NSMutableArray array];
+static NSArray<WCAtlasReplyTransformSnapshot *> *WCAtlasReplyTransformSnapshots(CommonMessageCellView *sourceCell) {
+    NSString *messageKey = WCAtlasImageJokerKeyForMessage(WCAtlasMessageWrapForCell(sourceCell));
+    NSMutableArray<WCAtlasReplyTransformSnapshot *> *snapshots = [NSMutableArray array];
     if (messageKey.length && sourceCell.window) {
-        NeoWCCollectReplyTransformTargets(sourceCell.window, messageKey, snapshots);
+        WCAtlasCollectReplyTransformTargets(sourceCell.window, messageKey, snapshots);
     }
     if (snapshots.count == 0 && sourceCell) {
-        NeoWCReplyTransformSnapshot *snapshot = [NeoWCReplyTransformSnapshot new];
+        WCAtlasReplyTransformSnapshot *snapshot = [WCAtlasReplyTransformSnapshot new];
         snapshot.view = sourceCell;
         snapshot.transform = sourceCell.transform;
         [snapshots addObject:snapshot];
@@ -2122,61 +2122,61 @@ static NSArray<NeoWCReplyTransformSnapshot *> *NeoWCReplyTransformSnapshots(Comm
     return snapshots;
 }
 
-static void NeoWCApplyReplyTransform(NSArray<NeoWCReplyTransformSnapshot *> *snapshots, CGFloat offset) {
-    for (NeoWCReplyTransformSnapshot *snapshot in snapshots) {
+static void WCAtlasApplyReplyTransform(NSArray<WCAtlasReplyTransformSnapshot *> *snapshots, CGFloat offset) {
+    for (WCAtlasReplyTransformSnapshot *snapshot in snapshots) {
         UIView *view = snapshot.view;
         if (view.window) view.transform = CGAffineTransformTranslate(snapshot.transform, offset, 0.0);
     }
 }
 
-static void NeoWCRestoreReplyTransforms(NSArray<NeoWCReplyTransformSnapshot *> *snapshots) {
-    for (NeoWCReplyTransformSnapshot *snapshot in snapshots) {
+static void WCAtlasRestoreReplyTransforms(NSArray<WCAtlasReplyTransformSnapshot *> *snapshots) {
+    for (WCAtlasReplyTransformSnapshot *snapshot in snapshots) {
         if (snapshot.view) snapshot.view.transform = snapshot.transform;
     }
 }
 
-static id NeoWCImageJokerMessageForObject(id object) {
+static id WCAtlasImageJokerMessageForObject(id object) {
     if (!object) return nil;
     Class messageClass = NSClassFromString(@"CMessageWrap");
     if (messageClass && [object isKindOfClass:messageClass]) return object;
-    id message = NeoWCTweakValueForSelectorNames(object, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap", @"message"]);
+    id message = WCAtlasTweakValueForSelectorNames(object, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap", @"message"]);
     if (message) return message;
-    id viewModel = NeoWCTweakValueForSelectorNames(object, @[@"viewModel", @"m_viewModel"]);
-    return NeoWCTweakValueForSelectorNames(viewModel, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
+    id viewModel = WCAtlasTweakValueForSelectorNames(object, @[@"viewModel", @"m_viewModel"]);
+    return WCAtlasTweakValueForSelectorNames(viewModel, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
 }
 
-static UIImage *NeoWCImageJokerImageForMessage(id message) {
-    if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return nil;
-    NSString *key = NeoWCImageJokerKeyForMessage(message);
+static UIImage *WCAtlasImageJokerImageForMessage(id message) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasChatJokerEnabledKey)) return nil;
+    NSString *key = WCAtlasImageJokerKeyForMessage(message);
     if (key.length == 0) return nil;
-    @synchronized (NeoWCImageJokerCacheLock()) {
-        return NeoWCImageJokerImages()[key];
+    @synchronized (WCAtlasImageJokerCacheLock()) {
+        return WCAtlasImageJokerImages()[key];
     }
 }
 
-static NSData *NeoWCImageJokerDataForMessage(id message) {
-    if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return nil;
-    NSString *key = NeoWCImageJokerKeyForMessage(message);
+static NSData *WCAtlasImageJokerDataForMessage(id message) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasChatJokerEnabledKey)) return nil;
+    NSString *key = WCAtlasImageJokerKeyForMessage(message);
     if (key.length == 0) return nil;
-    @synchronized (NeoWCImageJokerCacheLock()) {
-        return NeoWCImageJokerData()[key];
+    @synchronized (WCAtlasImageJokerCacheLock()) {
+        return WCAtlasImageJokerData()[key];
     }
 }
 
-static NSString *NeoWCImageJokerPathForMessage(id message) {
-    if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return nil;
-    NSString *key = NeoWCImageJokerKeyForMessage(message);
+static NSString *WCAtlasImageJokerPathForMessage(id message) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasChatJokerEnabledKey)) return nil;
+    NSString *key = WCAtlasImageJokerKeyForMessage(message);
     if (key.length == 0) return nil;
-    @synchronized (NeoWCImageJokerCacheLock()) {
-        return NeoWCImageJokerPaths()[key];
+    @synchronized (WCAtlasImageJokerCacheLock()) {
+        return WCAtlasImageJokerPaths()[key];
     }
 }
 
-static UIImage *NeoWCImageJokerImageForObject(id object) {
-    return NeoWCImageJokerImageForMessage(NeoWCImageJokerMessageForObject(object));
+static UIImage *WCAtlasImageJokerImageForObject(id object) {
+    return WCAtlasImageJokerImageForMessage(WCAtlasImageJokerMessageForObject(object));
 }
 
-static CGSize NeoWCImageJokerDisplaySize(UIImage *image) {
+static CGSize WCAtlasImageJokerDisplaySize(UIImage *image) {
     CGSize imageSize = image.size;
     if (imageSize.width <= 0.0 || imageSize.height <= 0.0 ||
         !isfinite(imageSize.width) || !isfinite(imageSize.height)) return CGSizeZero;
@@ -2210,11 +2210,11 @@ static CGSize NeoWCImageJokerDisplaySize(UIImage *image) {
     return CGSizeMake(floor(MAX(1.0, width)), floor(MAX(1.0, height)));
 }
 
-static NSString *NeoWCImageJokerTemporaryDirectory(void) {
+static NSString *WCAtlasImageJokerTemporaryDirectory(void) {
     return [NSTemporaryDirectory() stringByAppendingPathComponent:@"wxi_image_joker"];
 }
 
-static NSString *NeoWCImageJokerSafeFilename(NSString *key) {
+static NSString *WCAtlasImageJokerSafeFilename(NSString *key) {
     NSMutableString *name = [NSMutableString stringWithCapacity:MIN((NSUInteger)80, key.length)];
     NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"];
     for (NSUInteger index = 0; index < key.length && name.length < 80; index++) {
@@ -2225,61 +2225,61 @@ static NSString *NeoWCImageJokerSafeFilename(NSString *key) {
     return [(name.length > 0 ? name : [@"image" mutableCopy]) stringByAppendingPathExtension:@"jpg"];
 }
 
-static BOOL NeoWCStoreImageJokerOverride(id message, UIImage *image) {
-    NSString *key = NeoWCImageJokerKeyForMessage(message);
+static BOOL WCAtlasStoreImageJokerOverride(id message, UIImage *image) {
+    NSString *key = WCAtlasImageJokerKeyForMessage(message);
     if (key.length == 0 || ![image isKindOfClass:[UIImage class]]) return NO;
     NSData *data = UIImageJPEGRepresentation(image, 0.95);
     if (data.length == 0) data = UIImagePNGRepresentation(image);
     if (data.length == 0) return NO;
-    NSString *directory = NeoWCImageJokerTemporaryDirectory();
+    NSString *directory = WCAtlasImageJokerTemporaryDirectory();
     [[NSFileManager defaultManager] createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
-    NSString *path = [directory stringByAppendingPathComponent:NeoWCImageJokerSafeFilename(key)];
+    NSString *path = [directory stringByAppendingPathComponent:WCAtlasImageJokerSafeFilename(key)];
     if (![data writeToFile:path options:NSDataWritingAtomic error:nil]) path = nil;
-    @synchronized (NeoWCImageJokerCacheLock()) {
-        NeoWCImageJokerImages()[key] = image;
-        NeoWCImageJokerData()[key] = data;
-        if (path.length > 0) NeoWCImageJokerPaths()[key] = path;
-        else [NeoWCImageJokerPaths() removeObjectForKey:key];
+    @synchronized (WCAtlasImageJokerCacheLock()) {
+        WCAtlasImageJokerImages()[key] = image;
+        WCAtlasImageJokerData()[key] = data;
+        if (path.length > 0) WCAtlasImageJokerPaths()[key] = path;
+        else [WCAtlasImageJokerPaths() removeObjectForKey:key];
     }
     return YES;
 }
 
-static void NeoWCClearImageJokerOverrides(void) {
-    @synchronized (NeoWCImageJokerCacheLock()) {
-        [NeoWCImageJokerImages() removeAllObjects];
-        [NeoWCImageJokerData() removeAllObjects];
-        [NeoWCImageJokerPaths() removeAllObjects];
+static void WCAtlasClearImageJokerOverrides(void) {
+    @synchronized (WCAtlasImageJokerCacheLock()) {
+        [WCAtlasImageJokerImages() removeAllObjects];
+        [WCAtlasImageJokerData() removeAllObjects];
+        [WCAtlasImageJokerPaths() removeAllObjects];
     }
-    [[NSFileManager defaultManager] removeItemAtPath:NeoWCImageJokerTemporaryDirectory() error:nil];
+    [[NSFileManager defaultManager] removeItemAtPath:WCAtlasImageJokerTemporaryDirectory() error:nil];
 }
 
-static void NeoWCApplyImageJokerToCell(id cell, id message, UIImage *image) {
-    id imageView = NeoWCTweakSafeValue(cell, @"m_imageView");
+static void WCAtlasApplyImageJokerToCell(id cell, id message, UIImage *image) {
+    id imageView = WCAtlasTweakSafeValue(cell, @"m_imageView");
     if ([imageView isKindOfClass:[UIImageView class]]) ((UIImageView *)imageView).image = image;
-    id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel", @"m_viewModel"]);
+    id viewModel = WCAtlasTweakValueForSelectorNames(cell, @[@"viewModel", @"m_viewModel"]);
     SEL resetSelector = NSSelectorFromString(@"resetLayoutCache");
     if ([viewModel respondsToSelector:resetSelector]) ((void (*)(id, SEL))objc_msgSend)(viewModel, resetSelector);
-    NeoWCReloadJokerCell(cell, message, NeoWCJokerPresenterForCell(cell));
+    WCAtlasReloadJokerCell(cell, message, WCAtlasJokerPresenterForCell(cell));
 }
 
-@interface NeoWCImageJokerPickerDelegate : NSObject <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@interface WCAtlasImageJokerPickerDelegate : NSObject <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
 @property (nonatomic, weak) id cell;
 @property (nonatomic, weak) UIViewController *presenter;
 @property (nonatomic, strong) id message;
 @end
 
-@implementation NeoWCImageJokerPickerDelegate
+@implementation WCAtlasImageJokerPickerDelegate
 
 - (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey, id> *)info {
     UIImage *image = info[UIImagePickerControllerOriginalImage];
     if (![image isKindOfClass:[UIImage class]]) image = info[UIImagePickerControllerEditedImage];
     id cell = self.cell;
     id message = self.message;
-    if (image && message && NeoWCStoreImageJokerOverride(message, image)) {
-        if (cell) NeoWCApplyImageJokerToCell(cell, message, image);
-        NeoWCCompatibilityMarkTriggered(@"image-joker");
-        NeoWCCompatibilityMarkTriggered(@"chat-joker");
-        NeoWCLog(@"聊天图片已在当前页面伪装");
+    if (image && message && WCAtlasStoreImageJokerOverride(message, image)) {
+        if (cell) WCAtlasApplyImageJokerToCell(cell, message, image);
+        WCAtlasCompatibilityMarkTriggered(@"image-joker");
+        WCAtlasCompatibilityMarkTriggered(@"chat-joker");
+        WCAtlasLog(@"聊天图片已在当前页面伪装");
     }
     [picker dismissViewControllerAnimated:YES completion:nil];
 }
@@ -2290,31 +2290,31 @@ static void NeoWCApplyImageJokerToCell(id cell, id message, UIImage *image) {
 
 @end
 
-static void NeoWCPresentImageJokerPickerForCell(id cell) {
-    if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return;
-    id message = NeoWCMessageWrapForCell(cell);
-    UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
+static void WCAtlasPresentImageJokerPickerForCell(id cell) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasChatJokerEnabledKey)) return;
+    id message = WCAtlasMessageWrapForCell(cell);
+    UIViewController *presenter = WCAtlasJokerPresenterForCell(cell);
     if (!message || !presenter.view.window ||
         ![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) return;
     UIImagePickerController *picker = [UIImagePickerController new];
     picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
     picker.allowsEditing = NO;
-    NeoWCImageJokerPickerDelegate *delegate = [NeoWCImageJokerPickerDelegate new];
+    WCAtlasImageJokerPickerDelegate *delegate = [WCAtlasImageJokerPickerDelegate new];
     delegate.cell = cell;
     delegate.presenter = presenter;
     delegate.message = message;
     picker.delegate = delegate;
-    objc_setAssociatedObject(picker, &NeoWCImageJokerPickerDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(picker, &WCAtlasImageJokerPickerDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [presenter presentViewController:picker animated:YES completion:nil];
 }
 
-static NSArray *NeoWCOperationMenuItemsWithImageJoker(id target, NSArray *originalItems) {
+static NSArray *WCAtlasOperationMenuItemsWithImageJoker(id target, NSArray *originalItems) {
     if (![originalItems isKindOfClass:[NSArray class]]) return originalItems;
     NSMutableArray *items = [originalItems mutableCopy];
-    if (NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageWrapForCell(target)) {
+    if (WCAtlasEnhancementEnabled(WCAtlasChatJokerEnabledKey) && WCAtlasMessageWrapForCell(target)) {
         BOOL exists = NO;
         for (id item in items) {
-            if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"修改图片"]) { exists = YES; break; }
+            if ([WCAtlasTweakSafeValue(item, @"title") isEqualToString:@"修改图片"]) { exists = YES; break; }
         }
         if (!exists) {
             Class itemClass = NSClassFromString(@"MMMenuItem");
@@ -2331,15 +2331,15 @@ static NSArray *NeoWCOperationMenuItemsWithImageJoker(id target, NSArray *origin
     return items;
 }
 
-static id NeoWCEmoticonExtendInfoForCell(id cell, NSString *expectedClassName) {
-    id message = NeoWCMessageWrapForCell(cell);
-    id extendInfo = NeoWCTweakValueForSelectorNames(message, @[@"m_extendInfoWithMsgType"]);
+static id WCAtlasEmoticonExtendInfoForCell(id cell, NSString *expectedClassName) {
+    id message = WCAtlasMessageWrapForCell(cell);
+    id extendInfo = WCAtlasTweakValueForSelectorNames(message, @[@"m_extendInfoWithMsgType"]);
     Class expectedClass = NSClassFromString(expectedClassName);
     if (!extendInfo || (expectedClass && ![extendInfo isKindOfClass:expectedClass])) return nil;
     return extendInfo;
 }
 
-static NSData *NeoWCEmoticonDataForMD5(NSString *md5, BOOL needUpdateTime) {
+static NSData *WCAtlasEmoticonDataForMD5(NSString *md5, BOOL needUpdateTime) {
     if (![md5 isKindOfClass:[NSString class]] || md5.length == 0) return nil;
     Class utilClass = NSClassFromString(@"EmoticonUtil");
     SEL existsSelector = NSSelectorFromString(@"fileExistOfEmoticonForMd5:");
@@ -2350,7 +2350,7 @@ static NSData *NeoWCEmoticonDataForMD5(NSString *md5, BOOL needUpdateTime) {
     return [data isKindOfClass:[NSData class]] && [data length] > 0 ? data : nil;
 }
 
-static id NeoWCEmoticonAddLogicController(void) {
+static id WCAtlasEmoticonAddLogicController(void) {
     static id controller;
     @synchronized ([NSObject class]) {
         if (!controller) {
@@ -2361,7 +2361,7 @@ static id NeoWCEmoticonAddLogicController(void) {
     return controller;
 }
 
-static BOOL NeoWCSaveDataAsSelfieEmoticon(NSData *data) {
+static BOOL WCAtlasSaveDataAsSelfieEmoticon(NSData *data) {
     if (![data isKindOfClass:[NSData class]] || data.length == 0) return NO;
     Class fileClass = NSClassFromString(@"CBaseFile");
     Class uploadClass = NSClassFromString(@"EmoticonUploadInfoObj");
@@ -2404,32 +2404,32 @@ static BOOL NeoWCSaveDataAsSelfieEmoticon(NSData *data) {
     BOOL saved = ((BOOL (*)(id, SEL, id))objc_msgSend)(uploadInfo, saveTemp, data);
     if (!saved) return NO;
 
-    id controller = NeoWCEmoticonAddLogicController();
+    id controller = WCAtlasEmoticonAddLogicController();
     SEL handleSelector = NSSelectorFromString(@"handleEmoticonUploadInfo:source:");
     if (!controller || ![controller respondsToSelector:handleSelector]) return NO;
     ((void (*)(id, SEL, id, NSUInteger))objc_msgSend)(controller, handleSelector, uploadInfo, 7);
-    NeoWCCompatibilityMarkTriggered(@"emoticon-to-selfie");
+    WCAtlasCompatibilityMarkTriggered(@"emoticon-to-selfie");
     return YES;
 }
 
-static BOOL NeoWCSaveCellEmoticonAsSelfie(id cell, NSString *extendInfoClassName, BOOL needUpdateTime) {
-    id extendInfo = NeoWCEmoticonExtendInfoForCell(cell, extendInfoClassName);
-    NSString *md5 = NeoWCTweakValueForSelectorNames(extendInfo, @[@"m_nsEmoticonMD5"]);
-    NSData *data = NeoWCEmoticonDataForMD5(md5, needUpdateTime);
-    return NeoWCSaveDataAsSelfieEmoticon(data);
+static BOOL WCAtlasSaveCellEmoticonAsSelfie(id cell, NSString *extendInfoClassName, BOOL needUpdateTime) {
+    id extendInfo = WCAtlasEmoticonExtendInfoForCell(cell, extendInfoClassName);
+    NSString *md5 = WCAtlasTweakValueForSelectorNames(extendInfo, @[@"m_nsEmoticonMD5"]);
+    NSData *data = WCAtlasEmoticonDataForMD5(md5, needUpdateTime);
+    return WCAtlasSaveDataAsSelfieEmoticon(data);
 }
 
-static NSArray *NeoWCMenuItemsWithEmoticonToSelfie(id target, NSArray *originalItems, NSString *extendInfoClassName) {
-    if (![originalItems isKindOfClass:[NSArray class]] || !NeoWCEnhancementEnabled(NeoWCEmoticonToSelfieEnabledKey)) return originalItems;
-    if (!NeoWCEmoticonExtendInfoForCell(target, extendInfoClassName)) return originalItems;
+static NSArray *WCAtlasMenuItemsWithEmoticonToSelfie(id target, NSArray *originalItems, NSString *extendInfoClassName) {
+    if (![originalItems isKindOfClass:[NSArray class]] || !WCAtlasEnhancementEnabled(WCAtlasEmoticonToSelfieEnabledKey)) return originalItems;
+    if (!WCAtlasEmoticonExtendInfoForCell(target, extendInfoClassName)) return originalItems;
     for (id item in originalItems) {
-        if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"存入自拍"]) return originalItems;
+        if ([WCAtlasTweakSafeValue(item, @"title") isEqualToString:@"存入自拍"]) return originalItems;
     }
 
     Class itemClass = NSClassFromString(@"MMMenuItem");
     if (!itemClass) return originalItems;
     id menuItem = nil;
-    SEL action = NSSelectorFromString(@"neowc_saveEmoticonAsSelfie");
+    SEL action = NSSelectorFromString(@"wcatlas_saveEmoticonAsSelfie");
     SEL targetInitializer = NSSelectorFromString(@"initWithTitle:svgName:target:action:");
     SEL initializer = NSSelectorFromString(@"initWithTitle:svgName:action:");
     if ([itemClass instancesRespondToSelector:targetInitializer]) {
@@ -2445,24 +2445,24 @@ static NSArray *NeoWCMenuItemsWithEmoticonToSelfie(id target, NSArray *originalI
     return items;
 }
 
-static NSData *NeoWCPreviewEmoticonData(id controller) {
-    id popoverView = NeoWCTweakValueForSelectorNames(controller, @[@"popoverView"]);
+static NSData *WCAtlasPreviewEmoticonData(id controller) {
+    id popoverView = WCAtlasTweakValueForSelectorNames(controller, @[@"popoverView"]);
     SEL downloadedSelector = NSSelectorFromString(@"checkIfEmojiDownloaded");
     if ([popoverView respondsToSelector:downloadedSelector] &&
         !((BOOL (*)(id, SEL))objc_msgSend)(popoverView, downloadedSelector)) return nil;
-    id model = NeoWCTweakValueForSelectorNames(popoverView, @[@"model"]);
-    id emoticonWrap = NeoWCTweakValueForSelectorNames(model, @[@"emoticonWrap"]);
+    id model = WCAtlasTweakValueForSelectorNames(popoverView, @[@"model"]);
+    id emoticonWrap = WCAtlasTweakValueForSelectorNames(model, @[@"emoticonWrap"]);
     SEL selfieSelector = NSSelectorFromString(@"isSelfieEmoticon");
     if ([emoticonWrap respondsToSelector:selfieSelector] &&
         ((BOOL (*)(id, SEL))objc_msgSend)(emoticonWrap, selfieSelector)) return nil;
-    id imageData = NeoWCTweakValueForSelectorNames(emoticonWrap, @[@"m_imageData"]);
+    id imageData = WCAtlasTweakValueForSelectorNames(emoticonWrap, @[@"m_imageData"]);
     if ([imageData isKindOfClass:[NSData class]] && [imageData length] > 0) return imageData;
-    NSString *md5 = NeoWCTweakValueForSelectorNames(emoticonWrap, @[@"m_nsEmoticonMD5"]);
-    return NeoWCEmoticonDataForMD5(md5, YES);
+    NSString *md5 = WCAtlasTweakValueForSelectorNames(emoticonWrap, @[@"m_nsEmoticonMD5"]);
+    return WCAtlasEmoticonDataForMD5(md5, YES);
 }
 
-static NSString *NeoWCAdBlockerRewrittenURLString(NSString *URLString) {
-    if (!NeoWCEnhancementEnabled(NeoWCAdBlockerKey) ||
+static NSString *WCAtlasAdBlockerRewrittenURLString(NSString *URLString) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey) ||
         ![URLString isKindOfClass:[NSString class]]) return URLString;
     static NSArray<NSString *> *blockedFragments;
     static dispatch_once_t onceToken;
@@ -2486,83 +2486,83 @@ static NSString *NeoWCAdBlockerRewrittenURLString(NSString *URLString) {
     return URLString;
 }
 
-static UITextView *NeoWCInnerTextView(id growTextView) {
-    id textView = NeoWCTweakSafeValue(growTextView, @"textView");
-    if (![textView isKindOfClass:[UITextView class]]) textView = NeoWCTweakSafeValue(growTextView, @"_textView");
+static UITextView *WCAtlasInnerTextView(id growTextView) {
+    id textView = WCAtlasTweakSafeValue(growTextView, @"textView");
+    if (![textView isKindOfClass:[UITextView class]]) textView = WCAtlasTweakSafeValue(growTextView, @"_textView");
     return [textView isKindOfClass:[UITextView class]] ? textView : nil;
 }
 
-static void NeoWCSynchronizeInputSwipeActions(MMGrowTextView *view) {
+static void WCAtlasSynchronizeInputSwipeActions(MMGrowTextView *view) {
     if (!view) return;
-    BOOL enabled = NeoWCEnhancementEnabled(NeoWCInputSwipeActionsEnabledKey);
-    UISwipeGestureRecognizer *left = objc_getAssociatedObject(view, &NeoWCInputSwipeLeftRecognizerKey);
-    UISwipeGestureRecognizer *right = objc_getAssociatedObject(view, &NeoWCInputSwipeRightRecognizerKey);
+    BOOL enabled = WCAtlasEnhancementEnabled(WCAtlasInputSwipeActionsEnabledKey);
+    UISwipeGestureRecognizer *left = objc_getAssociatedObject(view, &WCAtlasInputSwipeLeftRecognizerKey);
+    UISwipeGestureRecognizer *right = objc_getAssociatedObject(view, &WCAtlasInputSwipeRightRecognizerKey);
     if (enabled) {
-        NeoWCCompatibilityMarkTriggered(@"input-swipe");
+        WCAtlasCompatibilityMarkTriggered(@"input-swipe");
         if (!left) {
-            left = [[UISwipeGestureRecognizer alloc] initWithTarget:view action:@selector(neowc_handleInputSwipeLeft:)];
+            left = [[UISwipeGestureRecognizer alloc] initWithTarget:view action:@selector(wcatlas_handleInputSwipeLeft:)];
             left.direction = UISwipeGestureRecognizerDirectionLeft;
             left.cancelsTouchesInView = NO;
             [view addGestureRecognizer:left];
-            objc_setAssociatedObject(view, &NeoWCInputSwipeLeftRecognizerKey, left, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(view, &WCAtlasInputSwipeLeftRecognizerKey, left, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         if (!right) {
-            right = [[UISwipeGestureRecognizer alloc] initWithTarget:view action:@selector(neowc_handleInputSwipeRight:)];
+            right = [[UISwipeGestureRecognizer alloc] initWithTarget:view action:@selector(wcatlas_handleInputSwipeRight:)];
             right.direction = UISwipeGestureRecognizerDirectionRight;
             right.cancelsTouchesInView = NO;
             [view addGestureRecognizer:right];
-            objc_setAssociatedObject(view, &NeoWCInputSwipeRightRecognizerKey, right, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(view, &WCAtlasInputSwipeRightRecognizerKey, right, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         return;
     }
     if (left) {
         [view removeGestureRecognizer:left];
-        objc_setAssociatedObject(view, &NeoWCInputSwipeLeftRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, &WCAtlasInputSwipeLeftRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     if (right) {
         [view removeGestureRecognizer:right];
-        objc_setAssociatedObject(view, &NeoWCInputSwipeRightRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, &WCAtlasInputSwipeRightRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
-static void NeoWCSynchronizeQuickReplyPlusGesture(MMInputToolView *view) {
+static void WCAtlasSynchronizeQuickReplyPlusGesture(MMInputToolView *view) {
     if (!view) return;
-    UILongPressGestureRecognizer *recognizer = objc_getAssociatedObject(view, &NeoWCQuickReplyPlusRecognizerKey);
-    BOOL enabled = NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey) && view.window;
+    UILongPressGestureRecognizer *recognizer = objc_getAssociatedObject(view, &WCAtlasQuickReplyPlusRecognizerKey);
+    BOOL enabled = WCAtlasEnhancementEnabled(WCAtlasQuickReplyEnabledKey) && view.window;
     if (enabled && !recognizer) {
-        NeoWCQuickReplyPlusGestureDelegate *delegate = [NeoWCQuickReplyPlusGestureDelegate new];
+        WCAtlasQuickReplyPlusGestureDelegate *delegate = [WCAtlasQuickReplyPlusGestureDelegate new];
         delegate.toolView = view;
         recognizer = [[UILongPressGestureRecognizer alloc] initWithTarget:view
-                                                                   action:@selector(neowc_handleQuickReplyPlusLongPress:)];
+                                                                   action:@selector(wcatlas_handleQuickReplyPlusLongPress:)];
         recognizer.minimumPressDuration = 0.55;
         recognizer.cancelsTouchesInView = YES;
         recognizer.delegate = delegate;
         [view addGestureRecognizer:recognizer];
-        objc_setAssociatedObject(view, &NeoWCQuickReplyPlusRecognizerKey, recognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(view, &NeoWCQuickReplyPlusDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, &WCAtlasQuickReplyPlusRecognizerKey, recognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, &WCAtlasQuickReplyPlusDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     } else if (!enabled && recognizer) {
         [view removeGestureRecognizer:recognizer];
-        objc_setAssociatedObject(view, &NeoWCQuickReplyPlusRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(view, &NeoWCQuickReplyPlusDelegateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, &WCAtlasQuickReplyPlusRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, &WCAtlasQuickReplyPlusDelegateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
-static id NeoWCContactForUserName(NSString *userName) {
-    return NeoWCPrivateContact(userName);
+static id WCAtlasContactForUserName(NSString *userName) {
+    return WCAtlasPrivateContact(userName);
 }
 
-static id NeoWCMessageChatContact(id message) {
+static id WCAtlasMessageChatContact(id message) {
     if (!message) return nil;
     Class contactManagerClass = objc_getClass("CContactMgr");
-    id manager = contactManagerClass ? NeoWCServiceForClass(contactManagerClass) : nil;
+    id manager = contactManagerClass ? WCAtlasServiceForClass(contactManagerClass) : nil;
     SEL selector = sel_registerName("getMessageChatContactByMessageWrap:");
     if (!manager || ![manager respondsToSelector:selector]) return nil;
     return ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, message);
 }
 
-static UIView *NeoWCAvatarHeadViewForCell(CommonMessageCellView *cell) {
-    id candidate = NeoWCTweakValueForSelectorNames(cell, @[@"getHeadImageView", @"m_headImageView", @"headImageView"]);
-    if (!candidate) candidate = NeoWCTweakSafeValue(cell, @"m_headImageView");
+static UIView *WCAtlasAvatarHeadViewForCell(CommonMessageCellView *cell) {
+    id candidate = WCAtlasTweakValueForSelectorNames(cell, @[@"getHeadImageView", @"m_headImageView", @"headImageView"]);
+    if (!candidate) candidate = WCAtlasTweakSafeValue(cell, @"m_headImageView");
     if ([candidate isKindOfClass:UIView.class]) return candidate;
     Class headViewClass = NSClassFromString(@"MMHeadImageView");
     if (!headViewClass) return nil;
@@ -2576,7 +2576,7 @@ static UIView *NeoWCAvatarHeadViewForCell(CommonMessageCellView *cell) {
     return nil;
 }
 
-static CommonMessageCellView *NeoWCAvatarMessageCellForView(UIView *view) {
+static CommonMessageCellView *WCAtlasAvatarMessageCellForView(UIView *view) {
     Class cellClass = NSClassFromString(@"CommonMessageCellView");
     UIView *candidate = view.superview;
     while (candidate) {
@@ -2586,7 +2586,7 @@ static CommonMessageCellView *NeoWCAvatarMessageCellForView(UIView *view) {
     return nil;
 }
 
-static void NeoWCResolveAvatarGestureConflicts(UIView *headView, UIGestureRecognizer *ownedRecognizer) {
+static void WCAtlasResolveAvatarGestureConflicts(UIView *headView, UIGestureRecognizer *ownedRecognizer) {
     if (!headView || !ownedRecognizer) return;
     NSArray<UIGestureRecognizer *> *recognizers = [headView.gestureRecognizers copy];
     for (UIGestureRecognizer *recognizer in recognizers) {
@@ -2605,43 +2605,43 @@ static void NeoWCResolveAvatarGestureConflicts(UIView *headView, UIGestureRecogn
     }
 }
 
-static BOOL NeoWCConfigureNativeAvatarDoubleTap(UIView *headView,
-                                                NeoWCAvatarQuickGestureProxy *proxy,
+static BOOL WCAtlasConfigureNativeAvatarDoubleTap(UIView *headView,
+                                                WCAtlasAvatarQuickGestureProxy *proxy,
                                                 BOOL enabled) {
     SEL setter = NSSelectorFromString(@"setTargetForDoubleClick:action:");
     if (![headView respondsToSelector:setter]) return NO;
-    NeoWCWeakObjectBox *originalTargetBox = objc_getAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapTargetKey);
-    NSString *originalActionName = objc_getAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapActionKey);
-    BOOL owned = [objc_getAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapOwnedKey) boolValue];
+    WCAtlasWeakObjectBox *originalTargetBox = objc_getAssociatedObject(headView, &WCAtlasAvatarNativeDoubleTapTargetKey);
+    NSString *originalActionName = objc_getAssociatedObject(headView, &WCAtlasAvatarNativeDoubleTapActionKey);
+    BOOL owned = [objc_getAssociatedObject(headView, &WCAtlasAvatarNativeDoubleTapOwnedKey) boolValue];
     if (enabled) {
         if (!originalTargetBox.object || originalActionName.length == 0) return NO;
-        NeoWCUpdatingAvatarNativeDoubleTap = YES;
+        WCAtlasUpdatingAvatarNativeDoubleTap = YES;
         ((void (*)(id, SEL, id, SEL))objc_msgSend)(headView, setter, proxy, @selector(handleGesture:));
-        NeoWCUpdatingAvatarNativeDoubleTap = NO;
-        objc_setAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapOwnedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        WCAtlasUpdatingAvatarNativeDoubleTap = NO;
+        objc_setAssociatedObject(headView, &WCAtlasAvatarNativeDoubleTapOwnedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return YES;
     }
     if (owned) {
         SEL originalAction = NSSelectorFromString(originalActionName);
-        NeoWCUpdatingAvatarNativeDoubleTap = YES;
+        WCAtlasUpdatingAvatarNativeDoubleTap = YES;
         ((void (*)(id, SEL, id, SEL))objc_msgSend)(headView, setter, originalTargetBox.object, originalAction);
-        NeoWCUpdatingAvatarNativeDoubleTap = NO;
-        objc_setAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapOwnedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        WCAtlasUpdatingAvatarNativeDoubleTap = NO;
+        objc_setAssociatedObject(headView, &WCAtlasAvatarNativeDoubleTapOwnedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     return NO;
 }
 
-static UIImage *NeoWCFirstImageInView(UIView *view) {
+static UIImage *WCAtlasFirstImageInView(UIView *view) {
     if ([view isKindOfClass:UIImageView.class] && ((UIImageView *)view).image) return ((UIImageView *)view).image;
     for (UIView *subview in view.subviews) {
-        UIImage *image = NeoWCFirstImageInView(subview);
+        UIImage *image = WCAtlasFirstImageInView(subview);
         if (image) return image;
     }
     return nil;
 }
 
-static UIImage *NeoWCAvatarSnapshot(UIView *view) {
-    UIImage *image = NeoWCFirstImageInView(view);
+static UIImage *WCAtlasAvatarSnapshot(UIView *view) {
+    UIImage *image = WCAtlasFirstImageInView(view);
     CGSize size = view.bounds.size;
     if (image || size.width <= 0.0 || size.height <= 0.0) return image;
     UIGraphicsBeginImageContextWithOptions(size, NO, UIScreen.mainScreen.scale);
@@ -2652,11 +2652,11 @@ static UIImage *NeoWCAvatarSnapshot(UIView *view) {
     return image;
 }
 
-static NSString *NeoWCAvatarDisplayName(id contact, NSString *fallback) {
-    return NeoWCPrivateContactDisplayName(contact, fallback) ?: @"";
+static NSString *WCAtlasAvatarDisplayName(id contact, NSString *fallback) {
+    return WCAtlasPrivateContactDisplayName(contact, fallback) ?: @"";
 }
 
-static UIViewController *NeoWCAvatarOwningViewController(UIView *view) {
+static UIViewController *WCAtlasAvatarOwningViewController(UIView *view) {
     UIViewController *nearestController = nil;
     UIResponder *responder = view;
     Class chatControllerClass = NSClassFromString(@"BaseMsgContentViewController");
@@ -2671,14 +2671,14 @@ static UIViewController *NeoWCAvatarOwningViewController(UIView *view) {
     return nearestController;
 }
 
-static NSString *NeoWCAvatarTargetUserName(CommonMessageCellView *cell, NSString *chatUserName) {
-    id message = NeoWCMessageWrapForCell(cell);
-    NSString *currentUser = NeoWCCurrentUserWXID();
-    if (NeoWCMessageCellIsSender(cell)) return currentUser;
+static NSString *WCAtlasAvatarTargetUserName(CommonMessageCellView *cell, NSString *chatUserName) {
+    id message = WCAtlasMessageWrapForCell(cell);
+    NSString *currentUser = WCAtlasCurrentUserWXID();
+    if (WCAtlasMessageCellIsSender(cell)) return currentUser;
     if ([chatUserName hasSuffix:@"@chatroom"]) {
         for (NSString *key in @[@"m_nsRealChatUsr", @"m_nsRealChatUsrName", @"realChatUserName", @"m_nsFromUsr"]) {
-            id value = NeoWCTweakValueForSelectorNames(message, @[key]);
-            if (!value) value = NeoWCTweakSafeValue(message, key);
+            id value = WCAtlasTweakValueForSelectorNames(message, @[key]);
+            if (!value) value = WCAtlasTweakSafeValue(message, key);
             if ([value isKindOfClass:NSString.class] && [value length] > 0 && ![value hasSuffix:@"@chatroom"]) return value;
         }
         return nil;
@@ -2686,9 +2686,9 @@ static NSString *NeoWCAvatarTargetUserName(CommonMessageCellView *cell, NSString
     return chatUserName;
 }
 
-static void NeoWCInvokeNativeAvatarDoubleTap(CommonMessageCellView *cell, UIView *headView) {
-    NeoWCWeakObjectBox *targetBox = objc_getAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapTargetKey);
-    NSString *actionName = objc_getAssociatedObject(headView, &NeoWCAvatarNativeDoubleTapActionKey);
+static void WCAtlasInvokeNativeAvatarDoubleTap(CommonMessageCellView *cell, UIView *headView) {
+    WCAtlasWeakObjectBox *targetBox = objc_getAssociatedObject(headView, &WCAtlasAvatarNativeDoubleTapTargetKey);
+    NSString *actionName = objc_getAssociatedObject(headView, &WCAtlasAvatarNativeDoubleTapActionKey);
     id target = targetBox.object;
     SEL action = actionName.length ? NSSelectorFromString(actionName) : NULL;
     if (target && action && [target respondsToSelector:action]) {
@@ -2700,105 +2700,105 @@ static void NeoWCInvokeNativeAvatarDoubleTap(CommonMessageCellView *cell, UIView
         ((void (*)(id, SEL, id))objc_msgSend)(cell, cellAction, headView);
         return;
     }
-    NeoWCShowTransientMessage(@"当前微信版本不支持拍一拍", NO);
+    WCAtlasShowTransientMessage(@"当前微信版本不支持拍一拍", NO);
 }
 
-static void NeoWCInvokeNativeAvatarLongPress(CommonMessageCellView *cell, UIView *headView) {
+static void WCAtlasInvokeNativeAvatarLongPress(CommonMessageCellView *cell, UIView *headView) {
     SEL selector = NSSelectorFromString(@"onHeadImageLongPressed:");
     if (!cell || !headView || ![cell respondsToSelector:selector]) {
-        NeoWCShowTransientMessage(@"当前微信版本不支持艾特", NO);
+        WCAtlasShowTransientMessage(@"当前微信版本不支持艾特", NO);
         return;
     }
-    NeoWCPerformingNativeAvatarLongPress = YES;
+    WCAtlasPerformingNativeAvatarLongPress = YES;
     ((void (*)(id, SEL, id))objc_msgSend)(cell, selector, headView);
-    NeoWCPerformingNativeAvatarLongPress = NO;
+    WCAtlasPerformingNativeAvatarLongPress = NO;
 }
 
-static void NeoWCOpenAvatarProfile(UIViewController *chatController, UIView *headView, id contact) {
+static void WCAtlasOpenAvatarProfile(UIViewController *chatController, UIView *headView, id contact) {
     (void)headView;
-    NSString *userName = NeoWCPrivateContactUserName(contact);
-    if (userName.length == 0 || !NeoWCPushPrivateContactProfile(chatController, userName)) {
-        NeoWCShowTransientMessage(@"当前微信版本无法打开资料页", NO);
+    NSString *userName = WCAtlasPrivateContactUserName(contact);
+    if (userName.length == 0 || !WCAtlasPushPrivateContactProfile(chatController, userName)) {
+        WCAtlasShowTransientMessage(@"当前微信版本无法打开资料页", NO);
     }
 }
 
-static void NeoWCClearPendingExclusiveRedEnvelope(void) {
-    NeoWCPendingExclusiveRedEnvelopeContact = nil;
-    NeoWCPendingExclusiveRedEnvelopeGroupID = nil;
-    NeoWCPendingExclusiveRedEnvelopeDeadline = 0.0;
+static void WCAtlasClearPendingExclusiveRedEnvelope(void) {
+    WCAtlasPendingExclusiveRedEnvelopeContact = nil;
+    WCAtlasPendingExclusiveRedEnvelopeGroupID = nil;
+    WCAtlasPendingExclusiveRedEnvelopeDeadline = 0.0;
 }
 
-static NSString *NeoWCContactUserName(id contact) {
+static NSString *WCAtlasContactUserName(id contact) {
     if ([contact isKindOfClass:NSString.class]) return contact;
-    return NeoWCPrivateContactUserName(contact);
+    return WCAtlasPrivateContactUserName(contact);
 }
 
-static void NeoWCPrepareExclusiveRedEnvelopeData(id data) {
-    if (!data || !NeoWCPendingExclusiveRedEnvelopeContact ||
-        NeoWCPendingExclusiveRedEnvelopeGroupID.length == 0 ||
-        CACurrentMediaTime() > NeoWCPendingExclusiveRedEnvelopeDeadline) {
-        if (CACurrentMediaTime() > NeoWCPendingExclusiveRedEnvelopeDeadline) {
-            NeoWCClearPendingExclusiveRedEnvelope();
+static void WCAtlasPrepareExclusiveRedEnvelopeData(id data) {
+    if (!data || !WCAtlasPendingExclusiveRedEnvelopeContact ||
+        WCAtlasPendingExclusiveRedEnvelopeGroupID.length == 0 ||
+        CACurrentMediaTime() > WCAtlasPendingExclusiveRedEnvelopeDeadline) {
+        if (CACurrentMediaTime() > WCAtlasPendingExclusiveRedEnvelopeDeadline) {
+            WCAtlasClearPendingExclusiveRedEnvelope();
         }
         return;
     }
-    id selectedConversation = NeoWCTweakValueForSelectorNames(data, @[@"m_oSelectContact"]);
-    if (!selectedConversation) selectedConversation = NeoWCTweakSafeValue(data, @"m_oSelectContact");
-    NSString *selectedUserName = NeoWCContactUserName(selectedConversation);
-    if (![selectedUserName isEqualToString:NeoWCPendingExclusiveRedEnvelopeGroupID]) return;
+    id selectedConversation = WCAtlasTweakValueForSelectorNames(data, @[@"m_oSelectContact"]);
+    if (!selectedConversation) selectedConversation = WCAtlasTweakSafeValue(data, @"m_oSelectContact");
+    NSString *selectedUserName = WCAtlasContactUserName(selectedConversation);
+    if (![selectedUserName isEqualToString:WCAtlasPendingExclusiveRedEnvelopeGroupID]) return;
 
-    id targetContact = NeoWCPendingExclusiveRedEnvelopeContact;
+    id targetContact = WCAtlasPendingExclusiveRedEnvelopeContact;
     SEL memberSelector = NSSelectorFromString(@"setSelectedMemberContact:");
     if ([data respondsToSelector:memberSelector]) {
         ((void (*)(id, SEL, id))objc_msgSend)(data, memberSelector, targetContact);
     }
-    objc_setAssociatedObject(data, &NeoWCExclusiveRedEnvelopeContactKey,
+    objc_setAssociatedObject(data, &WCAtlasExclusiveRedEnvelopeContactKey,
                              targetContact, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCClearPendingExclusiveRedEnvelope();
+    WCAtlasClearPendingExclusiveRedEnvelope();
 }
 
-static void NeoWCOpenAvatarExclusiveRedEnvelope(id chatController,
+static void WCAtlasOpenAvatarExclusiveRedEnvelope(id chatController,
                                                  id targetContact,
                                                  NSString *groupID) {
     SEL selector = NSSelectorFromString(@"redEnvelopesLogic");
     if (![chatController respondsToSelector:selector]) {
-        NeoWCShowTransientMessage(@"当前页面无法发红包", NO);
+        WCAtlasShowTransientMessage(@"当前页面无法发红包", NO);
         return;
     }
     if (!targetContact || groupID.length == 0 || ![groupID hasSuffix:@"@chatroom"]) {
-        NeoWCShowTransientMessage(@"未取得群成员资料", NO);
+        WCAtlasShowTransientMessage(@"未取得群成员资料", NO);
         return;
     }
-    NSUInteger generation = ++NeoWCPendingExclusiveRedEnvelopeGeneration;
-    NeoWCPendingExclusiveRedEnvelopeContact = targetContact;
-    NeoWCPendingExclusiveRedEnvelopeGroupID = [groupID copy];
-    NeoWCPendingExclusiveRedEnvelopeDeadline = CACurrentMediaTime() + 2.0;
+    NSUInteger generation = ++WCAtlasPendingExclusiveRedEnvelopeGeneration;
+    WCAtlasPendingExclusiveRedEnvelopeContact = targetContact;
+    WCAtlasPendingExclusiveRedEnvelopeGroupID = [groupID copy];
+    WCAtlasPendingExclusiveRedEnvelopeDeadline = CACurrentMediaTime() + 2.0;
     @try {
         ((id (*)(id, SEL))objc_msgSend)(chatController, selector);
     } @catch (NSException *exception) {
-        if (generation == NeoWCPendingExclusiveRedEnvelopeGeneration) {
-            NeoWCClearPendingExclusiveRedEnvelope();
+        if (generation == WCAtlasPendingExclusiveRedEnvelopeGeneration) {
+            WCAtlasClearPendingExclusiveRedEnvelope();
         }
-        NeoWCLog(@"打开专属红包失败：%@", exception.reason ?: exception.name);
-        NeoWCShowTransientMessage(@"打开红包失败", NO);
+        WCAtlasLog(@"打开专属红包失败：%@", exception.reason ?: exception.name);
+        WCAtlasShowTransientMessage(@"打开红包失败", NO);
         return;
     }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        if (generation == NeoWCPendingExclusiveRedEnvelopeGeneration) {
-            NeoWCClearPendingExclusiveRedEnvelope();
+        if (generation == WCAtlasPendingExclusiveRedEnvelopeGeneration) {
+            WCAtlasClearPendingExclusiveRedEnvelope();
         }
     });
 }
 
-static void NeoWCOpenAvatarTransfer(id chatController, NSString *targetUserName, id targetContact, NSString *chatUserName) {
+static void WCAtlasOpenAvatarTransfer(id chatController, NSString *targetUserName, id targetContact, NSString *chatUserName) {
     Class dataClass = NSClassFromString(@"WCPayControlData");
     Class managerClass = NSClassFromString(@"WCPayControlMgr");
     id data = dataClass ? [dataClass new] : nil;
-    id manager = managerClass ? NeoWCServiceForClass(managerClass) : nil;
+    id manager = managerClass ? WCAtlasServiceForClass(managerClass) : nil;
     SEL startSelector = NSSelectorFromString(@"startTransferMoneyLogic:Data:");
     if (!data || !manager || ![manager respondsToSelector:startSelector]) {
-        NeoWCShowTransientMessage(@"当前微信版本无法发起转账", NO);
+        WCAtlasShowTransientMessage(@"当前微信版本无法发起转账", NO);
         return;
     }
     NSMutableArray<NSDictionary *> *entries = [NSMutableArray arrayWithArray:@[
@@ -2843,21 +2843,21 @@ static void NeoWCOpenAvatarTransfer(id chatController, NSString *targetUserName,
     ((void (*)(id, SEL, id, id))objc_msgSend)(manager, startSelector, chatController, data);
 }
 
-static void NeoWCOpenGroupMemberHistory(UIViewController *presenter,
+static void WCAtlasOpenGroupMemberHistory(UIViewController *presenter,
                                         NSString *chatRoomUserName,
                                         id memberContact) {
     if (!presenter || ![chatRoomUserName hasSuffix:@"@chatroom"] || !memberContact) {
-        NeoWCShowTransientMessage(@"未取得群成员资料", NO);
+        WCAtlasShowTransientMessage(@"未取得群成员资料", NO);
         return;
     }
     Class controllerClass = NSClassFromString(@"ChatRoomMemMsgListViewController");
     SEL initializer = NSSelectorFromString(@"initWithChat:memContact:");
     Method method = controllerClass ? class_getInstanceMethod(controllerClass, initializer) : NULL;
     if (!method || method_getNumberOfArguments(method) != 4 ||
-        !NeoWCMethodReturnsObject(method) ||
-        !NeoWCMethodArgumentIsObject(method, 2) ||
-        !NeoWCMethodArgumentIsObject(method, 3)) {
-        NeoWCShowTransientMessage(@"当前微信版本不支持成员聊天记录", NO);
+        !WCAtlasMethodReturnsObject(method) ||
+        !WCAtlasMethodArgumentIsObject(method, 2) ||
+        !WCAtlasMethodArgumentIsObject(method, 3)) {
+        WCAtlasShowTransientMessage(@"当前微信版本不支持成员聊天记录", NO);
         return;
     }
     UIViewController *controller = nil;
@@ -2867,10 +2867,10 @@ static void NeoWCOpenGroupMemberHistory(UIViewController *presenter,
                                                               chatRoomUserName,
                                                               memberContact);
     } @catch (NSException *exception) {
-        NeoWCLog(@"打开群成员聊天记录失败：%@", exception.reason ?: exception.name);
+        WCAtlasLog(@"打开群成员聊天记录失败：%@", exception.reason ?: exception.name);
     }
     if (![controller isKindOfClass:UIViewController.class]) {
-        NeoWCShowTransientMessage(@"无法打开成员聊天记录", NO);
+        WCAtlasShowTransientMessage(@"无法打开成员聊天记录", NO);
         return;
     }
     if (presenter.navigationController) {
@@ -2882,47 +2882,47 @@ static void NeoWCOpenGroupMemberHistory(UIViewController *presenter,
     }
 }
 
-static void NeoWCOpenAvatarInfoCard(UIViewController *chatController,
+static void WCAtlasOpenAvatarInfoCard(UIViewController *chatController,
                                     id contact,
                                     UIImage *avatar,
                                     NSString *displayName,
                                     NSString *targetUserName,
                                     NSString *chatUserName) {
     if (!chatController || targetUserName.length == 0) return;
-    UIViewController *officialController = contact ? NeoWCCreateOfficialSocialInformation(contact) : nil;
+    UIViewController *officialController = contact ? WCAtlasCreateOfficialSocialInformation(contact) : nil;
     NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows =
-        [NeoWCProfileInfoRows(contact, NO) mutableCopy] ?: [NSMutableArray array];
+        [WCAtlasProfileInfoRows(contact, NO) mutableCopy] ?: [NSMutableArray array];
     id groupContact = nil;
     if (contact == nil) {
-        NeoWCAddInfoCardRow(rows, @"原始号码", targetUserName);
+        WCAtlasAddInfoCardRow(rows, @"原始号码", targetUserName);
     }
     if ([chatUserName hasSuffix:@"@chatroom"]) {
-        groupContact = NeoWCContactForUserName(chatUserName);
+        groupContact = WCAtlasContactForUserName(chatUserName);
         [rows addObject:@{ @"title": @"所在群聊", @"value": chatUserName }];
-        [rows addObjectsFromArray:NeoWCGroupMemberInfoRows(contact, groupContact, targetUserName)];
+        [rows addObjectsFromArray:WCAtlasGroupMemberInfoRows(contact, groupContact, targetUserName)];
     }
     NSArray *baseRows = [rows copy];
-    NSArray *displayRows = NeoWCMergeInfoCardRows(baseRows,
-        officialController ? NeoWCOfficialSocialInformationRows(officialController) : @[]);
-    NeoWCContactInfoCardViewController *card = [[NeoWCContactInfoCardViewController alloc]
+    NSArray *displayRows = WCAtlasMergeInfoCardRows(baseRows,
+        officialController ? WCAtlasOfficialSocialInformationRows(officialController) : @[]);
+    WCAtlasContactInfoCardViewController *card = [[WCAtlasContactInfoCardViewController alloc]
         initWithTitle:[chatUserName hasSuffix:@"@chatroom"] ? @"群成员详细信息" : @"详细信息"
                avatar:avatar
                  name:displayName ?: targetUserName
              userName:targetUserName
              rows:displayRows];
     if (officialController) {
-        NeoWCWeakObjectBox *box = [NeoWCWeakObjectBox new];
+        WCAtlasWeakObjectBox *box = [WCAtlasWeakObjectBox new];
         box.object = card;
-        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoCardBoxKey,
+        objc_setAssociatedObject(officialController, &WCAtlasOfficialInfoCardBoxKey,
                                  box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoBaseRowsKey,
+        objc_setAssociatedObject(officialController, &WCAtlasOfficialInfoBaseRowsKey,
                                  baseRows, OBJC_ASSOCIATION_COPY_NONATOMIC);
-        objc_setAssociatedObject(card, &NeoWCInfoCardOfficialControllerKey,
+        objc_setAssociatedObject(card, &WCAtlasInfoCardOfficialControllerKey,
                                  officialController, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        NeoWCRefreshInfoCardFromOfficialController(officialController);
+        WCAtlasRefreshInfoCardFromOfficialController(officialController);
     }
-    NeoWCConfigureInfoCardSwitches(card, targetUserName, [chatUserName hasSuffix:@"@chatroom"]);
-    NeoWCConfigureInfoCardDetailActions(card, contact, groupContact,
+    WCAtlasConfigureInfoCardSwitches(card, targetUserName, [chatUserName hasSuffix:@"@chatroom"]);
+    WCAtlasConfigureInfoCardDetailActions(card, contact, groupContact,
                                         targetUserName, officialController);
     if (chatController.navigationController) {
         [chatController.navigationController pushViewController:card animated:YES];
@@ -2932,27 +2932,27 @@ static void NeoWCOpenAvatarInfoCard(UIViewController *chatController,
     }
 }
 
-static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *headView) {
-    id message = NeoWCMessageWrapForCell(cell);
-    NSString *chatUserName = NeoWCSessionForMessage(message);
-    UIViewController *chatController = NeoWCAvatarOwningViewController(cell);
-    NSString *targetUserName = NeoWCAvatarTargetUserName(cell, chatUserName);
+static BOOL WCAtlasPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *headView) {
+    id message = WCAtlasMessageWrapForCell(cell);
+    NSString *chatUserName = WCAtlasSessionForMessage(message);
+    UIViewController *chatController = WCAtlasAvatarOwningViewController(cell);
+    NSString *targetUserName = WCAtlasAvatarTargetUserName(cell, chatUserName);
     if (chatController.view.window != cell.window ||
         chatUserName.length == 0 || targetUserName.length == 0) {
-        NeoWCShowTransientMessage(@"未能识别头像对应的联系人", NO);
+        WCAtlasShowTransientMessage(@"未能识别头像对应的联系人", NO);
         return NO;
     }
     BOOL group = [chatUserName hasSuffix:@"@chatroom"];
-    BOOL isSelf = [targetUserName isEqualToString:NeoWCCurrentUserWXID()];
-    id contact = group ? NeoWCMessageChatContact(message) : nil;
-    if (!contact) contact = NeoWCContactForUserName(targetUserName);
-    id groupContact = group ? NeoWCContactForUserName(chatUserName) : nil;
+    BOOL isSelf = [targetUserName isEqualToString:WCAtlasCurrentUserWXID()];
+    id contact = group ? WCAtlasMessageChatContact(message) : nil;
+    if (!contact) contact = WCAtlasContactForUserName(targetUserName);
+    id groupContact = group ? WCAtlasContactForUserName(chatUserName) : nil;
     NSInteger removalScene = (group && !isSelf)
-        ? NeoWCGroupMemberRemovalScene(groupContact, contact, targetUserName) : 0;
-    NSString *displayName = NeoWCAvatarDisplayName(contact, targetUserName);
-    NSString *maskedRealName = [[NeoWCFriendRelationChecker sharedChecker]
+        ? WCAtlasGroupMemberRemovalScene(groupContact, contact, targetUserName) : 0;
+    NSString *displayName = WCAtlasAvatarDisplayName(contact, targetUserName);
+    NSString *maskedRealName = [[WCAtlasFriendRelationChecker sharedChecker]
         maskedRealNameForUserName:targetUserName];
-    UIImage *avatar = NeoWCAvatarSnapshot(headView);
+    UIImage *avatar = WCAtlasAvatarSnapshot(headView);
     __weak UIViewController *weakController = chatController;
     __weak CommonMessageCellView *weakCell = cell;
     __weak UIView *weakHeadView = headView;
@@ -2961,96 +2961,96 @@ static BOOL NeoWCPresentAvatarQuickMenu(CommonMessageCellView *cell, UIView *hea
     id retainedContact = contact;
     id retainedGroupContact = groupContact;
 
-    NSMutableArray<NeoWCAvatarQuickAction *> *actions = [NSMutableArray array];
-    if (NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey)) {
-        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"详细信息" symbolName:@"person.text.rectangle" handler:^{
-            NeoWCOpenAvatarInfoCard(weakController, retainedContact, avatar, displayName,
+    NSMutableArray<WCAtlasAvatarQuickAction *> *actions = [NSMutableArray array];
+    if (WCAtlasEnhancementEnabled(WCAtlasShowRawContactIDEnabledKey)) {
+        [actions addObject:[WCAtlasAvatarQuickAction actionWithTitle:@"详细信息" symbolName:@"person.text.rectangle" handler:^{
+            WCAtlasOpenAvatarInfoCard(weakController, retainedContact, avatar, displayName,
                                    retainedTarget, retainedChat);
         }]];
     }
     if (group && !isSelf) {
-        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"艾特" symbolName:@"at" handler:^{
-            NeoWCInvokeNativeAvatarLongPress(weakCell, weakHeadView);
+        [actions addObject:[WCAtlasAvatarQuickAction actionWithTitle:@"艾特" symbolName:@"at" handler:^{
+            WCAtlasInvokeNativeAvatarLongPress(weakCell, weakHeadView);
         }]];
     }
-    [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"拍一拍" symbolName:@"hand.tap" handler:^{
-        NeoWCInvokeNativeAvatarDoubleTap(weakCell, weakHeadView);
+    [actions addObject:[WCAtlasAvatarQuickAction actionWithTitle:@"拍一拍" symbolName:@"hand.tap" handler:^{
+        WCAtlasInvokeNativeAvatarDoubleTap(weakCell, weakHeadView);
     }]];
     if (group && !isSelf) {
-        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"专属红包" symbolName:@"envelope" handler:^{
-            NeoWCOpenAvatarExclusiveRedEnvelope(weakController, retainedContact, retainedChat);
+        [actions addObject:[WCAtlasAvatarQuickAction actionWithTitle:@"专属红包" symbolName:@"envelope" handler:^{
+            WCAtlasOpenAvatarExclusiveRedEnvelope(weakController, retainedContact, retainedChat);
         }]];
     }
     if (!isSelf) {
-        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"转账" symbolName:@"arrow.left.arrow.right" handler:^{
-            NeoWCOpenAvatarTransfer(weakController, retainedTarget, retainedContact, retainedChat);
+        [actions addObject:[WCAtlasAvatarQuickAction actionWithTitle:@"转账" symbolName:@"arrow.left.arrow.right" handler:^{
+            WCAtlasOpenAvatarTransfer(weakController, retainedTarget, retainedContact, retainedChat);
         }]];
     }
     if (group && !isSelf) {
-        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"私聊" symbolName:@"bubble.left" handler:^{
-            NeoWCOpenChatForUserName(retainedTarget);
+        [actions addObject:[WCAtlasAvatarQuickAction actionWithTitle:@"私聊" symbolName:@"bubble.left" handler:^{
+            WCAtlasOpenChatForUserName(retainedTarget);
         }]];
     }
     if (group) {
-        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"聊天记录" symbolName:@"clock.arrow.circlepath" handler:^{
-            NeoWCOpenGroupMemberHistory(weakController, retainedChat, retainedContact);
+        [actions addObject:[WCAtlasAvatarQuickAction actionWithTitle:@"聊天记录" symbolName:@"clock.arrow.circlepath" handler:^{
+            WCAtlasOpenGroupMemberHistory(weakController, retainedChat, retainedContact);
         }]];
     }
     if (removalScene > 0) {
-        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"移出群聊" symbolName:@"person.fill.xmark" handler:^{
-            NeoWCConfirmRemoveGroupMember(weakController, retainedGroupContact, retainedContact,
+        [actions addObject:[WCAtlasAvatarQuickAction actionWithTitle:@"移出群聊" symbolName:@"person.fill.xmark" handler:^{
+            WCAtlasConfirmRemoveGroupMember(weakController, retainedGroupContact, retainedContact,
                                           retainedTarget, removalScene);
         }]];
     }
-    [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"朋友圈" symbolName:@"circle.grid.3x3" handler:^{
-        if (retainedContact) NeoWCOpenHomeMoments(weakController, retainedContact);
-        else NeoWCShowTransientMessage(@"未获取到联系人资料", NO);
+    [actions addObject:[WCAtlasAvatarQuickAction actionWithTitle:@"朋友圈" symbolName:@"circle.grid.3x3" handler:^{
+        if (retainedContact) WCAtlasOpenHomeMoments(weakController, retainedContact);
+        else WCAtlasShowTransientMessage(@"未获取到联系人资料", NO);
     }]];
     if (!isSelf) {
-        [actions addObject:[NeoWCAvatarQuickAction actionWithTitle:@"改备注" symbolName:@"pencil" handler:^{
-            if (retainedContact) NeoWCOpenHomeRemark(weakController, retainedContact, NO);
-            else NeoWCShowTransientMessage(@"未获取到联系人资料", NO);
+        [actions addObject:[WCAtlasAvatarQuickAction actionWithTitle:@"改备注" symbolName:@"pencil" handler:^{
+            if (retainedContact) WCAtlasOpenHomeRemark(weakController, retainedContact, NO);
+            else WCAtlasShowTransientMessage(@"未获取到联系人资料", NO);
         }]];
     }
-    NeoWCPresentAvatarQuickPanel(chatController,
+    WCAtlasPresentAvatarQuickPanel(chatController,
                                  avatar,
                                  displayName,
                                  targetUserName,
                                  maskedRealName,
                                  actions,
-                                 ^{ NeoWCOpenAvatarProfile(weakController, weakHeadView, retainedContact); });
+                                 ^{ WCAtlasOpenAvatarProfile(weakController, weakHeadView, retainedContact); });
     return YES;
 }
 
-static void NeoWCSynchronizeAvatarQuickGesture(CommonMessageCellView *cell) {
+static void WCAtlasSynchronizeAvatarQuickGesture(CommonMessageCellView *cell) {
     if (!cell) return;
-    UIView *oldHeadView = objc_getAssociatedObject(cell, &NeoWCAvatarQuickHeadViewKey);
-    UITapGestureRecognizer *doubleTap = objc_getAssociatedObject(cell, &NeoWCAvatarQuickDoubleTapRecognizerKey);
-    NeoWCAvatarQuickGestureProxy *oldProxy = objc_getAssociatedObject(cell, &NeoWCAvatarQuickGestureProxyKey);
-    UIView *headView = cell.window ? NeoWCAvatarHeadViewForCell(cell) : nil;
-    NSInteger mode = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCAvatarQuickMenuGestureKey];
-    if (!NeoWCEnhancementEnabled(NeoWCAvatarQuickMenuGestureKey)) mode = NeoWCAvatarQuickMenuGestureOff;
-    if (mode < NeoWCAvatarQuickMenuGestureOff || mode > NeoWCAvatarQuickMenuGestureLongPress) {
-        mode = NeoWCAvatarQuickMenuGestureOff;
+    UIView *oldHeadView = objc_getAssociatedObject(cell, &WCAtlasAvatarQuickHeadViewKey);
+    UITapGestureRecognizer *doubleTap = objc_getAssociatedObject(cell, &WCAtlasAvatarQuickDoubleTapRecognizerKey);
+    WCAtlasAvatarQuickGestureProxy *oldProxy = objc_getAssociatedObject(cell, &WCAtlasAvatarQuickGestureProxyKey);
+    UIView *headView = cell.window ? WCAtlasAvatarHeadViewForCell(cell) : nil;
+    NSInteger mode = [NSUserDefaults.standardUserDefaults integerForKey:WCAtlasAvatarQuickMenuGestureKey];
+    if (!WCAtlasEnhancementEnabled(WCAtlasAvatarQuickMenuGestureKey)) mode = WCAtlasAvatarQuickMenuGestureOff;
+    if (mode < WCAtlasAvatarQuickMenuGestureOff || mode > WCAtlasAvatarQuickMenuGestureLongPress) {
+        mode = WCAtlasAvatarQuickMenuGestureOff;
     }
-    if (!headView || mode == NeoWCAvatarQuickMenuGestureOff || oldHeadView != headView) {
-        if (oldHeadView && oldProxy) NeoWCConfigureNativeAvatarDoubleTap(oldHeadView, oldProxy, NO);
+    if (!headView || mode == WCAtlasAvatarQuickMenuGestureOff || oldHeadView != headView) {
+        if (oldHeadView && oldProxy) WCAtlasConfigureNativeAvatarDoubleTap(oldHeadView, oldProxy, NO);
         if (doubleTap && oldHeadView) [oldHeadView removeGestureRecognizer:doubleTap];
         doubleTap = nil;
-        objc_setAssociatedObject(cell, &NeoWCAvatarQuickDoubleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(cell, &NeoWCAvatarQuickGestureProxyKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(cell, &NeoWCAvatarQuickHeadViewKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        if (!headView || mode == NeoWCAvatarQuickMenuGestureOff) return;
+        objc_setAssociatedObject(cell, &WCAtlasAvatarQuickDoubleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasAvatarQuickGestureProxyKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasAvatarQuickHeadViewKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (!headView || mode == WCAtlasAvatarQuickMenuGestureOff) return;
     }
 
-    NeoWCAvatarQuickGestureProxy *proxy = objc_getAssociatedObject(cell, &NeoWCAvatarQuickGestureProxyKey);
-    if (!proxy) proxy = [NeoWCAvatarQuickGestureProxy new];
+    WCAtlasAvatarQuickGestureProxy *proxy = objc_getAssociatedObject(cell, &WCAtlasAvatarQuickGestureProxyKey);
+    if (!proxy) proxy = [WCAtlasAvatarQuickGestureProxy new];
     proxy.cell = cell;
     proxy.headView = headView;
     headView.userInteractionEnabled = YES;
 
-    if (mode == NeoWCAvatarQuickMenuGestureDoubleTap) {
-        BOOL usingNativeDoubleTap = NeoWCConfigureNativeAvatarDoubleTap(headView, proxy, YES);
+    if (mode == WCAtlasAvatarQuickMenuGestureDoubleTap) {
+        BOOL usingNativeDoubleTap = WCAtlasConfigureNativeAvatarDoubleTap(headView, proxy, YES);
         if (usingNativeDoubleTap && doubleTap) {
             [headView removeGestureRecognizer:doubleTap];
             doubleTap = nil;
@@ -3062,26 +3062,26 @@ static void NeoWCSynchronizeAvatarQuickGesture(CommonMessageCellView *cell) {
             doubleTap.delegate = proxy;
             [headView addGestureRecognizer:doubleTap];
         }
-        if (doubleTap) NeoWCResolveAvatarGestureConflicts(headView, doubleTap);
+        if (doubleTap) WCAtlasResolveAvatarGestureConflicts(headView, doubleTap);
     } else {
-        NeoWCConfigureNativeAvatarDoubleTap(headView, proxy, NO);
+        WCAtlasConfigureNativeAvatarDoubleTap(headView, proxy, NO);
         if (doubleTap) {
             [headView removeGestureRecognizer:doubleTap];
             doubleTap = nil;
         }
     }
-    objc_setAssociatedObject(cell, &NeoWCAvatarQuickHeadViewKey, headView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(cell, &NeoWCAvatarQuickDoubleTapRecognizerKey, doubleTap, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(cell, &NeoWCAvatarQuickGestureProxyKey, proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(cell, &WCAtlasAvatarQuickHeadViewKey, headView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(cell, &WCAtlasAvatarQuickDoubleTapRecognizerKey, doubleTap, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(cell, &WCAtlasAvatarQuickGestureProxyKey, proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static NSString *NeoWCConversationUserNameForEditLogic(id logic) {
+static NSString *WCAtlasConversationUserNameForEditLogic(id logic) {
     if (!logic) return nil;
     SEL originalMessageSelector = sel_registerName("originalMessageWrap");
     if ([logic respondsToSelector:originalMessageSelector]) {
         id wrap = ((id (*)(id, SEL))objc_msgSend)(logic, originalMessageSelector);
-        id fromValue = NeoWCTweakValueForSelectorNames(wrap, @[@"m_nsFromUsr"]);
-        id toValue = NeoWCTweakValueForSelectorNames(wrap, @[@"m_nsToUsr"]);
+        id fromValue = WCAtlasTweakValueForSelectorNames(wrap, @[@"m_nsFromUsr"]);
+        id toValue = WCAtlasTweakValueForSelectorNames(wrap, @[@"m_nsToUsr"]);
         NSString *fromUser = [fromValue isKindOfClass:[NSString class]] ? fromValue : nil;
         NSString *toUser = [toValue isKindOfClass:[NSString class]] ? toValue : nil;
         Class settingUtilClass = objc_getClass("SettingUtil");
@@ -3100,7 +3100,7 @@ static NSString *NeoWCConversationUserNameForEditLogic(id logic) {
             conversation = fromUser;
         }
         if (conversation.length > 0) {
-            objc_setAssociatedObject(logic, &NeoWCEditConversationUserNameKey,
+            objc_setAssociatedObject(logic, &WCAtlasEditConversationUserNameKey,
                                      conversation, OBJC_ASSOCIATION_COPY_NONATOMIC);
             return conversation;
         }
@@ -3109,15 +3109,15 @@ static NSString *NeoWCConversationUserNameForEditLogic(id logic) {
     if ([logic respondsToSelector:selector]) {
         id value = ((id (*)(id, SEL))objc_msgSend)(logic, selector);
         if ([value isKindOfClass:[NSString class]] && [value length] > 0) {
-            objc_setAssociatedObject(logic, &NeoWCEditConversationUserNameKey, value, OBJC_ASSOCIATION_COPY_NONATOMIC);
+            objc_setAssociatedObject(logic, &WCAtlasEditConversationUserNameKey, value, OBJC_ASSOCIATION_COPY_NONATOMIC);
             return value;
         }
     }
-    id cachedValue = objc_getAssociatedObject(logic, &NeoWCEditConversationUserNameKey);
+    id cachedValue = objc_getAssociatedObject(logic, &WCAtlasEditConversationUserNameKey);
     return [cachedValue isKindOfClass:[NSString class]] && [cachedValue length] > 0 ? cachedValue : nil;
 }
 
-static UIImage *NeoWCImageFromEditValue(id value, NSUInteger depth) {
+static UIImage *WCAtlasImageFromEditValue(id value, NSUInteger depth) {
     if (!value || depth > 4) return nil;
     if ([value isKindOfClass:[UIImage class]]) return value;
     if ([value isKindOfClass:[CIImage class]]) return [UIImage imageWithCIImage:value];
@@ -3133,7 +3133,7 @@ static UIImage *NeoWCImageFromEditValue(id value, NSUInteger depth) {
     }
     if ([value isKindOfClass:[NSArray class]]) {
         for (id candidate in [(NSArray *)value reverseObjectEnumerator]) {
-            UIImage *image = NeoWCImageFromEditValue(candidate, depth + 1);
+            UIImage *image = WCAtlasImageFromEditValue(candidate, depth + 1);
             if (image) return image;
         }
         return nil;
@@ -3142,12 +3142,12 @@ static UIImage *NeoWCImageFromEditValue(id value, NSUInteger depth) {
         NSDictionary *dictionary = value;
         NSArray<NSString *> *preferredKeys = @[@"editedImage", @"image", @"outputImage", @"resultImage", @"fullImage", @"path", @"url"];
         for (NSString *key in preferredKeys) {
-            UIImage *image = NeoWCImageFromEditValue(dictionary[key], depth + 1);
+            UIImage *image = WCAtlasImageFromEditValue(dictionary[key], depth + 1);
             if (image) return image;
         }
         NSUInteger checked = 0;
         for (id candidate in dictionary.allValues.reverseObjectEnumerator) {
-            UIImage *image = NeoWCImageFromEditValue(candidate, depth + 1);
+            UIImage *image = WCAtlasImageFromEditValue(candidate, depth + 1);
             if (image) return image;
             if (++checked >= 16) break;
         }
@@ -3155,37 +3155,37 @@ static UIImage *NeoWCImageFromEditValue(id value, NSUInteger depth) {
     return nil;
 }
 
-static void NeoWCCacheEditedImage(id logic, UIImage *image, NSString *source) {
+static void WCAtlasCacheEditedImage(id logic, UIImage *image, NSString *source) {
     if (!logic || ![image isKindOfClass:[UIImage class]]) return;
-    objc_setAssociatedObject(logic, &NeoWCEditedImageKey, image, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCLog(@"已从 %@ 取得编辑图片：%.0f × %.0f", source ?: @"未知来源", image.size.width * image.scale, image.size.height * image.scale);
+    objc_setAssociatedObject(logic, &WCAtlasEditedImageKey, image, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    WCAtlasLog(@"已从 %@ 取得编辑图片：%.0f × %.0f", source ?: @"未知来源", image.size.width * image.scale, image.size.height * image.scale);
 }
 
-static UIImage *NeoWCEditedImageFromLogic(id logic) {
-    UIImage *image = objc_getAssociatedObject(logic, &NeoWCEditedImageKey);
+static UIImage *WCAtlasEditedImageFromLogic(id logic) {
+    UIImage *image = objc_getAssociatedObject(logic, &WCAtlasEditedImageKey);
     if ([image isKindOfClass:[UIImage class]]) return image;
-    id initialView = NeoWCTweakSafeValue(logic, @"_editImageInitialView");
-    id scrollView = NeoWCTweakValueForSelectorNames(initialView, @[@"eIScrollView"]);
-    id editAttribute = NeoWCTweakValueForSelectorNames(scrollView, @[@"getEditImageAttr"]);
-    image = NeoWCTweakSafeValue(editAttribute, @"editedImage");
+    id initialView = WCAtlasTweakSafeValue(logic, @"_editImageInitialView");
+    id scrollView = WCAtlasTweakValueForSelectorNames(initialView, @[@"eIScrollView"]);
+    id editAttribute = WCAtlasTweakValueForSelectorNames(scrollView, @[@"getEditImageAttr"]);
+    image = WCAtlasTweakSafeValue(editAttribute, @"editedImage");
     if ([image isKindOfClass:[UIImage class]]) {
-        NeoWCCacheEditedImage(logic, image, @"编辑器最终图片");
+        WCAtlasCacheEditedImage(logic, image, @"编辑器最终图片");
         return image;
     }
     return nil;
 }
 
-static void NeoWCLogEditImageDiagnostics(id logic) {
-    id attribute = NeoWCTweakSafeValue(logic, @"_editImageAttr");
+static void WCAtlasLogEditImageDiagnostics(id logic) {
+    id attribute = WCAtlasTweakSafeValue(logic, @"_editImageAttr");
     NSMutableArray<NSString *> *parts = [NSMutableArray array];
     for (NSString *key in @[@"editedImage", @"editedImages", @"unCropImage", @"editImageAttrDic", @"originalImage", @"isEdited"]) {
-        id value = NeoWCTweakSafeValue(attribute, key);
+        id value = WCAtlasTweakSafeValue(attribute, key);
         [parts addObject:[NSString stringWithFormat:@"%@=%@", key, value ? NSStringFromClass([value class]) : @"nil"]];
     }
-    NeoWCLog(@"编辑图片取图诊断：logic=%@ attr=%@ %@", NSStringFromClass([logic class]), attribute ? NSStringFromClass([attribute class]) : @"nil", [parts componentsJoinedByString:@" "]);
+    WCAtlasLog(@"编辑图片取图诊断：logic=%@ attr=%@ %@", NSStringFromClass([logic class]), attribute ? NSStringFromClass([attribute class]) : @"nil", [parts componentsJoinedByString:@" "]);
 }
 
-static UIWindow *NeoWCActiveWindow(void) {
+static UIWindow *WCAtlasActiveWindow(void) {
     for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
         if (scene.activationState != UISceneActivationStateForegroundActive || ![scene isKindOfClass:[UIWindowScene class]]) continue;
         NSArray<UIWindow *> *windows = ((UIWindowScene *)scene).windows;
@@ -3198,7 +3198,7 @@ static UIWindow *NeoWCActiveWindow(void) {
             if (!window.hidden && window.alpha > 0.0 && window.windowLevel == UIWindowLevelNormal && ![className containsString:@"iConsole"]) return window;
         }
     }
-    id windows = NeoWCTweakSafeValue(UIApplication.sharedApplication, @"windows");
+    id windows = WCAtlasTweakSafeValue(UIApplication.sharedApplication, @"windows");
     if ([windows isKindOfClass:[NSArray class]]) {
         for (UIWindow *window in windows) {
             if (!window.hidden && window.alpha > 0.0 && window.windowLevel == UIWindowLevelNormal && ![NSStringFromClass(window.class) containsString:@"iConsole"]) return window;
@@ -3207,9 +3207,9 @@ static UIWindow *NeoWCActiveWindow(void) {
     return nil;
 }
 
-static void NeoWCShowTransientMessage(NSString *message, BOOL success) {
+static void WCAtlasShowTransientMessage(NSString *message, BOOL success) {
     if (![NSThread isMainThread]) {
-        dispatch_async(dispatch_get_main_queue(), ^{ NeoWCShowTransientMessage(message, success); });
+        dispatch_async(dispatch_get_main_queue(), ^{ WCAtlasShowTransientMessage(message, success); });
         return;
     }
     Class toastClass = NSClassFromString(@"WeToast");
@@ -3221,7 +3221,7 @@ static void NeoWCShowTransientMessage(NSString *message, BOOL success) {
         ((void (*)(id, SEL, id))objc_msgSend)(toast, showSelector, message);
         return;
     }
-    UIWindow *window = NeoWCActiveWindow();
+    UIWindow *window = WCAtlasActiveWindow();
     if (!window || message.length == 0) return;
     UILabel *label = [UILabel new];
     label.text = message;
@@ -3242,22 +3242,22 @@ static void NeoWCShowTransientMessage(NSString *message, BOOL success) {
     }];
 }
 
-static UIViewController *NeoWCEditPresenterController(id logic) {
+static UIViewController *WCAtlasEditPresenterController(id logic) {
     if (!logic) return nil;
-    UIViewController *cached = objc_getAssociatedObject(logic, &NeoWCEditPresenterControllerKey);
+    UIViewController *cached = objc_getAssociatedObject(logic, &WCAtlasEditPresenterControllerKey);
     if ([cached isKindOfClass:[UIViewController class]]) return cached;
-    id candidate = NeoWCTweakSafeValue(logic, @"currentViewController");
-    if (![candidate isKindOfClass:[UIViewController class]]) candidate = NeoWCTweakSafeValue(logic, @"forwardBasedViewController");
+    id candidate = WCAtlasTweakSafeValue(logic, @"currentViewController");
+    if (![candidate isKindOfClass:[UIViewController class]]) candidate = WCAtlasTweakSafeValue(logic, @"forwardBasedViewController");
     SEL selector = NSSelectorFromString(@"getCurrentViewController");
     if (![candidate isKindOfClass:[UIViewController class]] && [logic respondsToSelector:selector]) {
         candidate = ((id (*)(id, SEL))objc_msgSend)(logic, selector);
     }
     if (![candidate isKindOfClass:[UIViewController class]]) return nil;
-    objc_setAssociatedObject(logic, &NeoWCEditPresenterControllerKey, candidate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(logic, &WCAtlasEditPresenterControllerKey, candidate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     return candidate;
 }
 
-@interface NeoWCQuickSendSession : NSObject
+@interface WCAtlasQuickSendSession : NSObject
 @property (nonatomic, strong) id sourceLogic;
 @property (nonatomic, strong) id forwardLogic;
 @property (nonatomic, strong) id message;
@@ -3269,7 +3269,7 @@ static UIViewController *NeoWCEditPresenterController(id logic) {
 - (void)finishSession;
 @end
 
-@implementation NeoWCQuickSendSession
+@implementation WCAtlasQuickSendSession
 
 - (UIViewController *)getCurrentViewController { return self.presenter; }
 - (UIViewController *)GetCurrentViewController { return self.presenter; }
@@ -3277,17 +3277,17 @@ static UIViewController *NeoWCEditPresenterController(id logic) {
 
 - (void)OnForwardMessageSend:(id)logic {
     if (self.finished) return;
-    id confirmSheet = NeoWCTweakSafeValue(self.forwardLogic, @"confirmSheetView");
-    BOOL confirmedBySheet = [NeoWCTweakSafeValue(confirmSheet, @"isClickedSend") boolValue];
+    id confirmSheet = WCAtlasTweakSafeValue(self.forwardLogic, @"confirmSheetView");
+    BOOL confirmedBySheet = [WCAtlasTweakSafeValue(confirmSheet, @"isClickedSend") boolValue];
     if (!self.sendButtonTapped && !confirmedBySheet) {
-        NeoWCLog(@"快捷发送收到确认页准备回调，等待用户点击发送");
+        WCAtlasLog(@"快捷发送收到确认页准备回调，等待用户点击发送");
         return;
     }
     SEL selector = NSSelectorFromString(@"OnForwardMessageSend:");
     if ([self.sourceLogic respondsToSelector:selector]) {
         ((void (*)(id, SEL, id))objc_msgSend)(self.sourceLogic, selector, logic ?: self.forwardLogic);
     }
-    NeoWCLog(@"快捷发送已确认发送，结束图片编辑流程");
+    WCAtlasLog(@"快捷发送已确认发送，结束图片编辑流程");
     [self finishSession];
 }
 
@@ -3297,7 +3297,7 @@ static UIViewController *NeoWCEditPresenterController(id logic) {
     if ([self.sourceLogic respondsToSelector:selector]) {
         ((void (*)(id, SEL, id))objc_msgSend)(self.sourceLogic, selector, logic ?: self.forwardLogic);
     }
-    NeoWCLog(@"快捷发送已取消，保留图片编辑流程");
+    WCAtlasLog(@"快捷发送已取消，保留图片编辑流程");
     [self finishSession];
 }
 
@@ -3309,7 +3309,7 @@ static UIViewController *NeoWCEditPresenterController(id logic) {
     if (self.finished) return;
     self.finished = YES;
     dispatch_async(dispatch_get_main_queue(), ^{
-        [NeoWCActiveQuickSendSessions() removeObject:self];
+        [WCAtlasActiveQuickSendSessions() removeObject:self];
         self.forwardLogic = nil;
         self.sourceLogic = nil;
         self.message = nil;
@@ -3321,21 +3321,21 @@ static UIViewController *NeoWCEditPresenterController(id logic) {
 
 @end
 
-static BOOL NeoWCSendEditedImageToCurrentConversation(id logic, NSString **failureReason) {
-    UIImage *image = NeoWCEditedImageFromLogic(logic);
-    NSString *userName = NeoWCConversationUserNameForEditLogic(logic);
-    id contact = NeoWCContactForUserName(userName);
+static BOOL WCAtlasSendEditedImageToCurrentConversation(id logic, NSString **failureReason) {
+    UIImage *image = WCAtlasEditedImageFromLogic(logic);
+    NSString *userName = WCAtlasConversationUserNameForEditLogic(logic);
+    id contact = WCAtlasContactForUserName(userName);
     Class providerClass = objc_getClass("PasteboardMsgProvider");
     Class forwardClass = objc_getClass("ForwardMessageLogicController");
     SEL makeMessageSelector = sel_registerName("GetMessageFromImage:contact:");
     if (!image) {
-        NeoWCLogEditImageDiagnostics(logic);
+        WCAtlasLogEditImageDiagnostics(logic);
         if (failureReason) *failureReason = @"没有取得微信编辑后的图片";
         return NO;
     }
     if (userName.length == 0) { if (failureReason) *failureReason = @"当前编辑页不属于聊天会话"; return NO; }
     if (!contact) { if (failureReason) *failureReason = @"当前聊天联系人已失效"; return NO; }
-    NSString *contactName = NeoWCPrivateContactUserName(contact);
+    NSString *contactName = WCAtlasPrivateContactUserName(contact);
     if (contactName.length > 0 && ![contactName isEqualToString:userName]) { if (failureReason) *failureReason = @"会话校验失败，已阻止串会话发送"; return NO; }
     if (!providerClass || ![providerClass respondsToSelector:makeMessageSelector]) { if (failureReason) *failureReason = @"微信图片消息接口已变化"; return NO; }
     if (!forwardClass) { if (failureReason) *failureReason = @"微信确认发送组件不存在"; return NO; }
@@ -3346,12 +3346,12 @@ static BOOL NeoWCSendEditedImageToCurrentConversation(id logic, NSString **failu
     if (!forwardLogic || ![forwardLogic respondsToSelector:forwardSelector]) { if (failureReason) *failureReason = @"微信确认发送方法已变化"; return NO; }
     SEL delegateSelector = sel_registerName("setDelegate:");
     if (![forwardLogic respondsToSelector:delegateSelector]) { if (failureReason) *failureReason = @"微信转发代理接口已变化"; return NO; }
-    UIViewController *presenter = NeoWCEditPresenterController(logic);
+    UIViewController *presenter = WCAtlasEditPresenterController(logic);
     if (!presenter) {
         if (failureReason) *failureReason = @"无法取得微信图片编辑页面";
         return NO;
     }
-    NeoWCQuickSendSession *session = [NeoWCQuickSendSession new];
+    WCAtlasQuickSendSession *session = [WCAtlasQuickSendSession new];
     session.sourceLogic = logic;
     session.forwardLogic = forwardLogic;
     session.message = message;
@@ -3359,77 +3359,77 @@ static BOOL NeoWCSendEditedImageToCurrentConversation(id logic, NSString **failu
     session.image = image;
     session.presenter = presenter;
     ((void (*)(id, SEL, id))objc_msgSend)(forwardLogic, delegateSelector, session);
-    NeoWCTweakSetValue(forwardLogic, @"bSpecificContact", @YES);
-    NeoWCTweakSetValue(forwardLogic, @"bPresent", @YES);
-    NeoWCTweakSetValue(forwardLogic, @"bAnimation", @YES);
-    [NeoWCActiveQuickSendSessions() addObject:session];
-    NeoWCLog(@"快捷发送调用微信官方确认页：会话=%@ 页面=%@", userName, NSStringFromClass(presenter.class));
+    WCAtlasTweakSetValue(forwardLogic, @"bSpecificContact", @YES);
+    WCAtlasTweakSetValue(forwardLogic, @"bPresent", @YES);
+    WCAtlasTweakSetValue(forwardLogic, @"bAnimation", @YES);
+    [WCAtlasActiveQuickSendSessions() addObject:session];
+    WCAtlasLog(@"快捷发送调用微信官方确认页：会话=%@ 页面=%@", userName, NSStringFromClass(presenter.class));
     ((void (*)(id, SEL, id, id, id, BOOL, BOOL))objc_msgSend)(forwardLogic, forwardSelector, @[message], nil, @[contact], NO, YES);
-    __weak NeoWCQuickSendSession *weakSession = session;
+    __weak WCAtlasQuickSendSession *weakSession = session;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        NeoWCQuickSendSession *activeSession = weakSession;
+        WCAtlasQuickSendSession *activeSession = weakSession;
         if (activeSession && !activeSession.finished) {
-            NeoWCLog(@"快捷发送确认会话超时，释放保留资源");
+            WCAtlasLog(@"快捷发送确认会话超时，释放保留资源");
             [activeSession finishSession];
         }
     });
     return YES;
 }
 
-static void NeoWCAttemptQuickSendWhenReady(id logic, __unused NSUInteger attempt) {
+static void WCAtlasAttemptQuickSendWhenReady(id logic, __unused NSUInteger attempt) {
     if (!logic) {
-        NeoWCShowTransientMessage(@"发送失败：图片编辑会话已经结束", NO);
+        WCAtlasShowTransientMessage(@"发送失败：图片编辑会话已经结束", NO);
         return;
     }
     NSString *reason = nil;
-    if (NeoWCSendEditedImageToCurrentConversation(logic, &reason)) return;
+    if (WCAtlasSendEditedImageToCurrentConversation(logic, &reason)) return;
     NSString *message = [NSString stringWithFormat:@"发送失败：%@", reason ?: @"未知原因"];
-    NeoWCShowTransientMessage(message, NO);
-    NeoWCLog(@"%@", message);
+    WCAtlasShowTransientMessage(message, NO);
+    WCAtlasLog(@"%@", message);
 }
 
-static void NeoWCResumePendingQuickSendIfReady(id logic) {
-    if (!logic || ![objc_getAssociatedObject(logic, &NeoWCQuickSendPendingImageKey) boolValue]) return;
-    UIImage *image = objc_getAssociatedObject(logic, &NeoWCEditedImageKey);
+static void WCAtlasResumePendingQuickSendIfReady(id logic) {
+    if (!logic || ![objc_getAssociatedObject(logic, &WCAtlasQuickSendPendingImageKey) boolValue]) return;
+    UIImage *image = objc_getAssociatedObject(logic, &WCAtlasEditedImageKey);
     if (![image isKindOfClass:[UIImage class]]) return;
-    objc_setAssociatedObject(logic, &NeoWCQuickSendPendingImageKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCAttemptQuickSendWhenReady(logic, 0);
+    objc_setAssociatedObject(logic, &WCAtlasQuickSendPendingImageKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    WCAtlasAttemptQuickSendWhenReady(logic, 0);
 }
 
-static void NeoWCBeginQuickSend(id logic) {
+static void WCAtlasBeginQuickSend(id logic) {
     if (!logic) {
-        NeoWCShowTransientMessage(@"发送失败：图片编辑会话已经结束", NO);
+        WCAtlasShowTransientMessage(@"发送失败：图片编辑会话已经结束", NO);
         return;
     }
-    UIImage *cachedImage = NeoWCEditedImageFromLogic(logic);
+    UIImage *cachedImage = WCAtlasEditedImageFromLogic(logic);
     if ([cachedImage isKindOfClass:[UIImage class]]) {
-        NeoWCAttemptQuickSendWhenReady(logic, 0);
+        WCAtlasAttemptQuickSendWhenReady(logic, 0);
         return;
     }
-    objc_setAssociatedObject(logic, &NeoWCQuickSendPendingImageKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCLog(@"快捷发送等待微信生成最终编辑图片");
+    objc_setAssociatedObject(logic, &WCAtlasQuickSendPendingImageKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    WCAtlasLog(@"快捷发送等待微信生成最终编辑图片");
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (![objc_getAssociatedObject(logic, &NeoWCQuickSendPendingImageKey) boolValue]) return;
-        objc_setAssociatedObject(logic, &NeoWCQuickSendPendingImageKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        NeoWCLogEditImageDiagnostics(logic);
-        NeoWCShowTransientMessage(@"发送失败：微信未生成编辑后的图片", NO);
-        NeoWCLog(@"发送失败：等待最终编辑图片超时");
+        if (![objc_getAssociatedObject(logic, &WCAtlasQuickSendPendingImageKey) boolValue]) return;
+        objc_setAssociatedObject(logic, &WCAtlasQuickSendPendingImageKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        WCAtlasLogEditImageDiagnostics(logic);
+        WCAtlasShowTransientMessage(@"发送失败：微信未生成编辑后的图片", NO);
+        WCAtlasLog(@"发送失败：等待最终编辑图片超时");
     });
 }
 
-static NSString *NeoWCGameMD5ForContent(NSUInteger content) {
+static NSString *WCAtlasGameMD5ForContent(NSUInteger content) {
     Class gameControllerClass = objc_getClass("GameController");
     SEL selector = sel_registerName("getMD5ByGameContent:");
     if (!gameControllerClass || ![gameControllerClass respondsToSelector:selector]) return nil;
     return ((NSString *(*)(id, SEL, NSUInteger))objc_msgSend)(gameControllerClass, selector, content);
 }
 
-static void NeoWCRefreshDailyStepOverride(void) {
-    unsigned int stepCount = NeoWCConfiguredDailyStepCount();
-    if (stepCount > 0) NeoWCLog(@"微信运动今日配置为 %u 步", stepCount);
+static void WCAtlasRefreshDailyStepOverride(void) {
+    unsigned int stepCount = WCAtlasConfiguredDailyStepCount();
+    if (stepCount > 0) WCAtlasLog(@"微信运动今日配置为 %u 步", stepCount);
 }
 
-static id NeoWCMomentsObjectForSelector(id object, NSString *selectorName) {
+static id WCAtlasMomentsObjectForSelector(id object, NSString *selectorName) {
     SEL selector = NSSelectorFromString(selectorName);
     if (!object || ![object respondsToSelector:selector]) return nil;
     @try {
@@ -3439,16 +3439,16 @@ static id NeoWCMomentsObjectForSelector(id object, NSString *selectorName) {
     }
 }
 
-static id NeoWCMomentsObjectForName(id object, NSString *name) {
-    id value = NeoWCMomentsObjectForSelector(object, name);
-    return value ?: NeoWCTweakSafeValue(object, name);
+static id WCAtlasMomentsObjectForName(id object, NSString *name) {
+    id value = WCAtlasMomentsObjectForSelector(object, name);
+    return value ?: WCAtlasTweakSafeValue(object, name);
 }
 
-static NSArray<UIControl *> *NeoWCMomentsVisibleControls(UIView *root) {
+static NSArray<UIControl *> *WCAtlasMomentsVisibleControls(UIView *root) {
     if (![root isKindOfClass:[UIView class]]) return @[];
     NSMutableArray<UIControl *> *controls = [NSMutableArray array];
-    id injectedForwardButton = objc_getAssociatedObject(root, &NeoWCMomentsFloatForwardButtonKey);
-    id injectedSaveButton = objc_getAssociatedObject(root, &NeoWCMomentsFloatSaveButtonKey);
+    id injectedForwardButton = objc_getAssociatedObject(root, &WCAtlasMomentsFloatForwardButtonKey);
+    id injectedSaveButton = objc_getAssociatedObject(root, &WCAtlasMomentsFloatSaveButtonKey);
     NSMutableArray<UIView *> *pending = [NSMutableArray arrayWithObject:root];
     while (pending.count > 0) {
         UIView *view = pending.lastObject;
@@ -3473,7 +3473,7 @@ static NSArray<UIControl *> *NeoWCMomentsVisibleControls(UIView *root) {
     return controls;
 }
 
-static NSString *NeoWCMomentsControlDescription(UIControl *control) {
+static NSString *WCAtlasMomentsControlDescription(UIControl *control) {
     NSMutableArray<NSString *> *parts = [NSMutableArray array];
     for (NSString *value in @[control.accessibilityIdentifier ?: @"", control.accessibilityLabel ?: @""]) {
         if (value.length > 0) [parts addObject:value];
@@ -3485,14 +3485,14 @@ static NSString *NeoWCMomentsControlDescription(UIControl *control) {
     return [[parts componentsJoinedByString:@" "] lowercaseString];
 }
 
-static void NeoWCMomentsNativeFloatControls(WCOperateFloatView *floatView,
+static void WCAtlasMomentsNativeFloatControls(WCOperateFloatView *floatView,
                                             UIControl **likeControl,
                                             UIControl **commentControl) {
-    id like = NeoWCMomentsObjectForName(floatView, @"m_likeBtn");
-    id comment = NeoWCMomentsObjectForName(floatView, @"m_commentBtn");
-    NSArray<UIControl *> *controls = NeoWCMomentsVisibleControls(floatView);
+    id like = WCAtlasMomentsObjectForName(floatView, @"m_likeBtn");
+    id comment = WCAtlasMomentsObjectForName(floatView, @"m_commentBtn");
+    NSArray<UIControl *> *controls = WCAtlasMomentsVisibleControls(floatView);
     for (UIControl *control in controls) {
-        NSString *description = NeoWCMomentsControlDescription(control);
+        NSString *description = WCAtlasMomentsControlDescription(control);
         if (![comment isKindOfClass:[UIControl class]] &&
             ([description containsString:@"comment"] || [description containsString:@"评论"])) comment = control;
         if (![like isKindOfClass:[UIControl class]] &&
@@ -3504,7 +3504,7 @@ static void NeoWCMomentsNativeFloatControls(WCOperateFloatView *floatView,
     if (commentControl) *commentControl = [comment isKindOfClass:[UIControl class]] ? comment : nil;
 }
 
-static BOOL NeoWCMomentsBoolForSelector(id object, NSString *selectorName) {
+static BOOL WCAtlasMomentsBoolForSelector(id object, NSString *selectorName) {
     SEL selector = NSSelectorFromString(selectorName);
     if (!object || ![object respondsToSelector:selector]) return NO;
     @try {
@@ -3514,7 +3514,7 @@ static BOOL NeoWCMomentsBoolForSelector(id object, NSString *selectorName) {
     }
 }
 
-static unsigned int NeoWCMomentsUnsignedForSelector(id object, NSString *selectorName) {
+static unsigned int WCAtlasMomentsUnsignedForSelector(id object, NSString *selectorName) {
     SEL selector = NSSelectorFromString(selectorName);
     if (!object || ![object respondsToSelector:selector]) return 0;
     @try {
@@ -3524,21 +3524,21 @@ static unsigned int NeoWCMomentsUnsignedForSelector(id object, NSString *selecto
     }
 }
 
-static id NeoWCMomentsContentObject(id dataItem) {
-    return NeoWCMomentsObjectForSelector(dataItem, @"contentObj");
+static id WCAtlasMomentsContentObject(id dataItem) {
+    return WCAtlasMomentsObjectForSelector(dataItem, @"contentObj");
 }
 
-static NSArray *NeoWCMomentsMediaItems(id dataItem) {
-    id mediaList = NeoWCMomentsObjectForSelector(NeoWCMomentsContentObject(dataItem), @"mediaList");
+static NSArray *WCAtlasMomentsMediaItems(id dataItem) {
+    id mediaList = WCAtlasMomentsObjectForSelector(WCAtlasMomentsContentObject(dataItem), @"mediaList");
     return [mediaList isKindOfClass:[NSArray class]] ? mediaList : @[];
 }
 
-static NSString *NeoWCMomentsBodyText(id dataItem) {
-    id text = NeoWCMomentsObjectForSelector(dataItem, @"contentDesc");
+static NSString *WCAtlasMomentsBodyText(id dataItem) {
+    id text = WCAtlasMomentsObjectForSelector(dataItem, @"contentDesc");
     return [text isKindOfClass:[NSString class]] ? text : @"";
 }
 
-static BOOL NeoWCMomentsHasStructuredContent(id contentObject) {
+static BOOL WCAtlasMomentsHasStructuredContent(id contentObject) {
     static NSArray<NSString *> *selectors;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -3548,35 +3548,35 @@ static BOOL NeoWCMomentsHasStructuredContent(id contentObject) {
                       @"tingCategoryItem", @"tingChatRoomItem", @"tingLyricsItem"];
     });
     for (NSString *selectorName in selectors) {
-        if (NeoWCMomentsObjectForSelector(contentObject, selectorName)) return YES;
+        if (WCAtlasMomentsObjectForSelector(contentObject, selectorName)) return YES;
     }
     return NO;
 }
 
-static BOOL NeoWCMomentCanForward(id dataItem) {
+static BOOL WCAtlasMomentCanForward(id dataItem) {
     if (!dataItem) return NO;
-    id contentObject = NeoWCMomentsContentObject(dataItem);
+    id contentObject = WCAtlasMomentsContentObject(dataItem);
     if (!contentObject) return NO;
-    if (NeoWCMomentsHasStructuredContent(contentObject)) return YES;
-    NSArray *mediaItems = NeoWCMomentsMediaItems(dataItem);
-    if ((NeoWCMomentsBoolForSelector(contentObject, @"isPhotoType") ||
-         NeoWCMomentsBoolForSelector(contentObject, @"isVideoType")) && mediaItems.count > 0) return YES;
-    if (NeoWCMomentsUnsignedForSelector(contentObject, @"type") != 2 ||
-        mediaItems.count > 0 || NeoWCMomentsBodyText(dataItem).length == 0) return NO;
-    id linkURL = NeoWCMomentsObjectForSelector(contentObject, @"linkUrl");
+    if (WCAtlasMomentsHasStructuredContent(contentObject)) return YES;
+    NSArray *mediaItems = WCAtlasMomentsMediaItems(dataItem);
+    if ((WCAtlasMomentsBoolForSelector(contentObject, @"isPhotoType") ||
+         WCAtlasMomentsBoolForSelector(contentObject, @"isVideoType")) && mediaItems.count > 0) return YES;
+    if (WCAtlasMomentsUnsignedForSelector(contentObject, @"type") != 2 ||
+        mediaItems.count > 0 || WCAtlasMomentsBodyText(dataItem).length == 0) return NO;
+    id linkURL = WCAtlasMomentsObjectForSelector(contentObject, @"linkUrl");
     return ![linkURL isKindOfClass:[NSString class]] || [linkURL length] == 0;
 }
 
-static NSString *NeoWCMomentsExistingMediaPath(id mediaItem, NSArray<NSString *> *selectors) {
+static NSString *WCAtlasMomentsExistingMediaPath(id mediaItem, NSArray<NSString *> *selectors) {
     for (NSString *selectorName in selectors) {
-        id value = NeoWCMomentsObjectForSelector(mediaItem, selectorName);
+        id value = WCAtlasMomentsObjectForSelector(mediaItem, selectorName);
         NSString *path = [value isKindOfClass:[NSURL class]] ? [value path] : ([value isKindOfClass:[NSString class]] ? value : nil);
         if (path.length > 0 && [[NSFileManager defaultManager] fileExistsAtPath:path]) return path;
     }
     return nil;
 }
 
-static BOOL NeoWCMomentsMediaFileIsUsable(NSString *path) {
+static BOOL WCAtlasMomentsMediaFileIsUsable(NSString *path) {
     if (path.length == 0) return NO;
     BOOL directory = NO;
     NSFileManager *manager = NSFileManager.defaultManager;
@@ -3585,43 +3585,43 @@ static BOOL NeoWCMomentsMediaFileIsUsable(NSString *path) {
     return size.unsignedLongLongValue > 0;
 }
 
-static void NeoWCAppendUniqueMomentObject(NSMutableArray *objects, id object) {
+static void WCAtlasAppendUniqueMomentObject(NSMutableArray *objects, id object) {
     if (!object) return;
     for (id existing in objects) if (existing == object) return;
     [objects addObject:object];
 }
 
-static NSArray *NeoWCLivePhotoVideoCandidateObjects(id mediaItem, id parentMediaItem) {
+static NSArray *WCAtlasLivePhotoVideoCandidateObjects(id mediaItem, id parentMediaItem) {
     NSMutableArray *objects = [NSMutableArray array];
-    NeoWCAppendUniqueMomentObject(objects, mediaItem);
+    WCAtlasAppendUniqueMomentObject(objects, mediaItem);
     for (id owner in @[mediaItem ?: NSNull.null, parentMediaItem ?: NSNull.null]) {
         if (owner == NSNull.null) continue;
         for (NSString *selectorName in @[@"livePhotoVideoMediaItem", @"pairedVideoMediaItem",
                                          @"livePhotoMediaItem"]) {
-            NeoWCAppendUniqueMomentObject(objects, NeoWCMomentsObjectForSelector(owner, selectorName));
+            WCAtlasAppendUniqueMomentObject(objects, WCAtlasMomentsObjectForSelector(owner, selectorName));
         }
     }
-    NeoWCAppendUniqueMomentObject(objects, parentMediaItem);
+    WCAtlasAppendUniqueMomentObject(objects, parentMediaItem);
     return objects;
 }
 
-static NSString *NeoWCLivePhotoExistingVideoPath(id mediaItem, id parentMediaItem) {
+static NSString *WCAtlasLivePhotoExistingVideoPath(id mediaItem, id parentMediaItem) {
     NSArray *selectors = @[@"pathForSightData", @"pathForData", @"pathForAttachVideoData",
                            @"pathForExistData", @"tempPathForSightData",
                            @"pathForTempAttachVideoData", @"livePhotoVideoPath",
                            @"pairedVideoPath"];
-    for (id object in NeoWCLivePhotoVideoCandidateObjects(mediaItem, parentMediaItem)) {
+    for (id object in WCAtlasLivePhotoVideoCandidateObjects(mediaItem, parentMediaItem)) {
         for (NSString *selectorName in selectors) {
-            id value = NeoWCMomentsObjectForSelector(object, selectorName);
+            id value = WCAtlasMomentsObjectForSelector(object, selectorName);
             NSString *path = [value isKindOfClass:NSURL.class] ? [value path]
                 : ([value isKindOfClass:NSString.class] ? value : nil);
-            if (NeoWCMomentsMediaFileIsUsable(path)) return path;
+            if (WCAtlasMomentsMediaFileIsUsable(path)) return path;
         }
     }
     return nil;
 }
 
-static BOOL NeoWCMomentsLongLongForSelector(id object, NSString *selectorName, long long *result) {
+static BOOL WCAtlasMomentsLongLongForSelector(id object, NSString *selectorName, long long *result) {
     if (!object || selectorName.length == 0 || !result) return NO;
     SEL selector = NSSelectorFromString(selectorName);
     NSMethodSignature *signature = [object methodSignatureForSelector:selector];
@@ -3652,7 +3652,7 @@ static BOOL NeoWCMomentsLongLongForSelector(id object, NSString *selectorName, l
 
     if (returnType[0] != '@') return NO;
     // Some older builds expose the value as NSNumber rather than a scalar.
-    id value = NeoWCMomentsObjectForSelector(object, selectorName);
+    id value = WCAtlasMomentsObjectForSelector(object, selectorName);
     if ([value respondsToSelector:@selector(longLongValue)]) {
         *result = [value longLongValue];
         return YES;
@@ -3660,7 +3660,7 @@ static BOOL NeoWCMomentsLongLongForSelector(id object, NSString *selectorName, l
     return NO;
 }
 
-static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTimeMs,
+static long long WCAtlasNormalizedLivePhotoStillImageTimeMs(long long stillImageTimeMs,
                                                            NSString *videoPath) {
     long long normalizedTimeMs = MAX(1LL, stillImageTimeMs);
     if (videoPath.length == 0) return normalizedTimeMs;
@@ -3678,7 +3678,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     return MIN(normalizedTimeMs, maximumTimeMs);
 }
 
-@interface NeoWCMomentsForwardTask : NSObject
+@interface WCAtlasMomentsForwardTask : NSObject
 @property (nonatomic, strong) id dataItem;
 @property (nonatomic, weak) UIViewController *presenter;
 @property (nonatomic, strong) NSArray *mediaItems;
@@ -3690,19 +3690,19 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 - (void)start;
 @end
 
-@implementation NeoWCMomentsForwardTask
+@implementation WCAtlasMomentsForwardTask
 
 - (void)releasePresenterRetention {
     UIViewController *presenter = self.presenter;
-    if (presenter && objc_getAssociatedObject(presenter, &NeoWCMomentsForwardTaskKey) == self) {
-        objc_setAssociatedObject(presenter, &NeoWCMomentsForwardTaskKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (presenter && objc_getAssociatedObject(presenter, &WCAtlasMomentsForwardTaskKey) == self) {
+        objc_setAssociatedObject(presenter, &WCAtlasMomentsForwardTaskKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
 - (void)applyBodyTextToController:(id)controller attempt:(NSUInteger)attempt {
-    NSString *body = NeoWCMomentsBodyText(self.dataItem);
+    NSString *body = WCAtlasMomentsBodyText(self.dataItem);
     if (body.length == 0 || !controller) return;
-    id textView = NeoWCMomentsObjectForSelector(controller, @"textView");
+    id textView = WCAtlasMomentsObjectForSelector(controller, @"textView");
     SEL setTextSelector = NSSelectorFromString(@"setText:");
     if (!textView || ![textView respondsToSelector:setTextSelector]) {
         if (attempt < 3) {
@@ -3727,7 +3727,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 - (void)presentController:(id)controller applyBody:(BOOL)applyBody {
     UIViewController *presenter = self.presenter;
     if (![controller isKindOfClass:[UIViewController class]] || !presenter.view.window) {
-        NeoWCShowTransientMessage(@"朋友圈转发失败：当前页面不可用", NO);
+        WCAtlasShowTransientMessage(@"朋友圈转发失败：当前页面不可用", NO);
         [self releasePresenterRetention];
         return;
     }
@@ -3738,21 +3738,21 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     Class navigationClass = NSClassFromString(@"MMUINavigationController");
     if (!navigationClass) navigationClass = [UINavigationController class];
     id navigation = [[navigationClass alloc] initWithRootViewController:controller];
-    objc_setAssociatedObject(navigation, &NeoWCMomentsForwardTaskKey, self, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(navigation, &WCAtlasMomentsForwardTaskKey, self, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [self releasePresenterRetention];
     if ([navigation isKindOfClass:[UIViewController class]]) ((UIViewController *)navigation).modalPresentationStyle = UIModalPresentationFullScreen;
     __weak typeof(self) weakSelf = self;
     [presenter presentViewController:navigation animated:YES completion:^{
         if (applyBody) [weakSelf applyBodyTextToController:controller attempt:0];
     }];
-    NeoWCCompatibilityMarkTriggered(@"moments-forward");
+    WCAtlasCompatibilityMarkTriggered(@"moments-forward");
 }
 
 - (void)presentStructuredForward {
     Class controllerClass = NSClassFromString(@"WCForwardViewController");
     SEL initializer = NSSelectorFromString(@"initWithDataItem:");
     if (!controllerClass || ![controllerClass instancesRespondToSelector:initializer]) {
-        NeoWCShowTransientMessage(@"当前微信版本不支持此类朋友圈转发", NO);
+        WCAtlasShowTransientMessage(@"当前微信版本不支持此类朋友圈转发", NO);
         [self releasePresenterRetention];
         return;
     }
@@ -3764,7 +3764,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     Class controllerClass = NSClassFromString(@"WCNewCommitViewController");
     SEL initializer = NSSelectorFromString(@"initWithTextType");
     if (!controllerClass || ![controllerClass instancesRespondToSelector:initializer]) {
-        NeoWCShowTransientMessage(@"当前微信版本不支持文字朋友圈转发", NO);
+        WCAtlasShowTransientMessage(@"当前微信版本不支持文字朋友圈转发", NO);
         [self releasePresenterRetention];
         return;
     }
@@ -3788,7 +3788,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     Class controllerClass = NSClassFromString(@"WCNewCommitViewController");
     SEL controllerInitializer = NSSelectorFromString(@"initWithImages:contacts:");
     if (images.count == 0 || !controllerClass || ![controllerClass instancesRespondToSelector:controllerInitializer]) {
-        NeoWCShowTransientMessage(@"朋友圈图片读取失败", NO);
+        WCAtlasShowTransientMessage(@"朋友圈图片读取失败", NO);
         [self releasePresenterRetention];
         return;
     }
@@ -3807,7 +3807,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     Class controllerClass = NSClassFromString(@"WCNewCommitViewController");
     SEL initializer = NSSelectorFromString(@"initWithSightDraft:");
     if (!draft || !controllerClass || ![controllerClass instancesRespondToSelector:initializer]) {
-        NeoWCShowTransientMessage(@"朋友圈视频读取失败", NO);
+        WCAtlasShowTransientMessage(@"朋友圈视频读取失败", NO);
         [self releasePresenterRetention];
         return;
     }
@@ -3818,7 +3818,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 - (void)finishMediaResolutionIfNeeded {
     if (self.remainingDownloads > 0) return;
     if (self.failed) {
-        NeoWCShowTransientMessage(@"朋友圈媒体下载失败，请稍后重试", NO);
+        WCAtlasShowTransientMessage(@"朋友圈媒体下载失败，请稍后重试", NO);
         [self releasePresenterRetention];
         return;
     }
@@ -3830,7 +3830,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     NSArray *pathSelectors = self.video
         ? @[@"pathForSightData"]
         : @[@"pathForUhdData", @"pathForHdData", @"pathForData", @"pathForExistData"];
-    NSString *path = NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
+    NSString *path = WCAtlasMomentsExistingMediaPath(mediaItem, pathSelectors);
     if (path.length > 0) {
         self.resolvedPaths[index] = path;
         self.remainingDownloads--;
@@ -3854,7 +3854,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
-            NSString *resolvedPath = NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
+            NSString *resolvedPath = WCAtlasMomentsExistingMediaPath(mediaItem, pathSelectors);
             if (resolvedPath.length > 0) strongSelf.resolvedPaths[index] = resolvedPath;
             else strongSelf.failed = YES;
             [strongSelf.downloaders removeObject:downloader];
@@ -3879,25 +3879,25 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 }
 
 - (void)start {
-    id contentObject = NeoWCMomentsContentObject(self.dataItem);
-    NSArray *mediaItems = NeoWCMomentsMediaItems(self.dataItem);
-    if (NeoWCMomentsHasStructuredContent(contentObject)) {
+    id contentObject = WCAtlasMomentsContentObject(self.dataItem);
+    NSArray *mediaItems = WCAtlasMomentsMediaItems(self.dataItem);
+    if (WCAtlasMomentsHasStructuredContent(contentObject)) {
         [self presentStructuredForward];
-    } else if (NeoWCMomentsBoolForSelector(contentObject, @"isVideoType") && mediaItems.count > 0) {
+    } else if (WCAtlasMomentsBoolForSelector(contentObject, @"isVideoType") && mediaItems.count > 0) {
         [self startMediaResolution:mediaItems video:YES];
-    } else if (NeoWCMomentsBoolForSelector(contentObject, @"isPhotoType") && mediaItems.count > 0) {
+    } else if (WCAtlasMomentsBoolForSelector(contentObject, @"isPhotoType") && mediaItems.count > 0) {
         [self startMediaResolution:mediaItems video:NO];
-    } else if (NeoWCMomentCanForward(self.dataItem)) {
+    } else if (WCAtlasMomentCanForward(self.dataItem)) {
         [self presentTextCommit];
     } else {
-        NeoWCShowTransientMessage(@"当前朋友圈类型暂不支持转发", NO);
+        WCAtlasShowTransientMessage(@"当前朋友圈类型暂不支持转发", NO);
         [self releasePresenterRetention];
     }
 }
 
 @end
 
-@interface NeoWCMomentsMediaSaveTask : NSObject
+@interface WCAtlasMomentsMediaSaveTask : NSObject
 @property (nonatomic, strong) id dataItem;
 @property (nonatomic, weak) UIViewController *presenter;
 @property (nonatomic, strong) NSArray *mediaItems;
@@ -3925,22 +3925,22 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
                           attempt:(NSUInteger)attempt;
 @end
 
-@implementation NeoWCMomentsMediaSaveTask
+@implementation WCAtlasMomentsMediaSaveTask
 
 - (void)finish {
     UIViewController *presenter = self.presenter;
-    if (presenter && objc_getAssociatedObject(presenter, &NeoWCMomentsSaveTaskKey) == self) {
-        objc_setAssociatedObject(presenter, &NeoWCMomentsSaveTaskKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (presenter && objc_getAssociatedObject(presenter, &WCAtlasMomentsSaveTaskKey) == self) {
+        objc_setAssociatedObject(presenter, &WCAtlasMomentsSaveTaskKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (self.dataItem && objc_getAssociatedObject(self.dataItem, &NeoWCMomentsDataItemSaveTaskKey) == self) {
-        objc_setAssociatedObject(self.dataItem, &NeoWCMomentsDataItemSaveTaskKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (self.dataItem && objc_getAssociatedObject(self.dataItem, &WCAtlasMomentsDataItemSaveTaskKey) == self) {
+        objc_setAssociatedObject(self.dataItem, &WCAtlasMomentsDataItemSaveTaskKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     for (NSString *path in self.temporaryPaths) {
         [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
     }
     [self.temporaryPaths removeAllObjects];
     [self.livePhotoMakers removeAllObjects];
-    if (NeoWCActiveMomentsMediaSaveTask == self) NeoWCActiveMomentsMediaSaveTask = nil;
+    if (WCAtlasActiveMomentsMediaSaveTask == self) WCAtlasActiveMomentsMediaSaveTask = nil;
 }
 
 - (BOOL)prepareLivePhotoForImagePath:(NSString *)imagePath
@@ -3996,7 +3996,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
         return YES;
     } @catch (NSException *exception) {
         [self.livePhotoMakers removeObject:maker];
-        NeoWCLog(@"生成朋友圈实况配对文件失败：%@", exception.reason ?: @"未知异常");
+        WCAtlasLog(@"生成朋友圈实况配对文件失败：%@", exception.reason ?: @"未知异常");
         return NO;
     }
 }
@@ -4004,7 +4004,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 - (void)finishWithFailure:(NSString *)message {
     if (self.finished) return;
     self.finished = YES;
-    NeoWCShowTransientMessage(message.length > 0 ? message : @"保存失败，请检查照片权限", NO);
+    WCAtlasShowTransientMessage(message.length > 0 ? message : @"保存失败，请检查照片权限", NO);
     [self finish];
 }
 
@@ -4034,10 +4034,10 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     } else {
         message = [NSString stringWithFormat:@"已保存 %lu 张朋友圈图片", (unsigned long)imageCount];
     }
-    NeoWCShowTransientMessage(message, YES);
+    WCAtlasShowTransientMessage(message, YES);
     UINotificationFeedbackGenerator *feedback = [UINotificationFeedbackGenerator new];
     [feedback notificationOccurred:UINotificationFeedbackTypeSuccess];
-    NeoWCCompatibilityMarkTriggered(@"moments-save-images");
+    WCAtlasCompatibilityMarkTriggered(@"moments-save-images");
     [self finish];
 }
 
@@ -4049,9 +4049,9 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     Class albumServiceClass = NSClassFromString(@"MMAlbumService");
     SEL saveSelector = NSSelectorFromString(@"saveLivePhotoToAlbumWithImagePath:videoPath:stillImageTimeMs:isShowTips:successBlock:failureBlock:");
     if (!albumServiceClass) return NO;
-    // Match WeChatX's service lookup order through NeoWC's MMContext-aware
+    // Match WeChatX's service lookup order through WCAtlas's MMContext-aware
     // compatibility helper, which falls back to MMServiceCenter.defaultCenter.
-    id service = NeoWCServiceForClass(albumServiceClass);
+    id service = WCAtlasServiceForClass(albumServiceClass);
     if (!service || ![service respondsToSelector:saveSelector]) return NO;
     void (^successBlock)(void) = [^{
         if (success) success();
@@ -4066,7 +4066,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
             service, saveSelector, imagePath, videoPath, stillImageTimeMs, NO, successBlock, failureBlock);
         return YES;
     } @catch (NSException *exception) {
-        NeoWCLog(@"调用微信实况保存接口失败：%@", exception.reason ?: @"未知异常");
+        WCAtlasLog(@"调用微信实况保存接口失败：%@", exception.reason ?: @"未知异常");
         return NO;
     }
 }
@@ -4087,7 +4087,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
         return;
     }
     __weak typeof(self) weakSelf = self;
-    long long normalizedTimeMs = NeoWCNormalizedLivePhotoStillImageTimeMs(timeValue.longLongValue, videoPath);
+    long long normalizedTimeMs = WCAtlasNormalizedLivePhotoStillImageTimeMs(timeValue.longLongValue, videoPath);
     BOOL preparing = [self prepareLivePhotoForImagePath:imagePath
                                               videoPath:videoPath
                                        stillImageTimeMs:normalizedTimeMs
@@ -4144,7 +4144,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
         } completionHandler:^(BOOL success, NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (!success) {
-                    NeoWCLog(@"保存朋友圈视频失败：%@", error.localizedDescription ?: @"未知错误");
+                    WCAtlasLog(@"保存朋友圈视频失败：%@", error.localizedDescription ?: @"未知错误");
                     [self finishWithFailure:@"保存视频失败，请检查照片权限"];
                     return;
                 }
@@ -4181,7 +4181,7 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     } completionHandler:^(BOOL success, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (!success) {
-                NeoWCLog(@"保存朋友圈图片失败：%@", error.localizedDescription ?: @"未知错误");
+                WCAtlasLog(@"保存朋友圈图片失败：%@", error.localizedDescription ?: @"未知错误");
                 [self finishWithFailure:@"保存图片失败，请检查照片权限"];
                 return;
             }
@@ -4205,8 +4205,8 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
         ? @[@"pathForSightData", @"pathForData", @"pathForAttachVideoData", @"pathForExistData"]
         : @[@"pathForUhdData", @"pathForHdData", @"pathForData", @"pathForExistData"];
     NSString *path = videoPath
-        ? NeoWCLivePhotoExistingVideoPath(mediaItem, parentMediaItem)
-        : NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
+        ? WCAtlasLivePhotoExistingVideoPath(mediaItem, parentMediaItem)
+        : WCAtlasMomentsExistingMediaPath(mediaItem, pathSelectors);
     if (path.length > 0) {
         NSMutableArray *targetPaths = videoPath ? self.resolvedVideoPaths : self.resolvedPaths;
         targetPaths[index] = path;
@@ -4253,8 +4253,8 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
                           attempt:(NSUInteger)attempt {
     if (self.finished) return;
     NSString *resolvedPath = videoPath
-        ? NeoWCLivePhotoExistingVideoPath(mediaItem, parentMediaItem)
-        : NeoWCMomentsExistingMediaPath(mediaItem, pathSelectors);
+        ? WCAtlasLivePhotoExistingVideoPath(mediaItem, parentMediaItem)
+        : WCAtlasMomentsExistingMediaPath(mediaItem, pathSelectors);
     // AFN also rechecks after its completion when the path/file-size update is
     // slightly behind the callback. Keep this bounded below one second.
     if (resolvedPath.length == 0 && videoPath && attempt < 3) {
@@ -4284,10 +4284,10 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 }
 
 - (void)start {
-    id contentObject = NeoWCMomentsContentObject(self.dataItem);
-    NSArray *mediaItems = NeoWCMomentsMediaItems(self.dataItem);
-    BOOL isVideo = NeoWCMomentsBoolForSelector(contentObject, @"isVideoType");
-    BOOL isPhoto = NeoWCMomentsBoolForSelector(contentObject, @"isPhotoType");
+    id contentObject = WCAtlasMomentsContentObject(self.dataItem);
+    NSArray *mediaItems = WCAtlasMomentsMediaItems(self.dataItem);
+    BOOL isVideo = WCAtlasMomentsBoolForSelector(contentObject, @"isVideoType");
+    BOOL isPhoto = WCAtlasMomentsBoolForSelector(contentObject, @"isPhotoType");
     if ((!isVideo && !isPhoto) || mediaItems.count == 0) {
         [self finishWithFailure:@"该条朋友圈没有可保存的媒体"];
         return;
@@ -4312,13 +4312,13 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
     for (NSUInteger index = 0; index < self.mediaItems.count; index++) {
         id mediaItem = self.mediaItems[index];
         [requests addObject:@{ @"item": mediaItem, @"index": @(index), @"video": @NO }];
-        id livePhotoMediaItem = !isVideo ? NeoWCMomentsObjectForSelector(mediaItem, @"livePhotoMediaItem") : nil;
-        BOOL isLivePhoto = !isVideo && (NeoWCMomentsBoolForSelector(mediaItem, @"isLivePhoto") || livePhotoMediaItem != nil);
+        id livePhotoMediaItem = !isVideo ? WCAtlasMomentsObjectForSelector(mediaItem, @"livePhotoMediaItem") : nil;
+        BOOL isLivePhoto = !isVideo && (WCAtlasMomentsBoolForSelector(mediaItem, @"isLivePhoto") || livePhotoMediaItem != nil);
         if (isLivePhoto) {
             long long stillImageTimeMs = 0;
-            BOOL hasStillImageTime = NeoWCMomentsLongLongForSelector(mediaItem, @"livePhotoStillImageTimeMs", &stillImageTimeMs);
+            BOOL hasStillImageTime = WCAtlasMomentsLongLongForSelector(mediaItem, @"livePhotoStillImageTimeMs", &stillImageTimeMs);
             if (!hasStillImageTime && livePhotoMediaItem) {
-                hasStillImageTime = NeoWCMomentsLongLongForSelector(livePhotoMediaItem, @"livePhotoStillImageTimeMs", &stillImageTimeMs);
+                hasStillImageTime = WCAtlasMomentsLongLongForSelector(livePhotoMediaItem, @"livePhotoStillImageTimeMs", &stillImageTimeMs);
             }
             if (!livePhotoMediaItem) {
                 self.failed = YES;
@@ -4347,49 +4347,49 @@ static long long NeoWCNormalizedLivePhotoStillImageTimeMs(long long stillImageTi
 
 @end
 
-static void NeoWCForwardMoment(id dataItem, UIViewController *presenter) {
-    if (!NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey) || !presenter.view.window) return;
-    if (!NeoWCMomentCanForward(dataItem)) {
-        NeoWCShowTransientMessage(@"当前朋友圈类型暂不支持转发", NO);
+static void WCAtlasForwardMoment(id dataItem, UIViewController *presenter) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasMomentsForwardEnabledKey) || !presenter.view.window) return;
+    if (!WCAtlasMomentCanForward(dataItem)) {
+        WCAtlasShowTransientMessage(@"当前朋友圈类型暂不支持转发", NO);
         return;
     }
-    NeoWCMomentsForwardTask *task = [NeoWCMomentsForwardTask new];
+    WCAtlasMomentsForwardTask *task = [WCAtlasMomentsForwardTask new];
     task.dataItem = dataItem;
     task.presenter = presenter;
-    objc_setAssociatedObject(presenter, &NeoWCMomentsForwardTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(presenter, &WCAtlasMomentsForwardTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [task start];
 }
 
-static BOOL NeoWCMomentCanSaveMedia(id dataItem) {
-    id contentObject = NeoWCMomentsContentObject(dataItem);
-    return (NeoWCMomentsBoolForSelector(contentObject, @"isPhotoType") ||
-            NeoWCMomentsBoolForSelector(contentObject, @"isVideoType")) &&
-           NeoWCMomentsMediaItems(dataItem).count > 0;
+static BOOL WCAtlasMomentCanSaveMedia(id dataItem) {
+    id contentObject = WCAtlasMomentsContentObject(dataItem);
+    return (WCAtlasMomentsBoolForSelector(contentObject, @"isPhotoType") ||
+            WCAtlasMomentsBoolForSelector(contentObject, @"isVideoType")) &&
+           WCAtlasMomentsMediaItems(dataItem).count > 0;
 }
 
-static void NeoWCSaveMomentMedia(id dataItem, UIViewController *presenter) {
-    if (!NeoWCEnhancementEnabled(NeoWCMomentsSaveImagesEnabledKey) || !presenter.view.window) return;
-    if (!NeoWCMomentCanSaveMedia(dataItem)) {
-        NeoWCShowTransientMessage(@"该条朋友圈没有可保存的媒体", NO);
+static void WCAtlasSaveMomentMedia(id dataItem, UIViewController *presenter) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasMomentsSaveImagesEnabledKey) || !presenter.view.window) return;
+    if (!WCAtlasMomentCanSaveMedia(dataItem)) {
+        WCAtlasShowTransientMessage(@"该条朋友圈没有可保存的媒体", NO);
         return;
     }
-    NeoWCMomentsMediaSaveTask *activeTask = [NeoWCActiveMomentsMediaSaveTask isKindOfClass:[NeoWCMomentsMediaSaveTask class]]
-        ? NeoWCActiveMomentsMediaSaveTask
-        : objc_getAssociatedObject(dataItem, &NeoWCMomentsDataItemSaveTaskKey);
-    if ([activeTask isKindOfClass:[NeoWCMomentsMediaSaveTask class]] && !activeTask.finished) {
-        NeoWCLog(@"已忽略同一条朋友圈媒体的重复保存触发");
+    WCAtlasMomentsMediaSaveTask *activeTask = [WCAtlasActiveMomentsMediaSaveTask isKindOfClass:[WCAtlasMomentsMediaSaveTask class]]
+        ? WCAtlasActiveMomentsMediaSaveTask
+        : objc_getAssociatedObject(dataItem, &WCAtlasMomentsDataItemSaveTaskKey);
+    if ([activeTask isKindOfClass:[WCAtlasMomentsMediaSaveTask class]] && !activeTask.finished) {
+        WCAtlasLog(@"已忽略同一条朋友圈媒体的重复保存触发");
         return;
     }
-    NeoWCMomentsMediaSaveTask *task = [NeoWCMomentsMediaSaveTask new];
+    WCAtlasMomentsMediaSaveTask *task = [WCAtlasMomentsMediaSaveTask new];
     task.dataItem = dataItem;
     task.presenter = presenter;
-    objc_setAssociatedObject(presenter, &NeoWCMomentsSaveTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(dataItem, &NeoWCMomentsDataItemSaveTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCActiveMomentsMediaSaveTask = task;
+    objc_setAssociatedObject(presenter, &WCAtlasMomentsSaveTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(dataItem, &WCAtlasMomentsDataItemSaveTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    WCAtlasActiveMomentsMediaSaveTask = task;
     [task start];
 }
 
-static UIButton *NeoWCMomentsForwardButton(id target, SEL action) {
+static UIButton *WCAtlasMomentsForwardButton(id target, SEL action) {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:13.0 weight:UIImageSymbolWeightRegular];
     UIImage *icon = [UIImage systemImageNamed:@"arrow.turn.up.right" withConfiguration:configuration] ?:
@@ -4405,7 +4405,7 @@ static UIButton *NeoWCMomentsForwardButton(id target, SEL action) {
     return button;
 }
 
-static BOOL NeoWCMomentsVisibleTextIntersectsRect(UIView *view,
+static BOOL WCAtlasMomentsVisibleTextIntersectsRect(UIView *view,
                                                    UIView *root,
                                                    UIView *excludedView,
                                                    UIView *excludedLabel,
@@ -4418,24 +4418,24 @@ static BOOL NeoWCMomentsVisibleTextIntersectsRect(UIView *view,
         if (CGRectIntersectsRect(textFrame, rect)) return YES;
     }
     for (UIView *subview in view.subviews) {
-        if (NeoWCMomentsVisibleTextIntersectsRect(subview, root, excludedView, excludedLabel, rect)) return YES;
+        if (WCAtlasMomentsVisibleTextIntersectsRect(subview, root, excludedView, excludedLabel, rect)) return YES;
     }
     return NO;
 }
 
-static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
-    UIButton *button = objc_getAssociatedObject(cell, &NeoWCMomentsForwardButtonKey);
-    UIButton *saveButton = objc_getAssociatedObject(cell, &NeoWCMomentsSaveButtonKey);
-    id dataItem = NeoWCMomentsObjectForName(cell, @"m_dataItem");
-    BOOL detailContext = NeoWCMomentsIsNativeDetailContext(cell);
-    BOOL quickComment = NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) && !detailContext;
-    BOOL shouldShowForward = quickComment && NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey);
-    BOOL shouldShowSave = quickComment && NeoWCEnhancementEnabled(NeoWCMomentsSaveImagesEnabledKey) &&
-                          NeoWCMomentCanSaveMedia(dataItem);
+static void WCAtlasSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
+    UIButton *button = objc_getAssociatedObject(cell, &WCAtlasMomentsForwardButtonKey);
+    UIButton *saveButton = objc_getAssociatedObject(cell, &WCAtlasMomentsSaveButtonKey);
+    id dataItem = WCAtlasMomentsObjectForName(cell, @"m_dataItem");
+    BOOL detailContext = WCAtlasMomentsIsNativeDetailContext(cell);
+    BOOL quickComment = WCAtlasEnhancementEnabled(WCAtlasMomentsQuickCommentKey) && !detailContext;
+    BOOL shouldShowForward = quickComment && WCAtlasEnhancementEnabled(WCAtlasMomentsForwardEnabledKey);
+    BOOL shouldShowSave = quickComment && WCAtlasEnhancementEnabled(WCAtlasMomentsSaveImagesEnabledKey) &&
+                          WCAtlasMomentCanSaveMedia(dataItem);
     BOOL shouldShow = shouldShowForward || shouldShowSave;
-    UIView *operateButton = NeoWCMomentsObjectForName(cell, @"m_operateBtn");
+    UIView *operateButton = WCAtlasMomentsObjectForName(cell, @"m_operateBtn");
     NSValue *storedFrameValue = [operateButton isKindOfClass:[UIView class]]
-        ? objc_getAssociatedObject(operateButton, &NeoWCMomentsOriginalOperateFrameKey)
+        ? objc_getAssociatedObject(operateButton, &WCAtlasMomentsOriginalOperateFrameKey)
         : nil;
     BOOL hasLayout = cell.window && CGRectGetWidth(cell.bounds) > 0.0 &&
                       [operateButton isKindOfClass:[UIView class]] &&
@@ -4443,26 +4443,26 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
     if (!shouldShow || !dataItem || !hasLayout) {
         if (storedFrameValue) {
             operateButton.frame = storedFrameValue.CGRectValue;
-            objc_setAssociatedObject(operateButton, &NeoWCMomentsOriginalOperateFrameKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(operateButton, &WCAtlasMomentsOriginalOperateFrameKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         [button removeFromSuperview];
         [saveButton removeFromSuperview];
-        objc_setAssociatedObject(cell, &NeoWCMomentsForwardButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(cell, &NeoWCMomentsSaveButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasMomentsForwardButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasMomentsSaveButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
     if (!button) {
-        button = NeoWCMomentsForwardButton(cell, @selector(neowc_handleMomentsForward:));
-        objc_setAssociatedObject(cell, &NeoWCMomentsForwardButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        button = WCAtlasMomentsForwardButton(cell, @selector(wcatlas_handleMomentsForward:));
+        objc_setAssociatedObject(cell, &WCAtlasMomentsForwardButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     if (!saveButton) {
-        saveButton = NeoWCMomentsForwardButton(cell, @selector(neowc_handleMomentsSaveImages:));
+        saveButton = WCAtlasMomentsForwardButton(cell, @selector(wcatlas_handleMomentsSaveImages:));
         UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:13.0 weight:UIImageSymbolWeightRegular];
         UIImage *icon = [UIImage systemImageNamed:@"square.and.arrow.down" withConfiguration:configuration] ?:
                         [UIImage systemImageNamed:@"arrow.down.to.line" withConfiguration:configuration];
         [saveButton setImage:[icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] forState:UIControlStateNormal];
         saveButton.accessibilityLabel = @"保存朋友圈媒体";
-        objc_setAssociatedObject(cell, &NeoWCMomentsSaveButtonKey, saveButton, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasMomentsSaveButtonKey, saveButton, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     button.hidden = !shouldShowForward;
     saveButton.hidden = !shouldShowSave;
@@ -4488,7 +4488,7 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
         originalFrame = operateButton.frame;
         shiftedFrame = CGRectOffset(originalFrame, -36.0 * slotCount, 0.0);
     }
-    objc_setAssociatedObject(operateButton, &NeoWCMomentsOriginalOperateFrameKey,
+    objc_setAssociatedObject(operateButton, &WCAtlasMomentsOriginalOperateFrameKey,
                              [NSValue valueWithCGRect:originalFrame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     UIView *operateSuperview = operateButton.superview;
     CGRect originalFrameInCell = operateSuperview
@@ -4497,9 +4497,9 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
     CGRect shiftedFrameInCell = operateSuperview
         ? [operateSuperview convertRect:shiftedFrame toView:cell]
         : shiftedFrame;
-    UIView *timeLabel = NeoWCMomentsObjectForName(cell, @"m_timeLabel");
-    BOOL shouldStackVertically = NeoWCEnhancementEnabled(NeoWCMomentsPreciseTimeKey) &&
-        NeoWCMomentsVisibleTextIntersectsRect(cell, cell, operateButton, timeLabel, shiftedFrameInCell) &&
+    UIView *timeLabel = WCAtlasMomentsObjectForName(cell, @"m_timeLabel");
+    BOOL shouldStackVertically = WCAtlasEnhancementEnabled(WCAtlasMomentsPreciseTimeKey) &&
+        WCAtlasMomentsVisibleTextIntersectsRect(cell, cell, operateButton, timeLabel, shiftedFrameInCell) &&
         CGRectGetMinY(originalFrameInCell) >= CGRectGetHeight(originalFrameInCell) + 2.0;
     if (shouldStackVertically) {
         operateButton.frame = originalFrame;
@@ -4534,15 +4534,15 @@ static void NeoWCSynchronizeMomentsForwardButton(WCTimeLineCellView *cell) {
     }
 }
 
-static void NeoWCRestoreMomentsFloatMenu(WCOperateFloatView *floatView) {
-    NeoWCMomentsFloatMenuSnapshot *snapshot = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSnapshotKey);
-    if (![snapshot isKindOfClass:[NeoWCMomentsFloatMenuSnapshot class]] || snapshot.applying) return;
+static void WCAtlasRestoreMomentsFloatMenu(WCOperateFloatView *floatView) {
+    WCAtlasMomentsFloatMenuSnapshot *snapshot = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatSnapshotKey);
+    if (![snapshot isKindOfClass:[WCAtlasMomentsFloatMenuSnapshot class]] || snapshot.applying) return;
     snapshot.applying = YES;
     [snapshot.expandedLayerMask removeAllAnimations];
-    UIButton *button = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey);
-    UIButton *saveButton = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSaveButtonKey);
-    UIImageView *separator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey);
-    UIImageView *saveSeparator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSaveSeparatorKey);
+    UIButton *button = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatForwardButtonKey);
+    UIButton *saveButton = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatSaveButtonKey);
+    UIImageView *separator = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatSeparatorKey);
+    UIImageView *saveSeparator = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatSaveSeparatorKey);
     floatView.frame = snapshot.baseFrame;
     if (snapshot.container != floatView) snapshot.container.frame = snapshot.baseContainerFrame;
     NSUInteger count = MIN(snapshot.baseViews.count, snapshot.baseFrames.count);
@@ -4555,17 +4555,17 @@ static void NeoWCRestoreMomentsFloatMenu(WCOperateFloatView *floatView) {
     saveSeparator.hidden = YES;
     floatView.layer.mask = snapshot.originalLayerMask;
     snapshot.applying = NO;
-    objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSnapshotKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(floatView, &WCAtlasMomentsFloatSnapshotKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static NeoWCMomentsFloatMenuSnapshot *NeoWCCaptureMomentsFloatMenu(WCOperateFloatView *floatView,
+static WCAtlasMomentsFloatMenuSnapshot *WCAtlasCaptureMomentsFloatMenu(WCOperateFloatView *floatView,
                                                                    UIButton *button,
                                                                    UIButton *saveButton,
                                                                    UIView *separator,
                                                                    UIView *saveSeparator) {
     UIControl *likeButton = nil;
     UIControl *commentButton = nil;
-    NeoWCMomentsNativeFloatControls(floatView, &likeButton, &commentButton);
+    WCAtlasMomentsNativeFloatControls(floatView, &likeButton, &commentButton);
     UIControl *anchor = commentButton ?: likeButton;
     if (![anchor isKindOfClass:[UIControl class]]) return nil;
 
@@ -4573,7 +4573,7 @@ static NeoWCMomentsFloatMenuSnapshot *NeoWCCaptureMomentsFloatMenu(WCOperateFloa
     CGFloat slotWidth = CGRectGetWidth(anchor.frame);
     if (slotWidth < 44.0) slotWidth = 80.0;
 
-    NeoWCMomentsFloatMenuSnapshot *snapshot = [NeoWCMomentsFloatMenuSnapshot new];
+    WCAtlasMomentsFloatMenuSnapshot *snapshot = [WCAtlasMomentsFloatMenuSnapshot new];
     snapshot.baseFrame = floatView.frame;
     NSUInteger slotCount = (button.hidden ? 0 : 1) + (saveButton.hidden ? 0 : 1);
     snapshot.addedWidth = slotWidth * slotCount;
@@ -4622,7 +4622,7 @@ static NeoWCMomentsFloatMenuSnapshot *NeoWCCaptureMomentsFloatMenu(WCOperateFloa
     return snapshot;
 }
 
-static void NeoWCCollectMomentsNativeSeparators(UIView *root,
+static void WCAtlasCollectMomentsNativeSeparators(UIView *root,
                                                  UIView *excluded,
                                                  NSMutableArray<UIImageView *> *matches) {
     for (UIView *view in root.subviews) {
@@ -4635,15 +4635,15 @@ static void NeoWCCollectMomentsNativeSeparators(UIView *root,
                 [matches addObject:imageView];
             }
         }
-        NeoWCCollectMomentsNativeSeparators(view, excluded, matches);
+        WCAtlasCollectMomentsNativeSeparators(view, excluded, matches);
     }
 }
 
-static UIImageView *NeoWCMomentsNativeSeparator(WCOperateFloatView *floatView,
+static UIImageView *WCAtlasMomentsNativeSeparator(WCOperateFloatView *floatView,
                                                  UIControl *anchor,
                                                  UIImageView *excluded) {
     NSMutableArray<UIImageView *> *candidates = [NSMutableArray array];
-    NeoWCCollectMomentsNativeSeparators(floatView, excluded, candidates);
+    WCAtlasCollectMomentsNativeSeparators(floatView, excluded, candidates);
     UIImageView *nearest = nil;
     CGFloat nearestDistance = CGFLOAT_MAX;
     CGFloat anchorEdge = CGRectGetMinX([anchor convertRect:anchor.bounds toView:floatView]);
@@ -4663,7 +4663,7 @@ static UIImageView *NeoWCMomentsNativeSeparator(WCOperateFloatView *floatView,
     return nearestDistance <= 3.0 ? nearest : nil;
 }
 
-static UIImageView *NeoWCCloneMomentsNativeSeparator(UIImageView *source,
+static UIImageView *WCAtlasCloneMomentsNativeSeparator(UIImageView *source,
                                                       UIImageView *separator) {
     UIImage *image = source.image ?: [UIImage imageNamed:@"AlbumCommentLine"];
     if (!separator || separator.image != image) {
@@ -4679,16 +4679,16 @@ static UIImageView *NeoWCCloneMomentsNativeSeparator(UIImageView *source,
     return separator;
 }
 
-static void NeoWCApplyMomentsFloatMenuSnapshot(WCOperateFloatView *floatView) {
-    NeoWCMomentsFloatMenuSnapshot *snapshot = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSnapshotKey);
-    if (![snapshot isKindOfClass:[NeoWCMomentsFloatMenuSnapshot class]] ||
+static void WCAtlasApplyMomentsFloatMenuSnapshot(WCOperateFloatView *floatView) {
+    WCAtlasMomentsFloatMenuSnapshot *snapshot = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatSnapshotKey);
+    if (![snapshot isKindOfClass:[WCAtlasMomentsFloatMenuSnapshot class]] ||
         snapshot.addedWidth <= 0.0 || snapshot.applying) return;
     snapshot.applying = YES;
 
-    UIButton *button = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey);
-    UIButton *saveButton = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSaveButtonKey);
-    UIImageView *separator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey);
-    UIImageView *saveSeparator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSaveSeparatorKey);
+    UIButton *button = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatForwardButtonKey);
+    UIButton *saveButton = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatSaveButtonKey);
+    UIImageView *separator = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatSeparatorKey);
+    UIImageView *saveSeparator = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatSaveSeparatorKey);
     CGRect expandedFrame = snapshot.baseFrame;
     expandedFrame.origin.x -= snapshot.addedWidth;
     expandedFrame.size.width += snapshot.addedWidth;
@@ -4743,34 +4743,34 @@ static void NeoWCApplyMomentsFloatMenuSnapshot(WCOperateFloatView *floatView) {
     snapshot.applying = NO;
 }
 
-static void NeoWCPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
-    id dataItem = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatDataItemKey);
-    BOOL detailContext = NeoWCMomentsIsNativeDetailContext(floatView);
-    BOOL allowFloatExtension = (!NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) || detailContext) &&
+static void WCAtlasPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
+    id dataItem = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatDataItemKey);
+    BOOL detailContext = WCAtlasMomentsIsNativeDetailContext(floatView);
+    BOOL allowFloatExtension = (!WCAtlasEnhancementEnabled(WCAtlasMomentsQuickCommentKey) || detailContext) &&
                                dataItem != nil;
-    BOOL shouldShowForward = allowFloatExtension && NeoWCEnhancementEnabled(NeoWCMomentsForwardEnabledKey);
-    BOOL shouldShowSave = allowFloatExtension && NeoWCEnhancementEnabled(NeoWCMomentsSaveImagesEnabledKey) &&
-                          NeoWCMomentCanSaveMedia(dataItem);
+    BOOL shouldShowForward = allowFloatExtension && WCAtlasEnhancementEnabled(WCAtlasMomentsForwardEnabledKey);
+    BOOL shouldShowSave = allowFloatExtension && WCAtlasEnhancementEnabled(WCAtlasMomentsSaveImagesEnabledKey) &&
+                          WCAtlasMomentCanSaveMedia(dataItem);
     BOOL shouldShow = shouldShowForward || shouldShowSave;
     UIControl *likeButton = nil;
     UIControl *commentButton = nil;
-    NeoWCMomentsNativeFloatControls(floatView, &likeButton, &commentButton);
+    WCAtlasMomentsNativeFloatControls(floatView, &likeButton, &commentButton);
     UIControl *anchor = commentButton ?: likeButton;
-    UIButton *button = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey);
-    UIButton *saveButton = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSaveButtonKey);
-    UIImageView *separator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey);
-    UIImageView *saveSeparator = objc_getAssociatedObject(floatView, &NeoWCMomentsFloatSaveSeparatorKey);
+    UIButton *button = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatForwardButtonKey);
+    UIButton *saveButton = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatSaveButtonKey);
+    UIImageView *separator = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatSeparatorKey);
+    UIImageView *saveSeparator = objc_getAssociatedObject(floatView, &WCAtlasMomentsFloatSaveSeparatorKey);
     if (!shouldShow || ![anchor isKindOfClass:[UIControl class]]) {
-        NeoWCRestoreMomentsFloatMenu(floatView);
+        WCAtlasRestoreMomentsFloatMenu(floatView);
         [button removeFromSuperview];
         [saveButton removeFromSuperview];
         [separator removeFromSuperview];
         [saveSeparator removeFromSuperview];
-        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSnapshotKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSaveButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSaveSeparatorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(floatView, &WCAtlasMomentsFloatSnapshotKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(floatView, &WCAtlasMomentsFloatForwardButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(floatView, &WCAtlasMomentsFloatSaveButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(floatView, &WCAtlasMomentsFloatSeparatorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(floatView, &WCAtlasMomentsFloatSaveSeparatorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
     if (!saveButton) {
@@ -4786,8 +4786,8 @@ static void NeoWCPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
         saveButton.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
         saveButton.imageEdgeInsets = UIEdgeInsetsMake(0.0, -3.0, 0.0, 3.0);
         saveButton.titleEdgeInsets = UIEdgeInsetsMake(0.0, 3.0, 0.0, -3.0);
-        [saveButton addTarget:floatView action:@selector(neowc_handleMomentsSaveImages:) forControlEvents:UIControlEventTouchUpInside];
-        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSaveButtonKey, saveButton, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [saveButton addTarget:floatView action:@selector(wcatlas_handleMomentsSaveImages:) forControlEvents:UIControlEventTouchUpInside];
+        objc_setAssociatedObject(floatView, &WCAtlasMomentsFloatSaveButtonKey, saveButton, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     UIView *container = anchor.superview ?: floatView;
     if (!button) {
@@ -4804,8 +4804,8 @@ static void NeoWCPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
         button.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
         button.imageEdgeInsets = UIEdgeInsetsMake(0.0, -3.0, 0.0, 3.0);
         button.titleEdgeInsets = UIEdgeInsetsMake(0.0, 3.0, 0.0, -3.0);
-        [button addTarget:floatView action:@selector(neowc_handleMomentsForward:) forControlEvents:UIControlEventTouchUpInside];
-        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatForwardButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [button addTarget:floatView action:@selector(wcatlas_handleMomentsForward:) forControlEvents:UIControlEventTouchUpInside];
+        objc_setAssociatedObject(floatView, &WCAtlasMomentsFloatForwardButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     button.hidden = !shouldShowForward;
     saveButton.hidden = !shouldShowSave;
@@ -4835,41 +4835,41 @@ static void NeoWCPrepareMomentsFloatMenu(WCOperateFloatView *floatView) {
         [saveButton removeFromSuperview];
         [container addSubview:saveButton];
     }
-    UIImageView *nativeSeparator = NeoWCMomentsNativeSeparator(floatView, anchor, separator);
-    UIImageView *clonedSeparator = NeoWCCloneMomentsNativeSeparator(nativeSeparator, separator);
+    UIImageView *nativeSeparator = WCAtlasMomentsNativeSeparator(floatView, anchor, separator);
+    UIImageView *clonedSeparator = WCAtlasCloneMomentsNativeSeparator(nativeSeparator, separator);
     if (clonedSeparator != separator) {
         separator = clonedSeparator;
-        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSeparatorKey, separator, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(floatView, &WCAtlasMomentsFloatSeparatorKey, separator, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     if (separator.superview != container) {
         [separator removeFromSuperview];
         [container addSubview:separator];
     }
 
-    UIImageView *clonedSaveSeparator = NeoWCCloneMomentsNativeSeparator(nativeSeparator, saveSeparator);
+    UIImageView *clonedSaveSeparator = WCAtlasCloneMomentsNativeSeparator(nativeSeparator, saveSeparator);
     if (clonedSaveSeparator != saveSeparator) {
         saveSeparator = clonedSaveSeparator;
-        objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSaveSeparatorKey, saveSeparator, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(floatView, &WCAtlasMomentsFloatSaveSeparatorKey, saveSeparator, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     if (saveSeparator.superview != container) {
         [saveSeparator removeFromSuperview];
         [container addSubview:saveSeparator];
     }
 
-    NeoWCMomentsFloatMenuSnapshot *snapshot = NeoWCCaptureMomentsFloatMenu(floatView, button, saveButton, separator, saveSeparator);
-    objc_setAssociatedObject(floatView, &NeoWCMomentsFloatSnapshotKey, snapshot, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCApplyMomentsFloatMenuSnapshot(floatView);
+    WCAtlasMomentsFloatMenuSnapshot *snapshot = WCAtlasCaptureMomentsFloatMenu(floatView, button, saveButton, separator, saveSeparator);
+    objc_setAssociatedObject(floatView, &WCAtlasMomentsFloatSnapshotKey, snapshot, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    WCAtlasApplyMomentsFloatMenuSnapshot(floatView);
 }
 
-static BOOL NeoWCTriggerNativeMomentsComment(WCOperateFloatView *floatView) {
+static BOOL WCAtlasTriggerNativeMomentsComment(WCOperateFloatView *floatView) {
     UIControl *commentButton = nil;
-    NeoWCMomentsNativeFloatControls(floatView, nil, &commentButton);
+    WCAtlasMomentsNativeFloatControls(floatView, nil, &commentButton);
     if (![commentButton isKindOfClass:[UIControl class]]) return NO;
     [commentButton sendActionsForControlEvents:UIControlEventTouchUpInside];
     return YES;
 }
 
-static NSDateFormatter *NeoWCMomentsPreciseDateFormatter(void) {
+static NSDateFormatter *WCAtlasMomentsPreciseDateFormatter(void) {
     static NSDateFormatter *formatter;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -4880,7 +4880,7 @@ static NSDateFormatter *NeoWCMomentsPreciseDateFormatter(void) {
     return formatter;
 }
 
-static id NeoWCMomentsValueForExactSelector(id object, NSString *selectorName) {
+static id WCAtlasMomentsValueForExactSelector(id object, NSString *selectorName) {
     SEL selector = NSSelectorFromString(selectorName);
     if (!object || ![object respondsToSelector:selector]) return nil;
     @try {
@@ -4890,28 +4890,28 @@ static id NeoWCMomentsValueForExactSelector(id object, NSString *selectorName) {
     }
 }
 
-static void NeoWCRestoreMomentsTimeLabel(WCTimeLineCellView *cell, id label) {
-    if (![objc_getAssociatedObject(cell, &NeoWCMomentsPreciseTimeAppliedKey) boolValue]) return;
+static void WCAtlasRestoreMomentsTimeLabel(WCTimeLineCellView *cell, id label) {
+    if (![objc_getAssociatedObject(cell, &WCAtlasMomentsPreciseTimeAppliedKey) boolValue]) return;
     SEL setTextSelector = NSSelectorFromString(@"setText:");
     if ([label respondsToSelector:setTextSelector]) {
-        id original = objc_getAssociatedObject(cell, &NeoWCMomentsOriginalTimeTextKey);
+        id original = objc_getAssociatedObject(cell, &WCAtlasMomentsOriginalTimeTextKey);
         ((void (*)(id, SEL, id))objc_msgSend)(label, setTextSelector, original == NSNull.null ? nil : original);
     }
-    NSNumber *originalLines = objc_getAssociatedObject(cell, &NeoWCMomentsOriginalTimeLinesKey);
+    NSNumber *originalLines = objc_getAssociatedObject(cell, &WCAtlasMomentsOriginalTimeLinesKey);
     SEL linesSelector = NSSelectorFromString(@"setNumberOfLines:");
     if (originalLines && [label respondsToSelector:linesSelector]) {
         ((void (*)(id, SEL, NSInteger))objc_msgSend)(label, linesSelector, originalLines.integerValue);
     }
-    objc_setAssociatedObject(cell, &NeoWCMomentsPreciseTimeAppliedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(cell, &WCAtlasMomentsPreciseTimeAppliedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static NSString *NeoWCMomentsPreciseTimeText(unsigned int createTime) {
+static NSString *WCAtlasMomentsPreciseTimeText(unsigned int createTime) {
     if (createTime == 0) return nil;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSString *format = NeoWCNormalizedMomentsDateFormat([defaults stringForKey:NeoWCMomentsPreciseTimeFormatKey]);
-    if (!format) format = NeoWCMomentsPreciseTimeDefaultFormat;
+    NSString *format = WCAtlasNormalizedMomentsDateFormat([defaults stringForKey:WCAtlasMomentsPreciseTimeFormatKey]);
+    if (!format) format = WCAtlasMomentsPreciseTimeDefaultFormat;
     NSDate *date = [NSDate dateWithTimeIntervalSince1970:(NSTimeInterval)createTime];
-    NSDateFormatter *formatter = NeoWCMomentsPreciseDateFormatter();
+    NSDateFormatter *formatter = WCAtlasMomentsPreciseDateFormatter();
     @synchronized (formatter) {
         formatter.timeZone = NSTimeZone.localTimeZone;
         if (![formatter.dateFormat isEqualToString:format]) formatter.dateFormat = format;
@@ -4919,9 +4919,9 @@ static NSString *NeoWCMomentsPreciseTimeText(unsigned int createTime) {
     }
 }
 
-static void NeoWCApplyMomentsPreciseTime(WCTimeLineCellView *cell, BOOL nativeTimeRefreshed) {
+static void WCAtlasApplyMomentsPreciseTime(WCTimeLineCellView *cell, BOOL nativeTimeRefreshed) {
     if (!cell) return;
-    id label = NeoWCMomentsValueForExactSelector(cell, @"m_timeLabel");
+    id label = WCAtlasMomentsValueForExactSelector(cell, @"m_timeLabel");
     if (!label) return;
     SEL textSelector = NSSelectorFromString(@"text");
     SEL setTextSelector = NSSelectorFromString(@"setText:");
@@ -4929,41 +4929,41 @@ static void NeoWCApplyMomentsPreciseTime(WCTimeLineCellView *cell, BOOL nativeTi
 
     if (nativeTimeRefreshed) {
         id originalText = ((id (*)(id, SEL))objc_msgSend)(label, textSelector);
-        objc_setAssociatedObject(cell, &NeoWCMomentsOriginalTimeTextKey,
+        objc_setAssociatedObject(cell, &WCAtlasMomentsOriginalTimeTextKey,
                                  originalText ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         SEL numberOfLinesSelector = NSSelectorFromString(@"numberOfLines");
         if ([label respondsToSelector:numberOfLinesSelector]) {
             NSInteger lines = ((NSInteger (*)(id, SEL))objc_msgSend)(label, numberOfLinesSelector);
-            objc_setAssociatedObject(cell, &NeoWCMomentsOriginalTimeLinesKey,
+            objc_setAssociatedObject(cell, &WCAtlasMomentsOriginalTimeLinesKey,
                                      @(lines), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
-        objc_setAssociatedObject(cell, &NeoWCMomentsPreciseTimeAppliedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    } else if (!objc_getAssociatedObject(cell, &NeoWCMomentsOriginalTimeTextKey)) {
+        objc_setAssociatedObject(cell, &WCAtlasMomentsPreciseTimeAppliedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    } else if (!objc_getAssociatedObject(cell, &WCAtlasMomentsOriginalTimeTextKey)) {
         id currentText = ((id (*)(id, SEL))objc_msgSend)(label, textSelector);
-        objc_setAssociatedObject(cell, &NeoWCMomentsOriginalTimeTextKey,
+        objc_setAssociatedObject(cell, &WCAtlasMomentsOriginalTimeTextKey,
                                  currentText ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 
-    if (!NeoWCEnhancementEnabled(NeoWCMomentsPreciseTimeKey)) {
-        NeoWCRestoreMomentsTimeLabel(cell, label);
+    if (!WCAtlasEnhancementEnabled(WCAtlasMomentsPreciseTimeKey)) {
+        WCAtlasRestoreMomentsTimeLabel(cell, label);
         return;
     }
-    id dataItem = NeoWCMomentsValueForExactSelector(cell, @"m_dataItem");
+    id dataItem = WCAtlasMomentsValueForExactSelector(cell, @"m_dataItem");
     SEL createTimeSelector = NSSelectorFromString(@"createtime");
     if (!dataItem || ![dataItem respondsToSelector:createTimeSelector]) {
-        NeoWCRestoreMomentsTimeLabel(cell, label);
+        WCAtlasRestoreMomentsTimeLabel(cell, label);
         return;
     }
     unsigned int createTime = 0;
     @try {
         createTime = ((unsigned int (*)(id, SEL))objc_msgSend)(dataItem, createTimeSelector);
     } @catch (__unused NSException *exception) {
-        NeoWCRestoreMomentsTimeLabel(cell, label);
+        WCAtlasRestoreMomentsTimeLabel(cell, label);
         return;
     }
-    NSString *preciseText = NeoWCMomentsPreciseTimeText(createTime);
+    NSString *preciseText = WCAtlasMomentsPreciseTimeText(createTime);
     if (preciseText.length == 0) {
-        NeoWCRestoreMomentsTimeLabel(cell, label);
+        WCAtlasRestoreMomentsTimeLabel(cell, label);
         return;
     }
     NSString *currentText = ((id (*)(id, SEL))objc_msgSend)(label, textSelector);
@@ -4974,58 +4974,58 @@ static void NeoWCApplyMomentsPreciseTime(WCTimeLineCellView *cell, BOOL nativeTi
     if ([label respondsToSelector:linesSelector]) {
         ((void (*)(id, SEL, NSInteger))objc_msgSend)(label, linesSelector, 1);
     }
-    objc_setAssociatedObject(cell, &NeoWCMomentsPreciseTimeAppliedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(cell, &WCAtlasMomentsPreciseTimeAppliedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static void NeoWCSynchronizeMomentsCell(WCTimeLineCellView *cell) {
+static void WCAtlasSynchronizeMomentsCell(WCTimeLineCellView *cell) {
     if (!cell) return;
-    UITapGestureRecognizer *recognizer = objc_getAssociatedObject(cell, &NeoWCMomentsDoubleTapRecognizerKey);
-    BOOL enabled = NeoWCEnhancementEnabled(NeoWCMomentsDoubleTapLikeKey) &&
-                   !NeoWCMomentsIsNativeDetailContext(cell);
+    UITapGestureRecognizer *recognizer = objc_getAssociatedObject(cell, &WCAtlasMomentsDoubleTapRecognizerKey);
+    BOOL enabled = WCAtlasEnhancementEnabled(WCAtlasMomentsDoubleTapLikeKey) &&
+                   !WCAtlasMomentsIsNativeDetailContext(cell);
     if (enabled && !recognizer) {
-        recognizer = [[UITapGestureRecognizer alloc] initWithTarget:cell action:@selector(neowc_handleMomentsDoubleTap)];
+        recognizer = [[UITapGestureRecognizer alloc] initWithTarget:cell action:@selector(wcatlas_handleMomentsDoubleTap)];
         recognizer.numberOfTapsRequired = 2;
         recognizer.cancelsTouchesInView = NO;
         [cell addGestureRecognizer:recognizer];
-        objc_setAssociatedObject(cell, &NeoWCMomentsDoubleTapRecognizerKey, recognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasMomentsDoubleTapRecognizerKey, recognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     } else if (!enabled && recognizer) {
         [cell removeGestureRecognizer:recognizer];
-        objc_setAssociatedObject(cell, &NeoWCMomentsDoubleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell, &WCAtlasMomentsDoubleTapRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    NeoWCApplyMomentsPreciseTime(cell, NO);
-    NeoWCSynchronizeMomentsForwardButton(cell);
+    WCAtlasApplyMomentsPreciseTime(cell, NO);
+    WCAtlasSynchronizeMomentsForwardButton(cell);
 }
 
-static void NeoWCSynchronizeMomentsCellsInView(UIView *view) {
+static void WCAtlasSynchronizeMomentsCellsInView(UIView *view) {
     if (!view) return;
     Class cellClass = NSClassFromString(@"WCTimeLineCellView");
-    if (cellClass && [view isKindOfClass:cellClass]) NeoWCSynchronizeMomentsCell((WCTimeLineCellView *)view);
+    if (cellClass && [view isKindOfClass:cellClass]) WCAtlasSynchronizeMomentsCell((WCTimeLineCellView *)view);
     Class floatClass = NSClassFromString(@"WCOperateFloatView");
     if (floatClass && [view isKindOfClass:floatClass]) {
-        NeoWCApplyMomentsFloatMenuSnapshot((WCOperateFloatView *)view);
+        WCAtlasApplyMomentsFloatMenuSnapshot((WCOperateFloatView *)view);
     }
-    for (UIView *subview in view.subviews) NeoWCSynchronizeMomentsCellsInView(subview);
+    for (UIView *subview in view.subviews) WCAtlasSynchronizeMomentsCellsInView(subview);
 }
 
-static void NeoWCSynchronizeVisibleMomentsCells(void) {
+static void WCAtlasSynchronizeVisibleMomentsCells(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (@available(iOS 13.0, *)) {
             for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
                 if (![scene isKindOfClass:[UIWindowScene class]]) continue;
                 for (UIWindow *window in ((UIWindowScene *)scene).windows) {
-                    if (!window.hidden) NeoWCSynchronizeMomentsCellsInView(window);
+                    if (!window.hidden) WCAtlasSynchronizeMomentsCellsInView(window);
                 }
             }
             return;
         }
         for (UIWindow *window in UIApplication.sharedApplication.windows) {
-            if (!window.hidden) NeoWCSynchronizeMomentsCellsInView(window);
+            if (!window.hidden) WCAtlasSynchronizeMomentsCellsInView(window);
         }
     });
 }
 
-static void NeoWCShowMomentsHeart(WCTimeLineCellView *cell) {
-    UITapGestureRecognizer *recognizer = objc_getAssociatedObject(cell, &NeoWCMomentsDoubleTapRecognizerKey);
+static void WCAtlasShowMomentsHeart(WCTimeLineCellView *cell) {
+    UITapGestureRecognizer *recognizer = objc_getAssociatedObject(cell, &WCAtlasMomentsDoubleTapRecognizerKey);
     UIWindow *window = cell.window;
     if (!window || !recognizer) return;
     CGPoint point = [recognizer locationInView:window];
@@ -5056,9 +5056,9 @@ static void NeoWCShowMomentsHeart(WCTimeLineCellView *cell) {
     }];
 }
 
-static void NeoWCPlayMomentsLikeHaptic(NSUserDefaults *defaults) {
-    if (![defaults boolForKey:NeoWCMomentsLikeHapticEnabledKey]) return;
-    CGFloat savedIntensity = [defaults objectForKey:NeoWCMomentsLikeHapticIntensityKey] ? [defaults doubleForKey:NeoWCMomentsLikeHapticIntensityKey] : 0.65;
+static void WCAtlasPlayMomentsLikeHaptic(NSUserDefaults *defaults) {
+    if (![defaults boolForKey:WCAtlasMomentsLikeHapticEnabledKey]) return;
+    CGFloat savedIntensity = [defaults objectForKey:WCAtlasMomentsLikeHapticIntensityKey] ? [defaults doubleForKey:WCAtlasMomentsLikeHapticIntensityKey] : 0.65;
     CGFloat calibratedIntensity = savedIntensity < 0.34 ? 0.58 : (savedIntensity < 0.75 ? 0.76 : 0.90);
     UIImpactFeedbackGenerator *generator = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
     [generator prepare];
@@ -5066,7 +5066,7 @@ static void NeoWCPlayMomentsLikeHaptic(NSUserDefaults *defaults) {
     else [generator impactOccurred];
 }
 
-static UIButton *NeoWCFindButton(NSString *title, UIView *rootView) {
+static UIButton *WCAtlasFindButton(NSString *title, UIView *rootView) {
     if (!rootView || title.length == 0) return nil;
     for (UIView *subview in rootView.subviews) {
         if ([subview isKindOfClass:[UIButton class]]) {
@@ -5074,24 +5074,24 @@ static UIButton *NeoWCFindButton(NSString *title, UIView *rootView) {
             NSString *buttonTitle = button.currentTitle ?: button.currentAttributedTitle.string;
             if ([buttonTitle isEqualToString:title] && button.enabled && !button.hidden && button.alpha > 0.01) return button;
         }
-        UIButton *button = NeoWCFindButton(title, subview);
+        UIButton *button = WCAtlasFindButton(title, subview);
         if (button) return button;
     }
     return nil;
 }
 
-static UIViewController *NeoWCTopControllerForLoginToast(UIViewController *controller) {
-    if (controller.presentedViewController) return NeoWCTopControllerForLoginToast(controller.presentedViewController);
+static UIViewController *WCAtlasTopControllerForLoginToast(UIViewController *controller) {
+    if (controller.presentedViewController) return WCAtlasTopControllerForLoginToast(controller.presentedViewController);
     if ([controller isKindOfClass:[UINavigationController class]]) {
-        return NeoWCTopControllerForLoginToast(((UINavigationController *)controller).visibleViewController);
+        return WCAtlasTopControllerForLoginToast(((UINavigationController *)controller).visibleViewController);
     }
     if ([controller isKindOfClass:[UITabBarController class]]) {
-        return NeoWCTopControllerForLoginToast(((UITabBarController *)controller).selectedViewController);
+        return WCAtlasTopControllerForLoginToast(((UITabBarController *)controller).selectedViewController);
     }
     return controller;
 }
 
-static UIWindow *NeoWCActiveApplicationWindow(void) {
+static UIWindow *WCAtlasActiveApplicationWindow(void) {
     if (@available(iOS 13.0, *)) {
         UIWindow *fallbackWindow = nil;
         for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
@@ -5111,83 +5111,83 @@ static UIWindow *NeoWCActiveApplicationWindow(void) {
     return UIApplication.sharedApplication.windows.firstObject;
 }
 
-static BaseMsgContentViewController *NeoWCResolveVisibleChatController(void) {
-    BaseMsgContentViewController *cached = NeoWCVisibleChatController;
+static BaseMsgContentViewController *WCAtlasResolveVisibleChatController(void) {
+    BaseMsgContentViewController *cached = WCAtlasVisibleChatController;
     if (cached.isViewLoaded && cached.view.window &&
         (!cached.navigationController || cached.navigationController.topViewController == cached)) return cached;
     BaseMsgContentViewController *controller =
-        (BaseMsgContentViewController *)NeoWCPrivateCurrentChatController();
-    if (controller) NeoWCVisibleChatController = controller;
+        (BaseMsgContentViewController *)WCAtlasPrivateCurrentChatController();
+    if (controller) WCAtlasVisibleChatController = controller;
     return controller;
 }
 
-static void NeoWCRefreshPinnedMessageGlassInView(UIView *view) {
+static void WCAtlasRefreshPinnedMessageGlassInView(UIView *view) {
     if (!view) return;
     if ([view isKindOfClass:NSClassFromString(@"MMMsgCommonTipsView")]) {
-        NeoWCUpdatePinnedMessageGlass(view);
+        WCAtlasUpdatePinnedMessageGlass(view);
     }
-    for (UIView *subview in view.subviews) NeoWCRefreshPinnedMessageGlassInView(subview);
+    for (UIView *subview in view.subviews) WCAtlasRefreshPinnedMessageGlassInView(subview);
 }
 
-static void NeoWCRefreshGlassBackdropsInView(UIView *view) {
+static void WCAtlasRefreshGlassBackdropsInView(UIView *view) {
     if (!view) return;
-    if ([view isKindOfClass:NeoWCGlassCapsuleView.class]) {
-        [(NeoWCGlassCapsuleView *)view refreshBackdropAfterForeground];
+    if ([view isKindOfClass:WCAtlasGlassCapsuleView.class]) {
+        [(WCAtlasGlassCapsuleView *)view refreshBackdropAfterForeground];
     }
-    for (UIView *subview in view.subviews) NeoWCRefreshGlassBackdropsInView(subview);
+    for (UIView *subview in view.subviews) WCAtlasRefreshGlassBackdropsInView(subview);
 }
 
-static void NeoWCRefreshAntiRevokeCellsInView(UIView *view) {
+static void WCAtlasRefreshAntiRevokeCellsInView(UIView *view) {
     if (!view) return;
     Class cellClass = NSClassFromString(@"CommonMessageCellView");
     if (cellClass && [view isKindOfClass:cellClass]) {
-        SEL refreshSelector = NSSelectorFromString(@"neowc_scheduleAntiRevokeSidePromptRefresh");
+        SEL refreshSelector = NSSelectorFromString(@"wcatlas_scheduleAntiRevokeSidePromptRefresh");
         if ([view respondsToSelector:refreshSelector]) {
             ((void (*)(id, SEL))objc_msgSend)(view, refreshSelector);
         }
     }
     Class systemCellClass = NSClassFromString(@"SystemMessageCellView");
     if (systemCellClass && [view isKindOfClass:systemCellClass]) {
-        SEL colorSelector = NSSelectorFromString(@"neowc_applyAntiRevokeTextColor");
+        SEL colorSelector = NSSelectorFromString(@"wcatlas_applyAntiRevokeTextColor");
         if ([view respondsToSelector:colorSelector]) {
             ((void (*)(id, SEL))objc_msgSend)(view, colorSelector);
         }
     }
-    for (UIView *subview in view.subviews) NeoWCRefreshAntiRevokeCellsInView(subview);
+    for (UIView *subview in view.subviews) WCAtlasRefreshAntiRevokeCellsInView(subview);
 }
 
-static void NeoWCRefreshVisibleAntiRevokeCells(void) {
-    UIWindow *window = NeoWCActiveApplicationWindow();
-    if (window) NeoWCRefreshAntiRevokeCellsInView(window);
+static void WCAtlasRefreshVisibleAntiRevokeCells(void) {
+    UIWindow *window = WCAtlasActiveApplicationWindow();
+    if (window) WCAtlasRefreshAntiRevokeCellsInView(window);
 }
 
-static void NeoWCSynchronizeReplyGesturesInView(UIView *view) {
+static void WCAtlasSynchronizeReplyGesturesInView(UIView *view) {
     if (!view) return;
     Class cellClass = NSClassFromString(@"CommonMessageCellView");
     if (cellClass && [view isKindOfClass:cellClass]) {
-        NeoWCSynchronizeReplyGesture((CommonMessageCellView *)view);
-        NeoWCSynchronizeAvatarQuickGesture((CommonMessageCellView *)view);
-        NeoWCScheduleMessageTimeRefresh(view);
+        WCAtlasSynchronizeReplyGesture((CommonMessageCellView *)view);
+        WCAtlasSynchronizeAvatarQuickGesture((CommonMessageCellView *)view);
+        WCAtlasScheduleMessageTimeRefresh(view);
     }
-    for (UIView *subview in view.subviews) NeoWCSynchronizeReplyGesturesInView(subview);
+    for (UIView *subview in view.subviews) WCAtlasSynchronizeReplyGesturesInView(subview);
 }
 
-static void NeoWCSynchronizeVisibleReplyGestures(void) {
-    UIWindow *window = NeoWCActiveApplicationWindow();
-    if (window) NeoWCSynchronizeReplyGesturesInView(window);
+static void WCAtlasSynchronizeVisibleReplyGestures(void) {
+    UIWindow *window = WCAtlasActiveApplicationWindow();
+    if (window) WCAtlasSynchronizeReplyGesturesInView(window);
 }
 
-static id NeoWCExactIvarValue(id object, NSString *ivarName) {
+static id WCAtlasExactIvarValue(id object, NSString *ivarName) {
     if (!object || ivarName.length == 0) return nil;
     Ivar ivar = class_getInstanceVariable([object class], ivarName.UTF8String);
     if (ivar) return object_getIvar(object, ivar);
-    return NeoWCTweakSafeValue(object, ivarName);
+    return WCAtlasTweakSafeValue(object, ivarName);
 }
 
-static void NeoWCApplyAutoOriginalSelection(id controller, NSString *originCheckKey) {
-    if (!controller || !NeoWCEnhancementEnabled(NeoWCAutoOriginalImageEnabledKey)) return;
+static void WCAtlasApplyAutoOriginalSelection(id controller, NSString *originCheckKey) {
+    if (!controller || !WCAtlasEnhancementEnabled(WCAtlasAutoOriginalImageEnabledKey)) return;
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (!NeoWCEnhancementEnabled(NeoWCAutoOriginalImageEnabledKey)) return;
+        if (!WCAtlasEnhancementEnabled(WCAtlasAutoOriginalImageEnabledKey)) return;
 
         SEL selectedSelector = NSSelectorFromString(@"isOriginSelected");
         SEL checkSelector = NSSelectorFromString(@"onOriginImageCheck:");
@@ -5196,10 +5196,10 @@ static void NeoWCApplyAutoOriginalSelection(id controller, NSString *originCheck
             BOOL selected = ((BOOL (*)(id, SEL))objc_msgSend)(controller, selectedSelector);
             if (selected) return;
 
-            id originCheck = NeoWCExactIvarValue(controller, originCheckKey);
+            id originCheck = WCAtlasExactIvarValue(controller, originCheckKey);
             if (originCheck) {
                 ((void (*)(id, SEL, id))objc_msgSend)(controller, checkSelector, originCheck);
-                NeoWCCompatibilityMarkTriggered(@"auto-original-image");
+                WCAtlasCompatibilityMarkTriggered(@"auto-original-image");
                 return;
             }
         }
@@ -5208,29 +5208,29 @@ static void NeoWCApplyAutoOriginalSelection(id controller, NSString *originCheck
         SEL setter = NSSelectorFromString(@"setIsOriginSelected:");
         if ([controller respondsToSelector:setter]) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, setter, YES);
-            NeoWCCompatibilityMarkTriggered(@"auto-original-image");
+            WCAtlasCompatibilityMarkTriggered(@"auto-original-image");
         }
     });
 }
 
-static void NeoWCApplyAutoCombineSendSelection(id controller) {
+static void WCAtlasApplyAutoCombineSendSelection(id controller) {
     // WeChatX 2.1-9 uses this native chain verbatim: combineSendView ->
     // isCombineSendHidden -> controlCenter setIsCombineSend:YES ->
     // combineSendView updateSelected:YES. Its option is gated by auto-original.
     if (!controller) return;
-    if (!NeoWCEnhancementEnabled(NeoWCAutoOriginalImageEnabledKey) ||
-        !NeoWCEnhancementEnabled(NeoWCAutoCombineSendEnabledKey)) {
-        objc_setAssociatedObject(controller, &NeoWCAutoCombineSendAppliedKey, nil,
+    if (!WCAtlasEnhancementEnabled(WCAtlasAutoOriginalImageEnabledKey) ||
+        !WCAtlasEnhancementEnabled(WCAtlasAutoCombineSendEnabledKey)) {
+        objc_setAssociatedObject(controller, &WCAtlasAutoCombineSendAppliedKey, nil,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (!NeoWCEnhancementEnabled(NeoWCAutoOriginalImageEnabledKey) ||
-            !NeoWCEnhancementEnabled(NeoWCAutoCombineSendEnabledKey)) return;
+        if (!WCAtlasEnhancementEnabled(WCAtlasAutoOriginalImageEnabledKey) ||
+            !WCAtlasEnhancementEnabled(WCAtlasAutoCombineSendEnabledKey)) return;
 
-        id combineSendView = NeoWCTweakSafeValue(controller, @"combineSendView");
+        id combineSendView = WCAtlasTweakSafeValue(controller, @"combineSendView");
         if (!combineSendView) {
-            objc_setAssociatedObject(controller, &NeoWCAutoCombineSendAppliedKey, nil,
+            objc_setAssociatedObject(controller, &WCAtlasAutoCombineSendAppliedKey, nil,
                                      OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             return;
         }
@@ -5240,29 +5240,29 @@ static void NeoWCApplyAutoCombineSendSelection(id controller) {
             combineSendHidden = ((BOOL (*)(id, SEL))objc_msgSend)(controller, hiddenSelector);
         }
         if (combineSendHidden) {
-            objc_setAssociatedObject(controller, &NeoWCAutoCombineSendAppliedKey, nil,
+            objc_setAssociatedObject(controller, &WCAtlasAutoCombineSendAppliedKey, nil,
                                      OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             return;
         }
-        if ([objc_getAssociatedObject(controller, &NeoWCAutoCombineSendAppliedKey) boolValue]) return;
+        if ([objc_getAssociatedObject(controller, &WCAtlasAutoCombineSendAppliedKey) boolValue]) return;
 
-        id controlCenter = NeoWCTweakSafeValue(controller, @"controlCenter");
+        id controlCenter = WCAtlasTweakSafeValue(controller, @"controlCenter");
         SEL combineSelector = NSSelectorFromString(@"setIsCombineSend:");
         if (![controlCenter respondsToSelector:combineSelector]) return;
         ((void (*)(id, SEL, BOOL))objc_msgSend)(controlCenter, combineSelector, YES);
-        objc_setAssociatedObject(controller, &NeoWCAutoCombineSendAppliedKey, @YES,
+        objc_setAssociatedObject(controller, &WCAtlasAutoCombineSendAppliedKey, @YES,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
         SEL updateSelector = NSSelectorFromString(@"updateSelected:");
         if ([combineSendView respondsToSelector:updateSelector]) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(combineSendView, updateSelector, YES);
         }
-        NeoWCCompatibilityMarkTriggered(@"auto-combine-send");
+        WCAtlasCompatibilityMarkTriggered(@"auto-combine-send");
     });
 }
 
-static void NeoWCSetMomentsOriginalFlag(id object) {
-    if (!object || !NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey)) return;
+static void WCAtlasSetMomentsOriginalFlag(id object) {
+    if (!object || !WCAtlasEnhancementEnabled(WCAtlasMomentsOriginalMediaPostEnabledKey)) return;
     SEL originalSelector = NSSelectorFromString(@"setOriginal:");
     if ([object respondsToSelector:originalSelector]) {
         ((void (*)(id, SEL, BOOL))objc_msgSend)(object, originalSelector, YES);
@@ -5283,8 +5283,8 @@ static void NeoWCSetMomentsOriginalFlag(id object) {
     }
 }
 
-static void NeoWCSetMomentsCommitImagesOriginal(id controller) {
-    if (!controller || !NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey)) return;
+static void WCAtlasSetMomentsCommitImagesOriginal(id controller) {
+    if (!controller || !WCAtlasEnhancementEnabled(WCAtlasMomentsOriginalMediaPostEnabledKey)) return;
     SEL imageSelectorControllerSelector = NSSelectorFromString(@"imageSelectorController");
     SEL imagesSelector = NSSelectorFromString(@"arrImages");
     SEL assetSelector = NSSelectorFromString(@"m_asset");
@@ -5309,16 +5309,16 @@ static void NeoWCSetMomentsCommitImagesOriginal(id controller) {
     }
 }
 
-static void NeoWCPresentJokerEditorForCell(id cell, BOOL transferContext) {
-    if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return;
-    id message = NeoWCMessageWrapForCell(cell);
-    if (!message || (!transferContext && !NeoWCMessageCanJokerEdit(message))) return;
-    UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
+static void WCAtlasPresentJokerEditorForCell(id cell, BOOL transferContext) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasChatJokerEnabledKey)) return;
+    id message = WCAtlasMessageWrapForCell(cell);
+    if (!message || (!transferContext && !WCAtlasMessageCanJokerEdit(message))) return;
+    UIViewController *presenter = WCAtlasJokerPresenterForCell(cell);
     if (!presenter.view.window) return;
-    BOOL isText = !transferContext && NeoWCMessageIsText(message);
-    BOOL isRefer = !transferContext && !isText && NeoWCMessageIsRefer(message);
-    BOOL isTransfer = transferContext || (!isText && !isRefer && NeoWCMessageIsTransfer(message));
-    NSString *current = transferContext ? NeoWCTransferDisplayText(message) : NeoWCDisplayTextForJokerMessage(message);
+    BOOL isText = !transferContext && WCAtlasMessageIsText(message);
+    BOOL isRefer = !transferContext && !isText && WCAtlasMessageIsRefer(message);
+    BOOL isTransfer = transferContext || (!isText && !isRefer && WCAtlasMessageIsTransfer(message));
+    NSString *current = transferContext ? WCAtlasTransferDisplayText(message) : WCAtlasDisplayTextForJokerMessage(message);
     if (isTransfer && ([current hasPrefix:@"¥"] || [current hasPrefix:@"￥"])) current = [current substringFromIndex:1];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"聊天记录小丑"
                                                                    message:@"仅修改当前页面的本机显示，离开页面后可能恢复"
@@ -5337,16 +5337,16 @@ static void NeoWCPresentJokerEditorForCell(id cell, BOOL transferContext) {
     [alert addAction:[UIAlertAction actionWithTitle:@"应用" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         NSString *text = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
         if (targetCell && text.length > 0) {
-            NeoWCApplyJokerText(targetCell, targetMessage, targetController, text, transferContext);
+            WCAtlasApplyJokerText(targetCell, targetMessage, targetController, text, transferContext);
         }
     }]];
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
-static MMMenuItem *NeoWCJokerMenuItem(id target, BOOL transferContext) {
-    if (!NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) return nil;
-    id message = NeoWCMessageWrapForCell(target);
-    if (!message || (!transferContext && !NeoWCMessageCanJokerEdit(message))) return nil;
+static MMMenuItem *WCAtlasJokerMenuItem(id target, BOOL transferContext) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasChatJokerEnabledKey)) return nil;
+    id message = WCAtlasMessageWrapForCell(target);
+    if (!message || (!transferContext && !WCAtlasMessageCanJokerEdit(message))) return nil;
     Class itemClass = NSClassFromString(@"MMMenuItem");
     if (!itemClass) return nil;
     if (![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) return nil;
@@ -5357,19 +5357,19 @@ static MMMenuItem *NeoWCJokerMenuItem(id target, BOOL transferContext) {
     return [[itemClass alloc] initWithTitle:@"小丑" icon:icon target:target action:@selector(joker_handleMenuItem:)];
 }
 
-static NSArray *NeoWCOperationMenuItemsWithJoker(id target, NSArray *originalItems, BOOL transferContext) {
+static NSArray *WCAtlasOperationMenuItemsWithJoker(id target, NSArray *originalItems, BOOL transferContext) {
     if (![originalItems isKindOfClass:[NSArray class]]) return originalItems;
     NSArray *items = originalItems;
-    if (NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey)) {
+    if (WCAtlasEnhancementEnabled(WCAtlasChatJokerEnabledKey)) {
         BOOL containsJoker = NO;
         for (id item in originalItems) {
-            if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"小丑"]) {
+            if ([WCAtlasTweakSafeValue(item, @"title") isEqualToString:@"小丑"]) {
                 containsJoker = YES;
                 break;
             }
         }
         if (!containsJoker) {
-            MMMenuItem *jokerItem = NeoWCJokerMenuItem(target, transferContext);
+            MMMenuItem *jokerItem = WCAtlasJokerMenuItem(target, transferContext);
             if (jokerItem) {
                 NSMutableArray *mutableItems = [originalItems mutableCopy];
                 [mutableItems insertObject:jokerItem atIndex:0];
@@ -5380,60 +5380,60 @@ static NSArray *NeoWCOperationMenuItemsWithJoker(id target, NSArray *originalIte
     return items;
 }
 
-static BOOL NeoWCMessageIsFileAttachment(id message) {
+static BOOL WCAtlasMessageIsFileAttachment(id message) {
     SEL fileSelector = sel_registerName("IsFileMsg");
     if ([message respondsToSelector:fileSelector] &&
         ((BOOL (*)(id, SEL))objc_msgSend)(message, fileSelector)) return YES;
-    NSInteger messageType = [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue];
-    NSInteger innerType = [NeoWCTweakSafeValue(message, @"m_uiAppMsgInnerType") integerValue];
+    NSInteger messageType = [WCAtlasTweakSafeValue(message, @"m_uiMessageType") integerValue];
+    NSInteger innerType = [WCAtlasTweakSafeValue(message, @"m_uiAppMsgInnerType") integerValue];
     return messageType == 0x31 && innerType == 6;
 }
 
-static NeoWCQuickReplyType NeoWCQuickReplyTypeForMessage(id message, BOOL *supported) {
+static WCAtlasQuickReplyType WCAtlasQuickReplyTypeForMessage(id message, BOOL *supported) {
     if (supported) *supported = NO;
-    NSInteger messageType = [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue];
+    NSInteger messageType = [WCAtlasTweakSafeValue(message, @"m_uiMessageType") integerValue];
     if (messageType == 1) {
         if (supported) *supported = YES;
-        return NeoWCQuickReplyTypeText;
+        return WCAtlasQuickReplyTypeText;
     }
     if (messageType == 3) {
         if (supported) *supported = YES;
-        return NeoWCQuickReplyTypeImage;
+        return WCAtlasQuickReplyTypeImage;
     }
     if (messageType == 34) {
         if (supported) *supported = YES;
-        return NeoWCQuickReplyTypeVoice;
+        return WCAtlasQuickReplyTypeVoice;
     }
-    if (NeoWCMessageIsFileAttachment(message)) {
-        NSString *fileName = NeoWCTweakSafeValue(message, @"m_nsAppFileName");
+    if (WCAtlasMessageIsFileAttachment(message)) {
+        NSString *fileName = WCAtlasTweakSafeValue(message, @"m_nsAppFileName");
         NSString *extension = fileName.pathExtension.lowercaseString;
         static NSSet<NSString *> *videoExtensions;
         static dispatch_once_t onceToken;
         dispatch_once(&onceToken, ^{ videoExtensions = [NSSet setWithArray:@[@"mp4", @"mov", @"m4v"]]; });
         if ([videoExtensions containsObject:extension]) {
             if (supported) *supported = YES;
-            return NeoWCQuickReplyTypeVideo;
+            return WCAtlasQuickReplyTypeVideo;
         }
     }
-    return NeoWCQuickReplyTypeText;
+    return WCAtlasQuickReplyTypeText;
 }
 
-static BOOL NeoWCMessageCanAddToQuickReply(id message) {
-    if (!NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey) || !message) return NO;
-    NSString *session = NeoWCSessionForMessage(message);
-    unsigned long long localID = [NeoWCTweakSafeValue(message, @"m_uiMesLocalID") unsignedLongLongValue];
-    long long serverID = [NeoWCTweakSafeValue(message, @"m_n64MesSvrID") longLongValue];
+static BOOL WCAtlasMessageCanAddToQuickReply(id message) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasQuickReplyEnabledKey) || !message) return NO;
+    NSString *session = WCAtlasSessionForMessage(message);
+    unsigned long long localID = [WCAtlasTweakSafeValue(message, @"m_uiMesLocalID") unsignedLongLongValue];
+    long long serverID = [WCAtlasTweakSafeValue(message, @"m_n64MesSvrID") longLongValue];
     return session.length > 0 && (localID > 0 || serverID != 0);
 }
 
-static NSString *NeoWCQuickReplySourceMessageID(id message) {
-    long long serverID = [NeoWCTweakSafeValue(message, @"m_n64MesSvrID") longLongValue];
-    unsigned long long localID = [NeoWCTweakSafeValue(message, @"m_uiMesLocalID") unsignedLongLongValue];
+static NSString *WCAtlasQuickReplySourceMessageID(id message) {
+    long long serverID = [WCAtlasTweakSafeValue(message, @"m_n64MesSvrID") longLongValue];
+    unsigned long long localID = [WCAtlasTweakSafeValue(message, @"m_uiMesLocalID") unsignedLongLongValue];
     return serverID != 0 ? [NSString stringWithFormat:@"svr:%lld", serverID]
                          : [NSString stringWithFormat:@"local:%llu", localID];
 }
 
-static NSString *NeoWCExistingQuickReplyImagePath(id message) {
+static NSString *WCAtlasExistingQuickReplyImagePath(id message) {
     Class wrapClass = objc_getClass("CMessageWrap");
     if (!wrapClass) return nil;
     for (NSString *selectorName in @[@"getJpgPathOfMsgHDImg:",
@@ -5449,7 +5449,7 @@ static NSString *NeoWCExistingQuickReplyImagePath(id message) {
     return nil;
 }
 
-static NSString *NeoWCExistingQuickReplyAttachmentPath(id message) {
+static NSString *WCAtlasExistingQuickReplyAttachmentPath(id message) {
     SEL selector = sel_registerName("GetAppAttachmentPath");
     if (![message respondsToSelector:selector]) return nil;
     id value = ((id (*)(id, SEL))objc_msgSend)(message, selector);
@@ -5457,7 +5457,7 @@ static NSString *NeoWCExistingQuickReplyAttachmentPath(id message) {
     return path.length > 0 && [NSFileManager.defaultManager fileExistsAtPath:path] ? path : nil;
 }
 
-static NSString *NeoWCExistingQuickReplyVoicePath(id message) {
+static NSString *WCAtlasExistingQuickReplyVoicePath(id message) {
     SEL selector = sel_registerName("getVoicePath");
     if (![message respondsToSelector:selector]) return nil;
     id value = ((id (*)(id, SEL))objc_msgSend)(message, selector);
@@ -5465,52 +5465,52 @@ static NSString *NeoWCExistingQuickReplyVoicePath(id message) {
     return path.length > 0 && [NSFileManager.defaultManager fileExistsAtPath:path] ? path : nil;
 }
 
-static NSDictionary *NeoWCQuickReplyVoiceMetadata(id message) {
-    id extendInfo = NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType");
-    NSNumber *voiceTime = NeoWCTweakSafeValue(extendInfo, @"m_uiVoiceTime");
-    NSNumber *voiceFormat = NeoWCTweakSafeValue(extendInfo, @"m_uiVoiceFormat");
+static NSDictionary *WCAtlasQuickReplyVoiceMetadata(id message) {
+    id extendInfo = WCAtlasTweakSafeValue(message, @"m_extendInfoWithMsgType");
+    NSNumber *voiceTime = WCAtlasTweakSafeValue(extendInfo, @"m_uiVoiceTime");
+    NSNumber *voiceFormat = WCAtlasTweakSafeValue(extendInfo, @"m_uiVoiceFormat");
     NSMutableDictionary *metadata = [NSMutableDictionary dictionary];
     if ([voiceTime respondsToSelector:@selector(unsignedIntegerValue)] && voiceTime.unsignedIntegerValue > 0) metadata[@"voiceTime"] = voiceTime;
     if ([voiceFormat respondsToSelector:@selector(unsignedIntegerValue)]) metadata[@"voiceFormat"] = voiceFormat;
     return metadata;
 }
 
-static NSString *NeoWCQuickReplyMessagePreview(id message) {
+static NSString *WCAtlasQuickReplyMessagePreview(id message) {
     SEL displaySelector = NSSelectorFromString(@"GetDisplayContent");
     Method displayMethod = message ? class_getInstanceMethod([message class], displaySelector) : NULL;
     if (displayMethod && method_getNumberOfArguments(displayMethod) == 2 &&
-        NeoWCMethodReturnsObject(displayMethod)) {
+        WCAtlasMethodReturnsObject(displayMethod)) {
         @try {
             id value = ((id (*)(id, SEL))objc_msgSend)(message, displaySelector);
             if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
         } @catch (__unused NSException *exception) {}
     }
     for (NSString *key in @[@"m_nsTitle", @"m_nsAppFileName", @"m_nsDesc"]) {
-        id value = NeoWCTweakSafeValue(message, key);
+        id value = WCAtlasTweakSafeValue(message, key);
         if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
     }
-    NSInteger type = [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue];
+    NSInteger type = [WCAtlasTweakSafeValue(message, @"m_uiMessageType") integerValue];
     if (type == 1) {
-        id content = NeoWCTweakSafeValue(message, @"m_nsContent");
+        id content = WCAtlasTweakSafeValue(message, @"m_nsContent");
         if ([content isKindOfClass:NSString.class] && [content length] > 0) return content;
     }
     return [NSString stringWithFormat:@"微信消息 · 类型 %ld", (long)type];
 }
 
-typedef NS_ENUM(NSUInteger, NeoWCMediaToVoiceKind) {
-    NeoWCMediaToVoiceKindAudioFile = 1,
-    NeoWCMediaToVoiceKindVideo,
-    NeoWCMediaToVoiceKindMusic,
+typedef NS_ENUM(NSUInteger, WCAtlasMediaToVoiceKind) {
+    WCAtlasMediaToVoiceKindAudioFile = 1,
+    WCAtlasMediaToVoiceKindVideo,
+    WCAtlasMediaToVoiceKindMusic,
 };
 
-static BOOL NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKind kind) {
-    if (!NeoWCEnhancementEnabled(NeoWCMediaToVoiceEnabledKey)) return NO;
-    NSString *key = kind == NeoWCMediaToVoiceKindAudioFile ? NeoWCAudioFileToVoiceEnabledKey :
-        (kind == NeoWCMediaToVoiceKindVideo ? NeoWCVideoToVoiceEnabledKey : NeoWCMusicToVoiceEnabledKey);
-    return NeoWCEnhancementEnabled(key);
+static BOOL WCAtlasMediaToVoiceKindEnabled(WCAtlasMediaToVoiceKind kind) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasMediaToVoiceEnabledKey)) return NO;
+    NSString *key = kind == WCAtlasMediaToVoiceKindAudioFile ? WCAtlasAudioFileToVoiceEnabledKey :
+        (kind == WCAtlasMediaToVoiceKindVideo ? WCAtlasVideoToVoiceEnabledKey : WCAtlasMusicToVoiceEnabledKey);
+    return WCAtlasEnhancementEnabled(key);
 }
 
-static NSSet<NSString *> *NeoWCAudioFileExtensions(void) {
+static NSSet<NSString *> *WCAtlasAudioFileExtensions(void) {
     static NSSet<NSString *> *extensions;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -5520,28 +5520,28 @@ static NSSet<NSString *> *NeoWCAudioFileExtensions(void) {
     return extensions;
 }
 
-static BOOL NeoWCMessageIsConvertibleAudioFile(id message) {
+static BOOL WCAtlasMessageIsConvertibleAudioFile(id message) {
     if (!message) return NO;
-    id extension = NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType");
-    NSString *fileName = NeoWCTweakSafeValue(message, @"m_nsAppFileName");
-    if (fileName.length == 0) fileName = NeoWCTweakSafeValue(extension, @"m_nsAppFileName");
-    BOOL supportedExtension = [NeoWCAudioFileExtensions() containsObject:fileName.pathExtension.lowercaseString ?: @""];
-    NSInteger messageType = [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue];
-    return supportedExtension && (NeoWCMessageIsFileAttachment(message) || messageType == 49);
+    id extension = WCAtlasTweakSafeValue(message, @"m_extendInfoWithMsgType");
+    NSString *fileName = WCAtlasTweakSafeValue(message, @"m_nsAppFileName");
+    if (fileName.length == 0) fileName = WCAtlasTweakSafeValue(extension, @"m_nsAppFileName");
+    BOOL supportedExtension = [WCAtlasAudioFileExtensions() containsObject:fileName.pathExtension.lowercaseString ?: @""];
+    NSInteger messageType = [WCAtlasTweakSafeValue(message, @"m_uiMessageType") integerValue];
+    return supportedExtension && (WCAtlasMessageIsFileAttachment(message) || messageType == 49);
 }
 
-static BOOL NeoWCMessageIsMusicCard(id message) {
-    if (!message || [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue] != 49) return NO;
-    NSInteger innerType = [NeoWCTweakSafeValue(message, @"m_uiAppMsgInnerType") integerValue];
+static BOOL WCAtlasMessageIsMusicCard(id message) {
+    if (!message || [WCAtlasTweakSafeValue(message, @"m_uiMessageType") integerValue] != 49) return NO;
+    NSInteger innerType = [WCAtlasTweakSafeValue(message, @"m_uiAppMsgInnerType") integerValue];
     if (innerType == 0) {
-        innerType = [NeoWCTweakSafeValue(NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType"),
+        innerType = [WCAtlasTweakSafeValue(WCAtlasTweakSafeValue(message, @"m_extendInfoWithMsgType"),
                                          @"m_uiAppMsgInnerType") integerValue];
     }
     if (innerType == 3) return YES;
     // AFN identifies music app messages from the serialized app-message body as
     // well as the parsed inner-type field. Some WeChat builds populate the XML
     // before exposing m_uiAppMsgInnerType to AppMessageCellView.
-    NSString *content = NeoWCTweakSafeValue(message, @"m_nsContent");
+    NSString *content = WCAtlasTweakSafeValue(message, @"m_nsContent");
     if (![content isKindOfClass:NSString.class]) return NO;
     return [content rangeOfString:@"<appmsg type=\"3\"" options:NSCaseInsensitiveSearch].location != NSNotFound ||
            [content rangeOfString:@"<appmsg type='3'" options:NSCaseInsensitiveSearch].location != NSNotFound ||
@@ -5549,14 +5549,14 @@ static BOOL NeoWCMessageIsMusicCard(id message) {
            [content rangeOfString:@"<mediatagname>music" options:NSCaseInsensitiveSearch].location != NSNotFound;
 }
 
-static NSString *NeoWCMusicCardPlayableURLString(id message) {
-    id extension = NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType");
+static NSString *WCAtlasMusicCardPlayableURLString(id message) {
+    id extension = WCAtlasTweakSafeValue(message, @"m_extendInfoWithMsgType");
     NSArray<NSString *> *keys = @[@"m_nsAppMediaDataUrl", @"m_nsAppMediaLowBandDataUrl",
                                   @"m_nsAppMediaUrl", @"m_nsAppMediaLowUrl"];
     for (id owner in @[message ?: NSNull.null, extension ?: NSNull.null]) {
         if (owner == NSNull.null) continue;
         for (NSString *key in keys) {
-            NSString *value = NeoWCTweakSafeValue(owner, key);
+            NSString *value = WCAtlasTweakSafeValue(owner, key);
             if (![value isKindOfClass:NSString.class]) continue;
             NSString *trimmed = [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
             NSURL *URL = [NSURL URLWithString:trimmed];
@@ -5566,7 +5566,7 @@ static NSString *NeoWCMusicCardPlayableURLString(id message) {
             }
         }
     }
-    NSString *content = NeoWCTweakSafeValue(message, @"m_nsContent");
+    NSString *content = WCAtlasTweakSafeValue(message, @"m_nsContent");
     if ([content isKindOfClass:NSString.class]) {
         NSRegularExpression *expression = [NSRegularExpression
             regularExpressionWithPattern:@"(?is)<(?:dataurl|lowdataurl|musicurl|musichighbandurl|musiclowbandurl)>\\s*(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?\\s*</(?:dataurl|lowdataurl|musicurl|musichighbandurl|musiclowbandurl)>"
@@ -5587,7 +5587,7 @@ static NSString *NeoWCMusicCardPlayableURLString(id message) {
     return nil;
 }
 
-static NSString *NeoWCExistingVideoMessagePath(id message) {
+static NSString *WCAtlasExistingVideoMessagePath(id message) {
     if (!message) return nil;
     NSFileManager *fileManager = NSFileManager.defaultManager;
     Class wrapClass = objc_getClass("CMessageWrap");
@@ -5616,13 +5616,13 @@ static NSString *NeoWCExistingVideoMessagePath(id message) {
     return nil;
 }
 
-static NSString *NeoWCExistingAudioFileMessagePath(id message) {
+static NSString *WCAtlasExistingAudioFileMessagePath(id message) {
     if (!message) return nil;
     NSFileManager *fileManager = NSFileManager.defaultManager;
     for (NSString *selectorName in @[@"GetAppAttachmentPath", @"getAppAttachmentPath",
                                      @"appAttachmentPath", @"getFilePath", @"filePath",
                                      @"localPath", @"path", @"m_nsFilePath", @"m_nsAppFilePath"]) {
-        id value = NeoWCTweakValueForSelectorNames(message, @[selectorName]);
+        id value = WCAtlasTweakValueForSelectorNames(message, @[selectorName]);
         NSString *path = [value isKindOfClass:NSURL.class] ? [value path] :
             ([value isKindOfClass:NSString.class] ? value : nil);
         NSNumber *size = path.length > 0 ? [[fileManager attributesOfItemAtPath:path error:nil] objectForKey:NSFileSize] : nil;
@@ -5631,19 +5631,19 @@ static NSString *NeoWCExistingAudioFileMessagePath(id message) {
     return nil;
 }
 
-static NSString *NeoWCMediaToVoiceLocalPath(id message, NeoWCMediaToVoiceKind kind) {
-    if (kind == NeoWCMediaToVoiceKindAudioFile) return NeoWCExistingAudioFileMessagePath(message);
-    if (kind == NeoWCMediaToVoiceKindVideo) return NeoWCExistingVideoMessagePath(message);
+static NSString *WCAtlasMediaToVoiceLocalPath(id message, WCAtlasMediaToVoiceKind kind) {
+    if (kind == WCAtlasMediaToVoiceKindAudioFile) return WCAtlasExistingAudioFileMessagePath(message);
+    if (kind == WCAtlasMediaToVoiceKindVideo) return WCAtlasExistingVideoMessagePath(message);
     return nil;
 }
 
-static NSString *NeoWCMediaToVoiceTemporaryPath(NSString *extension) {
+static NSString *WCAtlasMediaToVoiceTemporaryPath(NSString *extension) {
     NSString *name = [NSString stringWithFormat:@"WCAtlas-media-to-voice-%@.%@",
                       NSUUID.UUID.UUIDString, extension.length > 0 ? extension : @"tmp"];
     return [NSTemporaryDirectory() stringByAppendingPathComponent:name];
 }
 
-static BOOL NeoWCSendConvertedSilkVoice(NSString *silkPath,
+static BOOL WCAtlasSendConvertedSilkVoice(NSString *silkPath,
                                         NSUInteger durationMilliseconds,
                                         NSString *session) {
     Class wrapClass = objc_getClass("CMessageWrap");
@@ -5651,45 +5651,45 @@ static BOOL NeoWCSendConvertedSilkVoice(NSString *silkPath,
     if (!wrapClass || ![wrapClass instancesRespondToSelector:initializer]) return NO;
     id voice = ((id (*)(id, SEL, NSUInteger))objc_msgSend)([wrapClass alloc], initializer, 34);
     if (!voice) return NO;
-    NeoWCTweakSetValue(voice, @"m_uiMessageType", @34);
-    id extension = NeoWCTweakSafeValue(voice, @"m_extendInfoWithMsgType");
-    NeoWCTweakSetValue(voice, @"m_uiVoiceTime", @(MAX((NSUInteger)1, durationMilliseconds)));
-    NeoWCTweakSetValue(voice, @"m_uiVoiceFormat", @4);
-    NeoWCTweakSetValue(voice, @"m_uiVoiceForwardFlag", @1);
-    NeoWCTweakSetValue(extension, @"m_uiVoiceTime", @(MAX((NSUInteger)1, durationMilliseconds)));
-    NeoWCTweakSetValue(extension, @"m_uiVoiceFormat", @4);
-    NeoWCTweakSetValue(extension, @"m_uiVoiceForwardFlag", @1);
-    return NeoWCSendVoiceMessage(voice, silkPath, session);
+    WCAtlasTweakSetValue(voice, @"m_uiMessageType", @34);
+    id extension = WCAtlasTweakSafeValue(voice, @"m_extendInfoWithMsgType");
+    WCAtlasTweakSetValue(voice, @"m_uiVoiceTime", @(MAX((NSUInteger)1, durationMilliseconds)));
+    WCAtlasTweakSetValue(voice, @"m_uiVoiceFormat", @4);
+    WCAtlasTweakSetValue(voice, @"m_uiVoiceForwardFlag", @1);
+    WCAtlasTweakSetValue(extension, @"m_uiVoiceTime", @(MAX((NSUInteger)1, durationMilliseconds)));
+    WCAtlasTweakSetValue(extension, @"m_uiVoiceFormat", @4);
+    WCAtlasTweakSetValue(extension, @"m_uiVoiceForwardFlag", @1);
+    return WCAtlasSendVoiceMessage(voice, silkPath, session);
 }
 
-static void NeoWCFinishMediaToVoiceConversion(NSString *sourcePath,
+static void WCAtlasFinishMediaToVoiceConversion(NSString *sourcePath,
                                                NSString *downloadedPath,
                                                NSString *session,
                                                id message) {
-    NSString *silkPath = NeoWCMediaToVoiceTemporaryPath(@"silk");
+    NSString *silkPath = WCAtlasMediaToVoiceTemporaryPath(@"silk");
     NSError *conversionError = nil;
     NSUInteger durationMilliseconds = 0;
-    BOOL converted = NeoWCEncodeAudioFileToSilk(sourcePath, silkPath, &durationMilliseconds, &conversionError);
+    BOOL converted = WCAtlasEncodeAudioFileToSilk(sourcePath, silkPath, &durationMilliseconds, &conversionError);
     if (downloadedPath.length > 0) [NSFileManager.defaultManager removeItemAtPath:downloadedPath error:nil];
     dispatch_async(dispatch_get_main_queue(), ^{
-        BOOL queued = converted && NeoWCSendConvertedSilkVoice(silkPath, durationMilliseconds, session);
+        BOOL queued = converted && WCAtlasSendConvertedSilkVoice(silkPath, durationMilliseconds, session);
         [NSFileManager.defaultManager removeItemAtPath:silkPath error:nil];
-        objc_setAssociatedObject(message, &NeoWCMediaToVoiceInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(message, &WCAtlasMediaToVoiceInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         if (!converted) {
-            NeoWCShowTransientMessage(conversionError.localizedDescription ?: @"媒体转语音失败", NO);
+            WCAtlasShowTransientMessage(conversionError.localizedDescription ?: @"媒体转语音失败", NO);
         } else if (!queued) {
-            NeoWCShowTransientMessage(@"微信语音发送接口已变化，未发送", NO);
+            WCAtlasShowTransientMessage(@"微信语音发送接口已变化，未发送", NO);
         } else {
-            NeoWCShowTransientMessage(@"已提交微信语音发送", YES);
+            WCAtlasShowTransientMessage(@"已提交微信语音发送", YES);
         }
     });
 }
 
-static void NeoWCConvertMusicURLToVoice(NSString *URLString, NSString *session, id message) {
+static void WCAtlasConvertMusicURLToVoice(NSString *URLString, NSString *session, id message) {
     NSURL *URL = [NSURL URLWithString:URLString];
     if (!URL) {
-        objc_setAssociatedObject(message, &NeoWCMediaToVoiceInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        NeoWCShowTransientMessage(@"音乐卡片没有有效播放地址", NO);
+        objc_setAssociatedObject(message, &WCAtlasMediaToVoiceInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        WCAtlasShowTransientMessage(@"音乐卡片没有有效播放地址", NO);
         return;
     }
     NSURLSessionDownloadTask *task = [NSURLSession.sharedSession downloadTaskWithURL:URL
@@ -5698,8 +5698,8 @@ static void NeoWCConvertMusicURLToVoice(NSString *URLString, NSString *session, 
             ? [(NSHTTPURLResponse *)response statusCode] : 200;
         if (downloadError || !location || statusCode < 200 || statusCode >= 300) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                objc_setAssociatedObject(message, &NeoWCMediaToVoiceInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                NeoWCShowTransientMessage(downloadError.localizedDescription ?: @"音乐音频下载失败", NO);
+                objc_setAssociatedObject(message, &WCAtlasMediaToVoiceInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                WCAtlasShowTransientMessage(downloadError.localizedDescription ?: @"音乐音频下载失败", NO);
             });
             return;
         }
@@ -5712,63 +5712,63 @@ static void NeoWCConvertMusicURLToVoice(NSString *URLString, NSString *session, 
             else if ([MIMEType containsString:@"flac"]) downloadExtension = @"flac";
             else if ([MIMEType containsString:@"mp4"] || [MIMEType containsString:@"aac"]) downloadExtension = @"m4a";
         }
-        NSString *downloadedPath = NeoWCMediaToVoiceTemporaryPath(downloadExtension.length > 0 ? downloadExtension : @"m4a");
+        NSString *downloadedPath = WCAtlasMediaToVoiceTemporaryPath(downloadExtension.length > 0 ? downloadExtension : @"m4a");
         NSError *moveError = nil;
         if (![NSFileManager.defaultManager moveItemAtURL:location
                                                    toURL:[NSURL fileURLWithPath:downloadedPath]
                                                    error:&moveError]) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                objc_setAssociatedObject(message, &NeoWCMediaToVoiceInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                NeoWCShowTransientMessage(moveError.localizedDescription ?: @"无法保存音乐音频", NO);
+                objc_setAssociatedObject(message, &WCAtlasMediaToVoiceInProgressKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                WCAtlasShowTransientMessage(moveError.localizedDescription ?: @"无法保存音乐音频", NO);
             });
             return;
         }
-        NeoWCFinishMediaToVoiceConversion(downloadedPath, downloadedPath, session, message);
+        WCAtlasFinishMediaToVoiceConversion(downloadedPath, downloadedPath, session, message);
     }];
     [task resume];
 }
 
-static NSString *NeoWCMediaToVoiceDisplayName(id message, NeoWCMediaToVoiceKind kind) {
-    NSString *title = kind == NeoWCMediaToVoiceKindAudioFile
-        ? NeoWCTweakSafeValue(message, @"m_nsAppFileName")
-        : NeoWCTweakSafeValue(message, @"m_nsTitle");
+static NSString *WCAtlasMediaToVoiceDisplayName(id message, WCAtlasMediaToVoiceKind kind) {
+    NSString *title = kind == WCAtlasMediaToVoiceKindAudioFile
+        ? WCAtlasTweakSafeValue(message, @"m_nsAppFileName")
+        : WCAtlasTweakSafeValue(message, @"m_nsTitle");
     if ([title isKindOfClass:NSString.class] && title.length > 0) return title;
-    return kind == NeoWCMediaToVoiceKindVideo ? @"聊天视频" :
-        (kind == NeoWCMediaToVoiceKindMusic ? @"音乐卡片" : @"音频文件");
+    return kind == WCAtlasMediaToVoiceKindVideo ? @"聊天视频" :
+        (kind == WCAtlasMediaToVoiceKindMusic ? @"音乐卡片" : @"音频文件");
 }
 
-static void NeoWCPresentMediaToVoiceConfirmation(id cell, NeoWCMediaToVoiceKind kind) {
-    if (!NeoWCMediaToVoiceKindEnabled(kind)) return;
-    id message = NeoWCMessageWrapForCell(cell);
-    if (kind == NeoWCMediaToVoiceKindAudioFile && !NeoWCMessageIsConvertibleAudioFile(message)) return;
-    if (kind == NeoWCMediaToVoiceKindMusic && !NeoWCMessageIsMusicCard(message)) return;
-    NSString *session = [NeoWCSessionForMessage(message) copy];
-    UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
+static void WCAtlasPresentMediaToVoiceConfirmation(id cell, WCAtlasMediaToVoiceKind kind) {
+    if (!WCAtlasMediaToVoiceKindEnabled(kind)) return;
+    id message = WCAtlasMessageWrapForCell(cell);
+    if (kind == WCAtlasMediaToVoiceKindAudioFile && !WCAtlasMessageIsConvertibleAudioFile(message)) return;
+    if (kind == WCAtlasMediaToVoiceKindMusic && !WCAtlasMessageIsMusicCard(message)) return;
+    NSString *session = [WCAtlasSessionForMessage(message) copy];
+    UIViewController *presenter = WCAtlasJokerPresenterForCell(cell);
     if (!message || session.length == 0 || !presenter.view.window) return;
-    if ([objc_getAssociatedObject(message, &NeoWCMediaToVoiceInProgressKey) boolValue]) {
-        NeoWCShowTransientMessage(@"该媒体正在转换，请稍候", NO);
+    if ([objc_getAssociatedObject(message, &WCAtlasMediaToVoiceInProgressKey) boolValue]) {
+        WCAtlasShowTransientMessage(@"该媒体正在转换，请稍候", NO);
         return;
     }
 
-    NSString *localPath = NeoWCMediaToVoiceLocalPath(message, kind);
-    NSString *musicURL = kind == NeoWCMediaToVoiceKindMusic ? NeoWCMusicCardPlayableURLString(message) : nil;
-    if (kind != NeoWCMediaToVoiceKindMusic && localPath.length == 0) {
-        NeoWCShowTransientMessage(kind == NeoWCMediaToVoiceKindVideo
+    NSString *localPath = WCAtlasMediaToVoiceLocalPath(message, kind);
+    NSString *musicURL = kind == WCAtlasMediaToVoiceKindMusic ? WCAtlasMusicCardPlayableURLString(message) : nil;
+    if (kind != WCAtlasMediaToVoiceKindMusic && localPath.length == 0) {
+        WCAtlasShowTransientMessage(kind == WCAtlasMediaToVoiceKindVideo
             ? @"未找到完整视频文件，请先播放或下载完视频"
             : @"未找到完整音频文件，请先下载完成", NO);
         return;
     }
-    if (kind == NeoWCMediaToVoiceKindMusic && musicURL.length == 0) {
-        NeoWCShowTransientMessage(@"音乐卡片没有可下载的播放地址", NO);
+    if (kind == WCAtlasMediaToVoiceKindMusic && musicURL.length == 0) {
+        WCAtlasShowTransientMessage(@"音乐卡片没有可下载的播放地址", NO);
         return;
     }
 
-    NSString *name = NeoWCMediaToVoiceDisplayName(message, kind);
+    NSString *name = WCAtlasMediaToVoiceDisplayName(message, kind);
     NSString *detail = [NSString stringWithFormat:@"发送到：%@\n来源：%@", session, name];
     if (localPath.length > 0) {
         AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:localPath] options:nil];
         if ([asset tracksWithMediaType:AVMediaTypeAudio].count == 0) {
-            NeoWCShowTransientMessage(@"该媒体不包含可用音轨", NO);
+            WCAtlasShowTransientMessage(@"该媒体不包含可用音轨", NO);
             return;
         }
         NSTimeInterval seconds = CMTimeGetSeconds(asset.duration);
@@ -5784,29 +5784,29 @@ static void NeoWCPresentMediaToVoiceConfirmation(id cell, NeoWCMediaToVoiceKind 
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"转换并发送" style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *action) {
-        objc_setAssociatedObject(message, &NeoWCMediaToVoiceInProgressKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        NeoWCShowTransientMessage(kind == NeoWCMediaToVoiceKindMusic ? @"正在下载并转换音乐" : @"正在转换媒体音轨", YES);
-        if (kind == NeoWCMediaToVoiceKindMusic) {
-            NeoWCConvertMusicURLToVoice(musicURL, session, message);
+        objc_setAssociatedObject(message, &WCAtlasMediaToVoiceInProgressKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        WCAtlasShowTransientMessage(kind == WCAtlasMediaToVoiceKindMusic ? @"正在下载并转换音乐" : @"正在转换媒体音轨", YES);
+        if (kind == WCAtlasMediaToVoiceKindMusic) {
+            WCAtlasConvertMusicURLToVoice(musicURL, session, message);
         } else {
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-                NeoWCFinishMediaToVoiceConversion(localPath, nil, session, message);
+                WCAtlasFinishMediaToVoiceConversion(localPath, nil, session, message);
             });
         }
     }]];
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
-static NSArray *NeoWCOperationMenuItemsWithMediaToVoice(id target,
+static NSArray *WCAtlasOperationMenuItemsWithMediaToVoice(id target,
                                                          NSArray *originalItems,
-                                                         NeoWCMediaToVoiceKind kind) {
-    if (![originalItems isKindOfClass:NSArray.class] || !NeoWCMediaToVoiceKindEnabled(kind)) return originalItems;
-    id message = NeoWCMessageWrapForCell(target);
-    BOOL eligible = kind == NeoWCMediaToVoiceKindAudioFile ? NeoWCMessageIsConvertibleAudioFile(message) :
-        (kind == NeoWCMediaToVoiceKindMusic ? NeoWCMessageIsMusicCard(message) : message != nil);
+                                                         WCAtlasMediaToVoiceKind kind) {
+    if (![originalItems isKindOfClass:NSArray.class] || !WCAtlasMediaToVoiceKindEnabled(kind)) return originalItems;
+    id message = WCAtlasMessageWrapForCell(target);
+    BOOL eligible = kind == WCAtlasMediaToVoiceKindAudioFile ? WCAtlasMessageIsConvertibleAudioFile(message) :
+        (kind == WCAtlasMediaToVoiceKindMusic ? WCAtlasMessageIsMusicCard(message) : message != nil);
     if (!eligible) return originalItems;
     for (id item in originalItems) {
-        if ([NeoWCTweakSafeValue(item, @"title") isEqualToString:@"转语音"]) return originalItems;
+        if ([WCAtlasTweakSafeValue(item, @"title") isEqualToString:@"转语音"]) return originalItems;
     }
     Class itemClass = objc_getClass("MMMenuItem");
     if (!itemClass || ![itemClass instancesRespondToSelector:@selector(initWithTitle:icon:target:action:)]) return originalItems;
@@ -5814,9 +5814,9 @@ static NSArray *NeoWCOperationMenuItemsWithMediaToVoice(id target,
                                                                                                   weight:UIImageSymbolWeightRegular];
     UIImage *icon = [[UIImage systemImageNamed:@"waveform" withConfiguration:configuration]
         imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
-    SEL action = kind == NeoWCMediaToVoiceKindAudioFile ? @selector(neowc_convertAudioFileToVoice:) :
-        (kind == NeoWCMediaToVoiceKindVideo ? @selector(neowc_convertVideoToVoice:) :
-                                             @selector(neowc_convertMusicToVoice:));
+    SEL action = kind == WCAtlasMediaToVoiceKindAudioFile ? @selector(wcatlas_convertAudioFileToVoice:) :
+        (kind == WCAtlasMediaToVoiceKindVideo ? @selector(wcatlas_convertVideoToVoice:) :
+                                             @selector(wcatlas_convertMusicToVoice:));
     MMMenuItem *item = [[itemClass alloc] initWithTitle:@"转语音" icon:icon target:target action:action];
     if (!item) return originalItems;
     NSMutableArray *items = [originalItems mutableCopy];
@@ -5825,67 +5825,67 @@ static NSArray *NeoWCOperationMenuItemsWithMediaToVoice(id target,
 }
 
 
-static void NeoWCCommitMessageToQuickReply(id message, NeoWCQuickReplyType type, NSString *session,
+static void WCAtlasCommitMessageToQuickReply(id message, WCAtlasQuickReplyType type, NSString *session,
                                            NSString *messageID, NSString *path, NSString *remark,
                                            NSString *folderIdentifier) {
     NSString *trimmedRemark = [remark stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    NSUInteger beforeCount = NeoWCQuickReplyStore.sharedStore.items.count;
+    NSUInteger beforeCount = WCAtlasQuickReplyStore.sharedStore.items.count;
     NSError *error = nil;
-    NeoWCQuickReplyItem *item = nil;
-    if (type == NeoWCQuickReplyTypeMessageReference) {
-        NSInteger innerType = [NeoWCTweakSafeValue(message, @"m_uiAppMsgInnerType") integerValue];
+    WCAtlasQuickReplyItem *item = nil;
+    if (type == WCAtlasQuickReplyTypeMessageReference) {
+        NSInteger innerType = [WCAtlasTweakSafeValue(message, @"m_uiAppMsgInnerType") integerValue];
         if (innerType == 0) {
-            innerType = [NeoWCTweakSafeValue(NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType"),
+            innerType = [WCAtlasTweakSafeValue(WCAtlasTweakSafeValue(message, @"m_extendInfoWithMsgType"),
                                               @"m_uiAppMsgInnerType") integerValue];
         }
-        item = [NeoWCQuickReplyStore.sharedStore
+        item = [WCAtlasQuickReplyStore.sharedStore
             addMessageReferenceForConversation:session
-                                        localID:[NeoWCTweakSafeValue(message, @"m_uiMesLocalID") unsignedLongLongValue]
-                                       serverID:[NeoWCTweakSafeValue(message, @"m_n64MesSvrID") longLongValue]
-                                    messageType:[NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue]
+                                        localID:[WCAtlasTweakSafeValue(message, @"m_uiMesLocalID") unsignedLongLongValue]
+                                       serverID:[WCAtlasTweakSafeValue(message, @"m_n64MesSvrID") longLongValue]
+                                    messageType:[WCAtlasTweakSafeValue(message, @"m_uiMessageType") integerValue]
                                       innerType:innerType
-                                        preview:NeoWCQuickReplyMessagePreview(message)
+                                        preview:WCAtlasQuickReplyMessagePreview(message)
                                           title:trimmedRemark
                               folderIdentifier:folderIdentifier
                                           error:&error];
-    } else if (type == NeoWCQuickReplyTypeText) {
-        NSString *text = NeoWCTweakSafeValue(message, @"m_nsContent");
-        item = [NeoWCQuickReplyStore.sharedStore addText:text ?: @""
+    } else if (type == WCAtlasQuickReplyTypeText) {
+        NSString *text = WCAtlasTweakSafeValue(message, @"m_nsContent");
+        item = [WCAtlasQuickReplyStore.sharedStore addText:text ?: @""
                                                     title:trimmedRemark
                                         folderIdentifier:folderIdentifier
                                        sourceConversation:session
                                           sourceMessageID:messageID
                                                     error:&error];
     } else {
-        item = [NeoWCQuickReplyStore.sharedStore addMediaAtURL:[NSURL fileURLWithPath:path]
+        item = [WCAtlasQuickReplyStore.sharedStore addMediaAtURL:[NSURL fileURLWithPath:path]
                                                           type:type
                                                          title:trimmedRemark
                                               folderIdentifier:folderIdentifier
                                             sourceConversation:session
                                                sourceMessageID:messageID
                                                          error:&error];
-        if (item && NeoWCQuickReplyStore.sharedStore.items.count > beforeCount) {
-            if (type == NeoWCQuickReplyTypeVoice) item.metadata = NeoWCQuickReplyVoiceMetadata(message);
-            [NeoWCQuickReplyStore.sharedStore updateItem:item error:&error];
+        if (item && WCAtlasQuickReplyStore.sharedStore.items.count > beforeCount) {
+            if (type == WCAtlasQuickReplyTypeVoice) item.metadata = WCAtlasQuickReplyVoiceMetadata(message);
+            [WCAtlasQuickReplyStore.sharedStore updateItem:item error:&error];
         }
     }
-    if (error) NeoWCShowTransientMessage(error.localizedDescription ?: @"加入快捷回复失败", NO);
-    else if (item && NeoWCQuickReplyStore.sharedStore.items.count > beforeCount) NeoWCShowTransientMessage(@"已加入快捷回复", YES);
-    else if (item) NeoWCShowTransientMessage(@"该消息已在消息库中", YES);
-    else NeoWCShowTransientMessage(@"加入快捷回复失败", NO);
+    if (error) WCAtlasShowTransientMessage(error.localizedDescription ?: @"加入快捷回复失败", NO);
+    else if (item && WCAtlasQuickReplyStore.sharedStore.items.count > beforeCount) WCAtlasShowTransientMessage(@"已加入快捷回复", YES);
+    else if (item) WCAtlasShowTransientMessage(@"该消息已在消息库中", YES);
+    else WCAtlasShowTransientMessage(@"加入快捷回复失败", NO);
 }
 
-static void NeoWCPresentQuickReplyFolderPicker(UIViewController *presenter, id message, NeoWCQuickReplyType type,
+static void WCAtlasPresentQuickReplyFolderPicker(UIViewController *presenter, id message, WCAtlasQuickReplyType type,
                                                 NSString *session, NSString *messageID, NSString *path,
                                                 NSString *remark) {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"存入文件夹" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
     void (^commit)(NSString *) = ^(NSString *folderIdentifier) {
-        NeoWCCommitMessageToQuickReply(message, type, session, messageID, path, remark, folderIdentifier);
+        WCAtlasCommitMessageToQuickReply(message, type, session, messageID, path, remark, folderIdentifier);
     };
     [sheet addAction:[UIAlertAction actionWithTitle:@"消息库根目录" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         commit(nil);
     }]];
-    for (NeoWCQuickReplyFolder *folder in NeoWCQuickReplyStore.sharedStore.folders) {
+    for (WCAtlasQuickReplyFolder *folder in WCAtlasQuickReplyStore.sharedStore.folders) {
         [sheet addAction:[UIAlertAction actionWithTitle:folder.name style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
             commit(folder.identifier);
         }]];
@@ -5896,9 +5896,9 @@ static void NeoWCPresentQuickReplyFolderPicker(UIViewController *presenter, id m
         [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
         [alert addAction:[UIAlertAction actionWithTitle:@"创建并导入" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *saveAction) {
             NSError *error = nil;
-            NeoWCQuickReplyFolder *folder = [NeoWCQuickReplyStore.sharedStore createFolderWithName:alert.textFields.firstObject.text error:&error];
+            WCAtlasQuickReplyFolder *folder = [WCAtlasQuickReplyStore.sharedStore createFolderWithName:alert.textFields.firstObject.text error:&error];
             if (folder) commit(folder.identifier);
-            else NeoWCShowTransientMessage(error.localizedDescription ?: @"创建文件夹失败", NO);
+            else WCAtlasShowTransientMessage(error.localizedDescription ?: @"创建文件夹失败", NO);
         }]];
         [presenter presentViewController:alert animated:YES completion:nil];
     }]];
@@ -5908,45 +5908,45 @@ static void NeoWCPresentQuickReplyFolderPicker(UIViewController *presenter, id m
     [presenter presentViewController:sheet animated:YES completion:nil];
 }
 
-static void NeoWCAddMessageToQuickReply(id cell) {
-    id message = NeoWCMessageWrapForCell(cell);
-    if (!NeoWCMessageCanAddToQuickReply(message)) return;
+static void WCAtlasAddMessageToQuickReply(id cell) {
+    id message = WCAtlasMessageWrapForCell(cell);
+    if (!WCAtlasMessageCanAddToQuickReply(message)) return;
     BOOL supported = NO;
-    NeoWCQuickReplyType type = NeoWCQuickReplyTypeForMessage(message, &supported);
-    if (!supported) type = NeoWCQuickReplyTypeMessageReference;
+    WCAtlasQuickReplyType type = WCAtlasQuickReplyTypeForMessage(message, &supported);
+    if (!supported) type = WCAtlasQuickReplyTypeMessageReference;
     NSString *path = nil;
-    if (type != NeoWCQuickReplyTypeText && type != NeoWCQuickReplyTypeMessageReference) {
-        path = type == NeoWCQuickReplyTypeImage ? NeoWCExistingQuickReplyImagePath(message) :
-            (type == NeoWCQuickReplyTypeVoice ? NeoWCExistingQuickReplyVoicePath(message) : NeoWCExistingQuickReplyAttachmentPath(message));
+    if (type != WCAtlasQuickReplyTypeText && type != WCAtlasQuickReplyTypeMessageReference) {
+        path = type == WCAtlasQuickReplyTypeImage ? WCAtlasExistingQuickReplyImagePath(message) :
+            (type == WCAtlasQuickReplyTypeVoice ? WCAtlasExistingQuickReplyVoicePath(message) : WCAtlasExistingQuickReplyAttachmentPath(message));
         if (path.length == 0) {
-            NSString *notice = type == NeoWCQuickReplyTypeImage ? @"请先下载或打开原图后再加入快捷回复" :
-                (type == NeoWCQuickReplyTypeVoice ? @"请先播放或下载语音后再加入快捷回复" : @"请先下载视频文件后再加入快捷回复");
-            NeoWCShowTransientMessage(notice, NO);
+            NSString *notice = type == WCAtlasQuickReplyTypeImage ? @"请先下载或打开原图后再加入快捷回复" :
+                (type == WCAtlasQuickReplyTypeVoice ? @"请先播放或下载语音后再加入快捷回复" : @"请先下载视频文件后再加入快捷回复");
+            WCAtlasShowTransientMessage(notice, NO);
             return;
         }
     }
-    UIViewController *presenter = NeoWCJokerPresenterForCell(cell);
+    UIViewController *presenter = WCAtlasJokerPresenterForCell(cell);
     if (!presenter.view.window) return;
-    NSString *session = NeoWCSessionForMessage(message);
-    NSString *messageID = NeoWCQuickReplySourceMessageID(message);
+    NSString *session = WCAtlasSessionForMessage(message);
+    NSString *messageID = WCAtlasQuickReplySourceMessageID(message);
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加入快捷回复"
                                                                    message:@"可填写备注并选择保存文件夹。"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"备注（可选）"; }];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"选择文件夹" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        NeoWCPresentQuickReplyFolderPicker(presenter, message, type, session, messageID, path,
+        WCAtlasPresentQuickReplyFolderPicker(presenter, message, type, session, messageID, path,
                                            alert.textFields.firstObject.text ?: @"");
     }]];
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
-static NSArray *NeoWCOperationMenuItemsWithQuickReply(id target, NSArray *originalItems) {
+static NSArray *WCAtlasOperationMenuItemsWithQuickReply(id target, NSArray *originalItems) {
     if (![originalItems isKindOfClass:NSArray.class]) return originalItems;
-    id message = NeoWCMessageWrapForCell(target);
-    if (!NeoWCMessageCanAddToQuickReply(message)) return originalItems;
+    id message = WCAtlasMessageWrapForCell(target);
+    if (!WCAtlasMessageCanAddToQuickReply(message)) return originalItems;
     for (id item in originalItems) {
-        NSString *title = NeoWCTweakSafeValue(item, @"title");
+        NSString *title = WCAtlasTweakSafeValue(item, @"title");
         if ([title isEqualToString:@"存入素材"] || [title isEqualToString:@"存入消息库"] ||
             [title isEqualToString:@"加入快捷回复"]) return originalItems;
     }
@@ -5958,22 +5958,22 @@ static NSArray *NeoWCOperationMenuItemsWithQuickReply(id target, NSArray *origin
     MMMenuItem *menuItem = [[itemClass alloc] initWithTitle:@"存入消息库"
                                                        icon:icon
                                                      target:target
-                                                     action:@selector(neowc_addToQuickReply:)];
+                                                     action:@selector(wcatlas_addToQuickReply:)];
     if (!menuItem) return originalItems;
     NSMutableArray *items = [originalItems mutableCopy];
     [items insertObject:menuItem atIndex:0];
     return items;
 }
 
-static void NeoWCPresentWalletBalanceEditor(id headerView) {
-    UIWindow *window = NeoWCActiveApplicationWindow();
-    UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
+static void WCAtlasPresentWalletBalanceEditor(id headerView) {
+    UIWindow *window = WCAtlasActiveApplicationWindow();
+    UIViewController *presenter = WCAtlasTopControllerForLoginToast(window.rootViewController);
     if (!presenter.view.window) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"钱包余额本地显示"
                                                                    message:@"仅修改本机界面文字；留空或输入 0 恢复真实显示"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        long long fen = NeoWCLongLongDefaultForKey(NeoWCWalletBalanceFenKey);
+        long long fen = WCAtlasLongLongDefaultForKey(WCAtlasWalletBalanceFenKey);
         textField.text = fen > 0 ? [NSString stringWithFormat:@"%.2f", fen / 100.0] : nil;
         textField.placeholder = @"例如 888.88";
         textField.keyboardType = UIKeyboardTypeDecimalPad;
@@ -5985,41 +5985,41 @@ static void NeoWCPresentWalletBalanceEditor(id headerView) {
         NSString *text = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
         long long fen = text.length > 0 ? (long long)llround(text.doubleValue * 100.0) : 0;
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        [defaults setObject:@(MAX(0LL, fen)) forKey:NeoWCWalletBalanceFenKey];
-        [defaults setBool:fen > 0 forKey:NeoWCWalletBalanceEnabledKey];
+        [defaults setObject:@(MAX(0LL, fen)) forKey:WCAtlasWalletBalanceFenKey];
+        [defaults setBool:fen > 0 forKey:WCAtlasWalletBalanceEnabledKey];
         id currentHeaderView = weakHeaderView;
         if (fen > 0 && currentHeaderView) {
-            NeoWCRefreshWalletHeaderBalance(currentHeaderView);
+            WCAtlasRefreshWalletHeaderBalance(currentHeaderView);
         } else if (currentHeaderView) {
             SEL refreshSelector = NSSelectorFromString(@"updateBalanceEntryView");
             if ([currentHeaderView respondsToSelector:refreshSelector]) {
                 ((void (*)(id, SEL))objc_msgSend)(currentHeaderView, refreshSelector);
             }
         }
-        NeoWCShowTransientMessage(fen > 0 ? @"钱包余额显示已更新" : @"钱包余额显示已恢复", YES);
+        WCAtlasShowTransientMessage(fen > 0 ? @"钱包余额显示已更新" : @"钱包余额显示已恢复", YES);
     }]];
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
-static void NeoWCInstallWalletLongPressIfNeeded(UIView *view, id target, SEL action) {
-    if (!view || objc_getAssociatedObject(view, &NeoWCWalletGestureRecognizerKey)) return;
+static void WCAtlasInstallWalletLongPressIfNeeded(UIView *view, id target, SEL action) {
+    if (!view || objc_getAssociatedObject(view, &WCAtlasWalletGestureRecognizerKey)) return;
     UILongPressGestureRecognizer *recognizer = [[UILongPressGestureRecognizer alloc] initWithTarget:target action:action];
     recognizer.minimumPressDuration = 0.55;
     recognizer.cancelsTouchesInView = NO;
     [view addGestureRecognizer:recognizer];
     view.userInteractionEnabled = YES;
-    objc_setAssociatedObject(view, &NeoWCWalletGestureRecognizerKey, recognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(view, &WCAtlasWalletGestureRecognizerKey, recognizer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static void NeoWCRemoveWalletLongPressIfNeeded(UIView *view) {
+static void WCAtlasRemoveWalletLongPressIfNeeded(UIView *view) {
     if (!view) return;
-    UIGestureRecognizer *recognizer = objc_getAssociatedObject(view, &NeoWCWalletGestureRecognizerKey);
+    UIGestureRecognizer *recognizer = objc_getAssociatedObject(view, &WCAtlasWalletGestureRecognizerKey);
     if (!recognizer) return;
     [view removeGestureRecognizer:recognizer];
-    objc_setAssociatedObject(view, &NeoWCWalletGestureRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(view, &WCAtlasWalletGestureRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-@interface NeoWCGameSelectorViewController : UIViewController
+@interface WCAtlasGameSelectorViewController : UIViewController
 @property (nonatomic, copy) NSString *sourceType;
 @property (nonatomic, copy) void (^selectionHandler)(NSUInteger value, NSString *title);
 @property (nonatomic, copy) void (^cancelHandler)(void);
@@ -6027,7 +6027,7 @@ static void NeoWCRemoveWalletLongPressIfNeeded(UIView *view) {
 @property (nonatomic, strong) UIView *sheetView;
 @end
 
-@implementation NeoWCGameSelectorViewController
+@implementation WCAtlasGameSelectorViewController
 
 - (UIButton *)choiceButtonWithTitle:(NSString *)title symbol:(NSString *)symbol value:(NSUInteger)value {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -6218,77 +6218,77 @@ static void NeoWCRemoveWalletLongPressIfNeeded(UIView *view) {
 
 @end
 
-static BOOL NeoWCTryAuthorizeGame(MMAuthorizeUserInfoViewController *controller) {
-    if (!controller || !NeoWCEnhancementEnabled(NeoWCAutoGameAuthorizeKey)) return NO;
-    if ([objc_getAssociatedObject(controller, &NeoWCGameDidAuthorizeKey) boolValue]) return YES;
-    UIButton *allowButton = NeoWCFindButton(@"允许", controller.view);
+static BOOL WCAtlasTryAuthorizeGame(MMAuthorizeUserInfoViewController *controller) {
+    if (!controller || !WCAtlasEnhancementEnabled(WCAtlasAutoGameAuthorizeKey)) return NO;
+    if ([objc_getAssociatedObject(controller, &WCAtlasGameDidAuthorizeKey) boolValue]) return YES;
+    UIButton *allowButton = WCAtlasFindButton(@"允许", controller.view);
     if (!allowButton || !allowButton.window) return NO;
-    objc_setAssociatedObject(controller, &NeoWCGameDidAuthorizeKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &WCAtlasGameDidAuthorizeKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [allowButton sendActionsForControlEvents:UIControlEventTouchUpInside];
-    NeoWCLog(@"已自动允许游戏扫码授权");
-    NeoWCShowTransientHUD(@"已自动允许游戏授权", @"gamecontroller.fill");
+    WCAtlasLog(@"已自动允许游戏扫码授权");
+    WCAtlasShowTransientHUD(@"已自动允许游戏授权", @"gamecontroller.fill");
     return YES;
 }
 
-static void NeoWCRegisterPlugin(void) {
-    if (NeoWCDidRegister) return;
+static void WCAtlasRegisterPlugin(void) {
+    if (WCAtlasDidRegister) return;
 
-    NeoWCSettingsRegisterDefaults();
+    WCAtlasSettingsRegisterDefaults();
 
     Class managerClass = NSClassFromString(@"WCPluginsMgr");
     WCPluginsMgr *manager = managerClass != WCAtlasPluginsMgr.class &&
         [managerClass respondsToSelector:@selector(sharedInstance)]
         ? [managerClass sharedInstance] : nil;
-    BOOL useBuiltInManager = NeoWCEnhancementEnabled(NeoWCPluginManagerEnabledKey);
+    BOOL useBuiltInManager = WCAtlasEnhancementEnabled(WCAtlasPluginManagerEnabledKey);
     if (!manager && !useBuiltInManager) return;
     if (manager) {
         [manager registerControllerWithTitle:@"WCAtlas"
-                                     version:NeoWCDisplayVersion
-                                  controller:NSStringFromClass([NeoWCSettingsViewController class])];
+                                     version:WCAtlasDisplayVersion
+                                  controller:NSStringFromClass([WCAtlasSettingsViewController class])];
     } else if (useBuiltInManager) {
         [WCAtlasPluginsMgr.sharedInstance registerControllerWithTitle:@"WCAtlas"
-                                                               version:NeoWCDisplayVersion
-                                                            controller:NSStringFromClass([NeoWCSettingsViewController class])];
+                                                               version:WCAtlasDisplayVersion
+                                                            controller:NSStringFromClass([WCAtlasSettingsViewController class])];
     }
-    NeoWCPluginManagerRegisterSavedQuickSwitches();
-    NeoWCDidRegister = YES;
-    NeoWCLog(manager ? @"已注册到懒猫插件管理" : @"已按内置插件管理设置注册 WCAtlas");
+    WCAtlasPluginManagerRegisterSavedQuickSwitches();
+    WCAtlasDidRegister = YES;
+    WCAtlasLog(manager ? @"已注册到懒猫插件管理" : @"已按内置插件管理设置注册 WCAtlas");
 }
 
-static void NeoWCRefreshHighRefreshRateConfiguration(void) {
-    NeoWCHighRefreshRateEnabled.store(NeoWCEnhancementEnabled(NeoWCScrollHighRefreshRateEnabledKey),
+static void WCAtlasRefreshHighRefreshRateConfiguration(void) {
+    WCAtlasHighRefreshRateEnabled.store(WCAtlasEnhancementEnabled(WCAtlasScrollHighRefreshRateEnabledKey),
                                       std::memory_order_relaxed);
     NSInteger maximum = UIScreen.mainScreen.maximumFramesPerSecond;
-    NeoWCHighRefreshRateScreenMaximum.store((int)MAX(60, maximum), std::memory_order_relaxed);
+    WCAtlasHighRefreshRateScreenMaximum.store((int)MAX(60, maximum), std::memory_order_relaxed);
 }
 
-static BOOL NeoWCShouldUseHighRefreshRate(void) {
-    return NeoWCHighRefreshRateEnabled.load(std::memory_order_relaxed) &&
-           NeoWCHighRefreshRateApplicationActive.load(std::memory_order_relaxed);
+static BOOL WCAtlasShouldUseHighRefreshRate(void) {
+    return WCAtlasHighRefreshRateEnabled.load(std::memory_order_relaxed) &&
+           WCAtlasHighRefreshRateApplicationActive.load(std::memory_order_relaxed);
 }
 
-@interface NeoWCEntryLoader : NSObject
+@interface WCAtlasEntryLoader : NSObject
 @end
 
-@implementation NeoWCEntryLoader
+@implementation WCAtlasEntryLoader
 
 + (void)load {
     dispatch_async(dispatch_get_main_queue(), ^{
-        NeoWCRegisterPlugin();
-        NeoWCRefreshDailyStepOverride();
-        NeoWCHighRefreshRateApplicationActive.store(
+        WCAtlasRegisterPlugin();
+        WCAtlasRefreshDailyStepOverride();
+        WCAtlasHighRefreshRateApplicationActive.store(
             UIApplication.sharedApplication.applicationState == UIApplicationStateActive,
             std::memory_order_relaxed);
-        NeoWCRefreshHighRefreshRateConfiguration();
+        WCAtlasRefreshHighRefreshRateConfiguration();
 
         [[NSNotificationCenter defaultCenter]
             addObserverForName:UIApplicationDidFinishLaunchingNotification
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(__unused NSNotification *note) {
-                        NeoWCRegisterPlugin();
-                        NeoWCRefreshDailyStepOverride();
-                        NeoWCRefreshHighRefreshRateConfiguration();
+                        WCAtlasRegisterPlugin();
+                        WCAtlasRefreshDailyStepOverride();
+                        WCAtlasRefreshHighRefreshRateConfiguration();
                     }];
 
         [[NSNotificationCenter defaultCenter]
@@ -6296,12 +6296,12 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(__unused NSNotification *note) {
-                        NeoWCRefreshDailyStepOverride();
-                        NeoWCRefreshHighRefreshRateConfiguration();
-                        BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
+                        WCAtlasRefreshDailyStepOverride();
+                        WCAtlasRefreshHighRefreshRateConfiguration();
+                        BaseMsgContentViewController *controller = WCAtlasResolveVisibleChatController();
                         if (controller) {
-                            NeoWCRefreshGlassBackdropsInView(controller.navigationController.navigationBar);
-                            NeoWCRefreshGlassBackdropsInView(controller.view);
+                            WCAtlasRefreshGlassBackdropsInView(controller.navigationController.navigationBar);
+                            WCAtlasRefreshGlassBackdropsInView(controller.view);
                         }
                     }];
 
@@ -6310,8 +6310,8 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(__unused NSNotification *note) {
-                        NeoWCHighRefreshRateApplicationActive.store(true, std::memory_order_relaxed);
-                        NeoWCRefreshHighRefreshRateConfiguration();
+                        WCAtlasHighRefreshRateApplicationActive.store(true, std::memory_order_relaxed);
+                        WCAtlasRefreshHighRefreshRateConfiguration();
                     }];
 
         [[NSNotificationCenter defaultCenter]
@@ -6319,47 +6319,47 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(__unused NSNotification *note) {
-                        NeoWCHighRefreshRateApplicationActive.store(false, std::memory_order_relaxed);
+                        WCAtlasHighRefreshRateApplicationActive.store(false, std::memory_order_relaxed);
                     }];
 
         [[NSNotificationCenter defaultCenter]
-            addObserverForName:NeoWCEnhancementDidChangeNotification
+            addObserverForName:WCAtlasEnhancementDidChangeNotification
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(NSNotification *note) {
-                        NeoWCSynchronizeVisibleMomentsCells();
-                        NeoWCSynchronizeVisibleReplyGestures();
+                        WCAtlasSynchronizeVisibleMomentsCells();
+                        WCAtlasSynchronizeVisibleReplyGestures();
                         NSString *changedKey = [note.object isKindOfClass:[NSString class]] ? note.object : nil;
                         if (!changedKey ||
-                            [changedKey isEqualToString:NeoWCScrollHighRefreshRateEnabledKey] ||
-                            [changedKey isEqualToString:NeoWCEnabledKey]) {
-                            NeoWCRefreshHighRefreshRateConfiguration();
+                            [changedKey isEqualToString:WCAtlasScrollHighRefreshRateEnabledKey] ||
+                            [changedKey isEqualToString:WCAtlasEnabledKey]) {
+                            WCAtlasRefreshHighRefreshRateConfiguration();
                         }
                         if (!changedKey ||
-                            [changedKey isEqualToString:NeoWCGlobalAvatarRoundingEnabledKey] ||
-                            [changedKey isEqualToString:NeoWCGlobalAvatarCornerPercentKey] ||
-                            [changedKey isEqualToString:NeoWCEnabledKey]) {
-                            NeoWCRefreshTrackedGlobalAvatarViews();
+                            [changedKey isEqualToString:WCAtlasGlobalAvatarRoundingEnabledKey] ||
+                            [changedKey isEqualToString:WCAtlasGlobalAvatarCornerPercentKey] ||
+                            [changedKey isEqualToString:WCAtlasEnabledKey]) {
+                            WCAtlasRefreshTrackedGlobalAvatarViews();
                         }
                         BOOL refreshChatTop = !changedKey ||
-                            [changedKey isEqualToString:NeoWCChatSearchButtonEnabledKey] ||
-                            [changedKey isEqualToString:NeoWCChatTopBarCapsuleEnabledKey] ||
-                            [changedKey isEqualToString:NeoWCChatGlassStyleKey] ||
-                            [changedKey isEqualToString:NeoWCChatGlassBlurIntensityKey] ||
-                            [changedKey isEqualToString:NeoWCChatTopBarAvatarSizeKey] ||
-                            [changedKey isEqualToString:NeoWCChatTopBarNicknameSizeKey];
-                        BaseMsgContentViewController *visibleChat = NeoWCResolveVisibleChatController();
+                            [changedKey isEqualToString:WCAtlasChatSearchButtonEnabledKey] ||
+                            [changedKey isEqualToString:WCAtlasChatTopBarCapsuleEnabledKey] ||
+                            [changedKey isEqualToString:WCAtlasChatGlassStyleKey] ||
+                            [changedKey isEqualToString:WCAtlasChatGlassBlurIntensityKey] ||
+                            [changedKey isEqualToString:WCAtlasChatTopBarAvatarSizeKey] ||
+                            [changedKey isEqualToString:WCAtlasChatTopBarNicknameSizeKey];
+                        BaseMsgContentViewController *visibleChat = WCAtlasResolveVisibleChatController();
                         if (refreshChatTop && visibleChat) {
-                            NeoWCUpdateChatTopBar(visibleChat);
-                            NeoWCRefreshPinnedMessageGlassInView(visibleChat.view);
+                            WCAtlasUpdateChatTopBar(visibleChat);
+                            WCAtlasRefreshPinnedMessageGlassInView(visibleChat.view);
                         }
                     }];
 
         void (^refreshVisibleChatChrome)(void) = ^{
-            BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
+            BaseMsgContentViewController *controller = WCAtlasResolveVisibleChatController();
             if (!controller) return;
-            NeoWCRefreshChatTopBarAfterWechatUpdate(controller);
-            NeoWCRefreshPinnedMessageGlassInView(controller.view);
+            WCAtlasRefreshChatTopBarAfterWechatUpdate(controller);
+            WCAtlasRefreshPinnedMessageGlassInView(controller.view);
         };
         for (NSNotificationName lifecycleName in @[UIApplicationDidBecomeActiveNotification,
                                                     UIApplicationProtectedDataDidBecomeAvailable]) {
@@ -6368,10 +6368,10 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
                             object:nil
                              queue:[NSOperationQueue mainQueue]
                         usingBlock:^(__unused NSNotification *note) {
-                            BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
+                            BaseMsgContentViewController *controller = WCAtlasResolveVisibleChatController();
                             if (controller) {
-                                NeoWCRefreshGlassBackdropsInView(controller.navigationController.navigationBar);
-                                NeoWCRefreshGlassBackdropsInView(controller.view);
+                                WCAtlasRefreshGlassBackdropsInView(controller.navigationController.navigationBar);
+                                WCAtlasRefreshGlassBackdropsInView(controller.view);
                             }
                             refreshVisibleChatChrome();
                             // WeChat restores different background layers in separate passes.
@@ -6384,16 +6384,16 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
         }
 
         [[NSNotificationCenter defaultCenter]
-            addObserverForName:NeoWCAntiRevokePromptDidChangeNotification
+            addObserverForName:WCAtlasAntiRevokePromptDidChangeNotification
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(__unused NSNotification *note) {
-                        NeoWCRefreshVisibleAntiRevokeCells();
+                        WCAtlasRefreshVisibleAntiRevokeCells();
                     }];
 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{
-            NeoWCRegisterPlugin();
+            WCAtlasRegisterPlugin();
         });
     });
 }
@@ -6403,20 +6403,20 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
 %hook CADisplayLink
 
 - (void)setFrameInterval:(NSInteger)frameInterval {
-    if (!NeoWCShouldUseHighRefreshRate()) {
+    if (!WCAtlasShouldUseHighRefreshRate()) {
         %orig;
         return;
     }
     %orig(1);
     if ([self respondsToSelector:@selector(setPreferredFramesPerSecond:)]) {
         self.preferredFramesPerSecond =
-            NeoWCHighRefreshRateScreenMaximum.load(std::memory_order_relaxed);
+            WCAtlasHighRefreshRateScreenMaximum.load(std::memory_order_relaxed);
     }
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)framesPerSecond {
-    if (NeoWCShouldUseHighRefreshRate()) {
-        NSInteger maximum = NeoWCHighRefreshRateScreenMaximum.load(std::memory_order_relaxed);
+    if (WCAtlasShouldUseHighRefreshRate()) {
+        NSInteger maximum = WCAtlasHighRefreshRateScreenMaximum.load(std::memory_order_relaxed);
         %orig(maximum);
         return;
     }
@@ -6428,13 +6428,13 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
 
-%group NeoWCHighRefreshRateRange
+%group WCAtlasHighRefreshRateRange
 
 %hook CADisplayLink
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (NeoWCShouldUseHighRefreshRate()) {
-        float maximum = (float)NeoWCHighRefreshRateScreenMaximum.load(std::memory_order_relaxed);
+    if (WCAtlasShouldUseHighRefreshRate()) {
+        float maximum = (float)WCAtlasHighRefreshRateScreenMaximum.load(std::memory_order_relaxed);
         CAFrameRateRange preferredRange = CAFrameRateRangeMake(maximum, maximum, maximum);
         %orig(preferredRange);
         return;
@@ -6451,12 +6451,12 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
 %hook CAMetalLayer
 
 - (NSUInteger)maximumDrawableCount {
-    if (NeoWCShouldUseHighRefreshRate()) return 2;
+    if (WCAtlasShouldUseHighRefreshRate()) return 2;
     return %orig;
 }
 
 - (void)setMaximumDrawableCount:(NSUInteger)maximumDrawableCount {
-    if (NeoWCShouldUseHighRefreshRate()) {
+    if (WCAtlasShouldUseHighRefreshRate()) {
         %orig(2);
         return;
     }
@@ -6465,7 +6465,7 @@ static BOOL NeoWCShouldUseHighRefreshRate(void) {
 
 %end
 
-static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
+static BOOL WCAtlasViewLooksLikeGlobalSeparator(UIView *view) {
     if (!view) return NO;
     NSString *className = NSStringFromClass(view.class);
     BOOL nativeSeparator = [className isEqualToString:@"_UITableViewCellSeparatorView"];
@@ -6487,17 +6487,17 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 
 - (void)layoutSubviews {
     %orig;
-    NSNumber *originalHidden = objc_getAssociatedObject(self, &NeoWCSeparatorOriginalHiddenKey);
-    BOOL shouldHide = NeoWCEnhancementEnabled(NeoWCHideSeparatorLinesKey) && NeoWCViewLooksLikeGlobalSeparator(self);
+    NSNumber *originalHidden = objc_getAssociatedObject(self, &WCAtlasSeparatorOriginalHiddenKey);
+    BOOL shouldHide = WCAtlasEnhancementEnabled(WCAtlasHideSeparatorLinesKey) && WCAtlasViewLooksLikeGlobalSeparator(self);
     if (shouldHide) {
         if (!originalHidden) {
             originalHidden = @(self.hidden);
-            objc_setAssociatedObject(self, &NeoWCSeparatorOriginalHiddenKey, originalHidden, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, &WCAtlasSeparatorOriginalHiddenKey, originalHidden, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         if (!self.hidden) self.hidden = YES;
     } else if (originalHidden) {
         self.hidden = originalHidden.boolValue;
-        objc_setAssociatedObject(self, &NeoWCSeparatorOriginalHiddenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(self, &WCAtlasSeparatorOriginalHiddenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
@@ -6507,7 +6507,7 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 
 - (void)viewDidLoad {
     %orig;
-    NeoWCRegisterPlugin();
+    WCAtlasRegisterPlugin();
 }
 
 %end
@@ -6516,25 +6516,25 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 
 - (void)viewDidLoad {
     %orig;
-    NeoWCApplyAutoOriginalSelection(self, @"m_originImageCheck");
-    NeoWCApplyAutoCombineSendSelection(self);
+    WCAtlasApplyAutoOriginalSelection(self, @"m_originImageCheck");
+    WCAtlasApplyAutoCombineSendSelection(self);
 }
 
 - (void)initBottomBar {
     %orig;
-    NeoWCApplyAutoCombineSendSelection(self);
+    WCAtlasApplyAutoCombineSendSelection(self);
 }
 
 - (void)initCombineSendViewIfNeeded {
     %orig;
-    NeoWCApplyAutoOriginalSelection(self, @"m_originImageCheck");
-    NeoWCApplyAutoCombineSendSelection(self);
+    WCAtlasApplyAutoOriginalSelection(self, @"m_originImageCheck");
+    WCAtlasApplyAutoCombineSendSelection(self);
 }
 
 - (void)reloadBottomBar {
     %orig;
-    NeoWCApplyAutoOriginalSelection(self, @"m_originImageCheck");
-    NeoWCApplyAutoCombineSendSelection(self);
+    WCAtlasApplyAutoOriginalSelection(self, @"m_originImageCheck");
+    WCAtlasApplyAutoCombineSendSelection(self);
 }
 
 %end
@@ -6542,27 +6542,27 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 %hook MMAssetTimeLineConfig
 
 - (BOOL)isRetrivingOriginImage {
-    if (NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey)) {
-        NeoWCCompatibilityMarkTriggered(@"moments-original-media");
+    if (WCAtlasEnhancementEnabled(WCAtlasMomentsOriginalMediaPostEnabledKey)) {
+        WCAtlasCompatibilityMarkTriggered(@"moments-original-media");
         return YES;
     }
     return %orig;
 }
 
 - (BOOL)shouldCompressLongImage {
-    return NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey) ? NO : %orig;
+    return WCAtlasEnhancementEnabled(WCAtlasMomentsOriginalMediaPostEnabledKey) ? NO : %orig;
 }
 
 - (CGSize)imageResultSizeForOriginSize:(CGSize)originSize {
-    return NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey) ? originSize : %orig(originSize);
+    return WCAtlasEnhancementEnabled(WCAtlasMomentsOriginalMediaPostEnabledKey) ? originSize : %orig(originSize);
 }
 
 - (CGFloat)compressQuality {
-    return NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey) ? 1.0 : %orig;
+    return WCAtlasEnhancementEnabled(WCAtlasMomentsOriginalMediaPostEnabledKey) ? 1.0 : %orig;
 }
 
 - (BOOL)useHighResolutionImageSize {
-    return NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey) ? YES : %orig;
+    return WCAtlasEnhancementEnabled(WCAtlasMomentsOriginalMediaPostEnabledKey) ? YES : %orig;
 }
 
 %end
@@ -6570,17 +6570,17 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 %hook WCNewCommitViewController
 
 - (void)OnDone {
-    NeoWCSetMomentsCommitImagesOriginal(self);
+    WCAtlasSetMomentsCommitImagesOriginal(self);
     %orig;
 }
 
 - (void)commonUpdateWCUploadTask:(id)task {
     %orig(task);
-    NeoWCSetMomentsOriginalFlag(task);
+    WCAtlasSetMomentsOriginalFlag(task);
 }
 
 - (void)processUploadTask:(id)task {
-    NeoWCSetMomentsOriginalFlag(task);
+    WCAtlasSetMomentsOriginalFlag(task);
     %orig(task);
 }
 
@@ -6590,25 +6590,25 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 
 - (void)viewDidLoad {
     %orig;
-    NeoWCApplyAutoOriginalSelection(self, @"_originImageCheck");
-    NeoWCApplyAutoCombineSendSelection(self);
+    WCAtlasApplyAutoOriginalSelection(self, @"_originImageCheck");
+    WCAtlasApplyAutoCombineSendSelection(self);
 }
 
 - (void)initBottomBar {
     %orig;
-    NeoWCApplyAutoCombineSendSelection(self);
+    WCAtlasApplyAutoCombineSendSelection(self);
 }
 
 - (void)initCombineSendViewIfNeeded {
     %orig;
-    NeoWCApplyAutoOriginalSelection(self, @"_originImageCheck");
-    NeoWCApplyAutoCombineSendSelection(self);
+    WCAtlasApplyAutoOriginalSelection(self, @"_originImageCheck");
+    WCAtlasApplyAutoCombineSendSelection(self);
 }
 
 - (void)reloadSelectedCollectionView {
     %orig;
-    NeoWCApplyAutoOriginalSelection(self, @"_originImageCheck");
-    NeoWCApplyAutoCombineSendSelection(self);
+    WCAtlasApplyAutoOriginalSelection(self, @"_originImageCheck");
+    WCAtlasApplyAutoCombineSendSelection(self);
 }
 
 %end
@@ -6618,7 +6618,7 @@ static BOOL NeoWCViewLooksLikeGlobalSeparator(UIView *view) {
 - (void)userNotificationCenter:(id)center
 didReceiveNotificationResponse:(id)response
          withCompletionHandler:(void (^)(void))completionHandler {
-    if (NeoWCHandleNotificationResponse(response, completionHandler)) {
+    if (WCAtlasHandleNotificationResponse(response, completionHandler)) {
         return;
     }
     %orig;
@@ -6630,32 +6630,32 @@ didReceiveNotificationResponse:(id)response
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
     %orig(application);
-    NeoWCMomentsPrewarmCancel();
-    NeoWCBackgroundKeeperEnterBackground();
+    WCAtlasMomentsPrewarmCancel();
+    WCAtlasBackgroundKeeperEnterBackground();
 }
 
 - (void)applicationWillEnterForeground:(UIApplication *)application {
     %orig(application);
-    NeoWCBackgroundKeeperWillEnterForeground();
+    WCAtlasBackgroundKeeperWillEnterForeground();
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
     %orig(application);
-    NeoWCMomentsPrewarmIfNeeded();
-    NeoWCMomentsReminderTick();
-    NeoWCMomentsInteractionReminderTick();
+    WCAtlasMomentsPrewarmIfNeeded();
+    WCAtlasMomentsReminderTick();
+    WCAtlasMomentsInteractionReminderTick();
 }
 
 - (void)careEnoughForTheLiving {
     %orig;
-    NeoWCMomentsReminderTick();
-    NeoWCMomentsInteractionReminderTick();
+    WCAtlasMomentsReminderTick();
+    WCAtlasMomentsInteractionReminderTick();
 }
 
 - (void)userNotificationCenter:(id)center
 didReceiveNotificationResponse:(id)response
          withCompletionHandler:(void (^)(void))completionHandler {
-    if (NeoWCHandleNotificationResponse(response, completionHandler)) {
+    if (WCAtlasHandleNotificationResponse(response, completionHandler)) {
         return;
     }
     %orig;
@@ -6667,13 +6667,13 @@ didReceiveNotificationResponse:(id)response
 
 - (unsigned int)getUnReadMessageCount {
     unsigned int count = %orig;
-    NeoWCMomentsInteractionObserveUnreadCount(self, count);
+    WCAtlasMomentsInteractionObserveUnreadCount(self, count);
     return count;
 }
 
 - (id)getLastUnReadMessage {
     id message = %orig;
-    NeoWCMomentsInteractionObserveLastUnreadMessage(self, message);
+    WCAtlasMomentsInteractionObserveLastUnreadMessage(self, message);
     return message;
 }
 
@@ -6682,12 +6682,12 @@ didReceiveNotificationResponse:(id)response
 %hook EditImageForwardAndEditLogicController
 
 - (void)OnClickEditImageDoneBarButton {
-    if (NeoWCEnhancementEnabled(NeoWCImageEditQuickSendEnabledKey)) {
-        NeoWCCompatibilityMarkTriggered(@"image-edit");
-        NeoWCCurrentEditImageLogicController = self;
-        (void)NeoWCConversationUserNameForEditLogic(self);
-        (void)NeoWCEditPresenterController(self);
-        objc_setAssociatedObject(self, &NeoWCEditedImageKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (WCAtlasEnhancementEnabled(WCAtlasImageEditQuickSendEnabledKey)) {
+        WCAtlasCompatibilityMarkTriggered(@"image-edit");
+        WCAtlasCurrentEditImageLogicController = self;
+        (void)WCAtlasConversationUserNameForEditLogic(self);
+        (void)WCAtlasEditPresenterController(self);
+        objc_setAssociatedObject(self, &WCAtlasEditedImageKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     %orig;
 }
@@ -6698,23 +6698,23 @@ didReceiveNotificationResponse:(id)response
 
 - (void)setEditedImage:(id)value {
     %orig;
-    if (!NeoWCEnhancementEnabled(NeoWCImageEditQuickSendEnabledKey)) return;
-    UIImage *image = NeoWCImageFromEditValue(value, 0);
-    id logic = NeoWCCurrentEditImageLogicController;
+    if (!WCAtlasEnhancementEnabled(WCAtlasImageEditQuickSendEnabledKey)) return;
+    UIImage *image = WCAtlasImageFromEditValue(value, 0);
+    id logic = WCAtlasCurrentEditImageLogicController;
     if (image && logic) {
-        NeoWCCacheEditedImage(logic, image, @"setEditedImage:");
-        NeoWCResumePendingQuickSendIfReady(logic);
+        WCAtlasCacheEditedImage(logic, image, @"setEditedImage:");
+        WCAtlasResumePendingQuickSendIfReady(logic);
     }
 }
 
 - (void)setEditedImages:(id)value {
     %orig;
-    if (!NeoWCEnhancementEnabled(NeoWCImageEditQuickSendEnabledKey)) return;
-    UIImage *image = NeoWCImageFromEditValue(value, 0);
-    id logic = NeoWCCurrentEditImageLogicController;
+    if (!WCAtlasEnhancementEnabled(WCAtlasImageEditQuickSendEnabledKey)) return;
+    UIImage *image = WCAtlasImageFromEditValue(value, 0);
+    id logic = WCAtlasCurrentEditImageLogicController;
     if (image && logic) {
-        NeoWCCacheEditedImage(logic, image, @"setEditedImages:");
-        NeoWCResumePendingQuickSendIfReady(logic);
+        WCAtlasCacheEditedImage(logic, image, @"setEditedImages:");
+        WCAtlasResumePendingQuickSendIfReady(logic);
     }
 }
 
@@ -6723,10 +6723,10 @@ didReceiveNotificationResponse:(id)response
 %hook WCActionSheet
 
 - (void)showInView:(UIView *)view {
-    id permissionsDataItem = NeoWCPendingMomentsPermissionDataItem;
+    id permissionsDataItem = WCAtlasPendingMomentsPermissionDataItem;
     if (permissionsDataItem) {
         @try {
-            (void)NeoWCConfigureMomentsPermissionsActionSheet(self, permissionsDataItem);
+            (void)WCAtlasConfigureMomentsPermissionsActionSheet(self, permissionsDataItem);
         } @catch (__unused NSException *exception) {
         }
     }
@@ -6734,31 +6734,31 @@ didReceiveNotificationResponse:(id)response
     BOOL isEditedImageMenu = hasForward &&
                              [self isContainButtonTitle:@"收藏"] &&
                              [self isContainButtonTitle:@"保存图片"];
-    if (NeoWCEnhancementEnabled(NeoWCImageEditQuickSendEnabledKey) && isEditedImageMenu && ![self isContainButtonTitle:@"发送到当前会话"]) {
+    if (WCAtlasEnhancementEnabled(WCAtlasImageEditQuickSendEnabledKey) && isEditedImageMenu && ![self isContainButtonTitle:@"发送到当前会话"]) {
         Class logicClass = objc_getClass("EditImageForwardAndEditLogicController");
-        id extendedDelegate = NeoWCTweakSafeValue(self, @"delegateEx");
-        id delegate = NeoWCTweakSafeValue(self, @"delegate");
+        id extendedDelegate = WCAtlasTweakSafeValue(self, @"delegateEx");
+        id delegate = WCAtlasTweakSafeValue(self, @"delegate");
         id logic = logicClass && [extendedDelegate isKindOfClass:logicClass]
             ? extendedDelegate
             : (logicClass && [delegate isKindOfClass:logicClass] ? delegate : nil);
-        NSString *conversationUserName = NeoWCConversationUserNameForEditLogic(logic);
-        (void)NeoWCEditPresenterController(logic);
-        id conversationContact = NeoWCContactForUserName(conversationUserName);
+        NSString *conversationUserName = WCAtlasConversationUserNameForEditLogic(logic);
+        (void)WCAtlasEditPresenterController(logic);
+        id conversationContact = WCAtlasContactForUserName(conversationUserName);
         if (logic && conversationUserName.length > 0 && conversationContact) {
             __weak id weakLogic = logic;
             [self addButtonWithTitle:@"发送到当前会话" eventAction:^{
                 id strongLogic = weakLogic;
-                if (!strongLogic) { NeoWCShowTransientMessage(@"发送失败：图片编辑会话已经结束", NO); return; }
+                if (!strongLogic) { WCAtlasShowTransientMessage(@"发送失败：图片编辑会话已经结束", NO); return; }
                 // WeChat writes the final image shortly after the action callback on
                 // some versions. Send immediately when ready, otherwise resume from
                 // EditImageAttr's setter without leaving the official editor flow.
-                NeoWCBeginQuickSend(strongLogic);
+                WCAtlasBeginQuickSend(strongLogic);
             }];
         }
     }
-    NeoWCPrepareMomentsHighQualityMenu(self);
+    WCAtlasPrepareMomentsHighQualityMenu(self);
     %orig;
-    if (NeoWCPendingMomentsPermissionDataItem == permissionsDataItem) NeoWCPendingMomentsPermissionDataItem = nil;
+    if (WCAtlasPendingMomentsPermissionDataItem == permissionsDataItem) WCAtlasPendingMomentsPermissionDataItem = nil;
 }
 
 %end
@@ -6766,13 +6766,13 @@ didReceiveNotificationResponse:(id)response
 %hook WCTimeLineViewController
 
 - (void)showPhotoAlert:(id)context {
-    id previousController = NeoWCPendingMomentsCameraController;
-    NeoWCPendingMomentsCameraController = NeoWCEnhancementEnabled(NeoWCMomentsOriginalMediaPostEnabledKey)
+    id previousController = WCAtlasPendingMomentsCameraController;
+    WCAtlasPendingMomentsCameraController = WCAtlasEnhancementEnabled(WCAtlasMomentsOriginalMediaPostEnabledKey)
         ? self : nil;
     @try {
         %orig(context);
     } @finally {
-        NeoWCPendingMomentsCameraController = previousController;
+        WCAtlasPendingMomentsCameraController = previousController;
     }
 }
 
@@ -6781,18 +6781,18 @@ didReceiveNotificationResponse:(id)response
 %hook WCCommentDetailViewControllerFB
 
 - (void)viewDidLoad {
-    NeoWCActiveMomentsDetailController = self;
+    WCAtlasActiveMomentsDetailController = self;
     %orig;
 }
 
 - (void)viewWillAppear:(BOOL)animated {
-    NeoWCActiveMomentsDetailController = self;
+    WCAtlasActiveMomentsDetailController = self;
     %orig(animated);
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
-    if (NeoWCActiveMomentsDetailController == self) NeoWCActiveMomentsDetailController = nil;
+    if (WCAtlasActiveMomentsDetailController == self) WCAtlasActiveMomentsDetailController = nil;
 }
 
 %end
@@ -6800,23 +6800,23 @@ didReceiveNotificationResponse:(id)response
 %hook SharePreConfirmSheetView
 
 - (void)onConfirmButtonClick {
-    id owner = NeoWCTweakSafeValue(self, @"delegate") ?: NeoWCTweakSafeValue(self, @"msgLogicController");
-    for (id session in [NeoWCActiveQuickSendSessions() copy]) {
-        if (NeoWCTweakSafeValue(session, @"forwardLogic") == owner) {
-            NeoWCTweakSetValue(session, @"sendButtonTapped", @YES);
+    id owner = WCAtlasTweakSafeValue(self, @"delegate") ?: WCAtlasTweakSafeValue(self, @"msgLogicController");
+    for (id session in [WCAtlasActiveQuickSendSessions() copy]) {
+        if (WCAtlasTweakSafeValue(session, @"forwardLogic") == owner) {
+            WCAtlasTweakSetValue(session, @"sendButtonTapped", @YES);
         }
     }
     %orig;
 }
 
 - (void)onCancelButtonClick {
-    id owner = NeoWCTweakSafeValue(self, @"delegate") ?: NeoWCTweakSafeValue(self, @"msgLogicController");
-    NSArray *sessions = [NeoWCActiveQuickSendSessions() copy];
+    id owner = WCAtlasTweakSafeValue(self, @"delegate") ?: WCAtlasTweakSafeValue(self, @"msgLogicController");
+    NSArray *sessions = [WCAtlasActiveQuickSendSessions() copy];
     %orig;
     dispatch_async(dispatch_get_main_queue(), ^{
         for (id session in sessions) {
-            if (![NeoWCTweakSafeValue(session, @"finished") boolValue] &&
-                NeoWCTweakSafeValue(session, @"forwardLogic") == owner) {
+            if (![WCAtlasTweakSafeValue(session, @"finished") boolValue] &&
+                WCAtlasTweakSafeValue(session, @"forwardLogic") == owner) {
                 SEL selector = NSSelectorFromString(@"OnForwardMessageCancel:");
                 if ([session respondsToSelector:selector]) {
                     ((void (*)(id, SEL, id))objc_msgSend)(session, selector, owner);
@@ -6832,20 +6832,20 @@ didReceiveNotificationResponse:(id)response
 
 - (void)addFunctionSection {
     %orig;
-    NeoWCInstallPluginManagerEntry(self);
-    NeoWCCompatibilityMarkTriggered(@"plugin-manager");
+    WCAtlasInstallPluginManagerEntry(self);
+    WCAtlasCompatibilityMarkTriggered(@"plugin-manager");
 }
 
 %new
 - (void)pushPluginController {
-    NeoWCPushPluginManager(self);
+    WCAtlasPushPluginManager(self);
 }
 
 - (void)addCardsIfNeededToSection:(id)section {
     (void)section;
-    NeoWCRecordMeMenuTitle(@"小店与卡包");
-    if (NeoWCHidesMeMenuTitle(@"小店与卡包")) {
-        NeoWCCompatibilityMarkTriggered(@"me-menu-visibility");
+    WCAtlasRecordMeMenuTitle(@"小店与卡包");
+    if (WCAtlasHidesMeMenuTitle(@"小店与卡包")) {
+        WCAtlasCompatibilityMarkTriggered(@"me-menu-visibility");
         return;
     }
     %orig;
@@ -6853,18 +6853,18 @@ didReceiveNotificationResponse:(id)response
 
 - (void)addEmoticonsIfNeededToSection:(id)section {
     (void)section;
-    NeoWCRecordMeMenuTitle(@"表情");
-    if (NeoWCHidesMeMenuTitle(@"表情")) {
-        NeoWCCompatibilityMarkTriggered(@"me-menu-visibility");
+    WCAtlasRecordMeMenuTitle(@"表情");
+    if (WCAtlasHidesMeMenuTitle(@"表情")) {
+        WCAtlasCompatibilityMarkTriggered(@"me-menu-visibility");
         return;
     }
     %orig;
 }
 
 - (id)createFinderEntranceCellConfig:(CGRect)frame {
-    NeoWCRecordMeMenuTitle(@"作品");
-    if (NeoWCHidesMeMenuTitle(@"作品")) {
-        NeoWCCompatibilityMarkTriggered(@"me-menu-visibility");
+    WCAtlasRecordMeMenuTitle(@"作品");
+    if (WCAtlasHidesMeMenuTitle(@"作品")) {
+        WCAtlasCompatibilityMarkTriggered(@"me-menu-visibility");
         return nil;
     }
     return %orig(frame);
@@ -6876,23 +6876,23 @@ didReceiveNotificationResponse:(id)response
 
 - (NSArray *)operationMenuItems {
     NSArray *originalItems = %orig;
-    originalItems = NeoWCOperationMenuItemsWithQuickReply(self, originalItems);
-    if (!NeoWCEnhancementEnabled(NeoWCVoiceForwardEnabledKey) ||
+    originalItems = WCAtlasOperationMenuItemsWithQuickReply(self, originalItems);
+    if (!WCAtlasEnhancementEnabled(WCAtlasVoiceForwardEnabledKey) ||
         ![originalItems isKindOfClass:[NSArray class]]) return originalItems;
     for (id item in originalItems) {
-        if ([[NeoWCTweakSafeValue(item, @"title") description] containsString:@"转发"]) return originalItems;
+        if ([[WCAtlasTweakSafeValue(item, @"title") description] containsString:@"转发"]) return originalItems;
     }
     SEL selector = NSSelectorFromString(@"forwardMenuItem");
     if (![self respondsToSelector:selector]) return originalItems;
     id forwardItem = ((id (*)(id, SEL))objc_msgSend)(self, selector);
     if (!forwardItem) return originalItems;
-    NeoWCCompatibilityMarkTriggered(@"voice-forward");
+    WCAtlasCompatibilityMarkTriggered(@"voice-forward");
     return [originalItems arrayByAddingObject:forwardItem];
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-    if (action == @selector(neowc_addToQuickReply:)) return NeoWCMessageCanAddToQuickReply(NeoWCMessageWrapForCell(self));
-    if (NeoWCEnhancementEnabled(NeoWCVoiceForwardEnabledKey) &&
+    if (action == @selector(wcatlas_addToQuickReply:)) return WCAtlasMessageCanAddToQuickReply(WCAtlasMessageWrapForCell(self));
+    if (WCAtlasEnhancementEnabled(WCAtlasVoiceForwardEnabledKey) &&
         (action == NSSelectorFromString(@"onForward:") ||
          action == NSSelectorFromString(@"doForward") ||
          action == NSSelectorFromString(@"onClickForwardMenu:"))) {
@@ -6902,15 +6902,15 @@ didReceiveNotificationResponse:(id)response
 }
 
 %new
-- (void)neowc_addToQuickReply:(id)sender {
+- (void)wcatlas_addToQuickReply:(id)sender {
     (void)sender;
-    NeoWCAddMessageToQuickReply(self);
+    WCAtlasAddMessageToQuickReply(self);
 }
 
 - (void)layoutSubviews {
     %orig;
-    id message = NeoWCImageJokerMessageForObject(self);
-    NeoWCScheduleVoiceTranscription(self, message);
+    id message = WCAtlasImageJokerMessageForObject(self);
+    WCAtlasScheduleVoiceTranscription(self, message);
 }
 
 %end
@@ -6918,7 +6918,7 @@ didReceiveNotificationResponse:(id)response
 %hook ForwardMessageLogicController
 
 - (void)ForwardMsg:(id)message ToContact:(id)contact {
-    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(message ? @[message] : @[],
+    NSArray *remaining = WCAtlasForwardMessagesBySendingVoices(message ? @[message] : @[],
                                                              contact ? @[contact] : @[],
                                                              NULL);
     if (remaining.count == 0 && message) return;
@@ -6926,7 +6926,7 @@ didReceiveNotificationResponse:(id)response
 }
 
 - (void)ForwardMsgList:(NSArray *)messages ToContact:(id)contact {
-    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages,
+    NSArray *remaining = WCAtlasForwardMessagesBySendingVoices(messages,
                                                              contact ? @[contact] : @[],
                                                              NULL);
     if (remaining.count == 0 && messages.count > 0) return;
@@ -6934,7 +6934,7 @@ didReceiveNotificationResponse:(id)response
 }
 
 - (void)ForwardMsgList:(NSArray *)messages ToContact:(id)contact batchRevokeScene:(NSInteger)scene {
-    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages,
+    NSArray *remaining = WCAtlasForwardMessagesBySendingVoices(messages,
                                                              contact ? @[contact] : @[],
                                                              NULL);
     if (remaining.count == 0 && messages.count > 0) return;
@@ -6942,7 +6942,7 @@ didReceiveNotificationResponse:(id)response
 }
 
 - (void)ForwardMsgList:(NSArray *)messages ToContact:(id)contact WithRevokeBatchId:(id)batchID {
-    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages,
+    NSArray *remaining = WCAtlasForwardMessagesBySendingVoices(messages,
                                                              contact ? @[contact] : @[],
                                                              NULL);
     if (remaining.count == 0 && messages.count > 0) return;
@@ -6950,13 +6950,13 @@ didReceiveNotificationResponse:(id)response
 }
 
 - (void)forwardMsgList:(NSArray *)messages toContacts:(NSArray *)contacts {
-    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages, contacts, NULL);
+    NSArray *remaining = WCAtlasForwardMessagesBySendingVoices(messages, contacts, NULL);
     if (remaining.count == 0 && messages.count > 0) return;
     %orig(remaining, contacts);
 }
 
 - (void)forwardNoConfirmForMsgList:(NSArray *)messages toContacts:(NSArray *)contacts {
-    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages, contacts, NULL);
+    NSArray *remaining = WCAtlasForwardMessagesBySendingVoices(messages, contacts, NULL);
     if (remaining.count == 0 && messages.count > 0) return;
     %orig(remaining, contacts);
 }
@@ -6964,7 +6964,7 @@ didReceiveNotificationResponse:(id)response
 - (void)forwardNoConfirmForMsgList:(NSArray *)messages
                         toContacts:(NSArray *)contacts
                 withBatchSendScene:(NSInteger)scene {
-    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages, contacts, NULL);
+    NSArray *remaining = WCAtlasForwardMessagesBySendingVoices(messages, contacts, NULL);
     if (remaining.count == 0 && messages.count > 0) return;
     %orig(remaining, contacts, scene);
 }
@@ -6974,9 +6974,9 @@ didReceiveNotificationResponse:(id)response
             toContacts:(NSArray *)contacts
             ignoreTips:(BOOL)ignoreTips {
     NSIndexSet *handled = nil;
-    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages, contacts, &handled);
+    NSArray *remaining = WCAtlasForwardMessagesBySendingVoices(messages, contacts, &handled);
     if (remaining.count == 0 && messages.count > 0) return;
-    %orig(remaining, NeoWCVoiceForwardFilteredOrigins(origins, handled), contacts, ignoreTips);
+    %orig(remaining, WCAtlasVoiceForwardFilteredOrigins(origins, handled), contacts, ignoreTips);
 }
 
 - (void)forwardMsgList:(NSArray *)messages
@@ -6985,10 +6985,10 @@ didReceiveNotificationResponse:(id)response
             ignoreTips:(BOOL)ignoreTips
        showConfirmView:(BOOL)showConfirmView {
     NSIndexSet *handled = nil;
-    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages, contacts, &handled);
+    NSArray *remaining = WCAtlasForwardMessagesBySendingVoices(messages, contacts, &handled);
     if (remaining.count == 0 && messages.count > 0) return;
     %orig(remaining,
-          NeoWCVoiceForwardFilteredOrigins(origins, handled),
+          WCAtlasVoiceForwardFilteredOrigins(origins, handled),
           contacts,
           ignoreTips,
           showConfirmView);
@@ -7001,10 +7001,10 @@ didReceiveNotificationResponse:(id)response
        showConfirmView:(BOOL)showConfirmView
       batchRevokeScene:(NSInteger)scene {
     NSIndexSet *handled = nil;
-    NSArray *remaining = NeoWCForwardMessagesBySendingVoices(messages, contacts, &handled);
+    NSArray *remaining = WCAtlasForwardMessagesBySendingVoices(messages, contacts, &handled);
     if (remaining.count == 0 && messages.count > 0) return;
     %orig(remaining,
-          NeoWCVoiceForwardFilteredOrigins(origins, handled),
+          WCAtlasVoiceForwardFilteredOrigins(origins, handled),
           contacts,
           ignoreTips,
           showConfirmView,
@@ -7016,8 +7016,8 @@ didReceiveNotificationResponse:(id)response
 %hook MMScreenShotViewController
 
 - (void)show {
-    if (NeoWCEnhancementEnabled(NeoWCHideScreenshotForwardKey)) {
-        NeoWCCompatibilityMarkTriggered(@"hide-screenshot-forward");
+    if (WCAtlasEnhancementEnabled(WCAtlasHideScreenshotForwardKey)) {
+        WCAtlasCompatibilityMarkTriggered(@"hide-screenshot-forward");
         return;
     }
     %orig;
@@ -7029,16 +7029,16 @@ didReceiveNotificationResponse:(id)response
 
 - (void)setAccessibilityLabel:(NSString *)label {
     %orig;
-    if ([label isEqualToString:@"免打扰"]) NeoWCUpdateChatMuteImageView(self);
+    if ([label isEqualToString:@"免打扰"]) WCAtlasUpdateChatMuteImageView(self);
 }
 
 - (void)didMoveToWindow {
     %orig;
-    if ([self.accessibilityLabel isEqualToString:@"免打扰"]) NeoWCUpdateChatMuteImageView(self);
+    if ([self.accessibilityLabel isEqualToString:@"免打扰"]) WCAtlasUpdateChatMuteImageView(self);
 }
 
 - (void)setHidden:(BOOL)hidden {
-    if (!hidden && NeoWCShouldKeepManagedChatMuteImageViewHidden(self)) {
+    if (!hidden && WCAtlasShouldKeepManagedChatMuteImageViewHidden(self)) {
         %orig(YES);
         return;
     }
@@ -7047,78 +7047,78 @@ didReceiveNotificationResponse:(id)response
 
 %end
 
-static BaseMsgContentViewController *NeoWCSendConfirmationSourceControllerForTarget(NSString *target) {
-    BaseMsgContentViewController *controller = NeoWCSendConfirmationChatController;
+static BaseMsgContentViewController *WCAtlasSendConfirmationSourceControllerForTarget(NSString *target) {
+    BaseMsgContentViewController *controller = WCAtlasSendConfirmationChatController;
     if (!controller || controller.isMovingFromParentViewController || controller.isBeingDismissed) return nil;
     if (controller.navigationController && controller.navigationController.topViewController != controller) return nil;
     UITabBarController *tabController = controller.tabBarController;
     if (tabController && tabController.selectedViewController != controller &&
         tabController.selectedViewController != controller.navigationController) return nil;
-    return [NeoWCChatUserName(controller) isEqualToString:target] ? controller : nil;
+    return [WCAtlasChatUserName(controller) isEqualToString:target] ? controller : nil;
 }
 
-static UIViewController *NeoWCSendConfirmationPresenterForTarget(NSString *target) {
+static UIViewController *WCAtlasSendConfirmationPresenterForTarget(NSString *target) {
     if (!NSThread.isMainThread || UIApplication.sharedApplication.applicationState != UIApplicationStateActive ||
-        target.length == 0 || !NeoWCSendConfirmationIsProtectedConversation(target)) return nil;
-    BaseMsgContentViewController *source = NeoWCSendConfirmationSourceControllerForTarget(target);
+        target.length == 0 || !WCAtlasSendConfirmationIsProtectedConversation(target)) return nil;
+    BaseMsgContentViewController *source = WCAtlasSendConfirmationSourceControllerForTarget(target);
     if (!source) return nil;
     UIViewController *presentationRoot = source.tabBarController ?: source.navigationController ?: source;
     return presentationRoot.view.window ? presentationRoot : nil;
 }
 
-static NSString *NeoWCSendConfirmationTextSummary(id wrap) {
-    NSString *content = NeoWCTweakSafeValue(wrap, @"m_nsContent");
+static NSString *WCAtlasSendConfirmationTextSummary(id wrap) {
+    NSString *content = WCAtlasTweakSafeValue(wrap, @"m_nsContent");
     if (![content isKindOfClass:NSString.class]) content = @"";
     if (content.length > 60) content = [[content substringToIndex:60] stringByAppendingString:@"…"];
     return content.length > 0 ? [NSString stringWithFormat:@"文字：%@", content] : @"即将发送文字消息。";
 }
 
-static BOOL NeoWCSendConfirmationMessageIsAppEmoticon(id wrap) {
-    if ([NeoWCTweakSafeValue(wrap, @"m_uiMessageType") integerValue] != 0x31) return NO;
-    NSString *md5 = NeoWCTweakSafeValue(wrap, @"m_nsEmoticonMD5");
+static BOOL WCAtlasSendConfirmationMessageIsAppEmoticon(id wrap) {
+    if ([WCAtlasTweakSafeValue(wrap, @"m_uiMessageType") integerValue] != 0x31) return NO;
+    NSString *md5 = WCAtlasTweakSafeValue(wrap, @"m_nsEmoticonMD5");
     if ([md5 isKindOfClass:NSString.class] && md5.length > 0) return YES;
-    NSString *content = NeoWCTweakSafeValue(wrap, @"m_nsContent");
+    NSString *content = WCAtlasTweakSafeValue(wrap, @"m_nsContent");
     if (![content isKindOfClass:NSString.class] || content.length == 0) return NO;
     return [content rangeOfString:@"<emoticonmd5>" options:NSCaseInsensitiveSearch].location != NSNotFound ||
            [content rangeOfString:@"<emoji" options:NSCaseInsensitiveSearch].location != NSNotFound;
 }
 
-static BOOL NeoWCSendConfirmationValidateTarget(NSString *target) {
+static BOOL WCAtlasSendConfirmationValidateTarget(NSString *target) {
     return UIApplication.sharedApplication.applicationState == UIApplicationStateActive &&
-           NeoWCSendConfirmationIsProtectedConversation(target) &&
-           NeoWCSendConfirmationSourceControllerForTarget(target) != nil;
+           WCAtlasSendConfirmationIsProtectedConversation(target) &&
+           WCAtlasSendConfirmationSourceControllerForTarget(target) != nil;
 }
 
-static void NeoWCArmImageSendConfirmationBypass(NSString *target) {
-    NeoWCSendConfirmationImageBypassUsername = [target copy];
-    NeoWCSendConfirmationImageBypassDeadline = CACurrentMediaTime() + 3.0;
+static void WCAtlasArmImageSendConfirmationBypass(NSString *target) {
+    WCAtlasSendConfirmationImageBypassUsername = [target copy];
+    WCAtlasSendConfirmationImageBypassDeadline = CACurrentMediaTime() + 3.0;
 }
 
-static BOOL NeoWCConsumeImageSendConfirmationBypass(NSString *target) {
+static BOOL WCAtlasConsumeImageSendConfirmationBypass(NSString *target) {
     CFTimeInterval now = CACurrentMediaTime();
     BOOL matches = target.length > 0 &&
-        [NeoWCSendConfirmationImageBypassUsername isEqualToString:target] &&
-        now <= NeoWCSendConfirmationImageBypassDeadline;
-    if (matches || now > NeoWCSendConfirmationImageBypassDeadline) {
-        NeoWCSendConfirmationImageBypassUsername = nil;
-        NeoWCSendConfirmationImageBypassDeadline = 0.0;
+        [WCAtlasSendConfirmationImageBypassUsername isEqualToString:target] &&
+        now <= WCAtlasSendConfirmationImageBypassDeadline;
+    if (matches || now > WCAtlasSendConfirmationImageBypassDeadline) {
+        WCAtlasSendConfirmationImageBypassUsername = nil;
+        WCAtlasSendConfirmationImageBypassDeadline = 0.0;
     }
     return matches;
 }
 
-static void NeoWCArmVideoSendConfirmationBypass(NSString *target) {
-    NeoWCSendConfirmationVideoBypassUsername = [target copy];
-    NeoWCSendConfirmationVideoBypassDeadline = CACurrentMediaTime() + 3.0;
+static void WCAtlasArmVideoSendConfirmationBypass(NSString *target) {
+    WCAtlasSendConfirmationVideoBypassUsername = [target copy];
+    WCAtlasSendConfirmationVideoBypassDeadline = CACurrentMediaTime() + 3.0;
 }
 
-static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
+static BOOL WCAtlasConsumeVideoSendConfirmationBypass(NSString *target) {
     CFTimeInterval now = CACurrentMediaTime();
     BOOL matches = target.length > 0 &&
-        [NeoWCSendConfirmationVideoBypassUsername isEqualToString:target] &&
-        now <= NeoWCSendConfirmationVideoBypassDeadline;
-    if (matches || now > NeoWCSendConfirmationVideoBypassDeadline) {
-        NeoWCSendConfirmationVideoBypassUsername = nil;
-        NeoWCSendConfirmationVideoBypassDeadline = 0.0;
+        [WCAtlasSendConfirmationVideoBypassUsername isEqualToString:target] &&
+        now <= WCAtlasSendConfirmationVideoBypassDeadline;
+    if (matches || now > WCAtlasSendConfirmationVideoBypassDeadline) {
+        WCAtlasSendConfirmationVideoBypassUsername = nil;
+        WCAtlasSendConfirmationVideoBypassDeadline = 0.0;
     }
     return matches;
 }
@@ -7128,16 +7128,16 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
 - (void)didMoveToWindow {
     %orig;
     if (self.window) {
-        NeoWCApplyChatInputRoundingToToolView(self);
+        WCAtlasApplyChatInputRoundingToToolView(self);
     }
-    NeoWCSynchronizeQuickReplyPlusGesture(self);
+    WCAtlasSynchronizeQuickReplyPlusGesture(self);
 }
 
 %new
-- (void)neowc_handleQuickReplyPlusLongPress:(UILongPressGestureRecognizer *)recognizer {
+- (void)wcatlas_handleQuickReplyPlusLongPress:(UILongPressGestureRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateBegan) return;
     UIView *candidate = [self hitTest:[recognizer locationInView:self] withEvent:nil];
-    UIView *sendButtonView = NeoWCTweakValueForSelectorNames(self, @[@"sendButton", @"_sendButton"]);
+    UIView *sendButtonView = WCAtlasTweakValueForSelectorNames(self, @[@"sendButton", @"_sendButton"]);
     BOOL sendControl = NO;
     while (candidate && candidate != self) {
         if (candidate == sendButtonView) {
@@ -7157,11 +7157,11 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
         candidate = candidate.superview;
     }
     if (sendControl) return;
-    BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
+    BaseMsgContentViewController *controller = WCAtlasResolveVisibleChatController();
     if (!controller.view.window) return;
-    BOOL quickReplyEnabled = NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey);
+    BOOL quickReplyEnabled = WCAtlasEnhancementEnabled(WCAtlasQuickReplyEnabledKey);
     if (quickReplyEnabled) {
-        NeoWCPresentQuickReplyLibrary(controller);
+        WCAtlasPresentQuickReplyLibrary(controller);
     }
 }
 
@@ -7170,17 +7170,17 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
 %hook MMHeadImageView
 
 - (void)setTargetForDoubleClick:(id)target action:(SEL)action {
-    BOOL nativeAssignment = !NeoWCUpdatingAvatarNativeDoubleTap;
+    BOOL nativeAssignment = !WCAtlasUpdatingAvatarNativeDoubleTap;
     if (nativeAssignment) {
         if (target && action) {
-            NeoWCWeakObjectBox *box = [NeoWCWeakObjectBox new];
+            WCAtlasWeakObjectBox *box = [WCAtlasWeakObjectBox new];
             box.object = target;
-            objc_setAssociatedObject(self, &NeoWCAvatarNativeDoubleTapTargetKey, box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            objc_setAssociatedObject(self, &NeoWCAvatarNativeDoubleTapActionKey,
+            objc_setAssociatedObject(self, &WCAtlasAvatarNativeDoubleTapTargetKey, box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, &WCAtlasAvatarNativeDoubleTapActionKey,
                                      NSStringFromSelector(action), OBJC_ASSOCIATION_COPY_NONATOMIC);
         } else {
-            objc_setAssociatedObject(self, &NeoWCAvatarNativeDoubleTapTargetKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            objc_setAssociatedObject(self, &NeoWCAvatarNativeDoubleTapActionKey, nil, OBJC_ASSOCIATION_COPY_NONATOMIC);
+            objc_setAssociatedObject(self, &WCAtlasAvatarNativeDoubleTapTargetKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, &WCAtlasAvatarNativeDoubleTapActionKey, nil, OBJC_ASSOCIATION_COPY_NONATOMIC);
         }
     }
     %orig(target, action);
@@ -7188,8 +7188,8 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
         __weak MMHeadImageView *weakHeadView = self;
         dispatch_async(dispatch_get_main_queue(), ^{
             MMHeadImageView *headView = weakHeadView;
-            CommonMessageCellView *cell = headView ? NeoWCAvatarMessageCellForView(headView) : nil;
-            if (cell.window) NeoWCSynchronizeAvatarQuickGesture(cell);
+            CommonMessageCellView *cell = headView ? WCAtlasAvatarMessageCellForView(headView) : nil;
+            if (cell.window) WCAtlasSynchronizeAvatarQuickGesture(cell);
         });
     }
 }
@@ -7199,35 +7199,35 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
     __weak MMHeadImageView *weakHeadView = self;
     dispatch_async(dispatch_get_main_queue(), ^{
         MMHeadImageView *headView = weakHeadView;
-        CommonMessageCellView *cell = headView ? NeoWCAvatarMessageCellForView(headView) : nil;
-        if (cell.window) NeoWCSynchronizeAvatarQuickGesture(cell);
+        CommonMessageCellView *cell = headView ? WCAtlasAvatarMessageCellForView(headView) : nil;
+        if (cell.window) WCAtlasSynchronizeAvatarQuickGesture(cell);
     });
 }
 
 - (void)layoutSubviews {
     %orig;
-    if (NeoWCHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
-        id imageView = NeoWCTweakValueForSelectorNames(self, @[@"headImageView"]);
+    if (WCAtlasHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
+        id imageView = WCAtlasTweakValueForSelectorNames(self, @[@"headImageView"]);
         if ([imageView isKindOfClass:UIImageView.class]) {
             ((UIImageView *)imageView).contentMode = UIViewContentModeScaleAspectFit;
         }
     }
-    NeoWCApplyGlobalAvatarRoundingToHeadView(self);
+    WCAtlasApplyGlobalAvatarRoundingToHeadView(self);
 }
 
 - (void)didMoveToWindow {
     %orig;
-    NeoWCApplyGlobalAvatarRoundingToHeadView(self);
-    CommonMessageCellView *cell = NeoWCAvatarMessageCellForView(self);
-    if (cell.window) NeoWCSynchronizeAvatarQuickGesture(cell);
+    WCAtlasApplyGlobalAvatarRoundingToHeadView(self);
+    CommonMessageCellView *cell = WCAtlasAvatarMessageCellForView(self);
+    if (cell.window) WCAtlasSynchronizeAvatarQuickGesture(cell);
 }
 
 - (void)setConerSize:(unsigned int)cornerSize {
-    if (NeoWCHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
+    if (WCAtlasHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
         %orig(cornerSize);
         return;
     }
-    %orig(NeoWCGlobalAvatarScaledCornerSize(cornerSize));
+    %orig(WCAtlasGlobalAvatarScaledCornerSize(cornerSize));
 }
 
 %end
@@ -7236,26 +7236,26 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
 
 - (void)layoutSubviews {
     %orig;
-    if (NeoWCHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
-        id imageView = NeoWCTweakValueForSelectorNames(self, @[@"headImageView"]);
+    if (WCAtlasHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
+        id imageView = WCAtlasTweakValueForSelectorNames(self, @[@"headImageView"]);
         if ([imageView isKindOfClass:UIImageView.class]) {
             ((UIImageView *)imageView).contentMode = UIViewContentModeScaleAspectFit;
         }
     }
-    NeoWCApplyGlobalAvatarRoundingToHeadView(self);
+    WCAtlasApplyGlobalAvatarRoundingToHeadView(self);
 }
 
 - (void)didMoveToWindow {
     %orig;
-    NeoWCApplyGlobalAvatarRoundingToHeadView(self);
+    WCAtlasApplyGlobalAvatarRoundingToHeadView(self);
 }
 
 - (void)setConerSize:(unsigned int)cornerSize {
-    if (NeoWCHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
+    if (WCAtlasHeadViewIsExcludedFromGlobalAvatarRounding(self)) {
         %orig(cornerSize);
         return;
     }
-    %orig(NeoWCGlobalAvatarScaledCornerSize(cornerSize));
+    %orig(WCAtlasGlobalAvatarScaledCornerSize(cornerSize));
 }
 
 %end
@@ -7268,14 +7268,14 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
 
 - (void)didMoveToWindow {
     %orig;
-    NeoWCSynchronizeInputSwipeActions(self);
+    WCAtlasSynchronizeInputSwipeActions(self);
 }
 
 %new
-- (void)neowc_handleInputSwipeLeft:(UISwipeGestureRecognizer *)recognizer {
-    if (recognizer.state != UIGestureRecognizerStateEnded || !NeoWCEnhancementEnabled(NeoWCInputSwipeActionsEnabledKey)) return;
-    UITextView *textView = NeoWCInnerTextView(self);
-    NeoWCTweakSetValue(self, @"text", @"");
+- (void)wcatlas_handleInputSwipeLeft:(UISwipeGestureRecognizer *)recognizer {
+    if (recognizer.state != UIGestureRecognizerStateEnded || !WCAtlasEnhancementEnabled(WCAtlasInputSwipeActionsEnabledKey)) return;
+    UITextView *textView = WCAtlasInnerTextView(self);
+    WCAtlasTweakSetValue(self, @"text", @"");
     if (textView) {
         textView.text = @"";
         textView.selectedRange = NSMakeRange(0, 0);
@@ -7285,9 +7285,9 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
 }
 
 %new
-- (void)neowc_handleInputSwipeRight:(UISwipeGestureRecognizer *)recognizer {
-    if (recognizer.state != UIGestureRecognizerStateEnded || !NeoWCEnhancementEnabled(NeoWCInputSwipeActionsEnabledKey)) return;
-    UITextView *textView = NeoWCInnerTextView(self);
+- (void)wcatlas_handleInputSwipeRight:(UISwipeGestureRecognizer *)recognizer {
+    if (recognizer.state != UIGestureRecognizerStateEnded || !WCAtlasEnhancementEnabled(WCAtlasInputSwipeActionsEnabledKey)) return;
+    UITextView *textView = WCAtlasInnerTextView(self);
     if (textView) {
         [textView becomeFirstResponder];
         [textView paste:nil];
@@ -7295,32 +7295,32 @@ static BOOL NeoWCConsumeVideoSendConfirmationBypass(NSString *target) {
     }
     NSString *pasteText = UIPasteboard.generalPasteboard.string;
     if (pasteText.length == 0) return;
-    NSString *currentText = NeoWCTweakSafeValue(self, @"text");
+    NSString *currentText = WCAtlasTweakSafeValue(self, @"text");
     if (![currentText isKindOfClass:[NSString class]]) currentText = @"";
-    NeoWCTweakSetValue(self, @"text", [currentText stringByAppendingString:pasteText]);
+    WCAtlasTweakSetValue(self, @"text", [currentText stringByAppendingString:pasteText]);
 }
 
 %end
 
-static NSString *NeoWCChatUserName(id controller) {
-    return NeoWCPrivateChatUserName(controller);
+static NSString *WCAtlasChatUserName(id controller) {
+    return WCAtlasPrivateChatUserName(controller);
 }
 
-static MMGrowTextView *NeoWCFindGrowTextView(UIView *view) {
+static MMGrowTextView *WCAtlasFindGrowTextView(UIView *view) {
     if (!view) return nil;
     Class growTextClass = objc_getClass("MMGrowTextView");
     if (growTextClass && [view isKindOfClass:growTextClass]) return (MMGrowTextView *)view;
     for (UIView *subview in view.subviews) {
-        MMGrowTextView *match = NeoWCFindGrowTextView(subview);
+        MMGrowTextView *match = WCAtlasFindGrowTextView(subview);
         if (match) return match;
     }
     return nil;
 }
 
-static BOOL NeoWCInsertQuickReplyText(BaseMsgContentViewController *controller, NSString *text) {
+static BOOL WCAtlasInsertQuickReplyText(BaseMsgContentViewController *controller, NSString *text) {
     if (!controller.view.window || text.length == 0) return NO;
-    MMGrowTextView *growTextView = NeoWCFindGrowTextView(controller.view);
-    UITextView *textView = NeoWCInnerTextView(growTextView);
+    MMGrowTextView *growTextView = WCAtlasFindGrowTextView(controller.view);
+    UITextView *textView = WCAtlasInnerTextView(growTextView);
     if (!growTextView || !textView) return NO;
     UITextRange *selection = textView.selectedTextRange;
     if (selection) {
@@ -7338,102 +7338,102 @@ static BOOL NeoWCInsertQuickReplyText(BaseMsgContentViewController *controller, 
     return YES;
 }
 
-static BOOL NeoWCSendQuickReplyTextNow(BaseMsgContentViewController *controller,
+static BOOL WCAtlasSendQuickReplyTextNow(BaseMsgContentViewController *controller,
                                        NSString *lockedUserName,
                                        NSString *text) {
-    if (!controller.view.window || ![NeoWCChatUserName(controller) isEqualToString:lockedUserName] || text.length == 0) return NO;
+    if (!controller.view.window || ![WCAtlasChatUserName(controller) isEqualToString:lockedUserName] || text.length == 0) return NO;
     Class wrapClass = objc_getClass("CMessageWrap");
     SEL initSelector = sel_registerName("initWithMsgType:");
-    id manager = NeoWCMessageManager();
+    id manager = WCAtlasMessageManager();
     SEL sendSelector = sel_registerName("AddMsg:MsgWrap:");
     if (!wrapClass || ![wrapClass instancesRespondToSelector:initSelector] ||
         !manager || ![manager respondsToSelector:sendSelector]) return NO;
     id wrap = ((id (*)(id, SEL, NSUInteger))objc_msgSend)([wrapClass alloc], initSelector, 1);
     if (!wrap) return NO;
     NSUInteger now = (NSUInteger)NSDate.date.timeIntervalSince1970;
-    NeoWCTweakSetValue(wrap, @"m_nsFromUsr", NeoWCCurrentUserWXID() ?: @"");
-    NeoWCTweakSetValue(wrap, @"m_nsToUsr", lockedUserName);
-    NeoWCTweakSetValue(wrap, @"m_nsContent", text);
-    NeoWCTweakSetValue(wrap, @"m_uiStatus", @1);
-    NeoWCTweakSetValue(wrap, @"m_uiCreateTime", @(now));
-    objc_setAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey, @YES,
+    WCAtlasTweakSetValue(wrap, @"m_nsFromUsr", WCAtlasCurrentUserWXID() ?: @"");
+    WCAtlasTweakSetValue(wrap, @"m_nsToUsr", lockedUserName);
+    WCAtlasTweakSetValue(wrap, @"m_nsContent", text);
+    WCAtlasTweakSetValue(wrap, @"m_uiStatus", @1);
+    WCAtlasTweakSetValue(wrap, @"m_uiCreateTime", @(now));
+    objc_setAssociatedObject(wrap, &WCAtlasSendConfirmationNativeBypassKey, @YES,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     ((void (*)(id, SEL, id, id))objc_msgSend)(manager, sendSelector, lockedUserName, wrap);
     return YES;
 }
 
-static void NeoWCSendQuickReplyTextWithConfirmation(BaseMsgContentViewController *controller,
+static void WCAtlasSendQuickReplyTextWithConfirmation(BaseMsgContentViewController *controller,
                                                      NSString *lockedUserName,
                                                      NSString *text) {
     __weak BaseMsgContentViewController *weakController = controller;
     dispatch_block_t sendAction = ^{
         BaseMsgContentViewController *strongController = weakController;
-        if (!NeoWCSendQuickReplyTextNow(strongController, lockedUserName, text)) {
-            NeoWCShowTransientMessage(@"快捷回复发送失败，会话或发送接口已失效", NO);
+        if (!WCAtlasSendQuickReplyTextNow(strongController, lockedUserName, text)) {
+            WCAtlasShowTransientMessage(@"快捷回复发送失败，会话或发送接口已失效", NO);
         }
     };
     NSString *preview = text.length > 60 ? [[text substringToIndex:60] stringByAppendingString:@"…"] : text;
-    BOOL held = NeoWCPresentSendConfirmationIfNeeded(controller,
+    BOOL held = WCAtlasPresentSendConfirmationIfNeeded(controller,
                                                       lockedUserName,
                                                       [NSString stringWithFormat:@"文字：%@", preview],
                                                       ^BOOL{
         BaseMsgContentViewController *strongController = weakController;
         return strongController.view.window &&
-               [NeoWCChatUserName(strongController) isEqualToString:lockedUserName];
+               [WCAtlasChatUserName(strongController) isEqualToString:lockedUserName];
     }, sendAction);
     if (!held) sendAction();
 }
 
-@interface NeoWCMaterialSendSession : NSObject
+@interface WCAtlasMaterialSendSession : NSObject
 @property (nonatomic, strong) id logic;
 @property (nonatomic, strong) id message;
 @property (nonatomic, strong) id contact;
 @end
 
-@implementation NeoWCMaterialSendSession
+@implementation WCAtlasMaterialSendSession
 @end
 
-static NSMutableSet<NeoWCMaterialSendSession *> *NeoWCActiveMaterialSendSessions(void) {
-    static NSMutableSet<NeoWCMaterialSendSession *> *sessions;
+static NSMutableSet<WCAtlasMaterialSendSession *> *WCAtlasActiveMaterialSendSessions(void) {
+    static NSMutableSet<WCAtlasMaterialSendSession *> *sessions;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{ sessions = [NSMutableSet set]; });
     return sessions;
 }
 
-static BOOL NeoWCSendQuickReplyImageNow(BaseMsgContentViewController *controller,
+static BOOL WCAtlasSendQuickReplyImageNow(BaseMsgContentViewController *controller,
                                         NSString *lockedUserName,
                                         NSString *path) {
-    if (!controller.view.window || ![NeoWCChatUserName(controller) isEqualToString:lockedUserName]) return NO;
+    if (!controller.view.window || ![WCAtlasChatUserName(controller) isEqualToString:lockedUserName]) return NO;
     UIImage *image = [UIImage imageWithContentsOfFile:path];
-    id contact = NeoWCContactForUserName(lockedUserName);
+    id contact = WCAtlasContactForUserName(lockedUserName);
     Class providerClass = objc_getClass("PasteboardMsgProvider");
     Class forwardClass = objc_getClass("ForwardMessageLogicController");
     SEL makeSelector = sel_registerName("GetMessageFromImage:contact:");
     SEL sendSelector = sel_registerName("forwardNoConfirmForMsgList:toContacts:");
     if (!image || !contact || !providerClass || ![providerClass respondsToSelector:makeSelector] || !forwardClass) return NO;
     id message = ((id (*)(id, SEL, id, id))objc_msgSend)(providerClass, makeSelector, image, contact);
-    if (message) objc_setAssociatedObject(message, &NeoWCSendConfirmationNativeBypassKey, @YES,
+    if (message) objc_setAssociatedObject(message, &WCAtlasSendConfirmationNativeBypassKey, @YES,
                                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     id logic = message ? [forwardClass new] : nil;
     if (!logic || ![logic respondsToSelector:sendSelector]) return NO;
-    NeoWCMaterialSendSession *session = [NeoWCMaterialSendSession new];
+    WCAtlasMaterialSendSession *session = [WCAtlasMaterialSendSession new];
     session.logic = logic;
     session.message = message;
     session.contact = contact;
-    [NeoWCActiveMaterialSendSessions() addObject:session];
+    [WCAtlasActiveMaterialSendSessions() addObject:session];
     @try {
         ((void (*)(id, SEL, id, id))objc_msgSend)(logic, sendSelector, @[message], @[contact]);
     } @catch (__unused NSException *exception) {
-        [NeoWCActiveMaterialSendSessions() removeObject:session];
+        [WCAtlasActiveMaterialSendSessions() removeObject:session];
         return NO;
     }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [NeoWCActiveMaterialSendSessions() removeObject:session];
+        [WCAtlasActiveMaterialSendSessions() removeObject:session];
     });
     return YES;
 }
 
-static UIImage *NeoWCQuickReplyVideoThumbnail(NSString *path) {
+static UIImage *WCAtlasQuickReplyVideoThumbnail(NSString *path) {
     AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:path] options:nil];
     AVAssetImageGenerator *generator = [AVAssetImageGenerator assetImageGeneratorWithAsset:asset];
     generator.appliesPreferredTrackTransform = YES;
@@ -7445,9 +7445,9 @@ static UIImage *NeoWCQuickReplyVideoThumbnail(NSString *path) {
     return image;
 }
 
-static id NeoWCQuickReplyVideoLogicController(BaseMsgContentViewController *controller) {
+static id WCAtlasQuickReplyVideoLogicController(BaseMsgContentViewController *controller) {
     if (!controller) return nil;
-    id candidate = NeoWCTweakSafeValue(controller, @"m_delegate");
+    id candidate = WCAtlasTweakSafeValue(controller, @"m_delegate");
     if (!candidate) {
         SEL delegateSelector = sel_registerName("m_delegate");
         if ([controller respondsToSelector:delegateSelector]) {
@@ -7460,7 +7460,7 @@ static id NeoWCQuickReplyVideoLogicController(BaseMsgContentViewController *cont
     }
     if (candidate) return candidate;
 
-    id manager = NeoWCServiceForClass(objc_getClass("MMMsgLogicManager"));
+    id manager = WCAtlasServiceForClass(objc_getClass("MMMsgLogicManager"));
     for (NSString *selectorName in @[@"getTopLogicController", @"topLogicController", @"GetCurrentLogicController"]) {
         SEL selector = NSSelectorFromString(selectorName);
         if (![manager respondsToSelector:selector]) continue;
@@ -7474,24 +7474,24 @@ static id NeoWCQuickReplyVideoLogicController(BaseMsgContentViewController *cont
     return nil;
 }
 
-static BOOL NeoWCSendLocalVideoNow(BaseMsgContentViewController *controller,
+static BOOL WCAtlasSendLocalVideoNow(BaseMsgContentViewController *controller,
                                    NSString *lockedUserName,
                                    NSString *path,
                                    UIImage *providedThumbnail,
                                    NSString **failureReason) {
-    if (!controller.view.window || ![NeoWCChatUserName(controller) isEqualToString:lockedUserName] ||
+    if (!controller.view.window || ![WCAtlasChatUserName(controller) isEqualToString:lockedUserName] ||
         ![NSFileManager.defaultManager fileExistsAtPath:path]) {
         if (failureReason) *failureReason = @"原会话或视频文件已失效";
         return NO;
     }
-    id logicController = NeoWCQuickReplyVideoLogicController(controller);
+    id logicController = WCAtlasQuickReplyVideoLogicController(controller);
     if (!logicController) {
         if (failureReason) *failureReason = @"无法取得当前聊天的视频逻辑控制器";
-        NeoWCLog(@"快捷视频发送失败：BaseMsg=%@，未取得 m_delegate 或 MMMsgLogicManager controller",
+        WCAtlasLog(@"快捷视频发送失败：BaseMsg=%@，未取得 m_delegate 或 MMMsgLogicManager controller",
                  NSStringFromClass(controller.class));
         return NO;
     }
-    id imageController = NeoWCTweakSafeValue(logicController, @"m_imageController");
+    id imageController = WCAtlasTweakSafeValue(logicController, @"m_imageController");
     if (!imageController) {
         SEL getter = sel_registerName("m_imageController");
         if ([logicController respondsToSelector:getter]) {
@@ -7504,81 +7504,81 @@ static BOOL NeoWCSendLocalVideoNow(BaseMsgContentViewController *controller,
     }
     if (!imageController) {
         if (failureReason) *failureReason = @"当前聊天没有可用的视频发送控制器";
-        NeoWCLog(@"快捷视频发送失败：logic=%@，未取得 m_imageController",
+        WCAtlasLog(@"快捷视频发送失败：logic=%@，未取得 m_imageController",
                  NSStringFromClass([logicController class]));
         return NO;
     }
     SEL selector = sel_registerName("onShortVideoTaken:thumbImg:editVideoAttr:paramModel:");
     if (![imageController respondsToSelector:selector]) {
         if (failureReason) *failureReason = @"当前微信的视频发送方法已变化";
-        NeoWCLog(@"快捷视频发送失败：imageController=%@ 不响应 %@",
+        WCAtlasLog(@"快捷视频发送失败：imageController=%@ 不响应 %@",
                  NSStringFromClass([imageController class]), NSStringFromSelector(selector));
         return NO;
     }
     UIImage *thumbnail = providedThumbnail;
-    if (!thumbnail) thumbnail = NeoWCQuickReplyVideoThumbnail(path);
+    if (!thumbnail) thumbnail = WCAtlasQuickReplyVideoThumbnail(path);
     if (!thumbnail) {
         if (failureReason) *failureReason = @"无法生成视频缩略图";
         return NO;
     }
     @try {
-        NeoWCArmVideoSendConfirmationBypass(lockedUserName);
+        WCAtlasArmVideoSendConfirmationBypass(lockedUserName);
         ((void (*)(id, SEL, id, id, id, id))objc_msgSend)(imageController, selector, path, thumbnail, nil, nil);
     } @catch (NSException *exception) {
-        NeoWCSendConfirmationVideoBypassUsername = nil;
-        NeoWCSendConfirmationVideoBypassDeadline = 0.0;
+        WCAtlasSendConfirmationVideoBypassUsername = nil;
+        WCAtlasSendConfirmationVideoBypassDeadline = 0.0;
         if (failureReason) *failureReason = @"调用微信视频发送方法失败";
-        NeoWCLog(@"快捷视频发送异常：%@", exception.reason ?: exception.name);
+        WCAtlasLog(@"快捷视频发送异常：%@", exception.reason ?: exception.name);
         return NO;
     }
     return YES;
 }
 
-static BOOL NeoWCSendQuickReplyVideoNow(BaseMsgContentViewController *controller,
+static BOOL WCAtlasSendQuickReplyVideoNow(BaseMsgContentViewController *controller,
                                         NSString *lockedUserName,
                                         NSString *path,
-                                        NeoWCQuickReplyItem *item,
+                                        WCAtlasQuickReplyItem *item,
                                         NSString **failureReason) {
-    NSString *thumbnailPath = [NeoWCQuickReplyStore.sharedStore absoluteThumbnailPathForItem:item];
+    NSString *thumbnailPath = [WCAtlasQuickReplyStore.sharedStore absoluteThumbnailPathForItem:item];
     UIImage *thumbnail = thumbnailPath.length > 0 ? [UIImage imageWithContentsOfFile:thumbnailPath] : nil;
-    return NeoWCSendLocalVideoNow(controller, lockedUserName, path, thumbnail, failureReason);
+    return WCAtlasSendLocalVideoNow(controller, lockedUserName, path, thumbnail, failureReason);
 }
 
-static BOOL NeoWCSendQuickReplyVoiceNow(BaseMsgContentViewController *controller,
+static BOOL WCAtlasSendQuickReplyVoiceNow(BaseMsgContentViewController *controller,
                                         NSString *lockedUserName,
                                         NSString *path,
-                                        NeoWCQuickReplyItem *item) {
-    if (!controller.view.window || ![NeoWCChatUserName(controller) isEqualToString:lockedUserName] ||
+                                        WCAtlasQuickReplyItem *item) {
+    if (!controller.view.window || ![WCAtlasChatUserName(controller) isEqualToString:lockedUserName] ||
         ![NSFileManager.defaultManager fileExistsAtPath:path]) return NO;
     Class messageWrapClass = objc_getClass("CMessageWrap");
     SEL initializer = sel_registerName("initWithMsgType:");
     if (!messageWrapClass || ![messageWrapClass instancesRespondToSelector:initializer]) return NO;
     id message = ((id (*)(id, SEL, NSUInteger))objc_msgSend)([messageWrapClass alloc], initializer, 34);
     if (!message) return NO;
-    NeoWCTweakSetValue(message, @"m_uiMessageType", @34);
-    id extendInfo = NeoWCTweakSafeValue(message, @"m_extendInfoWithMsgType");
+    WCAtlasTweakSetValue(message, @"m_uiMessageType", @34);
+    id extendInfo = WCAtlasTweakSafeValue(message, @"m_extendInfoWithMsgType");
     NSNumber *voiceTime = [item.metadata[@"voiceTime"] respondsToSelector:@selector(unsignedIntegerValue)] ? item.metadata[@"voiceTime"] : nil;
     NSNumber *voiceFormat = [item.metadata[@"voiceFormat"] respondsToSelector:@selector(unsignedIntegerValue)] ? item.metadata[@"voiceFormat"] : nil;
-    if (voiceTime.unsignedIntegerValue > 0) NeoWCTweakSetValue(extendInfo, @"m_uiVoiceTime", voiceTime);
-    if (voiceFormat) NeoWCTweakSetValue(extendInfo, @"m_uiVoiceFormat", voiceFormat);
-    NeoWCTweakSetValue(extendInfo, @"m_uiVoiceForwardFlag", @1);
-    return NeoWCSendVoiceMessage(message, path, lockedUserName);
+    if (voiceTime.unsignedIntegerValue > 0) WCAtlasTweakSetValue(extendInfo, @"m_uiVoiceTime", voiceTime);
+    if (voiceFormat) WCAtlasTweakSetValue(extendInfo, @"m_uiVoiceFormat", voiceFormat);
+    WCAtlasTweakSetValue(extendInfo, @"m_uiVoiceForwardFlag", @1);
+    return WCAtlasSendVoiceMessage(message, path, lockedUserName);
 }
 
-static id NeoWCResolveQuickReplyMessageReference(NeoWCQuickReplyItem *item) {
+static id WCAtlasResolveQuickReplyMessageReference(WCAtlasQuickReplyItem *item) {
     NSString *sourceConversation = item.sourceConversation;
     unsigned long long localID = [item.metadata[@"localID"] unsignedLongLongValue];
     long long serverID = [item.metadata[@"serverID"] longLongValue];
-    id manager = NeoWCMessageManager();
+    id manager = WCAtlasMessageManager();
     if (!manager || sourceConversation.length == 0) return nil;
     @try {
         SEL localSelector = NSSelectorFromString(@"GetMsg:LocalID:");
         Method localMethod = class_getInstanceMethod([manager class], localSelector);
         if (localID > 0 && localID <= UINT_MAX && [manager respondsToSelector:localSelector] &&
             localMethod && method_getNumberOfArguments(localMethod) == 4 &&
-            NeoWCMethodReturnsObject(localMethod) &&
-            NeoWCMethodArgumentIsObject(localMethod, 2) &&
-            NeoWCMethodArgumentIsIntegerScalar(localMethod, 3)) {
+            WCAtlasMethodReturnsObject(localMethod) &&
+            WCAtlasMethodArgumentIsObject(localMethod, 2) &&
+            WCAtlasMethodArgumentIsIntegerScalar(localMethod, 3)) {
             id message = ((id (*)(id, SEL, id, unsigned int))objc_msgSend)(
                 manager, localSelector, sourceConversation, (unsigned int)localID);
             if (message) return message;
@@ -7587,25 +7587,25 @@ static id NeoWCResolveQuickReplyMessageReference(NeoWCQuickReplyItem *item) {
         Method serverMethod = class_getInstanceMethod([manager class], serverSelector);
         if (serverID != 0 && [manager respondsToSelector:serverSelector] &&
             serverMethod && method_getNumberOfArguments(serverMethod) == 4 &&
-            NeoWCMethodReturnsObject(serverMethod) &&
-            NeoWCMethodArgumentIsObject(serverMethod, 2) &&
-            NeoWCMethodArgumentIsIntegerScalar(serverMethod, 3)) {
+            WCAtlasMethodReturnsObject(serverMethod) &&
+            WCAtlasMethodArgumentIsObject(serverMethod, 2) &&
+            WCAtlasMethodArgumentIsIntegerScalar(serverMethod, 3)) {
             return ((id (*)(id, SEL, id, long long))objc_msgSend)(
                 manager, serverSelector, sourceConversation, serverID);
         }
     } @catch (NSException *exception) {
-        NeoWCLog(@"消息库回查原消息失败：%@", exception.reason ?: exception.name);
+        WCAtlasLog(@"消息库回查原消息失败：%@", exception.reason ?: exception.name);
     }
     return nil;
 }
 
-static BOOL NeoWCForwardQuickReplyMessageNow(BaseMsgContentViewController *controller,
+static BOOL WCAtlasForwardQuickReplyMessageNow(BaseMsgContentViewController *controller,
                                               NSString *targetUserName,
                                               id message) {
     if (!controller.view.window || targetUserName.length == 0 || !message) return NO;
-    NSInteger messageType = [NeoWCTweakSafeValue(message, @"m_uiMessageType") integerValue];
-    if (messageType == 34) return NeoWCRepeatVoiceMessage(message, targetUserName);
-    id contact = NeoWCContactForUserName(targetUserName);
+    NSInteger messageType = [WCAtlasTweakSafeValue(message, @"m_uiMessageType") integerValue];
+    if (messageType == 34) return WCAtlasRepeatVoiceMessage(message, targetUserName);
+    id contact = WCAtlasContactForUserName(targetUserName);
     Class forwardClass = objc_getClass("ForwardMessageLogicController");
     SEL forwardSelector = sel_registerName("forwardNoConfirmForMsgList:toContacts:");
     SEL delegateSelector = sel_registerName("setDelegate:");
@@ -7617,189 +7617,189 @@ static BOOL NeoWCForwardQuickReplyMessageNow(BaseMsgContentViewController *contr
     Method forwardMethod = class_getInstanceMethod(forwardClass, forwardSelector);
     Method delegateMethod = class_getInstanceMethod(forwardClass, delegateSelector);
     if (!forwardMethod || method_getNumberOfArguments(forwardMethod) != 4 ||
-        !NeoWCMethodArgumentIsObject(forwardMethod, 2) ||
-        !NeoWCMethodArgumentIsObject(forwardMethod, 3) ||
+        !WCAtlasMethodArgumentIsObject(forwardMethod, 2) ||
+        !WCAtlasMethodArgumentIsObject(forwardMethod, 3) ||
         !delegateMethod || method_getNumberOfArguments(delegateMethod) != 3 ||
-        !NeoWCMethodArgumentIsObject(delegateMethod, 2)) return NO;
+        !WCAtlasMethodArgumentIsObject(delegateMethod, 2)) return NO;
     id logic = [forwardClass new];
-    NeoWCMessageRepeatSession *session = [NeoWCMessageRepeatSession new];
+    WCAtlasMessageRepeatSession *session = [WCAtlasMessageRepeatSession new];
     session.forwardLogic = logic;
     session.message = message;
     session.contact = contact;
     session.presenter = controller;
     ((void (*)(id, SEL, id))objc_msgSend)(logic, delegateSelector, session);
-    [NeoWCActiveQuickSendSessions() addObject:session];
+    [WCAtlasActiveQuickSendSessions() addObject:session];
     @try {
         ((void (*)(id, SEL, id, id))objc_msgSend)(logic, forwardSelector, @[message], @[contact]);
     } @catch (NSException *exception) {
-        NeoWCLog(@"消息库原消息转发失败：%@", exception.reason ?: exception.name);
+        WCAtlasLog(@"消息库原消息转发失败：%@", exception.reason ?: exception.name);
         [session finishSession];
         return NO;
     }
-    __weak NeoWCMessageRepeatSession *weakSession = session;
+    __weak WCAtlasMessageRepeatSession *weakSession = session;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        NeoWCMessageRepeatSession *activeSession = weakSession;
+        WCAtlasMessageRepeatSession *activeSession = weakSession;
         if (activeSession && !activeSession.finished) [activeSession finishSession];
     });
     return YES;
 }
 
-static void NeoWCSendQuickReplyMessageReferenceWithConfirmation(BaseMsgContentViewController *controller,
+static void WCAtlasSendQuickReplyMessageReferenceWithConfirmation(BaseMsgContentViewController *controller,
                                                                  NSString *lockedUserName,
-                                                                 NeoWCQuickReplyItem *item) {
-    id message = NeoWCResolveQuickReplyMessageReference(item);
+                                                                 WCAtlasQuickReplyItem *item) {
+    id message = WCAtlasResolveQuickReplyMessageReference(item);
     if (!message) {
-        NeoWCShowTransientMessage(@"原聊天消息已不存在，无法发送", NO);
+        WCAtlasShowTransientMessage(@"原聊天消息已不存在，无法发送", NO);
         return;
     }
     __weak BaseMsgContentViewController *weakController = controller;
     dispatch_block_t sendAction = ^{
         BaseMsgContentViewController *strongController = weakController;
-        if (!NeoWCForwardQuickReplyMessageNow(strongController, lockedUserName, message)) {
-            NeoWCShowTransientMessage(@"微信原生转发链暂不支持该消息", NO);
+        if (!WCAtlasForwardQuickReplyMessageNow(strongController, lockedUserName, message)) {
+            WCAtlasShowTransientMessage(@"微信原生转发链暂不支持该消息", NO);
         }
     };
-    BOOL held = NeoWCPresentSendConfirmationIfNeeded(controller, lockedUserName,
+    BOOL held = WCAtlasPresentSendConfirmationIfNeeded(controller, lockedUserName,
                                                       item.text.length ? item.text : @"原消息", ^BOOL{
         BaseMsgContentViewController *strongController = weakController;
         return strongController.view.window &&
-               [NeoWCChatUserName(strongController) isEqualToString:lockedUserName];
+               [WCAtlasChatUserName(strongController) isEqualToString:lockedUserName];
     }, sendAction);
     if (!held) sendAction();
 }
 
-static BOOL NeoWCSubmitSavedGroupInvitation(NSString *groupUserName,
+static BOOL WCAtlasSubmitSavedGroupInvitation(NSString *groupUserName,
                                              NSString *memberUserName,
                                              BOOL *supported) {
-    NeoWCPrivateGroupInvitationResult result =
-        NeoWCPrivateInviteGroupMember(groupUserName, memberUserName);
-    if (supported) *supported = result != NeoWCPrivateGroupInvitationResultUnsupported;
-    return result == NeoWCPrivateGroupInvitationResultSubmitted;
+    WCAtlasPrivateGroupInvitationResult result =
+        WCAtlasPrivateInviteGroupMember(groupUserName, memberUserName);
+    if (supported) *supported = result != WCAtlasPrivateGroupInvitationResultUnsupported;
+    return result == WCAtlasPrivateGroupInvitationResultSubmitted;
 }
 
-static void NeoWCSendQuickReplyGroupInvitationWithConfirmation(BaseMsgContentViewController *controller,
+static void WCAtlasSendQuickReplyGroupInvitationWithConfirmation(BaseMsgContentViewController *controller,
                                                                 NSString *lockedUserName,
-                                                                NeoWCQuickReplyItem *item) {
+                                                                WCAtlasQuickReplyItem *item) {
     NSString *groupUserName = [item.metadata[@"groupUserName"] isKindOfClass:NSString.class]
         ? item.metadata[@"groupUserName"] : item.text;
     if ([lockedUserName hasSuffix:@"@chatroom"] || [lockedUserName isEqualToString:@"filehelper"] ||
-        [lockedUserName isEqualToString:NeoWCCurrentUserWXID()]) {
-        NeoWCShowTransientMessage(@"群聊邀请只能在好友单聊中使用", NO);
+        [lockedUserName isEqualToString:WCAtlasCurrentUserWXID()]) {
+        WCAtlasShowTransientMessage(@"群聊邀请只能在好友单聊中使用", NO);
         return;
     }
     __weak BaseMsgContentViewController *weakController = controller;
     dispatch_block_t sendAction = ^{
         BaseMsgContentViewController *strongController = weakController;
         if (!strongController.view.window ||
-            ![NeoWCChatUserName(strongController) isEqualToString:lockedUserName]) return;
+            ![WCAtlasChatUserName(strongController) isEqualToString:lockedUserName]) return;
         BOOL supported = NO;
-        BOOL accepted = NeoWCSubmitSavedGroupInvitation(groupUserName, lockedUserName, &supported);
-        NeoWCShowTransientMessage(supported ? (accepted ? @"已提交群聊邀请" : @"群聊邀请未被微信接受")
+        BOOL accepted = WCAtlasSubmitSavedGroupInvitation(groupUserName, lockedUserName, &supported);
+        WCAtlasShowTransientMessage(supported ? (accepted ? @"已提交群聊邀请" : @"群聊邀请未被微信接受")
                                              : @"当前微信版本不支持群聊邀请",
                                   accepted);
     };
-    BOOL held = NeoWCPresentSendConfirmationIfNeeded(controller, lockedUserName,
+    BOOL held = WCAtlasPresentSendConfirmationIfNeeded(controller, lockedUserName,
         [NSString stringWithFormat:@"%@：邀请当前好友", item.title.length ? item.title : @"群聊邀请"],
         ^BOOL{
             BaseMsgContentViewController *strongController = weakController;
             return strongController.view.window &&
-                [NeoWCChatUserName(strongController) isEqualToString:lockedUserName];
+                [WCAtlasChatUserName(strongController) isEqualToString:lockedUserName];
         }, sendAction);
     if (!held) sendAction();
 }
 
-static void NeoWCSendQuickReplyMediaWithConfirmation(BaseMsgContentViewController *controller,
+static void WCAtlasSendQuickReplyMediaWithConfirmation(BaseMsgContentViewController *controller,
                                                       NSString *lockedUserName,
-                                                      NeoWCQuickReplyItem *item) {
-    NSString *path = [NeoWCQuickReplyStore.sharedStore absoluteMediaPathForItem:item];
+                                                      WCAtlasQuickReplyItem *item) {
+    NSString *path = [WCAtlasQuickReplyStore.sharedStore absoluteMediaPathForItem:item];
     if (path.length == 0 || ![NSFileManager.defaultManager fileExistsAtPath:path]) {
-        NeoWCShowTransientMessage(@"素材文件已丢失，请重新加入", NO);
+        WCAtlasShowTransientMessage(@"素材文件已丢失，请重新加入", NO);
         return;
     }
     __weak BaseMsgContentViewController *weakController = controller;
     dispatch_block_t sendAction = ^{
         BaseMsgContentViewController *strongController = weakController;
         NSString *failureReason = nil;
-        BOOL sent = item.type == NeoWCQuickReplyTypeImage
-            ? NeoWCSendQuickReplyImageNow(strongController, lockedUserName, path)
-            : (item.type == NeoWCQuickReplyTypeVideo
-                ? NeoWCSendQuickReplyVideoNow(strongController, lockedUserName, path, item, &failureReason)
-                : NeoWCSendQuickReplyVoiceNow(strongController, lockedUserName, path, item));
-        if (!sent) NeoWCShowTransientMessage(failureReason ?: @"微信媒体发送接口已变化，未发送素材", NO);
+        BOOL sent = item.type == WCAtlasQuickReplyTypeImage
+            ? WCAtlasSendQuickReplyImageNow(strongController, lockedUserName, path)
+            : (item.type == WCAtlasQuickReplyTypeVideo
+                ? WCAtlasSendQuickReplyVideoNow(strongController, lockedUserName, path, item, &failureReason)
+                : WCAtlasSendQuickReplyVoiceNow(strongController, lockedUserName, path, item));
+        if (!sent) WCAtlasShowTransientMessage(failureReason ?: @"微信媒体发送接口已变化，未发送素材", NO);
     };
-    BOOL held = NeoWCPresentSendConfirmationIfNeeded(controller,
+    BOOL held = WCAtlasPresentSendConfirmationIfNeeded(controller,
                                                       lockedUserName,
-                                                      item.type == NeoWCQuickReplyTypeImage ? @"图片素材：1 张" :
-                                                        (item.type == NeoWCQuickReplyTypeVideo ? @"视频素材：1 个" : @"语音素材：1 条"),
+                                                      item.type == WCAtlasQuickReplyTypeImage ? @"图片素材：1 张" :
+                                                        (item.type == WCAtlasQuickReplyTypeVideo ? @"视频素材：1 个" : @"语音素材：1 条"),
                                                       ^BOOL{
         BaseMsgContentViewController *strongController = weakController;
         return strongController.view.window &&
-               [NeoWCChatUserName(strongController) isEqualToString:lockedUserName];
+               [WCAtlasChatUserName(strongController) isEqualToString:lockedUserName];
     }, sendAction);
     if (!held) sendAction();
 }
 
-static void NeoWCPresentQuickReplyLibrary(BaseMsgContentViewController *controller) {
-    if (!controller.view.window || !NeoWCEnhancementEnabled(NeoWCQuickReplyEnabledKey)) return;
-    NSString *lockedUserName = [NeoWCChatUserName(controller) copy];
+static void WCAtlasPresentQuickReplyLibrary(BaseMsgContentViewController *controller) {
+    if (!controller.view.window || !WCAtlasEnhancementEnabled(WCAtlasQuickReplyEnabledKey)) return;
+    NSString *lockedUserName = [WCAtlasChatUserName(controller) copy];
     if (lockedUserName.length == 0) {
-        NeoWCShowTransientMessage(@"无法识别当前会话", NO);
+        WCAtlasShowTransientMessage(@"无法识别当前会话", NO);
         return;
     }
     __weak BaseMsgContentViewController *weakController = controller;
-    NeoWCQuickReplyViewController *library = [[NeoWCQuickReplyViewController alloc] initWithSelectionHandler:^(NeoWCQuickReplyItem *item) {
+    WCAtlasQuickReplyViewController *library = [[WCAtlasQuickReplyViewController alloc] initWithSelectionHandler:^(WCAtlasQuickReplyItem *item) {
         BaseMsgContentViewController *strongController = weakController;
-        NSString *currentUserName = NeoWCChatUserName(strongController);
+        NSString *currentUserName = WCAtlasChatUserName(strongController);
         if (!strongController.view.window || ![currentUserName isEqualToString:lockedUserName]) {
-            NeoWCShowTransientMessage(@"原会话已离开，未使用快捷回复", NO);
+            WCAtlasShowTransientMessage(@"原会话已离开，未使用快捷回复", NO);
             return;
         }
-        if (item.type == NeoWCQuickReplyTypeJavaScript) {
-            [NeoWCAutomationManager.sharedManager runJavaScript:item.text
+        if (item.type == WCAtlasQuickReplyTypeJavaScript) {
+            [WCAtlasAutomationManager.sharedManager runJavaScript:item.text
                 targetUserName:lockedUserName completion:^(NSString *result) {
-                    NeoWCShowTransientMessage(result, ![result hasPrefix:@"失败："]);
+                    WCAtlasShowTransientMessage(result, ![result hasPrefix:@"失败："]);
                 }];
             return;
         }
-        if (item.type == NeoWCQuickReplyTypeText) {
-            if (!NeoWCInsertQuickReplyText(strongController, item.text)) {
-                NeoWCShowTransientMessage(@"无法写入当前输入框", NO);
+        if (item.type == WCAtlasQuickReplyTypeText) {
+            if (!WCAtlasInsertQuickReplyText(strongController, item.text)) {
+                WCAtlasShowTransientMessage(@"无法写入当前输入框", NO);
             }
             return;
         }
-        if (item.type == NeoWCQuickReplyTypeMessageReference) {
-            NeoWCSendQuickReplyMessageReferenceWithConfirmation(strongController, lockedUserName, item);
+        if (item.type == WCAtlasQuickReplyTypeMessageReference) {
+            WCAtlasSendQuickReplyMessageReferenceWithConfirmation(strongController, lockedUserName, item);
             return;
         }
-        if (item.type == NeoWCQuickReplyTypeGroupInvitation) {
-            NeoWCSendQuickReplyGroupInvitationWithConfirmation(strongController, lockedUserName, item);
+        if (item.type == WCAtlasQuickReplyTypeGroupInvitation) {
+            WCAtlasSendQuickReplyGroupInvitationWithConfirmation(strongController, lockedUserName, item);
             return;
         }
-        NeoWCSendQuickReplyMediaWithConfirmation(strongController, lockedUserName, item);
-    } directSendHandler:^(NeoWCQuickReplyItem *item) {
+        WCAtlasSendQuickReplyMediaWithConfirmation(strongController, lockedUserName, item);
+    } directSendHandler:^(WCAtlasQuickReplyItem *item) {
         __weak BaseMsgContentViewController *delayedController = weakController;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{
             BaseMsgContentViewController *strongController = delayedController;
             if (!strongController.view.window ||
-                ![NeoWCChatUserName(strongController) isEqualToString:lockedUserName]) {
-                NeoWCShowTransientMessage(@"原会话已离开，未发送快捷回复", NO);
+                ![WCAtlasChatUserName(strongController) isEqualToString:lockedUserName]) {
+                WCAtlasShowTransientMessage(@"原会话已离开，未发送快捷回复", NO);
                 return;
             }
-            if (item.type == NeoWCQuickReplyTypeJavaScript) {
-                [NeoWCAutomationManager.sharedManager runJavaScript:item.text
+            if (item.type == WCAtlasQuickReplyTypeJavaScript) {
+                [WCAtlasAutomationManager.sharedManager runJavaScript:item.text
                     targetUserName:lockedUserName completion:^(NSString *result) {
-                        NeoWCShowTransientMessage(result, ![result hasPrefix:@"失败："]);
+                        WCAtlasShowTransientMessage(result, ![result hasPrefix:@"失败："]);
                     }];
-            } else if (item.type == NeoWCQuickReplyTypeText) {
-                if (item.text.length > 0) NeoWCSendQuickReplyTextWithConfirmation(strongController, lockedUserName, item.text);
-            } else if (item.type == NeoWCQuickReplyTypeMessageReference) {
-                NeoWCSendQuickReplyMessageReferenceWithConfirmation(strongController, lockedUserName, item);
-            } else if (item.type == NeoWCQuickReplyTypeGroupInvitation) {
-                NeoWCSendQuickReplyGroupInvitationWithConfirmation(strongController, lockedUserName, item);
+            } else if (item.type == WCAtlasQuickReplyTypeText) {
+                if (item.text.length > 0) WCAtlasSendQuickReplyTextWithConfirmation(strongController, lockedUserName, item.text);
+            } else if (item.type == WCAtlasQuickReplyTypeMessageReference) {
+                WCAtlasSendQuickReplyMessageReferenceWithConfirmation(strongController, lockedUserName, item);
+            } else if (item.type == WCAtlasQuickReplyTypeGroupInvitation) {
+                WCAtlasSendQuickReplyGroupInvitationWithConfirmation(strongController, lockedUserName, item);
             } else {
-                NeoWCSendQuickReplyMediaWithConfirmation(strongController, lockedUserName, item);
+                WCAtlasSendQuickReplyMediaWithConfirmation(strongController, lockedUserName, item);
             }
         });
     }];
@@ -7808,15 +7808,15 @@ static void NeoWCPresentQuickReplyLibrary(BaseMsgContentViewController *controll
     [controller presentViewController:navigation animated:YES completion:nil];
 }
 
-static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller);
-static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
+static void WCAtlasRestoreChatTopBar(BaseMsgContentViewController *controller);
+static void WCAtlasUpdateChatTopBar(BaseMsgContentViewController *controller);
 
-@interface NeoWCChatTopAvatarHostView : UIView
+@interface WCAtlasChatTopAvatarHostView : UIView
 @property (nonatomic, strong) UIView *sourceView;
 - (instancetype)initWithSourceView:(UIView *)sourceView;
 @end
 
-@implementation NeoWCChatTopAvatarHostView
+@implementation WCAtlasChatTopAvatarHostView
 
 - (instancetype)initWithSourceView:(UIView *)sourceView {
     self = [super initWithFrame:CGRectZero];
@@ -7849,7 +7849,7 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
 
     UIImageView *imageView = [self.sourceView isKindOfClass:UIImageView.class]
         ? (UIImageView *)self.sourceView
-        : NeoWCTweakValueForSelectorNames(self.sourceView, @[@"headImageView", @"imageView"]);
+        : WCAtlasTweakValueForSelectorNames(self.sourceView, @[@"headImageView", @"imageView"]);
     if ([imageView isKindOfClass:UIImageView.class]) {
         imageView.frame = self.sourceView.bounds;
         imageView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -7864,7 +7864,7 @@ static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller);
 
 @end
 
-static CGFloat NeoWCChatTopClampedValue(NSString *key, CGFloat fallback,
+static CGFloat WCAtlasChatTopClampedValue(NSString *key, CGFloat fallback,
                                        CGFloat minimum, CGFloat maximum) {
     id stored = [NSUserDefaults.standardUserDefaults objectForKey:key];
     CGFloat value = [stored respondsToSelector:@selector(doubleValue)] ? [stored doubleValue] : fallback;
@@ -7872,19 +7872,19 @@ static CGFloat NeoWCChatTopClampedValue(NSString *key, CGFloat fallback,
     return MIN(maximum, MAX(minimum, value));
 }
 
-static CGFloat NeoWCChatTopAvatarSize(void) {
-    return NeoWCChatTopClampedValue(NeoWCChatTopBarAvatarSizeKey, 30.0, 24.0, 34.0);
+static CGFloat WCAtlasChatTopAvatarSize(void) {
+    return WCAtlasChatTopClampedValue(WCAtlasChatTopBarAvatarSizeKey, 30.0, 24.0, 34.0);
 }
 
-static CGFloat NeoWCChatTopNicknameSize(void) {
-    return NeoWCChatTopClampedValue(NeoWCChatTopBarNicknameSizeKey, 15.0, 12.0, 18.0);
+static CGFloat WCAtlasChatTopNicknameSize(void) {
+    return WCAtlasChatTopClampedValue(WCAtlasChatTopBarNicknameSizeKey, 15.0, 12.0, 18.0);
 }
 
-static CGFloat NeoWCChatTopLeftCapsuleHeight(void) {
-    return MAX(38.0, NeoWCChatTopAvatarSize() + 8.0);
+static CGFloat WCAtlasChatTopLeftCapsuleHeight(void) {
+    return MAX(38.0, WCAtlasChatTopAvatarSize() + 8.0);
 }
 
-static UIImageView *NeoWCChatTopPlainAvatarImageView(UIImage *image) {
+static UIImageView *WCAtlasChatTopPlainAvatarImageView(UIImage *image) {
     if (![image isKindOfClass:UIImage.class]) return nil;
     UIImageView *imageView = [[UIImageView alloc] initWithImage:image];
     imageView.backgroundColor = UIColor.clearColor;
@@ -7893,21 +7893,21 @@ static UIImageView *NeoWCChatTopPlainAvatarImageView(UIImage *image) {
     return imageView;
 }
 
-static UIView *NeoWCChatTopAvatarView(id contact, NSString *userName) {
+static UIView *WCAtlasChatTopAvatarView(id contact, NSString *userName) {
     // Do not embed MMHeadImageView when the contact image is already available:
     // that host view applies its own crop while being resized and makes square
     // avatars look optically zoomed inside our second circular viewport.
-    UIImage *contactImage = NeoWCPrivateContactAvatarImage(contact);
-    UIImageView *plainImageView = NeoWCChatTopPlainAvatarImageView(contactImage);
+    UIImage *contactImage = WCAtlasPrivateContactAvatarImage(contact);
+    UIImageView *plainImageView = WCAtlasChatTopPlainAvatarImageView(contactImage);
     if (plainImageView) return plainImageView;
 
-    UIView *view = NeoWCPrivateContactAvatarView(contact, userName, NO);
+    UIView *view = WCAtlasPrivateContactAvatarView(contact, userName, NO);
     if (view) {
         id hostedImageView = [view isKindOfClass:UIImageView.class]
-            ? view : NeoWCTweakValueForSelectorNames(view, @[@"headImageView", @"imageView"]);
+            ? view : WCAtlasTweakValueForSelectorNames(view, @[@"headImageView", @"imageView"]);
         UIImage *hostedImage = [hostedImageView isKindOfClass:UIImageView.class]
             ? ((UIImageView *)hostedImageView).image : nil;
-        plainImageView = NeoWCChatTopPlainAvatarImageView(hostedImage);
+        plainImageView = WCAtlasChatTopPlainAvatarImageView(hostedImage);
         if (plainImageView) return plainImageView;
         return view;
     }
@@ -7917,107 +7917,107 @@ static UIView *NeoWCChatTopAvatarView(id contact, NSString *userName) {
     return fallback;
 }
 
-static NSString *NeoWCChatTopDisplayName(BaseMsgContentViewController *controller, id contact) {
+static NSString *WCAtlasChatTopDisplayName(BaseMsgContentViewController *controller, id contact) {
     for (NSString *value in @[
-        NeoWCPrivateContactRemark(contact) ?: @"",
-        NeoWCPrivateContactNickname(contact) ?: @"",
-        NeoWCPrivateContactAlias(contact) ?: @""
+        WCAtlasPrivateContactRemark(contact) ?: @"",
+        WCAtlasPrivateContactNickname(contact) ?: @"",
+        WCAtlasPrivateContactAlias(contact) ?: @""
     ]) {
         if (value.length > 0) {
-            objc_setAssociatedObject(controller, &NeoWCChatTopStableDisplayNameKey,
+            objc_setAssociatedObject(controller, &WCAtlasChatTopStableDisplayNameKey,
                                      value, OBJC_ASSOCIATION_COPY_NONATOMIC);
             return value;
         }
     }
-    NSString *stableName = objc_getAssociatedObject(controller, &NeoWCChatTopStableDisplayNameKey);
-    BOOL typing = [objc_getAssociatedObject(controller, &NeoWCChatTopTypingActiveKey) boolValue];
+    NSString *stableName = objc_getAssociatedObject(controller, &WCAtlasChatTopStableDisplayNameKey);
+    BOOL typing = [objc_getAssociatedObject(controller, &WCAtlasChatTopTypingActiveKey) boolValue];
     if (typing && stableName.length > 0) return stableName;
     NSString *title = controller.navigationItem.title ?: controller.title;
     if (title.length > 0 && ![title containsString:@"正在输入"]) {
-        objc_setAssociatedObject(controller, &NeoWCChatTopStableDisplayNameKey,
+        objc_setAssociatedObject(controller, &WCAtlasChatTopStableDisplayNameKey,
                                  title, OBJC_ASSOCIATION_COPY_NONATOMIC);
         return title;
     }
     return stableName.length > 0 ? stableName : @"聊天";
 }
 
-static BOOL NeoWCChatTitleViewShowsTypingStatus(id titleView) {
+static BOOL WCAtlasChatTitleViewShowsTypingStatus(id titleView) {
     if ([titleView isKindOfClass:UILabel.class]) {
         NSString *text = ((UILabel *)titleView).text;
         return [text isKindOfClass:NSString.class] && [text containsString:@"正在输入"];
     }
     if (![titleView isKindOfClass:UIView.class]) return NO;
     for (UIView *subview in ((UIView *)titleView).subviews) {
-        if (NeoWCChatTitleViewShowsTypingStatus(subview)) return YES;
+        if (WCAtlasChatTitleViewShowsTypingStatus(subview)) return YES;
     }
     return NO;
 }
 
-static BOOL NeoWCSetChatTypingState(BaseMsgContentViewController *controller, id titleView) {
-    BOOL typing = NeoWCChatTitleViewShowsTypingStatus(titleView);
-    BOOL previous = [objc_getAssociatedObject(controller, &NeoWCChatTopTypingActiveKey) boolValue];
+static BOOL WCAtlasSetChatTypingState(BaseMsgContentViewController *controller, id titleView) {
+    BOOL typing = WCAtlasChatTitleViewShowsTypingStatus(titleView);
+    BOOL previous = [objc_getAssociatedObject(controller, &WCAtlasChatTopTypingActiveKey) boolValue];
     if (typing == previous) return NO;
-    objc_setAssociatedObject(controller, &NeoWCChatTopTypingActiveKey,
+    objc_setAssociatedObject(controller, &WCAtlasChatTopTypingActiveKey,
                              @(typing), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     return YES;
 }
 
-static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibilityLabel);
+static UIButton *WCAtlasChatTopCapsuleButton(UIImage *image, NSString *accessibilityLabel);
 
-static CGFloat NeoWCChatGlassPercent(NSString *key, CGFloat fallback,
+static CGFloat WCAtlasChatGlassPercent(NSString *key, CGFloat fallback,
                                      CGFloat minimum, CGFloat maximum) {
     id stored = [NSUserDefaults.standardUserDefaults objectForKey:key];
     CGFloat value = [stored respondsToSelector:@selector(doubleValue)] ? [stored doubleValue] : fallback;
     return MIN(maximum, MAX(minimum, value));
 }
 
-static UIView *NeoWCChatTopGlassContainer(CGFloat cornerRadius, UIView **contentViewOut) {
-    NeoWCGlassCapsuleView *container = [NeoWCGlassCapsuleView new];
+static UIView *WCAtlasChatTopGlassContainer(CGFloat cornerRadius, UIView **contentViewOut) {
+    WCAtlasGlassCapsuleView *container = [WCAtlasGlassCapsuleView new];
     container.capsuleCornerRadius = cornerRadius;
-    objc_setAssociatedObject(container, &NeoWCChatTopGlassEffectMarkerKey,
+    objc_setAssociatedObject(container, &WCAtlasChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     UIVisualEffectView *effectView = container.effectView;
-    CGFloat blurIntensity = NeoWCChatGlassPercent(NeoWCChatGlassBlurIntensityKey,
+    CGFloat blurIntensity = WCAtlasChatGlassPercent(WCAtlasChatGlassBlurIntensityKey,
                                                   100.0, 20.0, 100.0) / 100.0;
-    NSInteger glassStyle = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCChatGlassStyleKey];
+    NSInteger glassStyle = [NSUserDefaults.standardUserDefaults integerForKey:WCAtlasChatGlassStyleKey];
     if (glassStyle == 1) [container configurePseudoLiquidWithBlurIntensity:blurIntensity];
     else [container configureFrostedGlassWithBlurIntensity:blurIntensity];
-    objc_setAssociatedObject(effectView, &NeoWCChatTopGlassEffectMarkerKey,
+    objc_setAssociatedObject(effectView, &WCAtlasChatTopGlassEffectMarkerKey,
                              @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (contentViewOut) *contentViewOut = container.contentView;
     return container;
 }
 
-static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *controller,
+static UIBarButtonItem *WCAtlasChatTopProfileItem(BaseMsgContentViewController *controller,
                                                 UIBarButtonItem *backItem) {
-    id contact = NeoWCPrivateChatContact(controller);
-    NSString *userName = NeoWCChatUserName(controller);
-    NSString *displayName = NeoWCChatTopDisplayName(controller, contact);
+    id contact = WCAtlasPrivateChatContact(controller);
+    NSString *userName = WCAtlasChatUserName(controller);
+    NSString *displayName = WCAtlasChatTopDisplayName(controller, contact);
     CGFloat availableWidth = MIN(205.0, CGRectGetWidth(UIScreen.mainScreen.bounds) - 130.0);
-    CGFloat avatarSize = NeoWCChatTopAvatarSize();
-    CGFloat nicknameSize = NeoWCChatTopNicknameSize();
-    CGFloat capsuleHeight = NeoWCChatTopLeftCapsuleHeight();
+    CGFloat avatarSize = WCAtlasChatTopAvatarSize();
+    CGFloat nicknameSize = WCAtlasChatTopNicknameSize();
+    CGFloat capsuleHeight = WCAtlasChatTopLeftCapsuleHeight();
 
     UIView *content = nil;
-    UIView *container = NeoWCChatTopGlassContainer(capsuleHeight / 2.0, &content);
+    UIView *container = WCAtlasChatTopGlassContainer(capsuleHeight / 2.0, &content);
 
     UIImageSymbolConfiguration *backConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:15.0
                                                                                                       weight:UIImageSymbolWeightMedium];
     UIImage *backImage = [UIImage systemImageNamed:@"chevron.left"
                                   withConfiguration:backConfiguration];
-    UIButton *backButton = NeoWCChatTopCapsuleButton(backImage, backItem.accessibilityLabel ?: @"返回");
-    NeoWCBarButtonActionProxy *backProxy = [NeoWCBarButtonActionProxy new];
+    UIButton *backButton = WCAtlasChatTopCapsuleButton(backImage, backItem.accessibilityLabel ?: @"返回");
+    WCAtlasBarButtonActionProxy *backProxy = [WCAtlasBarButtonActionProxy new];
     backProxy.originalItem = backItem;
     backProxy.fallbackController = controller;
     backProxy.popsNavigationController = YES;
     [backButton addTarget:backProxy action:@selector(invoke:) forControlEvents:UIControlEventTouchUpInside];
     [content addSubview:backButton];
-    objc_setAssociatedObject(controller, &NeoWCChatTopBackProxyKey, backProxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &WCAtlasChatTopBackProxyKey, backProxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
-    UIView *avatarSource = NeoWCChatTopAvatarView(contact, userName);
-    NeoWCExcludeHeadViewFromGlobalAvatarRounding(avatarSource);
-    NeoWCChatTopAvatarHostView *avatar = [[NeoWCChatTopAvatarHostView alloc]
+    UIView *avatarSource = WCAtlasChatTopAvatarView(contact, userName);
+    WCAtlasExcludeHeadViewFromGlobalAvatarRounding(avatarSource);
+    WCAtlasChatTopAvatarHostView *avatar = [[WCAtlasChatTopAvatarHostView alloc]
         initWithSourceView:avatarSource];
     [content addSubview:avatar];
 
@@ -8035,7 +8035,7 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     label.accessibilityLabel = displayName;
     [content addSubview:label];
 
-    BOOL typing = [objc_getAssociatedObject(controller, &NeoWCChatTopTypingActiveKey) boolValue];
+    BOOL typing = [objc_getAssociatedObject(controller, &WCAtlasChatTopTypingActiveKey) boolValue];
     UILabel *typingIndicator = nil;
     if (typing) {
         typingIndicator = [UILabel new];
@@ -8054,7 +8054,7 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
         pulse.duration = 0.65;
         pulse.autoreverses = YES;
         pulse.repeatCount = HUGE_VALF;
-        [typingIndicator.layer addAnimation:pulse forKey:@"neowc.typing-pulse"];
+        [typingIndicator.layer addAnimation:pulse forKey:@"wcatlas.typing-pulse"];
     }
 
     CGFloat labelWidth = ceil([displayName sizeWithAttributes:@{NSFontAttributeName: label.font}].width);
@@ -8088,13 +8088,13 @@ static UIBarButtonItem *NeoWCChatTopProfileItem(BaseMsgContentViewController *co
     }
     [NSLayoutConstraint activateConstraints:constraints];
     UILongPressGestureRecognizer *confirmationGesture = [[UILongPressGestureRecognizer alloc]
-        initWithTarget:controller action:@selector(neowc_toggleSendConfirmation:)];
+        initWithTarget:controller action:@selector(wcatlas_toggleSendConfirmation:)];
     confirmationGesture.minimumPressDuration = 0.55;
     [container addGestureRecognizer:confirmationGesture];
     return [[UIBarButtonItem alloc] initWithCustomView:container];
 }
 
-static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibilityLabel) {
+static UIButton *WCAtlasChatTopCapsuleButton(UIImage *image, NSString *accessibilityLabel) {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     button.translatesAutoresizingMaskIntoConstraints = NO;
     [button setImage:[image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] forState:UIControlStateNormal];
@@ -8103,68 +8103,68 @@ static UIButton *NeoWCChatTopCapsuleButton(UIImage *image, NSString *accessibili
     return button;
 }
 
-static id NeoWCOfficialChatSearchHost(BaseMsgContentViewController *controller) {
+static id WCAtlasOfficialChatSearchHost(BaseMsgContentViewController *controller) {
     if (!controller) return nil;
     UINavigationController *navigationController = controller.navigationController;
     return (!navigationController || navigationController.topViewController == controller)
         ? controller : nil;
 }
 
-static id NeoWCNativeChatSearchHelper(BaseMsgContentViewController *controller,
+static id WCAtlasNativeChatSearchHelper(BaseMsgContentViewController *controller,
                                       BOOL createIfMissing) {
     if (!controller) return nil;
-    id helper = NeoWCTweakSafeValue(controller, @"m_oMsgSearchHelper");
-    if (!helper) helper = NeoWCExactIvarValue(controller, @"m_oMsgSearchHelper");
+    id helper = WCAtlasTweakSafeValue(controller, @"m_oMsgSearchHelper");
+    if (!helper) helper = WCAtlasExactIvarValue(controller, @"m_oMsgSearchHelper");
     if (helper || !createIfMissing) return helper;
 
     SEL selector = NSSelectorFromString(@"initMsgSearchHelper:");
     Method method = class_getInstanceMethod([controller class], selector);
     if (![controller respondsToSelector:selector] ||
         method_getNumberOfArguments(method) != 3 ||
-        !NeoWCMethodArgumentIsIntegerScalar(method, 2)) return nil;
+        !WCAtlasMethodArgumentIsIntegerScalar(method, 2)) return nil;
     @try {
         ((void (*)(id, SEL, NSUInteger))objc_msgSend)(controller, selector, (NSUInteger)0);
     } @catch (__unused NSException *exception) {
         return nil;
     }
-    helper = NeoWCTweakSafeValue(controller, @"m_oMsgSearchHelper");
-    return helper ?: NeoWCExactIvarValue(controller, @"m_oMsgSearchHelper");
+    helper = WCAtlasTweakSafeValue(controller, @"m_oMsgSearchHelper");
+    return helper ?: WCAtlasExactIvarValue(controller, @"m_oMsgSearchHelper");
 }
 
-static id NeoWCNativeChatSearcher(id helper) {
+static id WCAtlasNativeChatSearcher(id helper) {
     if (!helper) return nil;
-    id searcher = NeoWCTweakSafeValue(helper, @"searcher");
+    id searcher = WCAtlasTweakSafeValue(helper, @"searcher");
     if (!searcher) {
         SEL selector = NSSelectorFromString(@"getSearcher");
         if ([helper respondsToSelector:selector]) {
             searcher = ((id (*)(id, SEL))objc_msgSend)(helper, selector);
         }
     }
-    return searcher ?: NeoWCExactIvarValue(helper, @"_searcher");
+    return searcher ?: WCAtlasExactIvarValue(helper, @"_searcher");
 }
 
-static void NeoWCSetChatSearchInteractivePop(BaseMsgContentViewController *controller,
+static void WCAtlasSetChatSearchInteractivePop(BaseMsgContentViewController *controller,
                                              BOOL enabled) {
     SEL selector = NSSelectorFromString(@"setM_bInteractivePopEnabled:");
     Method method = class_getInstanceMethod([controller class], selector);
     if (![controller respondsToSelector:selector] ||
         method_getNumberOfArguments(method) != 3 ||
-        !NeoWCMethodArgumentIsIntegerScalar(method, 2)) return;
+        !WCAtlasMethodArgumentIsIntegerScalar(method, 2)) return;
     ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, selector, enabled);
 }
 
-static void NeoWCRemoveChatSearchEdgePan(BaseMsgContentViewController *controller) {
-    UIGestureRecognizer *recognizer = objc_getAssociatedObject(controller, &NeoWCChatSearchEdgePanKey);
+static void WCAtlasRemoveChatSearchEdgePan(BaseMsgContentViewController *controller) {
+    UIGestureRecognizer *recognizer = objc_getAssociatedObject(controller, &WCAtlasChatSearchEdgePanKey);
     if (recognizer.view) [recognizer.view removeGestureRecognizer:recognizer];
-    objc_setAssociatedObject(controller, &NeoWCChatSearchEdgePanKey, nil,
+    objc_setAssociatedObject(controller, &WCAtlasChatSearchEdgePanKey, nil,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static NSArray<UIView *> *NeoWCOfficialChatSearchChromeViews(id searcher) {
+static NSArray<UIView *> *WCAtlasOfficialChatSearchChromeViews(id searcher) {
     if (!searcher) return @[];
     NSMutableArray<UIView *> *views = [NSMutableArray array];
     for (NSString *key in @[@"searchBar", @"searchBarNotInSearcher", @"searchContainerView"]) {
-        id value = NeoWCTweakSafeValue(searcher, key);
+        id value = WCAtlasTweakSafeValue(searcher, key);
         if ([value isKindOfClass:UIView.class] && ![views containsObject:value]) {
             [views addObject:value];
         }
@@ -8172,8 +8172,8 @@ static NSArray<UIView *> *NeoWCOfficialChatSearchChromeViews(id searcher) {
     return views;
 }
 
-static void NeoWCSetOfficialChatSearchChromeHidden(id searcher, BOOL hidden) {
-    for (UIView *view in NeoWCOfficialChatSearchChromeViews(searcher)) {
+static void WCAtlasSetOfficialChatSearchChromeHidden(id searcher, BOOL hidden) {
+    for (UIView *view in WCAtlasOfficialChatSearchChromeViews(searcher)) {
         if (hidden) [view endEditing:YES];
         view.hidden = hidden;
         view.alpha = hidden ? 0.0 : 1.0;
@@ -8181,11 +8181,11 @@ static void NeoWCSetOfficialChatSearchChromeHidden(id searcher, BOOL hidden) {
     }
 }
 
-static void NeoWCHideOfficialChatSearchChrome(BaseMsgContentViewController *controller,
+static void WCAtlasHideOfficialChatSearchChrome(BaseMsgContentViewController *controller,
                                               id searcher) {
     if (!controller || !searcher) return;
-    UIView *searchBar = NeoWCTweakSafeValue(searcher, @"searchBar");
-    NeoWCSetOfficialChatSearchChromeHidden(searcher, YES);
+    UIView *searchBar = WCAtlasTweakSafeValue(searcher, @"searchBar");
+    WCAtlasSetOfficialChatSearchChromeHidden(searcher, YES);
     if (![searchBar isKindOfClass:UIView.class]) return;
 
     // The stock search bar sits inside one or two private wrapper views. The
@@ -8204,16 +8204,16 @@ static void NeoWCHideOfficialChatSearchChrome(BaseMsgContentViewController *cont
     }
 }
 
-static void NeoWCCleanupOfficialChatSearch(BaseMsgContentViewController *controller) {
-    if (!controller || ![objc_getAssociatedObject(controller, &NeoWCChatSearchActiveKey) boolValue] ||
-        [objc_getAssociatedObject(controller, &NeoWCChatSearchCleanupKey) boolValue]) return;
-    objc_setAssociatedObject(controller, &NeoWCChatSearchCleanupKey, @YES,
+static void WCAtlasCleanupOfficialChatSearch(BaseMsgContentViewController *controller) {
+    if (!controller || ![objc_getAssociatedObject(controller, &WCAtlasChatSearchActiveKey) boolValue] ||
+        [objc_getAssociatedObject(controller, &WCAtlasChatSearchCleanupKey) boolValue]) return;
+    objc_setAssociatedObject(controller, &WCAtlasChatSearchCleanupKey, @YES,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCRemoveChatSearchEdgePan(controller);
+    WCAtlasRemoveChatSearchEdgePan(controller);
 
-    id helper = NeoWCNativeChatSearchHelper(controller, NO);
-    id searcher = NeoWCNativeChatSearcher(helper);
-    NeoWCHideOfficialChatSearchChrome(controller, searcher);
+    id helper = WCAtlasNativeChatSearchHelper(controller, NO);
+    id searcher = WCAtlasNativeChatSearcher(helper);
+    WCAtlasHideOfficialChatSearchChrome(controller, searcher);
     SEL activeSelector = NSSelectorFromString(@"setActive:animated:completion:");
     SEL searchActiveSelector = NSSelectorFromString(@"isSeachActive");
     BOOL closedThroughSearcher = NO;
@@ -8251,37 +8251,37 @@ static void NeoWCCleanupOfficialChatSearch(BaseMsgContentViewController *control
             BaseMsgContentViewController *strongController = weakController;
             id strongSearcher = weakSearcher;
             if (strongController && strongSearcher) {
-                NeoWCHideOfficialChatSearchChrome(strongController, strongSearcher);
+                WCAtlasHideOfficialChatSearchChrome(strongController, strongSearcher);
             }
         });
     }
-    NeoWCSetChatSearchInteractivePop(controller, YES);
-    objc_setAssociatedObject(controller, &NeoWCChatSearchTransitionKey, nil,
+    WCAtlasSetChatSearchInteractivePop(controller, YES);
+    objc_setAssociatedObject(controller, &WCAtlasChatSearchTransitionKey, nil,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(controller, &NeoWCChatSearchActiveKey, nil,
+    objc_setAssociatedObject(controller, &WCAtlasChatSearchActiveKey, nil,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(controller, &NeoWCChatSearchCleanupKey, nil,
+    objc_setAssociatedObject(controller, &WCAtlasChatSearchCleanupKey, nil,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller, id sender) {
+static BOOL WCAtlasOpenOfficialChatSearch(BaseMsgContentViewController *controller, id sender) {
     (void)sender;
-    id searchHost = NeoWCOfficialChatSearchHost(controller);
+    id searchHost = WCAtlasOfficialChatSearchHost(controller);
     if (!searchHost) return NO;
 
     // WCRefine reuses WeChat's controller-owned helper. Creating and retaining
     // another helper leaves two independent delegate/dismiss lifecycles and is
     // the source of the stale search bar and cancel-time crash.
-    id helper = NeoWCNativeChatSearchHelper(searchHost, YES);
+    id helper = WCAtlasNativeChatSearchHelper(searchHost, YES);
     if (!helper) return NO;
     SEL panCancelSelector = NSSelectorFromString(@"setBUsePanCancelGesture:");
     if ([helper respondsToSelector:panCancelSelector]) {
         ((void (*)(id, SEL, BOOL))objc_msgSend)(helper, panCancelSelector, YES);
     }
-    id searcher = NeoWCNativeChatSearcher(helper);
+    id searcher = WCAtlasNativeChatSearcher(helper);
 
-    NeoWCSetOfficialChatSearchChromeHidden(searcher, NO);
-    UIView *searchBar = NeoWCTweakSafeValue(searcher, @"searchBar");
+    WCAtlasSetOfficialChatSearchChromeHidden(searcher, NO);
+    UIView *searchBar = WCAtlasTweakSafeValue(searcher, @"searchBar");
     if ([searchBar isKindOfClass:UIView.class]) {
         searchBar.hidden = NO;
         searchBar.alpha = 1.0;
@@ -8300,19 +8300,19 @@ static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller
     SEL activeSelector = NSSelectorFromString(@"setActive:animated:completion:");
     if (![searcher respondsToSelector:pushSelector] &&
         ![searcher respondsToSelector:activeSelector]) return NO;
-    if (objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey)) {
-        objc_setAssociatedObject(controller, &NeoWCChatSearchTransitionKey,
+    if (objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalLeftItemsKey)) {
+        objc_setAssociatedObject(controller, &WCAtlasChatSearchTransitionKey,
                                  @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        NeoWCRestoreChatTopBar(controller);
+        WCAtlasRestoreChatTopBar(controller);
     }
-    NeoWCSetChatSearchInteractivePop(controller, NO);
-    objc_setAssociatedObject(controller, &NeoWCChatSearchActiveKey, @YES,
+    WCAtlasSetChatSearchInteractivePop(controller, NO);
+    objc_setAssociatedObject(controller, &WCAtlasChatSearchActiveKey, @YES,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     UIScreenEdgePanGestureRecognizer *edgePan = [[UIScreenEdgePanGestureRecognizer alloc]
-        initWithTarget:controller action:@selector(neowc_handleChatSearchEdgePan:)];
+        initWithTarget:controller action:@selector(wcatlas_handleChatSearchEdgePan:)];
     edgePan.edges = UIRectEdgeLeft;
     [controller.view addGestureRecognizer:edgePan];
-    objc_setAssociatedObject(controller, &NeoWCChatSearchEdgePanKey, edgePan,
+    objc_setAssociatedObject(controller, &WCAtlasChatSearchEdgePanKey, edgePan,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     @try {
         if ([searcher respondsToSelector:pushSelector]) {
@@ -8322,19 +8322,19 @@ static BOOL NeoWCOpenOfficialChatSearch(BaseMsgContentViewController *controller
                                                              YES, NO, nil);
         }
     } @catch (__unused NSException *exception) {
-        NeoWCCleanupOfficialChatSearch(controller);
+        WCAtlasCleanupOfficialChatSearch(controller);
         return NO;
     }
     return YES;
 }
 
-static UIImage *NeoWCChatSearchImage(void) {
+static UIImage *WCAtlasChatSearchImage(void) {
     UIImage *image = [UIImage imageNamed:@"icons_outlined_search"];
     return image ?: [UIImage systemImageNamed:@"magnifyingglass"];
 }
 
-static UIImage *NeoWCChatCapsuleSearchImage(void) {
-    UIImage *image = NeoWCChatSearchImage();
+static UIImage *WCAtlasChatCapsuleSearchImage(void) {
+    UIImage *image = WCAtlasChatSearchImage();
     if (!image) return nil;
     CGSize size = CGSizeMake(18.0, 18.0);
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
@@ -8346,34 +8346,34 @@ static UIImage *NeoWCChatCapsuleSearchImage(void) {
     return [resized imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
-static UIBarButtonItem *NeoWCOfficialChatSearchBarButton(BaseMsgContentViewController *controller) {
+static UIBarButtonItem *WCAtlasOfficialChatSearchBarButton(BaseMsgContentViewController *controller) {
     Class utilityClass = NSClassFromString(@"MMUICommonUtil");
     SEL factorySelector = NSSelectorFromString(@"getBarButtonWithImageName:target:action:style:accessibility:");
     Method factoryMethod = utilityClass ? class_getClassMethod(utilityClass, factorySelector) : NULL;
     if (factoryMethod && method_getNumberOfArguments(factoryMethod) == 7 &&
-        NeoWCMethodReturnsObject(factoryMethod) &&
-        NeoWCMethodArgumentIsObject(factoryMethod, 2) &&
-        NeoWCMethodArgumentIsObject(factoryMethod, 3) &&
-        NeoWCMethodArgumentIsSelector(factoryMethod, 4) &&
-        NeoWCMethodArgumentIsIntegerScalar(factoryMethod, 5) &&
-        NeoWCMethodArgumentIsObject(factoryMethod, 6)) {
+        WCAtlasMethodReturnsObject(factoryMethod) &&
+        WCAtlasMethodArgumentIsObject(factoryMethod, 2) &&
+        WCAtlasMethodArgumentIsObject(factoryMethod, 3) &&
+        WCAtlasMethodArgumentIsSelector(factoryMethod, 4) &&
+        WCAtlasMethodArgumentIsIntegerScalar(factoryMethod, 5) &&
+        WCAtlasMethodArgumentIsObject(factoryMethod, 6)) {
         id item = ((id (*)(id, SEL, id, id, SEL, NSInteger, id))objc_msgSend)(
             utilityClass, factorySelector, @"icons_outlined_search", controller,
-            @selector(neowc_openChatSearch:), 2, @"search");
+            @selector(wcatlas_openChatSearch:), 2, @"search");
         if ([item isKindOfClass:[UIBarButtonItem class]]) return item;
     }
-    return [[UIBarButtonItem alloc] initWithImage:NeoWCChatSearchImage()
+    return [[UIBarButtonItem alloc] initWithImage:WCAtlasChatSearchImage()
                                             style:UIBarButtonItemStylePlain
                                            target:controller
-                                           action:@selector(neowc_openChatSearch:)];
+                                           action:@selector(wcatlas_openChatSearch:)];
 }
 
-static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *controller,
+static UIBarButtonItem *WCAtlasChatTopCapsuleItem(BaseMsgContentViewController *controller,
                                                 UIBarButtonItem *moreItem) {
     if (!moreItem) return nil;
     UIView *content = nil;
-    CGFloat capsuleHeight = MAX(36.0, NeoWCChatTopLeftCapsuleHeight() - 2.0);
-    UIView *capsule = NeoWCChatTopGlassContainer(capsuleHeight / 2.0, &content);
+    CGFloat capsuleHeight = MAX(36.0, WCAtlasChatTopLeftCapsuleHeight() - 2.0);
+    UIView *capsule = WCAtlasChatTopGlassContainer(capsuleHeight / 2.0, &content);
 
     UIStackView *stack = [[UIStackView alloc] init];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -8383,19 +8383,19 @@ static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *co
     [content addSubview:stack];
 
     UIImage *moreImage = moreItem.image ?: [UIImage systemImageNamed:@"ellipsis"];
-    UIButton *more = NeoWCChatTopCapsuleButton(moreImage, moreItem.accessibilityLabel ?: @"更多");
-    NeoWCBarButtonActionProxy *proxy = [NeoWCBarButtonActionProxy new];
+    UIButton *more = WCAtlasChatTopCapsuleButton(moreImage, moreItem.accessibilityLabel ?: @"更多");
+    WCAtlasBarButtonActionProxy *proxy = [WCAtlasBarButtonActionProxy new];
     proxy.originalItem = moreItem;
-    objc_setAssociatedObject(controller, &NeoWCChatTopMoreProxyKey, proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &WCAtlasChatTopMoreProxyKey, proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [more addTarget:proxy action:@selector(invoke:) forControlEvents:UIControlEventTouchUpInside];
     if (moreItem.menu) {
         more.menu = moreItem.menu;
         more.showsMenuAsPrimaryAction = YES;
     }
-    BOOL includesSearch = NeoWCEnhancementEnabled(NeoWCChatSearchButtonEnabledKey);
+    BOOL includesSearch = WCAtlasEnhancementEnabled(WCAtlasChatSearchButtonEnabledKey);
     if (includesSearch) {
-        UIButton *search = NeoWCChatTopCapsuleButton(NeoWCChatCapsuleSearchImage(), @"搜索聊天记录");
-        [search addTarget:controller action:@selector(neowc_openChatSearch:) forControlEvents:UIControlEventTouchUpInside];
+        UIButton *search = WCAtlasChatTopCapsuleButton(WCAtlasChatCapsuleSearchImage(), @"搜索聊天记录");
+        [search addTarget:controller action:@selector(wcatlas_openChatSearch:) forControlEvents:UIControlEventTouchUpInside];
         [stack addArrangedSubview:search];
     }
     [stack addArrangedSubview:more];
@@ -8410,7 +8410,7 @@ static UIBarButtonItem *NeoWCChatTopCapsuleItem(BaseMsgContentViewController *co
     return [[UIBarButtonItem alloc] initWithCustomView:capsule];
 }
 
-static UINavigationBarAppearance *NeoWCTransparentChatTopAppearance(void) {
+static UINavigationBarAppearance *WCAtlasTransparentChatTopAppearance(void) {
     UINavigationBarAppearance *appearance = [UINavigationBarAppearance new];
     [appearance configureWithTransparentBackground];
     appearance.backgroundColor = UIColor.clearColor;
@@ -8419,9 +8419,9 @@ static UINavigationBarAppearance *NeoWCTransparentChatTopAppearance(void) {
     return appearance;
 }
 
-static void NeoWCApplyTransparentChatTopAppearance(BaseMsgContentViewController *controller) {
+static void WCAtlasApplyTransparentChatTopAppearance(BaseMsgContentViewController *controller) {
     UINavigationItem *navigationItem = controller.navigationItem;
-    UINavigationBarAppearance *appearance = NeoWCTransparentChatTopAppearance();
+    UINavigationBarAppearance *appearance = WCAtlasTransparentChatTopAppearance();
     navigationItem.standardAppearance = appearance;
     navigationItem.compactAppearance = appearance;
     navigationItem.scrollEdgeAppearance = appearance;
@@ -8439,8 +8439,8 @@ static void NeoWCApplyTransparentChatTopAppearance(BaseMsgContentViewController 
     controller.extendedLayoutIncludesOpaqueBars = YES;
 }
 
-static BOOL NeoWCIsNavigationBarBackgroundView(UIView *view) {
-    if (objc_getAssociatedObject(view, &NeoWCChatTopGlassEffectMarkerKey)) return NO;
+static BOOL WCAtlasIsNavigationBarBackgroundView(UIView *view) {
+    if (objc_getAssociatedObject(view, &WCAtlasChatTopGlassEffectMarkerKey)) return NO;
     NSString *className = NSStringFromClass(view.class);
     return [view isKindOfClass:[UIVisualEffectView class]] ||
            [className containsString:@"Background"] ||
@@ -8448,47 +8448,47 @@ static BOOL NeoWCIsNavigationBarBackgroundView(UIView *view) {
            [className containsString:@"Material"];
 }
 
-static BOOL NeoWCViewContainsChatTopContent(UIView *view) {
+static BOOL WCAtlasViewContainsChatTopContent(UIView *view) {
     if (!view) return NO;
-    if (objc_getAssociatedObject(view, &NeoWCChatTopGlassEffectMarkerKey)) return YES;
+    if (objc_getAssociatedObject(view, &WCAtlasChatTopGlassEffectMarkerKey)) return YES;
     NSString *className = NSStringFromClass(view.class);
     if ([className containsString:@"ContentView"] || [className containsString:@"BarContent"]) return YES;
     for (UIView *subview in view.subviews) {
-        if (NeoWCViewContainsChatTopContent(subview)) return YES;
+        if (WCAtlasViewContainsChatTopContent(subview)) return YES;
     }
     return NO;
 }
 
-static UIView *NeoWCFirstDescendantOfClass(UIView *view, Class targetClass) {
+static UIView *WCAtlasFirstDescendantOfClass(UIView *view, Class targetClass) {
     if (!view || !targetClass) return nil;
     if ([view isKindOfClass:targetClass]) return view;
     for (UIView *subview in view.subviews) {
-        UIView *match = NeoWCFirstDescendantOfClass(subview, targetClass);
+        UIView *match = WCAtlasFirstDescendantOfClass(subview, targetClass);
         if (match) return match;
     }
     return nil;
 }
 
-static BOOL NeoWCViewContainsVisualEffect(UIView *view) {
+static BOOL WCAtlasViewContainsVisualEffect(UIView *view) {
     if (!view) return NO;
     if ([view isKindOfClass:[UIVisualEffectView class]]) return YES;
     for (UIView *subview in view.subviews) {
-        if (NeoWCViewContainsVisualEffect(subview)) return YES;
+        if (WCAtlasViewContainsVisualEffect(subview)) return YES;
     }
     return NO;
 }
 
-static void NeoWCSetChatNavigationBackgroundHidden(UIView *view, BOOL hidden) {
+static void WCAtlasSetChatNavigationBackgroundHidden(UIView *view, BOOL hidden) {
     if (!view) return;
-    if (objc_getAssociatedObject(view, &NeoWCChatTopGlassEffectMarkerKey)) return;
-    if (NeoWCIsNavigationBarBackgroundView(view)) {
-        NSNumber *originalAlpha = objc_getAssociatedObject(view, &NeoWCChatTopBackgroundOriginalAlphaKey);
-        NSNumber *originalHidden = objc_getAssociatedObject(view, &NeoWCChatTopBackgroundOriginalHiddenKey);
+    if (objc_getAssociatedObject(view, &WCAtlasChatTopGlassEffectMarkerKey)) return;
+    if (WCAtlasIsNavigationBarBackgroundView(view)) {
+        NSNumber *originalAlpha = objc_getAssociatedObject(view, &WCAtlasChatTopBackgroundOriginalAlphaKey);
+        NSNumber *originalHidden = objc_getAssociatedObject(view, &WCAtlasChatTopBackgroundOriginalHiddenKey);
         if (hidden) {
             if (!originalAlpha) {
-                objc_setAssociatedObject(view, &NeoWCChatTopBackgroundOriginalAlphaKey,
+                objc_setAssociatedObject(view, &WCAtlasChatTopBackgroundOriginalAlphaKey,
                                          @(view.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                objc_setAssociatedObject(view, &NeoWCChatTopBackgroundOriginalHiddenKey,
+                objc_setAssociatedObject(view, &WCAtlasChatTopBackgroundOriginalHiddenKey,
                                          @(view.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             }
             view.hidden = YES;
@@ -8496,29 +8496,29 @@ static void NeoWCSetChatNavigationBackgroundHidden(UIView *view, BOOL hidden) {
         } else if (originalAlpha) {
             view.alpha = originalAlpha.doubleValue;
             view.hidden = originalHidden.boolValue;
-            objc_setAssociatedObject(view, &NeoWCChatTopBackgroundOriginalAlphaKey,
+            objc_setAssociatedObject(view, &WCAtlasChatTopBackgroundOriginalAlphaKey,
                                      nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            objc_setAssociatedObject(view, &NeoWCChatTopBackgroundOriginalHiddenKey,
+            objc_setAssociatedObject(view, &WCAtlasChatTopBackgroundOriginalHiddenKey,
                                      nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         return;
     }
     for (UIView *subview in view.subviews) {
-        NeoWCSetChatNavigationBackgroundHidden(subview, hidden);
+        WCAtlasSetChatNavigationBackgroundHidden(subview, hidden);
     }
 }
 
-static void NeoWCSetChatNavigationDirectBackgroundsHidden(UINavigationBar *navigationBar, BOOL hidden) {
+static void WCAtlasSetChatNavigationDirectBackgroundsHidden(UINavigationBar *navigationBar, BOOL hidden) {
     if (!navigationBar) return;
     for (UIView *subview in navigationBar.subviews) {
-        if (NeoWCViewContainsChatTopContent(subview)) continue;
-        NSNumber *originalAlpha = objc_getAssociatedObject(subview, &NeoWCChatTopBackgroundOriginalAlphaKey);
-        NSNumber *originalHidden = objc_getAssociatedObject(subview, &NeoWCChatTopBackgroundOriginalHiddenKey);
+        if (WCAtlasViewContainsChatTopContent(subview)) continue;
+        NSNumber *originalAlpha = objc_getAssociatedObject(subview, &WCAtlasChatTopBackgroundOriginalAlphaKey);
+        NSNumber *originalHidden = objc_getAssociatedObject(subview, &WCAtlasChatTopBackgroundOriginalHiddenKey);
         if (hidden) {
             if (!originalAlpha) {
-                objc_setAssociatedObject(subview, &NeoWCChatTopBackgroundOriginalAlphaKey,
+                objc_setAssociatedObject(subview, &WCAtlasChatTopBackgroundOriginalAlphaKey,
                                          @(subview.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                objc_setAssociatedObject(subview, &NeoWCChatTopBackgroundOriginalHiddenKey,
+                objc_setAssociatedObject(subview, &WCAtlasChatTopBackgroundOriginalHiddenKey,
                                          @(subview.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             }
             subview.hidden = YES;
@@ -8526,27 +8526,27 @@ static void NeoWCSetChatNavigationDirectBackgroundsHidden(UINavigationBar *navig
         } else if (originalAlpha) {
             subview.alpha = originalAlpha.doubleValue;
             subview.hidden = originalHidden.boolValue;
-            objc_setAssociatedObject(subview, &NeoWCChatTopBackgroundOriginalAlphaKey,
+            objc_setAssociatedObject(subview, &WCAtlasChatTopBackgroundOriginalAlphaKey,
                                      nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            objc_setAssociatedObject(subview, &NeoWCChatTopBackgroundOriginalHiddenKey,
+            objc_setAssociatedObject(subview, &WCAtlasChatTopBackgroundOriginalHiddenKey,
                                      nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
     }
 }
 
-static void NeoWCSetChatNavigationHostTransparent(UIView *hostView, BOOL transparent);
-static void NeoWCSetChatNavigationContainerClear(UIView *view, BOOL clear);
+static void WCAtlasSetChatNavigationHostTransparent(UIView *hostView, BOOL transparent);
+static void WCAtlasSetChatNavigationContainerClear(UIView *view, BOOL clear);
 
-static void NeoWCSetChatTopFadeMask(UIView *backgroundView, BOOL enabled) {
+static void WCAtlasSetChatTopFadeMask(UIView *backgroundView, BOOL enabled) {
     if (!backgroundView) return;
-    id originalMask = objc_getAssociatedObject(backgroundView, &NeoWCChatTopOriginalBackgroundMaskKey);
+    id originalMask = objc_getAssociatedObject(backgroundView, &WCAtlasChatTopOriginalBackgroundMaskKey);
     if (enabled) {
         if (!originalMask) {
-            objc_setAssociatedObject(backgroundView, &NeoWCChatTopOriginalBackgroundMaskKey,
+            objc_setAssociatedObject(backgroundView, &WCAtlasChatTopOriginalBackgroundMaskKey,
                                      backgroundView.layer.mask ?: NSNull.null,
                                      OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
-        CAGradientLayer *fadeMask = objc_getAssociatedObject(backgroundView, &NeoWCChatTopFadeBackgroundMaskKey);
+        CAGradientLayer *fadeMask = objc_getAssociatedObject(backgroundView, &WCAtlasChatTopFadeBackgroundMaskKey);
         if (!fadeMask) {
             fadeMask = [CAGradientLayer layer];
             fadeMask.startPoint = CGPointMake(0.5, 0.0);
@@ -8558,32 +8558,32 @@ static void NeoWCSetChatTopFadeMask(UIView *backgroundView, BOOL enabled) {
                                 (id)UIColor.clearColor.CGColor,
                                 (id)UIColor.clearColor.CGColor];
             fadeMask.locations = @[@0.0, @0.15, @0.30, @0.40, @0.45, @1.0];
-            objc_setAssociatedObject(backgroundView, &NeoWCChatTopFadeBackgroundMaskKey,
+            objc_setAssociatedObject(backgroundView, &WCAtlasChatTopFadeBackgroundMaskKey,
                                      fadeMask, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         fadeMask.frame = backgroundView.bounds;
         backgroundView.layer.mask = fadeMask;
     } else if (originalMask) {
         backgroundView.layer.mask = originalMask == NSNull.null ? nil : originalMask;
-        objc_setAssociatedObject(backgroundView, &NeoWCChatTopOriginalBackgroundMaskKey,
+        objc_setAssociatedObject(backgroundView, &WCAtlasChatTopOriginalBackgroundMaskKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(backgroundView, &NeoWCChatTopFadeBackgroundMaskKey,
+        objc_setAssociatedObject(backgroundView, &WCAtlasChatTopFadeBackgroundMaskKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
-static void NeoWCSetVisualEffectsTopFade(UIView *view, BOOL enabled) {
+static void WCAtlasSetVisualEffectsTopFade(UIView *view, BOOL enabled) {
     if (!view) return;
     if ([view isKindOfClass:[UIVisualEffectView class]]) {
         UIVisualEffectView *effectView = (UIVisualEffectView *)view;
-        id originalEffect = objc_getAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectKey);
-        id originalMask = objc_getAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectMaskKey);
+        id originalEffect = objc_getAssociatedObject(effectView, &WCAtlasChatTopOriginalVisualEffectKey);
+        id originalMask = objc_getAssociatedObject(effectView, &WCAtlasChatTopOriginalVisualEffectMaskKey);
         if (enabled) {
             if (!originalEffect) {
-                objc_setAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectKey,
+                objc_setAssociatedObject(effectView, &WCAtlasChatTopOriginalVisualEffectKey,
                                          effectView.effect ?: NSNull.null,
                                          OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                objc_setAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectMaskKey,
+                objc_setAssociatedObject(effectView, &WCAtlasChatTopOriginalVisualEffectMaskKey,
                                          effectView.layer.mask ?: NSNull.null,
                                          OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             }
@@ -8593,73 +8593,73 @@ static void NeoWCSetVisualEffectsTopFade(UIView *view, BOOL enabled) {
                     : [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
             }
             effectView.layer.mask = originalMask == NSNull.null ? nil : originalMask;
-            NeoWCSetChatNavigationContainerClear(effectView, YES);
+            WCAtlasSetChatNavigationContainerClear(effectView, YES);
         } else if (originalEffect) {
             effectView.effect = originalEffect == NSNull.null ? nil : originalEffect;
             effectView.layer.mask = originalMask == NSNull.null ? nil : originalMask;
-            NeoWCSetChatNavigationContainerClear(effectView, NO);
-            objc_setAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectKey,
+            WCAtlasSetChatNavigationContainerClear(effectView, NO);
+            objc_setAssociatedObject(effectView, &WCAtlasChatTopOriginalVisualEffectKey,
                                      nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            objc_setAssociatedObject(effectView, &NeoWCChatTopOriginalVisualEffectMaskKey,
+            objc_setAssociatedObject(effectView, &WCAtlasChatTopOriginalVisualEffectMaskKey,
                                      nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
     }
     for (UIView *subview in view.subviews) {
-        NeoWCSetVisualEffectsTopFade(subview, enabled);
+        WCAtlasSetVisualEffectsTopFade(subview, enabled);
     }
 }
 
-static void NeoWCSetChatContentNavigationBackgroundTransparent(BaseMsgContentViewController *controller,
+static void WCAtlasSetChatContentNavigationBackgroundTransparent(BaseMsgContentViewController *controller,
                                                                 BOOL transparent) {
-    UIView *contentNavigationBar = objc_getAssociatedObject(controller, &NeoWCChatTopContentNavigationBarKey);
+    UIView *contentNavigationBar = objc_getAssociatedObject(controller, &WCAtlasChatTopContentNavigationBarKey);
     if (transparent && (!contentNavigationBar || !contentNavigationBar.superview)) {
         Class contentNavigationBarClass = NSClassFromString(@"MMNewMsgContentNavBar");
-        contentNavigationBar = NeoWCFirstDescendantOfClass(controller.view, contentNavigationBarClass);
+        contentNavigationBar = WCAtlasFirstDescendantOfClass(controller.view, contentNavigationBarClass);
         if (!contentNavigationBar) {
             contentNavigationBarClass = NSClassFromString(@"MMMsgContentNavBar");
-            contentNavigationBar = NeoWCFirstDescendantOfClass(controller.view, contentNavigationBarClass);
+            contentNavigationBar = WCAtlasFirstDescendantOfClass(controller.view, contentNavigationBarClass);
         }
         if (contentNavigationBar) {
-            objc_setAssociatedObject(controller, &NeoWCChatTopContentNavigationBarKey,
+            objc_setAssociatedObject(controller, &WCAtlasChatTopContentNavigationBarKey,
                                      contentNavigationBar, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
     }
     if (!contentNavigationBar) return;
-    NeoWCSetChatNavigationHostTransparent(contentNavigationBar, transparent);
-    NeoWCSetChatNavigationContainerClear(contentNavigationBar, transparent);
+    WCAtlasSetChatNavigationHostTransparent(contentNavigationBar, transparent);
+    WCAtlasSetChatNavigationContainerClear(contentNavigationBar, transparent);
     for (UIView *subview in contentNavigationBar.subviews) {
         BOOL fillsTopBar = CGRectGetWidth(subview.bounds) >= CGRectGetWidth(contentNavigationBar.bounds) - 1.0 &&
                            CGRectGetHeight(subview.bounds) >= CGRectGetHeight(contentNavigationBar.bounds) - 1.0;
-        if (fillsTopBar && NeoWCViewContainsVisualEffect(subview)) {
-            NeoWCSetChatNavigationContainerClear(subview, transparent);
-            NeoWCSetVisualEffectsTopFade(subview, transparent);
-            NeoWCSetChatTopFadeMask(subview, transparent);
+        if (fillsTopBar && WCAtlasViewContainsVisualEffect(subview)) {
+            WCAtlasSetChatNavigationContainerClear(subview, transparent);
+            WCAtlasSetVisualEffectsTopFade(subview, transparent);
+            WCAtlasSetChatTopFadeMask(subview, transparent);
             for (UIView *backgroundSubview in subview.subviews) {
                 if (CGRectGetHeight(backgroundSubview.bounds) <= 1.0) {
-                    NeoWCSetChatNavigationContainerClear(backgroundSubview, transparent);
-                    NeoWCSetChatNavigationBackgroundHidden(backgroundSubview, transparent);
+                    WCAtlasSetChatNavigationContainerClear(backgroundSubview, transparent);
+                    WCAtlasSetChatNavigationBackgroundHidden(backgroundSubview, transparent);
                 }
             }
         }
     }
     if (!transparent) {
-        objc_setAssociatedObject(controller, &NeoWCChatTopContentNavigationBarKey,
+        objc_setAssociatedObject(controller, &WCAtlasChatTopContentNavigationBarKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
-static void NeoWCSetChatNavigationHostTransparent(UIView *hostView, BOOL transparent) {
+static void WCAtlasSetChatNavigationHostTransparent(UIView *hostView, BOOL transparent) {
     if (!hostView) return;
-    NSNumber *originalClips = objc_getAssociatedObject(hostView, &NeoWCChatTopOriginalClipsToBoundsKey);
-    NSNumber *originalBorder = objc_getAssociatedObject(hostView, &NeoWCChatTopOriginalBorderWidthKey);
-    NSNumber *originalCorner = objc_getAssociatedObject(hostView, &NeoWCChatTopOriginalCornerRadiusKey);
+    NSNumber *originalClips = objc_getAssociatedObject(hostView, &WCAtlasChatTopOriginalClipsToBoundsKey);
+    NSNumber *originalBorder = objc_getAssociatedObject(hostView, &WCAtlasChatTopOriginalBorderWidthKey);
+    NSNumber *originalCorner = objc_getAssociatedObject(hostView, &WCAtlasChatTopOriginalCornerRadiusKey);
     if (transparent) {
         if (!originalClips) {
-            objc_setAssociatedObject(hostView, &NeoWCChatTopOriginalClipsToBoundsKey,
+            objc_setAssociatedObject(hostView, &WCAtlasChatTopOriginalClipsToBoundsKey,
                                      @(hostView.clipsToBounds), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            objc_setAssociatedObject(hostView, &NeoWCChatTopOriginalBorderWidthKey,
+            objc_setAssociatedObject(hostView, &WCAtlasChatTopOriginalBorderWidthKey,
                                      @(hostView.layer.borderWidth), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            objc_setAssociatedObject(hostView, &NeoWCChatTopOriginalCornerRadiusKey,
+            objc_setAssociatedObject(hostView, &WCAtlasChatTopOriginalCornerRadiusKey,
                                      @(hostView.layer.cornerRadius), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         hostView.clipsToBounds = NO;
@@ -8669,68 +8669,68 @@ static void NeoWCSetChatNavigationHostTransparent(UIView *hostView, BOOL transpa
         hostView.clipsToBounds = originalClips.boolValue;
         hostView.layer.borderWidth = originalBorder.doubleValue;
         hostView.layer.cornerRadius = originalCorner.doubleValue;
-        objc_setAssociatedObject(hostView, &NeoWCChatTopOriginalClipsToBoundsKey,
+        objc_setAssociatedObject(hostView, &WCAtlasChatTopOriginalClipsToBoundsKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(hostView, &NeoWCChatTopOriginalBorderWidthKey,
+        objc_setAssociatedObject(hostView, &WCAtlasChatTopOriginalBorderWidthKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(hostView, &NeoWCChatTopOriginalCornerRadiusKey,
+        objc_setAssociatedObject(hostView, &WCAtlasChatTopOriginalCornerRadiusKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
-static void NeoWCSetChatNavigationContainerClear(UIView *view, BOOL clear) {
+static void WCAtlasSetChatNavigationContainerClear(UIView *view, BOOL clear) {
     if (!view) return;
-    id originalColor = objc_getAssociatedObject(view, &NeoWCChatTopContainerOriginalBackgroundColorKey);
+    id originalColor = objc_getAssociatedObject(view, &WCAtlasChatTopContainerOriginalBackgroundColorKey);
     if (clear) {
         if (!originalColor) {
-            objc_setAssociatedObject(view, &NeoWCChatTopContainerOriginalBackgroundColorKey,
+            objc_setAssociatedObject(view, &WCAtlasChatTopContainerOriginalBackgroundColorKey,
                                      view.backgroundColor ?: NSNull.null,
                                      OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         view.backgroundColor = UIColor.clearColor;
     } else if (originalColor) {
         view.backgroundColor = originalColor == NSNull.null ? nil : originalColor;
-        objc_setAssociatedObject(view, &NeoWCChatTopContainerOriginalBackgroundColorKey,
+        objc_setAssociatedObject(view, &WCAtlasChatTopContainerOriginalBackgroundColorKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
-static void NeoWCApplyChatNavigationBackgroundWithNavigation(BaseMsgContentViewController *controller,
+static void WCAtlasApplyChatNavigationBackgroundWithNavigation(BaseMsgContentViewController *controller,
                                                               UINavigationController *navigationController,
                                                               BOOL hidden) {
-    NeoWCSetChatContentNavigationBackgroundTransparent(controller, hidden);
+    WCAtlasSetChatContentNavigationBackgroundTransparent(controller, hidden);
     UINavigationBar *navigationBar = navigationController.navigationBar;
-    NeoWCSetChatNavigationHostTransparent(navigationBar, hidden);
-    NeoWCSetChatNavigationHostTransparent(navigationBar.superview, hidden);
-    NeoWCSetChatNavigationBackgroundHidden(navigationBar, hidden);
-    NeoWCSetChatNavigationDirectBackgroundsHidden(navigationBar, hidden);
+    WCAtlasSetChatNavigationHostTransparent(navigationBar, hidden);
+    WCAtlasSetChatNavigationHostTransparent(navigationBar.superview, hidden);
+    WCAtlasSetChatNavigationBackgroundHidden(navigationBar, hidden);
+    WCAtlasSetChatNavigationDirectBackgroundsHidden(navigationBar, hidden);
     UIView *navigationRoot = navigationController.view;
     UIView *view = navigationBar;
     for (NSUInteger depth = 0; view && depth < 4; depth++, view = view.superview) {
-        NeoWCSetChatNavigationContainerClear(view, hidden);
+        WCAtlasSetChatNavigationContainerClear(view, hidden);
         for (UIView *sibling in view.superview.subviews) {
-            if (sibling != view && NeoWCIsNavigationBarBackgroundView(sibling)) {
-                NeoWCSetChatNavigationBackgroundHidden(sibling, hidden);
+            if (sibling != view && WCAtlasIsNavigationBarBackgroundView(sibling)) {
+                WCAtlasSetChatNavigationBackgroundHidden(sibling, hidden);
             }
         }
         if (view == navigationRoot) break;
     }
 }
 
-static void NeoWCApplyChatNavigationBackground(BaseMsgContentViewController *controller, BOOL hidden) {
-    NeoWCApplyChatNavigationBackgroundWithNavigation(controller,
+static void WCAtlasApplyChatNavigationBackground(BaseMsgContentViewController *controller, BOOL hidden) {
+    WCAtlasApplyChatNavigationBackgroundWithNavigation(controller,
                                                      controller.navigationController,
                                                      hidden);
 }
 
-static void NeoWCRestoreChatNavigationPresentationWithNavigation(BaseMsgContentViewController *controller,
+static void WCAtlasRestoreChatNavigationPresentationWithNavigation(BaseMsgContentViewController *controller,
                                                                   UINavigationController *navigationController) {
     UINavigationBar *navigationBar = navigationController.navigationBar;
-    id standardAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationStandardAppearanceKey);
-    id compactAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationCompactAppearanceKey);
-    id scrollEdgeAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationScrollEdgeAppearanceKey);
-    id compactScrollEdgeAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationCompactScrollEdgeAppearanceKey);
-    NSNumber *translucent = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationTranslucentKey);
+    id standardAppearance = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalNavigationStandardAppearanceKey);
+    id compactAppearance = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalNavigationCompactAppearanceKey);
+    id scrollEdgeAppearance = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalNavigationScrollEdgeAppearanceKey);
+    id compactScrollEdgeAppearance = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalNavigationCompactScrollEdgeAppearanceKey);
+    NSNumber *translucent = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalNavigationTranslucentKey);
     if (navigationBar && standardAppearance) {
         navigationBar.standardAppearance = standardAppearance == NSNull.null ? nil : standardAppearance;
         navigationBar.compactAppearance = compactAppearance == NSNull.null ? nil : compactAppearance;
@@ -8740,19 +8740,19 @@ static void NeoWCRestoreChatNavigationPresentationWithNavigation(BaseMsgContentV
         }
         navigationBar.translucent = translucent.boolValue;
     }
-    NSNumber *edges = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalEdgesForExtendedLayoutKey);
-    NSNumber *includesOpaqueBars = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey);
+    NSNumber *edges = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalEdgesForExtendedLayoutKey);
+    NSNumber *includesOpaqueBars = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey);
     if (edges) controller.edgesForExtendedLayout = (UIRectEdge)edges.unsignedIntegerValue;
     if (includesOpaqueBars) controller.extendedLayoutIncludesOpaqueBars = includesOpaqueBars.boolValue;
-    NeoWCApplyChatNavigationBackgroundWithNavigation(controller, navigationController, NO);
+    WCAtlasApplyChatNavigationBackgroundWithNavigation(controller, navigationController, NO);
 }
 
-static void NeoWCRestoreChatNavigationPresentation(BaseMsgContentViewController *controller) {
-    NeoWCRestoreChatNavigationPresentationWithNavigation(controller,
+static void WCAtlasRestoreChatNavigationPresentation(BaseMsgContentViewController *controller) {
+    WCAtlasRestoreChatNavigationPresentationWithNavigation(controller,
                                                          controller.navigationController);
 }
 
-static UIBarButtonItem *NeoWCNativeChatMoreItem(BaseMsgContentViewController *controller) {
+static UIBarButtonItem *WCAtlasNativeChatMoreItem(BaseMsgContentViewController *controller) {
     SEL selector = NSSelectorFromString(@"getRightBarButton");
     if ([controller respondsToSelector:selector]) {
         @try {
@@ -8761,275 +8761,275 @@ static UIBarButtonItem *NeoWCNativeChatMoreItem(BaseMsgContentViewController *co
         } @catch (__unused NSException *exception) {
         }
     }
-    UIBarButtonItem *installed = objc_getAssociatedObject(controller, &NeoWCChatTopCapsuleItemKey);
+    UIBarButtonItem *installed = objc_getAssociatedObject(controller, &WCAtlasChatTopCapsuleItemKey);
     for (UIBarButtonItem *item in controller.navigationItem.rightBarButtonItems) {
         if (item != installed) return item;
     }
-    NSArray *original = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey);
+    NSArray *original = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalRightItemsKey);
     return original.firstObject;
 }
 
-static void NeoWCRemoveStandaloneChatSearchButton(BaseMsgContentViewController *controller) {
-    UIBarButtonItem *searchItem = objc_getAssociatedObject(controller, &NeoWCChatSearchItemKey);
+static void WCAtlasRemoveStandaloneChatSearchButton(BaseMsgContentViewController *controller) {
+    UIBarButtonItem *searchItem = objc_getAssociatedObject(controller, &WCAtlasChatSearchItemKey);
     if (!searchItem) return;
     NSMutableArray *rightItems = [controller.navigationItem.rightBarButtonItems mutableCopy] ?: [NSMutableArray array];
     [rightItems removeObjectIdenticalTo:searchItem];
     controller.navigationItem.rightBarButtonItems = rightItems;
-    objc_setAssociatedObject(controller, &NeoWCChatSearchItemKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &WCAtlasChatSearchItemKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static void NeoWCUpdateStandaloneChatSearchButton(BaseMsgContentViewController *controller) {
-    if (!NeoWCEnhancementEnabled(NeoWCChatSearchButtonEnabledKey)) {
-        NeoWCRemoveStandaloneChatSearchButton(controller);
+static void WCAtlasUpdateStandaloneChatSearchButton(BaseMsgContentViewController *controller) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasChatSearchButtonEnabledKey)) {
+        WCAtlasRemoveStandaloneChatSearchButton(controller);
         return;
     }
-    UIBarButtonItem *installed = objc_getAssociatedObject(controller, &NeoWCChatSearchItemKey);
+    UIBarButtonItem *installed = objc_getAssociatedObject(controller, &WCAtlasChatSearchItemKey);
     NSArray *currentItems = controller.navigationItem.rightBarButtonItems ?: @[];
     if (installed && [currentItems containsObject:installed]) return;
 
     NSMutableArray *rightItems = [currentItems mutableCopy] ?: [NSMutableArray array];
     if (installed) [rightItems removeObjectIdenticalTo:installed];
-    UIBarButtonItem *searchItem = NeoWCOfficialChatSearchBarButton(controller);
+    UIBarButtonItem *searchItem = WCAtlasOfficialChatSearchBarButton(controller);
     if (!searchItem) return;
     [rightItems addObject:searchItem];
     controller.navigationItem.rightBarButtonItems = rightItems;
-    objc_setAssociatedObject(controller, &NeoWCChatSearchItemKey,
+    objc_setAssociatedObject(controller, &WCAtlasChatSearchItemKey,
                              searchItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static void NeoWCCaptureOriginalChatNavigationPresentationIfNeeded(BaseMsgContentViewController *controller) {
+static void WCAtlasCaptureOriginalChatNavigationPresentationIfNeeded(BaseMsgContentViewController *controller) {
     UINavigationBar *navigationBar = controller.navigationController.navigationBar;
     if (navigationBar &&
-        !objc_getAssociatedObject(controller, &NeoWCChatTopOriginalNavigationStandardAppearanceKey)) {
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalNavigationStandardAppearanceKey,
+        !objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalNavigationStandardAppearanceKey)) {
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalNavigationStandardAppearanceKey,
                                  navigationBar.standardAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalNavigationCompactAppearanceKey,
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalNavigationCompactAppearanceKey,
                                  navigationBar.compactAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalNavigationScrollEdgeAppearanceKey,
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalNavigationScrollEdgeAppearanceKey,
                                  navigationBar.scrollEdgeAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         if (@available(iOS 15.0, *)) {
-            objc_setAssociatedObject(controller, &NeoWCChatTopOriginalNavigationCompactScrollEdgeAppearanceKey,
+            objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalNavigationCompactScrollEdgeAppearanceKey,
                                      navigationBar.compactScrollEdgeAppearance ?: NSNull.null,
                                      OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalNavigationTranslucentKey,
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalNavigationTranslucentKey,
                                  @(navigationBar.translucent), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (!objc_getAssociatedObject(controller, &NeoWCChatTopOriginalEdgesForExtendedLayoutKey)) {
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalEdgesForExtendedLayoutKey,
+    if (!objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalEdgesForExtendedLayoutKey)) {
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalEdgesForExtendedLayoutKey,
                                  @((NSUInteger)controller.edgesForExtendedLayout), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey,
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey,
                                  @(controller.extendedLayoutIncludesOpaqueBars), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
-static void NeoWCRestoreChatTopBar(BaseMsgContentViewController *controller) {
-    NSArray *originalLeft = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey);
+static void WCAtlasRestoreChatTopBar(BaseMsgContentViewController *controller) {
+    NSArray *originalLeft = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalLeftItemsKey);
     if (!originalLeft) return;
-    NSArray *originalRight = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey) ?: @[];
-    id originalTitleView = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalTitleViewKey);
-    NSNumber *originalSupplement = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalSupplementKey);
+    NSArray *originalRight = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalRightItemsKey) ?: @[];
+    id originalTitleView = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalTitleViewKey);
+    NSNumber *originalSupplement = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalSupplementKey);
     controller.navigationItem.leftBarButtonItems = originalLeft;
     controller.navigationItem.rightBarButtonItems = originalRight;
     controller.navigationItem.titleView = originalTitleView == NSNull.null ? nil : originalTitleView;
     controller.navigationItem.leftItemsSupplementBackButton = originalSupplement.boolValue;
-    id standardAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalStandardAppearanceKey);
-    id compactAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalCompactAppearanceKey);
-    id scrollEdgeAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalScrollEdgeAppearanceKey);
-    id compactScrollEdgeAppearance = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalCompactScrollEdgeAppearanceKey);
+    id standardAppearance = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalStandardAppearanceKey);
+    id compactAppearance = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalCompactAppearanceKey);
+    id scrollEdgeAppearance = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalScrollEdgeAppearanceKey);
+    id compactScrollEdgeAppearance = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalCompactScrollEdgeAppearanceKey);
     controller.navigationItem.standardAppearance = standardAppearance == NSNull.null ? nil : standardAppearance;
     controller.navigationItem.compactAppearance = compactAppearance == NSNull.null ? nil : compactAppearance;
     controller.navigationItem.scrollEdgeAppearance = scrollEdgeAppearance == NSNull.null ? nil : scrollEdgeAppearance;
     if (@available(iOS 15.0, *)) {
         controller.navigationItem.compactScrollEdgeAppearance = compactScrollEdgeAppearance == NSNull.null ? nil : compactScrollEdgeAppearance;
     }
-    NeoWCRestoreChatNavigationPresentation(controller);
-    const void *keys[] = {&NeoWCChatTopProfileItemKey, &NeoWCChatTopCapsuleItemKey,
-                          &NeoWCChatTopOriginalLeftItemsKey, &NeoWCChatTopOriginalRightItemsKey,
-                          &NeoWCChatTopOriginalTitleViewKey, &NeoWCChatTopOriginalSupplementKey,
-                          &NeoWCChatTopMoreProxyKey, &NeoWCChatTopBackProxyKey,
-                          &NeoWCChatTopOriginalStandardAppearanceKey,
-                          &NeoWCChatTopOriginalCompactAppearanceKey,
-                          &NeoWCChatTopOriginalScrollEdgeAppearanceKey,
-                          &NeoWCChatTopOriginalCompactScrollEdgeAppearanceKey,
-                          &NeoWCChatTopPlaceholderTitleViewKey,
-                          &NeoWCChatTopOriginalNavigationStandardAppearanceKey,
-                          &NeoWCChatTopOriginalNavigationCompactAppearanceKey,
-                          &NeoWCChatTopOriginalNavigationScrollEdgeAppearanceKey,
-                          &NeoWCChatTopOriginalNavigationCompactScrollEdgeAppearanceKey,
-                          &NeoWCChatTopOriginalNavigationTranslucentKey,
-                          &NeoWCChatTopOriginalEdgesForExtendedLayoutKey,
-                          &NeoWCChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey};
+    WCAtlasRestoreChatNavigationPresentation(controller);
+    const void *keys[] = {&WCAtlasChatTopProfileItemKey, &WCAtlasChatTopCapsuleItemKey,
+                          &WCAtlasChatTopOriginalLeftItemsKey, &WCAtlasChatTopOriginalRightItemsKey,
+                          &WCAtlasChatTopOriginalTitleViewKey, &WCAtlasChatTopOriginalSupplementKey,
+                          &WCAtlasChatTopMoreProxyKey, &WCAtlasChatTopBackProxyKey,
+                          &WCAtlasChatTopOriginalStandardAppearanceKey,
+                          &WCAtlasChatTopOriginalCompactAppearanceKey,
+                          &WCAtlasChatTopOriginalScrollEdgeAppearanceKey,
+                          &WCAtlasChatTopOriginalCompactScrollEdgeAppearanceKey,
+                          &WCAtlasChatTopPlaceholderTitleViewKey,
+                          &WCAtlasChatTopOriginalNavigationStandardAppearanceKey,
+                          &WCAtlasChatTopOriginalNavigationCompactAppearanceKey,
+                          &WCAtlasChatTopOriginalNavigationScrollEdgeAppearanceKey,
+                          &WCAtlasChatTopOriginalNavigationCompactScrollEdgeAppearanceKey,
+                          &WCAtlasChatTopOriginalNavigationTranslucentKey,
+                          &WCAtlasChatTopOriginalEdgesForExtendedLayoutKey,
+                          &WCAtlasChatTopOriginalExtendedLayoutIncludesOpaqueBarsKey};
     for (NSUInteger index = 0; index < sizeof(keys) / sizeof(keys[0]); index++) {
         objc_setAssociatedObject(controller, keys[index], nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
-static void NeoWCUpdateChatTopBar(BaseMsgContentViewController *controller) {
-    if (!NeoWCEnhancementEnabled(NeoWCChatTopBarCapsuleEnabledKey)) {
-        NeoWCRestoreChatTopBar(controller);
-        NeoWCUpdateStandaloneChatSearchButton(controller);
+static void WCAtlasUpdateChatTopBar(BaseMsgContentViewController *controller) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasChatTopBarCapsuleEnabledKey)) {
+        WCAtlasRestoreChatTopBar(controller);
+        WCAtlasUpdateStandaloneChatSearchButton(controller);
         return;
     }
-    NeoWCRemoveStandaloneChatSearchButton(controller);
-    NeoWCCaptureOriginalChatNavigationPresentationIfNeeded(controller);
+    WCAtlasRemoveStandaloneChatSearchButton(controller);
+    WCAtlasCaptureOriginalChatNavigationPresentationIfNeeded(controller);
     UINavigationItem *navigationItem = controller.navigationItem;
-    NSArray *originalLeft = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey);
+    NSArray *originalLeft = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalLeftItemsKey);
     if (!originalLeft) {
         originalLeft = navigationItem.leftBarButtonItems ?: @[];
         NSMutableArray *originalRight = [navigationItem.rightBarButtonItems mutableCopy] ?: [NSMutableArray array];
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalLeftItemsKey, originalLeft, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey, originalRight, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalTitleViewKey,
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalLeftItemsKey, originalLeft, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalRightItemsKey, originalRight, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalTitleViewKey,
                                  navigationItem.titleView ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalSupplementKey,
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalSupplementKey,
                                  @(navigationItem.leftItemsSupplementBackButton), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalStandardAppearanceKey,
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalStandardAppearanceKey,
                                  navigationItem.standardAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalCompactAppearanceKey,
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalCompactAppearanceKey,
                                  navigationItem.compactAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &NeoWCChatTopOriginalScrollEdgeAppearanceKey,
+        objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalScrollEdgeAppearanceKey,
                                  navigationItem.scrollEdgeAppearance ?: NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         if (@available(iOS 15.0, *)) {
-            objc_setAssociatedObject(controller, &NeoWCChatTopOriginalCompactScrollEdgeAppearanceKey,
+            objc_setAssociatedObject(controller, &WCAtlasChatTopOriginalCompactScrollEdgeAppearanceKey,
                                      navigationItem.compactScrollEdgeAppearance ?: NSNull.null,
                                      OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
     }
-    NSArray<UIBarButtonItem *> *originalRight = objc_getAssociatedObject(controller, &NeoWCChatTopOriginalRightItemsKey) ?: @[];
-    UIBarButtonItem *moreItem = NeoWCNativeChatMoreItem(controller) ?: originalRight.firstObject;
+    NSArray<UIBarButtonItem *> *originalRight = objc_getAssociatedObject(controller, &WCAtlasChatTopOriginalRightItemsKey) ?: @[];
+    UIBarButtonItem *moreItem = WCAtlasNativeChatMoreItem(controller) ?: originalRight.firstObject;
     NSArray *remainingRight = @[];
 
     UIBarButtonItem *backItem = originalLeft.firstObject;
     NSArray *remainingLeft = originalLeft.count > 1
         ? [originalLeft subarrayWithRange:NSMakeRange(1, originalLeft.count - 1)] : @[];
-    UIBarButtonItem *profileItem = NeoWCChatTopProfileItem(controller, backItem);
+    UIBarButtonItem *profileItem = WCAtlasChatTopProfileItem(controller, backItem);
     NSMutableArray *leftItems = [NSMutableArray arrayWithObject:profileItem];
     [leftItems addObjectsFromArray:remainingLeft];
     navigationItem.leftItemsSupplementBackButton = NO;
     navigationItem.leftBarButtonItems = leftItems;
     UIView *placeholderTitleView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 1, 1)];
     navigationItem.titleView = placeholderTitleView;
-    objc_setAssociatedObject(controller, &NeoWCChatTopPlaceholderTitleViewKey,
+    objc_setAssociatedObject(controller, &WCAtlasChatTopPlaceholderTitleViewKey,
                              placeholderTitleView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCApplyTransparentChatTopAppearance(controller);
-    NeoWCApplyChatNavigationBackground(controller, YES);
-    objc_setAssociatedObject(controller, &NeoWCChatTopProfileItemKey, profileItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    WCAtlasApplyTransparentChatTopAppearance(controller);
+    WCAtlasApplyChatNavigationBackground(controller, YES);
+    objc_setAssociatedObject(controller, &WCAtlasChatTopProfileItemKey, profileItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
-    UIBarButtonItem *capsuleItem = NeoWCChatTopCapsuleItem(controller, moreItem);
+    UIBarButtonItem *capsuleItem = WCAtlasChatTopCapsuleItem(controller, moreItem);
     NSMutableArray *rightItems = [NSMutableArray array];
     if (capsuleItem) [rightItems addObject:capsuleItem];
     [rightItems addObjectsFromArray:remainingRight];
     navigationItem.rightBarButtonItems = rightItems;
-    objc_setAssociatedObject(controller, &NeoWCChatTopCapsuleItemKey, capsuleItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &WCAtlasChatTopCapsuleItemKey, capsuleItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-static void NeoWCRefreshChatTopBarAfterWechatUpdate(BaseMsgContentViewController *controller) {
-    if (!NeoWCEnhancementEnabled(NeoWCChatTopBarCapsuleEnabledKey)) {
-        NeoWCUpdateStandaloneChatSearchButton(controller);
+static void WCAtlasRefreshChatTopBarAfterWechatUpdate(BaseMsgContentViewController *controller) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasChatTopBarCapsuleEnabledKey)) {
+        WCAtlasUpdateStandaloneChatSearchButton(controller);
         return;
     }
     if (!controller.isViewLoaded || !controller.view.window) return;
     if (controller.navigationController.topViewController != controller) return;
-    UIBarButtonItem *profileItem = objc_getAssociatedObject(controller, &NeoWCChatTopProfileItemKey);
-    UIBarButtonItem *capsuleItem = objc_getAssociatedObject(controller, &NeoWCChatTopCapsuleItemKey);
-    UIView *placeholderTitleView = objc_getAssociatedObject(controller, &NeoWCChatTopPlaceholderTitleViewKey);
+    UIBarButtonItem *profileItem = objc_getAssociatedObject(controller, &WCAtlasChatTopProfileItemKey);
+    UIBarButtonItem *capsuleItem = objc_getAssociatedObject(controller, &WCAtlasChatTopCapsuleItemKey);
+    UIView *placeholderTitleView = objc_getAssociatedObject(controller, &WCAtlasChatTopPlaceholderTitleViewKey);
     BOOL profileMissing = !profileItem || ![controller.navigationItem.leftBarButtonItems containsObject:profileItem];
     BOOL capsuleMissing = capsuleItem && ![controller.navigationItem.rightBarButtonItems containsObject:capsuleItem];
     BOOL titleWasReplaced = !placeholderTitleView || controller.navigationItem.titleView != placeholderTitleView;
-    if (profileMissing || capsuleMissing || titleWasReplaced) NeoWCUpdateChatTopBar(controller);
-    NeoWCApplyTransparentChatTopAppearance(controller);
-    NeoWCApplyChatNavigationBackground(controller, YES);
+    if (profileMissing || capsuleMissing || titleWasReplaced) WCAtlasUpdateChatTopBar(controller);
+    WCAtlasApplyTransparentChatTopAppearance(controller);
+    WCAtlasApplyChatNavigationBackground(controller, YES);
 }
 
-static BOOL NeoWCJumpToReferencedMessage(CommonMessageCellView *cell) {
-    if (!NeoWCEnhancementEnabled(NeoWCQuoteJumpEnabledKey)) return NO;
-    id viewModel = NeoWCTweakValueForSelectorNames(cell, @[@"viewModel", @"_viewModel"]);
-    id message = NeoWCImageJokerMessageForObject(cell);
+static BOOL WCAtlasJumpToReferencedMessage(CommonMessageCellView *cell) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasQuoteJumpEnabledKey)) return NO;
+    id viewModel = WCAtlasTweakValueForSelectorNames(cell, @[@"viewModel", @"_viewModel"]);
+    id message = WCAtlasImageJokerMessageForObject(cell);
     if (!message) {
-        message = NeoWCTweakValueForSelectorNames(viewModel,
+        message = WCAtlasTweakValueForSelectorNames(viewModel,
             @[@"messageWrap", @"getMessageWrap", @"getCurrentMessageWrap", @"msgWrap"]);
     }
     id referencedMessage = nil;
     for (id object in @[message ?: NSNull.null, viewModel ?: NSNull.null, cell]) {
         if (object == NSNull.null) continue;
         for (NSString *key in @[@"referHostMsg", @"referingMessageWrap", @"replyingMessageWrap"]) {
-            referencedMessage = NeoWCTweakSafeValue(object, key);
+            referencedMessage = WCAtlasTweakSafeValue(object, key);
             if (referencedMessage) break;
         }
         if (referencedMessage) break;
     }
     if (!referencedMessage) return NO;
-    UIViewController *controller = NeoWCJokerPresenterForCell(cell) ?: NeoWCVisibleChatController;
+    UIViewController *controller = WCAtlasJokerPresenterForCell(cell) ?: WCAtlasVisibleChatController;
     for (NSString *selectorName in @[@"returnToOriginalMsg:", @"locateToMsg:"]) {
         SEL selector = NSSelectorFromString(selectorName);
         if ([controller respondsToSelector:selector]) {
             ((void (*)(id, SEL, id))objc_msgSend)(controller, selector, referencedMessage);
-            NeoWCCompatibilityMarkTriggered(@"quote-jump");
+            WCAtlasCompatibilityMarkTriggered(@"quote-jump");
             return YES;
         }
     }
     if ([cell respondsToSelector:@selector(onReturnToOriginalMsg)]) {
         ((void (*)(id, SEL))objc_msgSend)(cell, @selector(onReturnToOriginalMsg));
-        NeoWCCompatibilityMarkTriggered(@"quote-jump");
+        WCAtlasCompatibilityMarkTriggered(@"quote-jump");
         return YES;
     }
     return NO;
 }
 
-static void NeoWCSetPinnedMessageDescendantBackgroundsClear(UIView *view,
+static void WCAtlasSetPinnedMessageDescendantBackgroundsClear(UIView *view,
                                                             UIView *glassView,
                                                             BOOL clear) {
     if (!view || view == glassView || [view isDescendantOfView:glassView]) return;
-    id originalColor = objc_getAssociatedObject(view, &NeoWCChatPinnedOriginalBackgroundColorKey);
+    id originalColor = objc_getAssociatedObject(view, &WCAtlasChatPinnedOriginalBackgroundColorKey);
     if (clear) {
         if (!originalColor) {
-            objc_setAssociatedObject(view, &NeoWCChatPinnedOriginalBackgroundColorKey,
+            objc_setAssociatedObject(view, &WCAtlasChatPinnedOriginalBackgroundColorKey,
                                      view.backgroundColor ?: NSNull.null,
                                      OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         view.backgroundColor = UIColor.clearColor;
     } else if (originalColor) {
         view.backgroundColor = originalColor == NSNull.null ? nil : originalColor;
-        objc_setAssociatedObject(view, &NeoWCChatPinnedOriginalBackgroundColorKey,
+        objc_setAssociatedObject(view, &WCAtlasChatPinnedOriginalBackgroundColorKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     for (UIView *subview in view.subviews) {
-        NeoWCSetPinnedMessageDescendantBackgroundsClear(subview, glassView, clear);
+        WCAtlasSetPinnedMessageDescendantBackgroundsClear(subview, glassView, clear);
     }
 }
 
-static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
+static void WCAtlasUpdatePinnedMessageGlass(UIView *tipsView) {
     if (!tipsView) return;
-    BOOL enabled = NeoWCEnhancementEnabled(NeoWCChatTopBarCapsuleEnabledKey);
-    NeoWCGlassCapsuleView *glassView = objc_getAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey);
+    BOOL enabled = WCAtlasEnhancementEnabled(WCAtlasChatTopBarCapsuleEnabledKey);
+    WCAtlasGlassCapsuleView *glassView = objc_getAssociatedObject(tipsView, &WCAtlasChatPinnedBlurViewKey);
     if (!enabled) {
-        NeoWCSetPinnedMessageDescendantBackgroundsClear(tipsView, glassView, NO);
-        NSNumber *shadowOpacity = objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOpacityKey);
+        WCAtlasSetPinnedMessageDescendantBackgroundsClear(tipsView, glassView, NO);
+        NSNumber *shadowOpacity = objc_getAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalShadowOpacityKey);
         if (shadowOpacity) {
             tipsView.layer.shadowOpacity = shadowOpacity.floatValue;
-            tipsView.layer.shadowRadius = [objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowRadiusKey) doubleValue];
-            tipsView.layer.shadowOffset = [objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOffsetKey) CGSizeValue];
-            id shadowColor = objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowColorKey);
+            tipsView.layer.shadowRadius = [objc_getAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalShadowRadiusKey) doubleValue];
+            tipsView.layer.shadowOffset = [objc_getAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalShadowOffsetKey) CGSizeValue];
+            id shadowColor = objc_getAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalShadowColorKey);
             tipsView.layer.shadowColor = shadowColor == NSNull.null ? nil : (__bridge CGColorRef)shadowColor;
-            tipsView.layer.borderWidth = [objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalBorderWidthKey) doubleValue];
-            id borderColor = objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalBorderColorKey);
+            tipsView.layer.borderWidth = [objc_getAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalBorderWidthKey) doubleValue];
+            id borderColor = objc_getAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalBorderColorKey);
             tipsView.layer.borderColor = borderColor == NSNull.null ? nil : (__bridge CGColorRef)borderColor;
-            objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOpacityKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalShadowOpacityKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         [glassView removeFromSuperview];
-        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey,
+        objc_setAssociatedObject(tipsView, &WCAtlasChatPinnedBlurViewKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
 
-    if (!objc_getAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOpacityKey)) {
-        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOpacityKey, @(tipsView.layer.shadowOpacity), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowRadiusKey, @(tipsView.layer.shadowRadius), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowOffsetKey, [NSValue valueWithCGSize:tipsView.layer.shadowOffset], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalShadowColorKey, tipsView.layer.shadowColor ? (__bridge id)tipsView.layer.shadowColor : NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalBorderWidthKey, @(tipsView.layer.borderWidth), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedOriginalBorderColorKey, tipsView.layer.borderColor ? (__bridge id)tipsView.layer.borderColor : NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (!objc_getAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalShadowOpacityKey)) {
+        objc_setAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalShadowOpacityKey, @(tipsView.layer.shadowOpacity), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalShadowRadiusKey, @(tipsView.layer.shadowRadius), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalShadowOffsetKey, [NSValue valueWithCGSize:tipsView.layer.shadowOffset], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalShadowColorKey, tipsView.layer.shadowColor ? (__bridge id)tipsView.layer.shadowColor : NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalBorderWidthKey, @(tipsView.layer.borderWidth), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(tipsView, &WCAtlasChatPinnedOriginalBorderColorKey, tipsView.layer.borderColor ? (__bridge id)tipsView.layer.borderColor : NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     tipsView.layer.shadowOpacity = 0.0;
     tipsView.layer.shadowRadius = 0.0;
@@ -9039,18 +9039,18 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
     tipsView.layer.borderColor = UIColor.clearColor.CGColor;
 
     if (!glassView) {
-        glassView = [NeoWCGlassCapsuleView new];
+        glassView = [WCAtlasGlassCapsuleView new];
         // This backdrop is positioned from MMMsgCommonTipsView's runtime bounds.
         // Keep it out of Auto Layout so an ambiguous constraint pass cannot
         // stretch it to the expanded pinned-message container.
         glassView.translatesAutoresizingMaskIntoConstraints = YES;
         glassView.userInteractionEnabled = NO;
-        objc_setAssociatedObject(glassView, &NeoWCChatTopGlassEffectMarkerKey,
+        objc_setAssociatedObject(glassView, &WCAtlasChatTopGlassEffectMarkerKey,
                                  @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(tipsView, &NeoWCChatPinnedBlurViewKey,
+        objc_setAssociatedObject(tipsView, &WCAtlasChatPinnedBlurViewKey,
                                  glassView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    CGFloat blurIntensity = NeoWCChatGlassPercent(NeoWCChatGlassBlurIntensityKey,
+    CGFloat blurIntensity = WCAtlasChatGlassPercent(WCAtlasChatGlassBlurIntensityKey,
                                                   100.0, 20.0, 100.0) / 100.0;
     // The pinned row has an expanding host view. Liquid highlight/rim layers
     // visually leak when that host changes height, so this row deliberately
@@ -9076,18 +9076,18 @@ static void NeoWCUpdatePinnedMessageGlass(UIView *tipsView) {
     } else {
         [tipsView sendSubviewToBack:glassView];
     }
-    NeoWCSetPinnedMessageDescendantBackgroundsClear(tipsView, glassView, YES);
+    WCAtlasSetPinnedMessageDescendantBackgroundsClear(tipsView, glassView, YES);
 }
 
-static char NeoWCRawContactIDKey;
-static char NeoWCProfileContactKey;
-static char NeoWCProfileIsGroupKey;
-static char NeoWCProfileChatRoomKey;
-static char NeoWCRawContactIDCellMarkerKey;
-static char NeoWCProfileMessageBlockCellMarkerKey;
-static char NeoWCProfileSendConfirmationCellMarkerKey;
+static char WCAtlasRawContactIDKey;
+static char WCAtlasProfileContactKey;
+static char WCAtlasProfileIsGroupKey;
+static char WCAtlasProfileChatRoomKey;
+static char WCAtlasRawContactIDCellMarkerKey;
+static char WCAtlasProfileMessageBlockCellMarkerKey;
+static char WCAtlasProfileSendConfirmationCellMarkerKey;
 
-static NSUInteger NeoWCCallUnsignedSelector(id object, NSString *selectorName) {
+static NSUInteger WCAtlasCallUnsignedSelector(id object, NSString *selectorName) {
     SEL selector = NSSelectorFromString(selectorName);
     if (!object || ![object respondsToSelector:selector]) return 0;
     @try {
@@ -9097,25 +9097,25 @@ static NSUInteger NeoWCCallUnsignedSelector(id object, NSString *selectorName) {
     }
 }
 
-static id NeoWCRawProfileValue(id object, NSArray<NSString *> *names) {
+static id WCAtlasRawProfileValue(id object, NSArray<NSString *> *names) {
     if (!object) return nil;
-    id value = NeoWCTweakValueForSelectorNames(object, names);
+    id value = WCAtlasTweakValueForSelectorNames(object, names);
     if (value) return value;
     for (NSString *name in names) {
-        value = NeoWCTweakSafeValue(object, name);
+        value = WCAtlasTweakSafeValue(object, name);
         if (value) return value;
     }
     return nil;
 }
 
-static NSArray *NeoWCTableSections(id tableInfo) {
+static NSArray *WCAtlasTableSections(id tableInfo) {
     if ([tableInfo isKindOfClass:NSArray.class]) return tableInfo;
-    id sections = NeoWCRawProfileValue(tableInfo,
+    id sections = WCAtlasRawProfileValue(tableInfo,
                                        @[@"sections", @"m_arrSections", @"sectionArray", @"allSections"]);
     return [sections isKindOfClass:NSArray.class] ? sections : nil;
 }
 
-static id NeoWCTableSectionAtIndex(id tableInfo, NSUInteger index) {
+static id WCAtlasTableSectionAtIndex(id tableInfo, NSUInteger index) {
     for (NSString *name in @[@"getSectionAt:", @"sectionAtIndex:"]) {
         SEL selector = NSSelectorFromString(name);
         if (!tableInfo || ![tableInfo respondsToSelector:selector]) continue;
@@ -9125,17 +9125,17 @@ static id NeoWCTableSectionAtIndex(id tableInfo, NSUInteger index) {
         } @catch (__unused NSException *exception) {
         }
     }
-    NSArray *sections = NeoWCTableSections(tableInfo);
+    NSArray *sections = WCAtlasTableSections(tableInfo);
     return index < sections.count ? sections[index] : nil;
 }
 
-static NSArray *NeoWCTableCells(id section) {
-    id cells = NeoWCRawProfileValue(section,
+static NSArray *WCAtlasTableCells(id section) {
+    id cells = WCAtlasRawProfileValue(section,
                                     @[@"getAllCells", @"cells", @"m_arrCells", @"cellArray", @"allCells"]);
     return [cells isKindOfClass:NSArray.class] ? cells : nil;
 }
 
-static id NeoWCTableCellAtIndex(id section, NSUInteger index) {
+static id WCAtlasTableCellAtIndex(id section, NSUInteger index) {
     for (NSString *name in @[@"getCellAt:", @"cellAtIndex:"]) {
         SEL selector = NSSelectorFromString(name);
         if (![section respondsToSelector:selector]) continue;
@@ -9144,11 +9144,11 @@ static id NeoWCTableCellAtIndex(id section, NSUInteger index) {
         } @catch (__unused NSException *exception) {
         }
     }
-    NSArray *cells = NeoWCTableCells(section);
+    NSArray *cells = WCAtlasTableCells(section);
     return [cells isKindOfClass:NSArray.class] && index < cells.count ? cells[index] : nil;
 }
 
-static NSUInteger NeoWCTableCellCount(id section) {
+static NSUInteger WCAtlasTableCellCount(id section) {
     for (NSString *name in @[@"getCellCount", @"cellCount"]) {
         SEL selector = NSSelectorFromString(name);
         if (![section respondsToSelector:selector]) continue;
@@ -9157,35 +9157,35 @@ static NSUInteger NeoWCTableCellCount(id section) {
         } @catch (__unused NSException *exception) {
         }
     }
-    NSArray *cells = NeoWCTableCells(section);
+    NSArray *cells = WCAtlasTableCells(section);
     return [cells isKindOfClass:NSArray.class] ? cells.count : 0;
 }
 
-static NSString *NeoWCTableCellTitle(id cell) {
-    id title = NeoWCRawProfileValue(cell, @[@"title", @"m_title", @"leftTitle", @"text"]);
+static NSString *WCAtlasTableCellTitle(id cell) {
+    id title = WCAtlasRawProfileValue(cell, @[@"title", @"m_title", @"leftTitle", @"text"]);
     if ([title isKindOfClass:NSString.class]) return title;
-    UILabel *label = NeoWCRawProfileValue(cell, @[@"titleLabel", @"m_titleLabel", @"leftLabel"]);
+    UILabel *label = WCAtlasRawProfileValue(cell, @[@"titleLabel", @"m_titleLabel", @"leftLabel"]);
     if ([label isKindOfClass:UILabel.class]) return label.text;
 
     // Newer WeChat table cells keep their visible title in
     // cellConfig.leftConfig.title instead of exposing it on the cell itself.
-    id cellConfig = NeoWCRawProfileValue(cell, @[@"cellConfig", @"m_cellConfig"]);
-    id leftConfig = NeoWCRawProfileValue(cellConfig, @[@"leftConfig", @"m_leftConfig"]);
-    title = NeoWCRawProfileValue(leftConfig, @[@"title", @"text"]);
+    id cellConfig = WCAtlasRawProfileValue(cell, @[@"cellConfig", @"m_cellConfig"]);
+    id leftConfig = WCAtlasRawProfileValue(cellConfig, @[@"leftConfig", @"m_leftConfig"]);
+    title = WCAtlasRawProfileValue(leftConfig, @[@"title", @"text"]);
     return [title isKindOfClass:NSString.class] ? title : nil;
 }
 
-static void NeoWCCollectLabels(UIView *view, NSMutableArray<UILabel *> *labels) {
+static void WCAtlasCollectLabels(UIView *view, NSMutableArray<UILabel *> *labels) {
     if ([view isKindOfClass:UILabel.class] && [(UILabel *)view text].length > 0) {
         [labels addObject:(UILabel *)view];
     }
-    for (UIView *subview in view.subviews) NeoWCCollectLabels(subview, labels);
+    for (UIView *subview in view.subviews) WCAtlasCollectLabels(subview, labels);
 }
 
-static NSString *NeoWCTableCellLeftmostText(id cell) {
+static NSString *WCAtlasTableCellLeftmostText(id cell) {
     if (![cell isKindOfClass:UIView.class]) return nil;
     NSMutableArray<UILabel *> *labels = [NSMutableArray array];
-    NeoWCCollectLabels(cell, labels);
+    WCAtlasCollectLabels(cell, labels);
     UILabel *leftmost = nil;
     for (UILabel *label in labels) {
         if (!leftmost || CGRectGetMinX(label.frame) < CGRectGetMinX(leftmost.frame)) leftmost = label;
@@ -9193,22 +9193,22 @@ static NSString *NeoWCTableCellLeftmostText(id cell) {
     return leftmost.text;
 }
 
-static NSString *NeoWCTableCellRightText(id cell, NSString *title) {
+static NSString *WCAtlasTableCellRightText(id cell, NSString *title) {
     for (NSString *name in @[@"rightValue", @"m_rightValue", @"detail", @"value", @"rightText"]) {
-        id value = NeoWCRawProfileValue(cell, @[name]);
+        id value = WCAtlasRawProfileValue(cell, @[name]);
         if ([value isKindOfClass:NSString.class] && [value length] > 0 && ![value isEqualToString:title]) return value;
     }
     for (NSString *name in @[@"detailTextLabel", @"rightLabel", @"m_rightLabel", @"valueLabel"]) {
-        UILabel *label = NeoWCRawProfileValue(cell, @[name]);
+        UILabel *label = WCAtlasRawProfileValue(cell, @[name]);
         if ([label isKindOfClass:UILabel.class] && label.text.length > 0 && ![label.text isEqualToString:title]) return label.text;
     }
-    id cellConfig = NeoWCRawProfileValue(cell, @[@"cellConfig", @"m_cellConfig"]);
-    id rightConfig = NeoWCRawProfileValue(cellConfig, @[@"rightConfig", @"m_rightConfig"]);
-    id configured = NeoWCRawProfileValue(rightConfig, @[@"title", @"text", @"value"]);
+    id cellConfig = WCAtlasRawProfileValue(cell, @[@"cellConfig", @"m_cellConfig"]);
+    id rightConfig = WCAtlasRawProfileValue(cellConfig, @[@"rightConfig", @"m_rightConfig"]);
+    id configured = WCAtlasRawProfileValue(rightConfig, @[@"title", @"text", @"value"]);
     if ([configured isKindOfClass:NSString.class] && [configured length] > 0 && ![configured isEqualToString:title]) return configured;
     if ([cell isKindOfClass:UIView.class]) {
         NSMutableArray<UILabel *> *labels = [NSMutableArray array];
-        NeoWCCollectLabels(cell, labels);
+        WCAtlasCollectLabels(cell, labels);
         UILabel *rightmost = nil;
         for (UILabel *label in labels) {
             if ([label.text isEqualToString:title]) continue;
@@ -9219,7 +9219,7 @@ static NSString *NeoWCTableCellRightText(id cell, NSString *title) {
     return nil;
 }
 
-static NSString *NeoWCAdditionDaysValue(NSString *title, NSString *value) {
+static NSString *WCAtlasAdditionDaysValue(NSString *title, NSString *value) {
     if (![title containsString:@"添加时间"] || value.length == 0) return nil;
     NSArray<NSDictionary *> *formats = @[
         @{ @"format": @"yyyy年M月d日 HH:mm:ss", @"approximate": @NO },
@@ -9259,7 +9259,7 @@ static NSString *NeoWCAdditionDaysValue(NSString *title, NSString *value) {
     return [NSString stringWithFormat:@"%@%ld 天", approximate ? @"约 " : @"", (long)days];
 }
 
-static uint32_t NeoWCContactAddTime(id contact) {
+static uint32_t WCAtlasContactAddTime(id contact) {
     if (!contact) return 0;
     // WCPulse 1.7-2 hooks the official profile row and reads m_uiAddCreateTime.
     // Prefer that server-populated value; retain the local field only as a
@@ -9275,8 +9275,8 @@ static uint32_t NeoWCContactAddTime(id contact) {
     return 0;
 }
 
-static NSString *NeoWCContactAddTimeValue(id contact) {
-    uint32_t timestamp = NeoWCContactAddTime(contact);
+static NSString *WCAtlasContactAddTimeValue(id contact) {
+    uint32_t timestamp = WCAtlasContactAddTime(contact);
     NSTimeInterval now = NSDate.date.timeIntervalSince1970;
     // The host getter is a 32-bit scalar. Only render values that are valid
     // Unix seconds, so a future host format change degrades to an empty row.
@@ -9290,8 +9290,8 @@ static NSString *NeoWCContactAddTimeValue(id contact) {
     return text;
 }
 
-static NSString *NeoWCContactAddDaysValue(id contact) {
-    uint32_t timestamp = NeoWCContactAddTime(contact);
+static NSString *WCAtlasContactAddDaysValue(id contact) {
+    uint32_t timestamp = WCAtlasContactAddTime(contact);
     NSTimeInterval now = NSDate.date.timeIntervalSince1970;
     if (timestamp < 946684800U || timestamp > now + 24.0 * 60.0 * 60.0) return nil;
     NSCalendar *calendar = NSCalendar.currentCalendar;
@@ -9303,10 +9303,10 @@ static NSString *NeoWCContactAddDaysValue(id contact) {
     return days >= 0 ? [NSString stringWithFormat:@"%ld 天", (long)days] : nil;
 }
 
-static id NeoWCCallCompatibleObjectGetter(id object, NSString *selectorName) {
+static id WCAtlasCallCompatibleObjectGetter(id object, NSString *selectorName) {
     SEL selector = NSSelectorFromString(selectorName);
     Method method = object ? class_getInstanceMethod([object class], selector) : NULL;
-    if (!method || method_getNumberOfArguments(method) != 2 || !NeoWCMethodReturnsObject(method)) return nil;
+    if (!method || method_getNumberOfArguments(method) != 2 || !WCAtlasMethodReturnsObject(method)) return nil;
     @try {
         return ((id (*)(id, SEL))objc_msgSend)(object, selector);
     } @catch (__unused NSException *exception) {
@@ -9314,53 +9314,53 @@ static id NeoWCCallCompatibleObjectGetter(id object, NSString *selectorName) {
     }
 }
 
-static NSArray *NeoWCOfficialRelatedGroups(id controller) {
-    id logic = NeoWCRawProfileValue(controller,
+static NSArray *WCAtlasOfficialRelatedGroups(id controller) {
+    id logic = WCAtlasRawProfileValue(controller,
                                     @[@"m_relatedGroupLogic", @"relatedGroupLogic"]);
-    if (!logic) logic = objc_getAssociatedObject(controller, &NeoWCOfficialRelatedGroupLogicKey);
+    if (!logic) logic = objc_getAssociatedObject(controller, &WCAtlasOfficialRelatedGroupLogicKey);
     // WCPulse 1.7-2 reads ContactRelatedGroupLogic through this no-argument
     // object getter for non-friends. Fall back to the backing ivar for host
     // versions where the getter is unavailable.
-    id officialGroups = NeoWCCallCompatibleObjectGetter(logic, @"getContactRelatedGroup");
+    id officialGroups = WCAtlasCallCompatibleObjectGetter(logic, @"getContactRelatedGroup");
     if ([officialGroups isKindOfClass:NSArray.class]) return officialGroups;
     if ([officialGroups isKindOfClass:NSSet.class]) return [officialGroups allObjects];
-    id groups = NeoWCRawProfileValue(logic, @[@"_arrRelatedGroup"]);
+    id groups = WCAtlasRawProfileValue(logic, @[@"_arrRelatedGroup"]);
     if ([groups isKindOfClass:NSArray.class]) return groups;
     if ([groups isKindOfClass:NSSet.class]) return [groups allObjects];
-    if ([NeoWCRawProfileValue(logic, @[@"_bSearchDone"]) boolValue]) return @[];
+    if ([WCAtlasRawProfileValue(logic, @[@"_bSearchDone"]) boolValue]) return @[];
     return nil;
 }
 
-static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCOfficialSocialInformationRows(id controller) {
-    id tableInfo = NeoWCRawProfileValue(controller, @[@"m_tableViewInfo", @"tableViewInfo"]);
-    NSUInteger sectionCount = NeoWCCallUnsignedSelector(tableInfo, @"getSectionCount");
-    if (sectionCount == 0) sectionCount = NeoWCTableSections(tableInfo).count;
+static NSArray<NSDictionary<NSString *, NSString *> *> *WCAtlasOfficialSocialInformationRows(id controller) {
+    id tableInfo = WCAtlasRawProfileValue(controller, @[@"m_tableViewInfo", @"tableViewInfo"]);
+    NSUInteger sectionCount = WCAtlasCallUnsignedSelector(tableInfo, @"getSectionCount");
+    if (sectionCount == 0) sectionCount = WCAtlasTableSections(tableInfo).count;
     NSMutableArray *rows = [NSMutableArray array];
     NSMutableSet *titles = [NSMutableSet set];
     for (NSUInteger sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++) {
-        id section = NeoWCTableSectionAtIndex(tableInfo, sectionIndex);
-        NSUInteger cellCount = NeoWCTableCellCount(section);
+        id section = WCAtlasTableSectionAtIndex(tableInfo, sectionIndex);
+        NSUInteger cellCount = WCAtlasTableCellCount(section);
         for (NSUInteger cellIndex = 0; cellIndex < cellCount; cellIndex++) {
-            id cell = NeoWCTableCellAtIndex(section, cellIndex);
-            NSString *title = [NeoWCTableCellTitle(cell)
+            id cell = WCAtlasTableCellAtIndex(section, cellIndex);
+            NSString *title = [WCAtlasTableCellTitle(cell)
                 stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
             if (title.length == 0) {
-                title = [NeoWCTableCellLeftmostText(cell)
+                title = [WCAtlasTableCellLeftmostText(cell)
                     stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
             }
-            NSString *value = [NeoWCTableCellRightText(cell, title)
+            NSString *value = [WCAtlasTableCellRightText(cell, title)
                 stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
             if (title.length == 0 || value.length == 0 || [titles containsObject:title]) continue;
             [titles addObject:title];
             [rows addObject:@{ @"title": title, @"value": value }];
-            NSString *days = NeoWCAdditionDaysValue(title, value);
+            NSString *days = WCAtlasAdditionDaysValue(title, value);
             if (days.length > 0 && ![titles containsObject:@"添加天数"]) {
                 [titles addObject:@"添加天数"];
                 [rows addObject:@{ @"title": @"添加天数", @"value": days }];
             }
         }
     }
-    NSArray *relatedGroups = NeoWCOfficialRelatedGroups(controller);
+    NSArray *relatedGroups = WCAtlasOfficialRelatedGroups(controller);
     if (relatedGroups != nil && ![titles containsObject:@"共同群聊"]) {
         [rows addObject:@{ @"title": @"共同群聊",
                            @"value": [NSString stringWithFormat:@"%lu 个", (unsigned long)relatedGroups.count] }];
@@ -9368,7 +9368,7 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCOfficialSocialInfor
     return rows;
 }
 
-static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCMergeInfoCardRows(NSArray *baseRows,
+static NSArray<NSDictionary<NSString *, NSString *> *> *WCAtlasMergeInfoCardRows(NSArray *baseRows,
                                                                                 NSArray *officialRows) {
     BOOL friendCard = NO;
     BOOL allowsCommonGroups = NO;
@@ -9417,39 +9417,39 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCMergeInfoCardRows(N
     return rows;
 }
 
-static void NeoWCRefreshInfoCardFromOfficialController(id officialController) {
+static void WCAtlasRefreshInfoCardFromOfficialController(id officialController) {
     if (!NSThread.isMainThread) {
-        dispatch_async(dispatch_get_main_queue(), ^{ NeoWCRefreshInfoCardFromOfficialController(officialController); });
+        dispatch_async(dispatch_get_main_queue(), ^{ WCAtlasRefreshInfoCardFromOfficialController(officialController); });
         return;
     }
-    NeoWCWeakObjectBox *box = objc_getAssociatedObject(officialController, &NeoWCOfficialInfoCardBoxKey);
-    NeoWCContactInfoCardViewController *card = [box.object isKindOfClass:NeoWCContactInfoCardViewController.class]
+    WCAtlasWeakObjectBox *box = objc_getAssociatedObject(officialController, &WCAtlasOfficialInfoCardBoxKey);
+    WCAtlasContactInfoCardViewController *card = [box.object isKindOfClass:WCAtlasContactInfoCardViewController.class]
         ? box.object : nil;
-    NSArray *baseRows = objc_getAssociatedObject(officialController, &NeoWCOfficialInfoBaseRowsKey) ?: @[];
+    NSArray *baseRows = objc_getAssociatedObject(officialController, &WCAtlasOfficialInfoBaseRowsKey) ?: @[];
     if (card) {
-        [card updateRows:NeoWCMergeInfoCardRows(baseRows,
-            NeoWCOfficialSocialInformationRows(officialController))];
-        id contact = objc_getAssociatedObject(officialController, &NeoWCProfileContactKey);
-        NSString *username = NeoWCPrivateContactUserName(contact);
-        NeoWCConfigureInfoCardDetailActions(card, contact, nil, username, officialController);
+        [card updateRows:WCAtlasMergeInfoCardRows(baseRows,
+            WCAtlasOfficialSocialInformationRows(officialController))];
+        id contact = objc_getAssociatedObject(officialController, &WCAtlasProfileContactKey);
+        NSString *username = WCAtlasPrivateContactUserName(contact);
+        WCAtlasConfigureInfoCardDetailActions(card, contact, nil, username, officialController);
     }
 }
 
-static BOOL NeoWCSectionContainsRawIDCell(id section, NSString *title) {
-    NSUInteger count = NeoWCTableCellCount(section);
+static BOOL WCAtlasSectionContainsRawIDCell(id section, NSString *title) {
+    NSUInteger count = WCAtlasTableCellCount(section);
     for (NSUInteger index = 0; index < count; index++) {
-        id cell = NeoWCTableCellAtIndex(section, index);
-        if ([objc_getAssociatedObject(cell, &NeoWCRawContactIDCellMarkerKey) boolValue]) return YES;
-        NSString *marker = NeoWCTweakSafeValue(cell, @"userInfo");
-        if ([marker isKindOfClass:NSString.class] && [marker hasPrefix:@"neowc_profile_raw_"]) return YES;
-        NSString *cellTitle = NeoWCTableCellTitle(cell);
+        id cell = WCAtlasTableCellAtIndex(section, index);
+        if ([objc_getAssociatedObject(cell, &WCAtlasRawContactIDCellMarkerKey) boolValue]) return YES;
+        NSString *marker = WCAtlasTweakSafeValue(cell, @"userInfo");
+        if ([marker isKindOfClass:NSString.class] && [marker hasPrefix:@"wcatlas_profile_raw_"]) return YES;
+        NSString *cellTitle = WCAtlasTableCellTitle(cell);
         if ([cellTitle isEqualToString:title] || [cellTitle isEqualToString:@"原始 ID"] ||
             [cellTitle isEqualToString:@"原始群号码"]) return YES;
     }
     return NO;
 }
 
-static id NeoWCCreateRawIDCell(id target, NSString *title, NSString *rawID) {
+static id WCAtlasCreateRawIDCell(id target, NSString *title, NSString *rawID) {
     Class cellClass = NSClassFromString(@"WCTableViewCellManager");
     SEL copyFactory = NSSelectorFromString(@"normalCellForSel:target:title:rightValue:canRightValueCopy:");
     SEL basicFactory = NSSelectorFromString(@"normalCellForSel:target:title:rightValue:");
@@ -9457,7 +9457,7 @@ static id NeoWCCreateRawIDCell(id target, NSString *title, NSString *rawID) {
     if ([cellClass respondsToSelector:copyFactory]) {
         cell = ((id (*)(id, SEL, SEL, id, NSString *, NSString *, BOOL))objc_msgSend)(cellClass,
                                                                                      copyFactory,
-                                                                                     @selector(neowc_openInfoCard),
+                                                                                     @selector(wcatlas_openInfoCard),
                                                                                      target,
                                                                                      title,
                                                                                      @"查看",
@@ -9465,13 +9465,13 @@ static id NeoWCCreateRawIDCell(id target, NSString *title, NSString *rawID) {
     } else if ([cellClass respondsToSelector:basicFactory]) {
         cell = ((id (*)(id, SEL, SEL, id, NSString *, NSString *))objc_msgSend)(cellClass,
                                                                                 basicFactory,
-                                                                                @selector(neowc_openInfoCard),
+                                                                                @selector(wcatlas_openInfoCard),
                                                                                 target,
                                                                                 title,
                                                                                 @"查看");
     }
     if (cell) {
-        NeoWCTweakSetValue(cell, @"userInfo", @"neowc_profile_info_card_cell");
+        WCAtlasTweakSetValue(cell, @"userInfo", @"wcatlas_profile_info_card_cell");
         SEL heightSelector = NSSelectorFromString(@"setFCellHeight:");
         if ([cell respondsToSelector:heightSelector]) {
             ((void (*)(id, SEL, CGFloat))objc_msgSend)(cell, heightSelector, 56.0);
@@ -9480,9 +9480,9 @@ static id NeoWCCreateRawIDCell(id target, NSString *title, NSString *rawID) {
     return cell;
 }
 
-static BOOL NeoWCInsertRawIDCell(id section, id cell, NSUInteger index) {
+static BOOL WCAtlasInsertRawIDCell(id section, id cell, NSUInteger index) {
     if (!section || !cell) return NO;
-    NSUInteger count = NeoWCTableCellCount(section);
+    NSUInteger count = WCAtlasTableCellCount(section);
     if (index == NSNotFound || index > count) index = count;
     SEL insertSelector = NSSelectorFromString(@"insertCell:At:");
     SEL addSelector = NSSelectorFromString(@"addCell:");
@@ -9494,7 +9494,7 @@ static BOOL NeoWCInsertRawIDCell(id section, id cell, NSUInteger index) {
         ((void (*)(id, SEL, id))objc_msgSend)(section, addSelector, cell);
         return YES;
     }
-    NSArray *cells = NeoWCTableCells(section);
+    NSArray *cells = WCAtlasTableCells(section);
     if ([cells isKindOfClass:NSMutableArray.class]) {
         [(NSMutableArray *)cells insertObject:cell atIndex:MIN(index, cells.count)];
         return YES;
@@ -9502,18 +9502,18 @@ static BOOL NeoWCInsertRawIDCell(id section, id cell, NSUInteger index) {
     return NO;
 }
 
-static BOOL NeoWCProfileSectionContainsMarker(id section, const void *markerKey, NSString *title) {
-    NSUInteger count = NeoWCTableCellCount(section);
+static BOOL WCAtlasProfileSectionContainsMarker(id section, const void *markerKey, NSString *title) {
+    NSUInteger count = WCAtlasTableCellCount(section);
     for (NSUInteger index = 0; index < count; index++) {
-        id cell = NeoWCTableCellAtIndex(section, index);
+        id cell = WCAtlasTableCellAtIndex(section, index);
         if ([objc_getAssociatedObject(cell, markerKey) boolValue]) return YES;
-        if ([[NeoWCTableCellTitle(cell) stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
+        if ([[WCAtlasTableCellTitle(cell) stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
              isEqualToString:title]) return YES;
     }
     return NO;
 }
 
-static id NeoWCCreateProfileSwitchCell(id target, SEL rowAction, SEL switchAction,
+static id WCAtlasCreateProfileSwitchCell(id target, SEL rowAction, SEL switchAction,
                                        NSString *title, BOOL enabled) {
     Class cellClass = NSClassFromString(@"WCTableViewCellManager");
     UISwitch *toggle = [UISwitch new];
@@ -9531,21 +9531,21 @@ static id NeoWCCreateProfileSwitchCell(id target, SEL rowAction, SEL switchActio
     return nil;
 }
 
-static id NeoWCProfileFeatureTargetSection(id tableInfo, NSUInteger *insertionIndex) {
-    NSUInteger sectionCount = NeoWCCallUnsignedSelector(tableInfo, @"getSectionCount");
-    if (sectionCount == 0) sectionCount = NeoWCTableSections(tableInfo).count;
+static id WCAtlasProfileFeatureTargetSection(id tableInfo, NSUInteger *insertionIndex) {
+    NSUInteger sectionCount = WCAtlasCallUnsignedSelector(tableInfo, @"getSectionCount");
+    if (sectionCount == 0) sectionCount = WCAtlasTableSections(tableInfo).count;
     id bestSection = nil;
     NSInteger bestScore = NSIntegerMin;
     NSUInteger bestIndex = NSNotFound;
     for (NSUInteger sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++) {
-        id section = NeoWCTableSectionAtIndex(tableInfo, sectionIndex);
-        NSUInteger cellCount = NeoWCTableCellCount(section);
+        id section = WCAtlasTableSectionAtIndex(tableInfo, sectionIndex);
+        NSUInteger cellCount = WCAtlasTableCellCount(section);
         NSInteger score = -((NSInteger)sectionIndex);
         NSUInteger index = cellCount;
         for (NSUInteger cellIndex = 0; cellIndex < cellCount; cellIndex++) {
-            id cell = NeoWCTableCellAtIndex(section, cellIndex);
-            NSString *title = NeoWCTableCellTitle(cell);
-            if ([objc_getAssociatedObject(cell, &NeoWCRawContactIDCellMarkerKey) boolValue] ||
+            id cell = WCAtlasTableCellAtIndex(section, cellIndex);
+            NSString *title = WCAtlasTableCellTitle(cell);
+            if ([objc_getAssociatedObject(cell, &WCAtlasRawContactIDCellMarkerKey) boolValue] ||
                 [title isEqualToString:@"原始号码"] || [title isEqualToString:@"原始群号码"]) {
                 score += 200;
                 index = cellIndex + 1;
@@ -9567,94 +9567,94 @@ static id NeoWCProfileFeatureTargetSection(id tableInfo, NSUInteger *insertionIn
     return bestSection;
 }
 
-static void NeoWCInjectProfileConversationSwitches(id controller, BOOL group) {
+static void WCAtlasInjectProfileConversationSwitches(id controller, BOOL group) {
     if (!controller) return;
     NSArray<NSString *> *contactNames = group ?
         @[@"m_chatRoomContact", @"chatRoomContact", @"contact", @"m_contact"] :
         @[@"m_contact", @"contact", @"contactInfo", @"m_contactInfo"];
-    id contact = NeoWCRawProfileValue(controller, contactNames);
-    NSString *username = NeoWCPrivateContactUserName(contact);
+    id contact = WCAtlasRawProfileValue(controller, contactNames);
+    NSString *username = WCAtlasPrivateContactUserName(contact);
     if (![username isKindOfClass:NSString.class] || username.length == 0) return;
-    objc_setAssociatedObject(controller, &NeoWCRawContactIDKey, username, OBJC_ASSOCIATION_COPY_NONATOMIC);
+    objc_setAssociatedObject(controller, &WCAtlasRawContactIDKey, username, OBJC_ASSOCIATION_COPY_NONATOMIC);
 
-    id tableInfo = NeoWCRawProfileValue(controller,
+    id tableInfo = WCAtlasRawProfileValue(controller,
                                         @[@"m_tableViewInfo", @"tableViewInfo", @"m_tableViewMgr", @"tableViewMgr"]);
     NSUInteger insertionIndex = NSNotFound;
-    id section = NeoWCProfileFeatureTargetSection(tableInfo, &insertionIndex);
+    id section = WCAtlasProfileFeatureTargetSection(tableInfo, &insertionIndex);
     if (!section) return;
 
-    BOOL showBlockSwitch = NeoWCEnhancementEnabled(NeoWCMessageBlockEnabledKey) &&
-                           [NSUserDefaults.standardUserDefaults boolForKey:NeoWCMessageBlockProfileSwitchEnabledKey];
-    BOOL showConfirmSwitch = NeoWCEnhancementEnabled(NeoWCSendConfirmationEnabledKey) &&
-                             [NSUserDefaults.standardUserDefaults boolForKey:NeoWCSendConfirmationProfileSwitchEnabledKey];
+    BOOL showBlockSwitch = WCAtlasEnhancementEnabled(WCAtlasMessageBlockEnabledKey) &&
+                           [NSUserDefaults.standardUserDefaults boolForKey:WCAtlasMessageBlockProfileSwitchEnabledKey];
+    BOOL showConfirmSwitch = WCAtlasEnhancementEnabled(WCAtlasSendConfirmationEnabledKey) &&
+                             [NSUserDefaults.standardUserDefaults boolForKey:WCAtlasSendConfirmationProfileSwitchEnabledKey];
     NSString *blockTitle = group ? @"屏蔽本群消息" : @"屏蔽此人消息";
     NSString *confirmTitle = group ? @"本群发送确认" : @"对其发送确认";
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    BOOL blocked = [defaults boolForKey:NeoWCMessageBlockEnabledKey] &&
-                   NeoWCMessageBlockTypesForConversation(username).count > 0;
-    if (showBlockSwitch && !NeoWCProfileSectionContainsMarker(section, &NeoWCProfileMessageBlockCellMarkerKey, blockTitle)) {
-        id cell = NeoWCCreateProfileSwitchCell(controller,
+    BOOL blocked = [defaults boolForKey:WCAtlasMessageBlockEnabledKey] &&
+                   WCAtlasMessageBlockTypesForConversation(username).count > 0;
+    if (showBlockSwitch && !WCAtlasProfileSectionContainsMarker(section, &WCAtlasProfileMessageBlockCellMarkerKey, blockTitle)) {
+        id cell = WCAtlasCreateProfileSwitchCell(controller,
                                                NULL,
-                                               @selector(neowc_toggleProfileMessageBlock:),
+                                               @selector(wcatlas_toggleProfileMessageBlock:),
                                                blockTitle, blocked);
         if (cell) {
-            objc_setAssociatedObject(cell, &NeoWCProfileMessageBlockCellMarkerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            if (NeoWCInsertRawIDCell(section, cell, insertionIndex)) insertionIndex++;
+            objc_setAssociatedObject(cell, &WCAtlasProfileMessageBlockCellMarkerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            if (WCAtlasInsertRawIDCell(section, cell, insertionIndex)) insertionIndex++;
         }
     }
     if (showConfirmSwitch &&
-        !NeoWCProfileSectionContainsMarker(section, &NeoWCProfileSendConfirmationCellMarkerKey, confirmTitle)) {
-        id cell = NeoWCCreateProfileSwitchCell(controller, NULL,
-                                               @selector(neowc_toggleProfileSendConfirmation:),
-                                               confirmTitle, NeoWCSendConfirmationIsProtectedConversation(username));
+        !WCAtlasProfileSectionContainsMarker(section, &WCAtlasProfileSendConfirmationCellMarkerKey, confirmTitle)) {
+        id cell = WCAtlasCreateProfileSwitchCell(controller, NULL,
+                                               @selector(wcatlas_toggleProfileSendConfirmation:),
+                                               confirmTitle, WCAtlasSendConfirmationIsProtectedConversation(username));
         if (cell) {
-            objc_setAssociatedObject(cell, &NeoWCProfileSendConfirmationCellMarkerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            NeoWCInsertRawIDCell(section, cell, insertionIndex);
+            objc_setAssociatedObject(cell, &WCAtlasProfileSendConfirmationCellMarkerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            WCAtlasInsertRawIDCell(section, cell, insertionIndex);
         }
     }
 }
 
-static void NeoWCSetProfileMessageBlocked(NSString *username, BOOL blocked) {
-    NeoWCMessageBlockSetTypesForConversation(username, blocked ? @[@"all"] : @[]);
+static void WCAtlasSetProfileMessageBlocked(NSString *username, BOOL blocked) {
+    WCAtlasMessageBlockSetTypesForConversation(username, blocked ? @[@"all"] : @[]);
 }
 
-static void NeoWCConfigureInfoCardSwitches(NeoWCContactInfoCardViewController *card,
+static void WCAtlasConfigureInfoCardSwitches(WCAtlasContactInfoCardViewController *card,
                                            NSString *username,
                                            BOOL group) {
     if (!card || username.length == 0) return;
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    BOOL showBlock = NeoWCEnhancementEnabled(NeoWCMessageBlockEnabledKey) &&
-                     [defaults boolForKey:NeoWCMessageBlockProfileSwitchEnabledKey];
-    BOOL showConfirm = NeoWCEnhancementEnabled(NeoWCSendConfirmationEnabledKey) &&
-                       [defaults boolForKey:NeoWCSendConfirmationProfileSwitchEnabledKey];
+    BOOL showBlock = WCAtlasEnhancementEnabled(WCAtlasMessageBlockEnabledKey) &&
+                     [defaults boolForKey:WCAtlasMessageBlockProfileSwitchEnabledKey];
+    BOOL showConfirm = WCAtlasEnhancementEnabled(WCAtlasSendConfirmationEnabledKey) &&
+                       [defaults boolForKey:WCAtlasSendConfirmationProfileSwitchEnabledKey];
     NSString *capturedUserName = [username copy];
     if (showBlock) {
-        BOOL blocked = NeoWCMessageBlockTypesForConversation(capturedUserName).count > 0;
+        BOOL blocked = WCAtlasMessageBlockTypesForConversation(capturedUserName).count > 0;
         [card configureMessageBlockSwitchWithTitle:(group ? @"屏蔽本群消息" : @"屏蔽此人消息")
                                             enabled:blocked
                                             handler:^(BOOL enabled) {
-            NeoWCSetProfileMessageBlocked(capturedUserName, enabled);
+            WCAtlasSetProfileMessageBlocked(capturedUserName, enabled);
         }];
     }
     if (showConfirm) {
-        BOOL protectedConversation = NeoWCSendConfirmationIsProtectedConversation(capturedUserName);
+        BOOL protectedConversation = WCAtlasSendConfirmationIsProtectedConversation(capturedUserName);
         [card configureSendConfirmationSwitchWithTitle:(group ? @"本群发送确认" : @"对其发送确认")
                                                   enabled:protectedConversation
                                                   handler:^(BOOL enabled) {
-            NeoWCSendConfirmationSetProtected(capturedUserName, enabled);
+            WCAtlasSendConfirmationSetProtected(capturedUserName, enabled);
         }];
     }
 }
 
-static UIViewController *NeoWCProfileOwnerViewController(id controller) {
+static UIViewController *WCAtlasProfileOwnerViewController(id controller) {
     if ([controller isKindOfClass:UIViewController.class]) return controller;
-    id candidate = NeoWCRawProfileValue(controller,
+    id candidate = WCAtlasRawProfileValue(controller,
                                         @[@"m_contactInfoViewController", @"contactInfoViewController",
                                           @"m_viewController", @"viewController", @"delegate"]);
     if ([candidate isKindOfClass:UIViewController.class]) return candidate;
-    id tableInfo = NeoWCRawProfileValue(controller,
+    id tableInfo = WCAtlasRawProfileValue(controller,
                                         @[@"m_tableViewInfo", @"tableViewInfo", @"m_tableViewMgr", @"tableViewMgr"]);
-    id tableView = NeoWCRawProfileValue(tableInfo, @[@"getTableView", @"tableView", @"m_tableView"]);
+    id tableView = WCAtlasRawProfileValue(tableInfo, @[@"getTableView", @"tableView", @"m_tableView"]);
     UIResponder *responder = [tableView isKindOfClass:UIView.class] ? tableView : nil;
     while ((responder = responder.nextResponder)) {
         if ([responder isKindOfClass:UIViewController.class]) return (UIViewController *)responder;
@@ -9662,7 +9662,7 @@ static UIViewController *NeoWCProfileOwnerViewController(id controller) {
     return nil;
 }
 
-static void NeoWCAddInfoCardRow(NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows,
+static void WCAtlasAddInfoCardRow(NSMutableArray<NSDictionary<NSString *, NSString *> *> *rows,
                                 NSString *title,
                                 id value) {
     NSString *text = [value isKindOfClass:NSString.class]
@@ -9670,7 +9670,7 @@ static void NeoWCAddInfoCardRow(NSMutableArray<NSDictionary<NSString *, NSString
     if (title.length > 0 && text.length > 0) [rows addObject:@{ @"title": title, @"value": text }];
 }
 
-static NSArray<NSString *> *NeoWCProfileStringList(id value) {
+static NSArray<NSString *> *WCAtlasProfileStringList(id value) {
     if ([value isKindOfClass:NSString.class]) {
         NSMutableArray *items = [NSMutableArray array];
         for (NSString *part in [(NSString *)value componentsSeparatedByCharactersInSet:
@@ -9688,7 +9688,7 @@ static NSArray<NSString *> *NeoWCProfileStringList(id value) {
     return @[];
 }
 
-static void NeoWCAddProfileMemberNamesFromValue(id value, NSMutableSet<NSString *> *names) {
+static void WCAtlasAddProfileMemberNamesFromValue(id value, NSMutableSet<NSString *> *names) {
     if (!value || !names) return;
     if ([value isKindOfClass:NSString.class]) {
         NSString *string = value;
@@ -9724,27 +9724,27 @@ static void NeoWCAddProfileMemberNamesFromValue(id value, NSMutableSet<NSString 
         for (id item in value) {
             NSString *name = [item isKindOfClass:NSString.class]
                 ? [item stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
-                : NeoWCPrivateContactUserName(item);
+                : WCAtlasPrivateContactUserName(item);
             if (name.length > 0) [names addObject:name];
         }
     } @catch (__unused NSException *exception) {}
 }
 
-static NSSet<NSString *> *NeoWCGroupMemberUserNames(id groupContact) {
+static NSSet<NSString *> *WCAtlasGroupMemberUserNames(id groupContact) {
     NSMutableSet<NSString *> *names = [NSMutableSet set];
-    id directValue = NeoWCRawProfileValue(groupContact, @[@"m_nsChatRoomMemList"]);
-    NeoWCAddProfileMemberNamesFromValue(directValue, names);
-    id roomData = NeoWCRawProfileValue(groupContact, @[@"m_ChatRoomData"]);
-    id nestedValue = NeoWCRawProfileValue(roomData, @[@"m_nsChatRoomMemList"]);
-    NeoWCAddProfileMemberNamesFromValue(nestedValue, names);
+    id directValue = WCAtlasRawProfileValue(groupContact, @[@"m_nsChatRoomMemList"]);
+    WCAtlasAddProfileMemberNamesFromValue(directValue, names);
+    id roomData = WCAtlasRawProfileValue(groupContact, @[@"m_ChatRoomData"]);
+    id nestedValue = WCAtlasRawProfileValue(roomData, @[@"m_nsChatRoomMemList"]);
+    WCAtlasAddProfileMemberNamesFromValue(nestedValue, names);
     return (directValue || nestedValue) ? names : nil;
 }
 
-static NSArray *NeoWCAllChatRoomContacts(void) {
-    return NeoWCPrivateGroupContactList();
+static NSArray *WCAtlasAllChatRoomContacts(void) {
+    return WCAtlasPrivateGroupContactList();
 }
 
-static BOOL NeoWCContactListMethodIsCompatible(id manager, SEL selector) {
+static BOOL WCAtlasContactListMethodIsCompatible(id manager, SEL selector) {
     Method method = manager ? class_getInstanceMethod([manager class], selector) : NULL;
     if (!method || method_getNumberOfArguments(method) != 3) return NO;
     char returnType[8] = {0};
@@ -9754,9 +9754,9 @@ static BOOL NeoWCContactListMethodIsCompatible(id manager, SEL selector) {
     return (returnType[0] == 'B' || returnType[0] == 'c') && argumentType[0] == '@';
 }
 
-static BOOL NeoWCIsUsernameInContactList(id manager, SEL selector, NSString *userName, BOOL *available) {
+static BOOL WCAtlasIsUsernameInContactList(id manager, SEL selector, NSString *userName, BOOL *available) {
     if (available) *available = NO;
-    if (!manager || userName.length == 0 || !NeoWCContactListMethodIsCompatible(manager, selector)) return NO;
+    if (!manager || userName.length == 0 || !WCAtlasContactListMethodIsCompatible(manager, selector)) return NO;
     if (available) *available = YES;
     @try {
         return ((BOOL (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
@@ -9766,20 +9766,20 @@ static BOOL NeoWCIsUsernameInContactList(id manager, SEL selector, NSString *use
     }
 }
 
-static NSInteger NeoWCGroupFriendCount(id groupContact) {
-    NSSet<NSString *> *memberNames = NeoWCGroupMemberUserNames(groupContact);
+static NSInteger WCAtlasGroupFriendCount(id groupContact) {
+    NSSet<NSString *> *memberNames = WCAtlasGroupMemberUserNames(groupContact);
     if (memberNames.count == 0) return -1;
     Class contactManagerClass = objc_getClass("CContactMgr");
-    id contactManager = contactManagerClass ? NeoWCServiceForClass(contactManagerClass) : nil;
+    id contactManager = contactManagerClass ? WCAtlasServiceForClass(contactManagerClass) : nil;
     SEL membershipSelector = NSSelectorFromString(@"isInContactList:");
-    if (!NeoWCContactListMethodIsCompatible(contactManager, membershipSelector)) return -1;
+    if (!WCAtlasContactListMethodIsCompatible(contactManager, membershipSelector)) return -1;
 
-    NSString *currentUserName = NeoWCCurrentUserWXID();
+    NSString *currentUserName = WCAtlasCurrentUserWXID();
     NSInteger friendCount = 0;
     BOOL available = YES;
     for (NSString *memberName in memberNames) {
         if (currentUserName.length > 0 && [memberName isEqualToString:currentUserName]) continue;
-        BOOL isFriend = NeoWCIsUsernameInContactList(contactManager, membershipSelector,
+        BOOL isFriend = WCAtlasIsUsernameInContactList(contactManager, membershipSelector,
                                                      memberName, &available);
         if (!available) return -1;
         if (isFriend) friendCount++;
@@ -9787,56 +9787,56 @@ static NSInteger NeoWCGroupFriendCount(id groupContact) {
     return friendCount;
 }
 
-static NSArray *NeoWCCommonGroupContacts(NSString *userName) {
+static NSArray *WCAtlasCommonGroupContacts(NSString *userName) {
     if (userName.length == 0 || [userName hasSuffix:@"@chatroom"]) return nil;
-    NSArray *groups = NeoWCAllChatRoomContacts();
+    NSArray *groups = WCAtlasAllChatRoomContacts();
     if (!groups) return nil;
     NSMutableArray *matches = [NSMutableArray array];
     for (id groupContact in groups) {
-        NSSet<NSString *> *memberNames = NeoWCGroupMemberUserNames(groupContact);
+        NSSet<NSString *> *memberNames = WCAtlasGroupMemberUserNames(groupContact);
         if ([memberNames containsObject:userName]) [matches addObject:groupContact];
     }
     return matches;
 }
 
-static NSInteger NeoWCCommonGroupCount(NSString *userName) {
-    NSArray *groups = NeoWCCommonGroupContacts(userName);
+static NSInteger WCAtlasCommonGroupCount(NSString *userName) {
+    NSArray *groups = WCAtlasCommonGroupContacts(userName);
     return groups ? (NSInteger)groups.count : -1;
 }
 
-static NSArray *NeoWCGroupFriendContacts(id groupContact) {
-    NSSet<NSString *> *memberNames = NeoWCGroupMemberUserNames(groupContact);
+static NSArray *WCAtlasGroupFriendContacts(id groupContact) {
+    NSSet<NSString *> *memberNames = WCAtlasGroupMemberUserNames(groupContact);
     if (memberNames.count == 0) return nil;
     Class contactManagerClass = objc_getClass("CContactMgr");
-    id contactManager = contactManagerClass ? NeoWCServiceForClass(contactManagerClass) : nil;
+    id contactManager = contactManagerClass ? WCAtlasServiceForClass(contactManagerClass) : nil;
     SEL membershipSelector = NSSelectorFromString(@"isInContactList:");
-    if (!NeoWCContactListMethodIsCompatible(contactManager, membershipSelector)) return nil;
-    NSString *currentUserName = NeoWCCurrentUserWXID();
+    if (!WCAtlasContactListMethodIsCompatible(contactManager, membershipSelector)) return nil;
+    NSString *currentUserName = WCAtlasCurrentUserWXID();
     NSMutableArray *contacts = [NSMutableArray array];
     for (NSString *memberName in memberNames) {
         if ([memberName isEqualToString:currentUserName]) continue;
         BOOL available = NO;
-        if (!NeoWCIsUsernameInContactList(contactManager, membershipSelector, memberName, &available)) {
+        if (!WCAtlasIsUsernameInContactList(contactManager, membershipSelector, memberName, &available)) {
             if (!available) return nil;
             continue;
         }
-        id contact = NeoWCContactForUserName(memberName);
+        id contact = WCAtlasContactForUserName(memberName);
         if (contact) [contacts addObject:contact];
     }
     return contacts;
 }
 
-static NSArray<NSDictionary<NSString *, id> *> *NeoWCInfoListRowsForContacts(NSArray *contacts) {
+static NSArray<NSDictionary<NSString *, id> *> *WCAtlasInfoListRowsForContacts(NSArray *contacts) {
     NSMutableArray<NSDictionary<NSString *, id> *> *rows = [NSMutableArray array];
     NSMutableSet<NSString *> *identifiers = [NSMutableSet set];
     for (id contact in contacts) {
-        NSString *userName = NeoWCPrivateContactUserName(contact);
+        NSString *userName = WCAtlasPrivateContactUserName(contact);
         if (userName.length == 0 || [identifiers containsObject:userName]) continue;
         [identifiers addObject:userName];
-        NSString *name = NeoWCAvatarDisplayName(contact, userName);
+        NSString *name = WCAtlasAvatarDisplayName(contact, userName);
         NSMutableDictionary<NSString *, id> *row = [@{ @"title": name.length > 0 ? name : userName,
                                                         @"value": userName } mutableCopy];
-        UIImage *image = NeoWCPrivateContactAvatarImage(contact);
+        UIImage *image = WCAtlasPrivateContactAvatarImage(contact);
         if (image) row[@"image"] = image;
         [rows addObject:row];
     }
@@ -9846,11 +9846,11 @@ static NSArray<NSDictionary<NSString *, id> *> *NeoWCInfoListRowsForContacts(NSA
     return rows;
 }
 
-static NSArray *NeoWCMergedContactCollections(NSArray *primary, NSArray *secondary) {
+static NSArray *WCAtlasMergedContactCollections(NSArray *primary, NSArray *secondary) {
     NSMutableArray *merged = [NSMutableArray array];
     NSMutableSet<NSString *> *identifiers = [NSMutableSet set];
     for (id contact in [(primary ?: @[]) arrayByAddingObjectsFromArray:secondary ?: @[]]) {
-        NSString *userName = NeoWCPrivateContactUserName(contact);
+        NSString *userName = WCAtlasPrivateContactUserName(contact);
         if (userName.length == 0 || [identifiers containsObject:userName]) continue;
         [identifiers addObject:userName];
         [merged addObject:contact];
@@ -9858,92 +9858,92 @@ static NSArray *NeoWCMergedContactCollections(NSArray *primary, NSArray *seconda
     return merged;
 }
 
-static void NeoWCConfigureInfoCardDetailActions(NeoWCContactInfoCardViewController *card,
+static void WCAtlasConfigureInfoCardDetailActions(WCAtlasContactInfoCardViewController *card,
                                                 id contact,
                                                 id groupContact,
                                                 NSString *username,
                                                 id officialController) {
     if (!card) return;
     id resolvedGroupContact = groupContact;
-    NSString *contactUserName = NeoWCPrivateContactUserName(contact);
+    NSString *contactUserName = WCAtlasPrivateContactUserName(contact);
     if (!resolvedGroupContact && [contactUserName hasSuffix:@"@chatroom"]) resolvedGroupContact = contact;
-    NSArray *friends = NeoWCGroupFriendContacts(resolvedGroupContact);
-    NSArray *friendRows = NeoWCInfoListRowsForContacts(friends);
+    NSArray *friends = WCAtlasGroupFriendContacts(resolvedGroupContact);
+    NSArray *friendRows = WCAtlasInfoListRowsForContacts(friends);
     if (friendRows.count > 0) {
         [card configureRowActionWithTitle:@"群内好友" handler:^(UIViewController *presenter) {
-            NeoWCInfoListViewController *list = [[NeoWCInfoListViewController alloc]
+            WCAtlasInfoListViewController *list = [[WCAtlasInfoListViewController alloc]
                 initWithTitle:@"群内好友" rows:friendRows];
             [list configureSelectionHandler:^(UIViewController *listPresenter, NSDictionary<NSString *,id> *row) {
                 NSString *memberUserName = row[@"value"];
-                id memberContact = NeoWCContactForUserName(memberUserName);
-                if (memberContact) NeoWCOpenAvatarProfile(listPresenter, nil, memberContact);
-                else NeoWCShowTransientMessage(@"未获取到好友资料", NO);
+                id memberContact = WCAtlasContactForUserName(memberUserName);
+                if (memberContact) WCAtlasOpenAvatarProfile(listPresenter, nil, memberContact);
+                else WCAtlasShowTransientMessage(@"未获取到好友资料", NO);
             }];
             [presenter.navigationController pushViewController:list animated:YES];
         }];
     }
 
     if (username.length == 0 || [username hasSuffix:@"@chatroom"]) return;
-    NSArray *localGroups = NeoWCCommonGroupContacts(username);
-    NSArray *officialGroups = officialController ? NeoWCOfficialRelatedGroups(officialController) : nil;
-    NSArray *groups = NeoWCMergedContactCollections(localGroups, officialGroups);
-    NSArray *groupRows = NeoWCInfoListRowsForContacts(groups);
+    NSArray *localGroups = WCAtlasCommonGroupContacts(username);
+    NSArray *officialGroups = officialController ? WCAtlasOfficialRelatedGroups(officialController) : nil;
+    NSArray *groups = WCAtlasMergedContactCollections(localGroups, officialGroups);
+    NSArray *groupRows = WCAtlasInfoListRowsForContacts(groups);
     if (groupRows.count > 0) {
         [card configureRowActionWithTitle:@"共同群聊" handler:^(UIViewController *presenter) {
-            NeoWCInfoListViewController *list = [[NeoWCInfoListViewController alloc]
+            WCAtlasInfoListViewController *list = [[WCAtlasInfoListViewController alloc]
                 initWithTitle:@"共同群聊" rows:groupRows];
             [list configureSelectionHandler:^(__unused UIViewController *listPresenter,
                                                NSDictionary<NSString *,id> *row) {
                 NSString *groupUserName = row[@"value"];
-                if ([groupUserName hasSuffix:@"@chatroom"]) NeoWCOpenChatForUserName(groupUserName);
+                if ([groupUserName hasSuffix:@"@chatroom"]) WCAtlasOpenChatForUserName(groupUserName);
             }];
             [presenter.navigationController pushViewController:list animated:YES];
         }];
     }
 }
 
-static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCProfileInfoRows(id contact, BOOL group) {
+static NSArray<NSDictionary<NSString *, NSString *> *> *WCAtlasProfileInfoRows(id contact, BOOL group) {
     NSMutableArray *rows = [NSMutableArray array];
-    NeoWCAddInfoCardRow(rows, group ? @"原始群号码" : @"原始号码",
-                       NeoWCPrivateContactUserName(contact));
+    WCAtlasAddInfoCardRow(rows, group ? @"原始群号码" : @"原始号码",
+                       WCAtlasPrivateContactUserName(contact));
     if (group) {
-        NeoWCAddInfoCardRow(rows, @"群聊名称",
-                           NeoWCPrivateContactDisplayName(contact, nil));
-        NSSet<NSString *> *memberNames = NeoWCGroupMemberUserNames(contact);
-        if (memberNames.count > 0) NeoWCAddInfoCardRow(rows, @"群成员",
+        WCAtlasAddInfoCardRow(rows, @"群聊名称",
+                           WCAtlasPrivateContactDisplayName(contact, nil));
+        NSSet<NSString *> *memberNames = WCAtlasGroupMemberUserNames(contact);
+        if (memberNames.count > 0) WCAtlasAddInfoCardRow(rows, @"群成员",
                                                         [NSString stringWithFormat:@"%lu 人",
                                                          (unsigned long)memberNames.count]);
-        NSInteger friendCount = NeoWCGroupFriendCount(contact);
-        if (friendCount >= 0) NeoWCAddInfoCardRow(rows, @"群内好友",
+        NSInteger friendCount = WCAtlasGroupFriendCount(contact);
+        if (friendCount >= 0) WCAtlasAddInfoCardRow(rows, @"群内好友",
                                                    [NSString stringWithFormat:@"%ld 人", (long)friendCount]);
-        NeoWCAddInfoCardRow(rows, @"群主", NeoWCRawProfileValue(contact,
+        WCAtlasAddInfoCardRow(rows, @"群主", WCAtlasRawProfileValue(contact,
             @[@"m_nsChatRoomOwner", @"m_nsOwner", @"ownerUserName", @"owner"]));
-        NSArray *admins = NeoWCProfileStringList(NeoWCRawProfileValue(contact,
+        NSArray *admins = WCAtlasProfileStringList(WCAtlasRawProfileValue(contact,
             @[@"m_nsChatRoomAdminList", @"m_nsAdminList", @"m_adminList", @"adminList", @"admins", @"m_arrAdmin"]));
-        if (admins.count > 0) NeoWCAddInfoCardRow(rows, @"管理员", [admins componentsJoinedByString:@"、"]);
-        NeoWCAddInfoCardRow(rows, @"群简介", NeoWCRawProfileValue(contact, @[@"groupSummary"]));
-        NeoWCAddInfoCardRow(rows, @"群链接", NeoWCRawProfileValue(contact, @[@"groupURL"]));
+        if (admins.count > 0) WCAtlasAddInfoCardRow(rows, @"管理员", [admins componentsJoinedByString:@"、"]);
+        WCAtlasAddInfoCardRow(rows, @"群简介", WCAtlasRawProfileValue(contact, @[@"groupSummary"]));
+        WCAtlasAddInfoCardRow(rows, @"群链接", WCAtlasRawProfileValue(contact, @[@"groupURL"]));
     } else {
-        NeoWCAddInfoCardRow(rows, @"昵称", NeoWCPrivateContactNickname(contact));
-        NeoWCAddInfoCardRow(rows, @"备注", NeoWCPrivateContactRemark(contact));
-        NeoWCAddInfoCardRow(rows, @"微信号", NeoWCPrivateContactAlias(contact));
-        NSString *userName = NeoWCPrivateContactUserName(contact);
-        NeoWCAddInfoCardRow(rows, @"脱敏姓名",
-            [[NeoWCFriendRelationChecker sharedChecker] maskedRealNameForUserName:userName]);
-        NeoWCAddInfoCardRow(rows, @"添加时间", NeoWCContactAddTimeValue(contact));
-        NeoWCAddInfoCardRow(rows, @"添加天数", NeoWCContactAddDaysValue(contact));
+        WCAtlasAddInfoCardRow(rows, @"昵称", WCAtlasPrivateContactNickname(contact));
+        WCAtlasAddInfoCardRow(rows, @"备注", WCAtlasPrivateContactRemark(contact));
+        WCAtlasAddInfoCardRow(rows, @"微信号", WCAtlasPrivateContactAlias(contact));
+        NSString *userName = WCAtlasPrivateContactUserName(contact);
+        WCAtlasAddInfoCardRow(rows, @"脱敏姓名",
+            [[WCAtlasFriendRelationChecker sharedChecker] maskedRealNameForUserName:userName]);
+        WCAtlasAddInfoCardRow(rows, @"添加时间", WCAtlasContactAddTimeValue(contact));
+        WCAtlasAddInfoCardRow(rows, @"添加天数", WCAtlasContactAddDaysValue(contact));
         // The native related-group search exits early for non-friends. Seed the
         // row from the WCPulse-compatible session/contact scan, then merge any
         // official result that becomes available asynchronously.
-        NSInteger commonCount = NeoWCCommonGroupCount(userName);
-        NeoWCAddInfoCardRow(rows, @"共同群聊", commonCount >= 0
+        NSInteger commonCount = WCAtlasCommonGroupCount(userName);
+        WCAtlasAddInfoCardRow(rows, @"共同群聊", commonCount >= 0
             ? [NSString stringWithFormat:@"%ld 个", (long)commonCount]
             : @"正在加载");
     }
     return rows;
 }
 
-static UIViewController *NeoWCCreateOfficialSocialInformation(id contact) {
+static UIViewController *WCAtlasCreateOfficialSocialInformation(id contact) {
     if (!contact) return nil;
     Class controllerClass = NSClassFromString(@"SocialInfomationViewController");
     SEL setter = NSSelectorFromString(@"setM_contact:");
@@ -9952,23 +9952,23 @@ static UIViewController *NeoWCCreateOfficialSocialInformation(id contact) {
         return nil;
     }
     ((void (*)(id, SEL, id))objc_msgSend)(controller, setter, contact);
-    NSString *rawID = NeoWCPrivateContactUserName(contact);
-    objc_setAssociatedObject(controller, &NeoWCProfileContactKey, contact, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(controller, &NeoWCProfileIsGroupKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(controller, &NeoWCRawContactIDKey, rawID, OBJC_ASSOCIATION_COPY_NONATOMIC);
+    NSString *rawID = WCAtlasPrivateContactUserName(contact);
+    objc_setAssociatedObject(controller, &WCAtlasProfileContactKey, contact, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &WCAtlasProfileIsGroupKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &WCAtlasRawContactIDKey, rawID, OBJC_ASSOCIATION_COPY_NONATOMIC);
     (void)controller.view;
     SEL reloadSelector = NSSelectorFromString(@"reloadTableView");
     if ([controller respondsToSelector:reloadSelector]) {
         ((void (*)(id, SEL))objc_msgSend)(controller, reloadSelector);
     }
-    id relatedGroupLogic = NeoWCRawProfileValue(controller,
+    id relatedGroupLogic = WCAtlasRawProfileValue(controller,
         @[@"m_relatedGroupLogic", @"relatedGroupLogic"]);
     if (!relatedGroupLogic) {
         Class logicClass = objc_getClass("ContactRelatedGroupLogic");
         SEL initializer = NSSelectorFromString(@"initWithContact:");
         Method initializerMethod = logicClass ? class_getInstanceMethod(logicClass, initializer) : NULL;
         if (initializerMethod && method_getNumberOfArguments(initializerMethod) == 3 &&
-            NeoWCMethodReturnsObject(initializerMethod)) {
+            WCAtlasMethodReturnsObject(initializerMethod)) {
             @try {
                 relatedGroupLogic = ((id (*)(id, SEL, id))objc_msgSend)([logicClass alloc], initializer, contact);
             } @catch (__unused NSException *exception) {
@@ -9976,7 +9976,7 @@ static UIViewController *NeoWCCreateOfficialSocialInformation(id contact) {
             }
         }
         if (relatedGroupLogic) {
-            objc_setAssociatedObject(controller, &NeoWCOfficialRelatedGroupLogicKey,
+            objc_setAssociatedObject(controller, &WCAtlasOfficialRelatedGroupLogicKey,
                                      relatedGroupLogic, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
     }
@@ -9998,14 +9998,14 @@ static UIViewController *NeoWCCreateOfficialSocialInformation(id contact) {
                                          (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
                            dispatch_get_main_queue(), ^{
                 UIViewController *strongController = weakController;
-                if (strongController) NeoWCRefreshInfoCardFromOfficialController(strongController);
+                if (strongController) WCAtlasRefreshInfoCardFromOfficialController(strongController);
             });
         }
     }
     return controller;
 }
 
-static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCGroupMemberInfoRows(id contact,
+static NSArray<NSDictionary<NSString *, NSString *> *> *WCAtlasGroupMemberInfoRows(id contact,
                                                                                    id groupContact,
                                                                                    NSString *userName) {
     NSMutableArray *rows = [NSMutableArray array];
@@ -10013,57 +10013,57 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *NeoWCGroupMemberInfoRows
     if (groupContact && contact && [groupContact respondsToSelector:displaySelector]) {
         @try {
             id value = ((id (*)(id, SEL, id))objc_msgSend)(groupContact, displaySelector, contact);
-            NeoWCAddInfoCardRow(rows, @"群昵称", value);
+            WCAtlasAddInfoCardRow(rows, @"群昵称", value);
         } @catch (__unused NSException *exception) {}
     }
-    NSString *owner = NeoWCRawProfileValue(groupContact,
+    NSString *owner = WCAtlasRawProfileValue(groupContact,
         @[@"m_nsChatRoomOwner", @"m_nsOwner", @"ownerUserName", @"owner"]);
-    NSArray *admins = NeoWCProfileStringList(NeoWCRawProfileValue(groupContact,
+    NSArray *admins = WCAtlasProfileStringList(WCAtlasRawProfileValue(groupContact,
         @[@"m_nsChatRoomAdminList", @"m_nsAdminList", @"m_adminList", @"adminList", @"admins", @"m_arrAdmin"]));
     NSString *role = [owner isEqualToString:userName] ? @"群主"
         : ([admins containsObject:userName] ? @"管理员" : @"群成员");
-    NeoWCAddInfoCardRow(rows, @"群身份", role);
-    NSInteger friendCount = NeoWCGroupFriendCount(groupContact);
-    if (friendCount >= 0) NeoWCAddInfoCardRow(rows, @"群内好友",
+    WCAtlasAddInfoCardRow(rows, @"群身份", role);
+    NSInteger friendCount = WCAtlasGroupFriendCount(groupContact);
+    if (friendCount >= 0) WCAtlasAddInfoCardRow(rows, @"群内好友",
                                                [NSString stringWithFormat:@"%ld 人", (long)friendCount]);
     return rows;
 }
 
-static NSString *NeoWCGroupMemberInviterUserName(id groupContact, id memberContact,
+static NSString *WCAtlasGroupMemberInviterUserName(id groupContact, id memberContact,
                                                   NSString *memberUserName) {
-    id chatRoomData = NeoWCRawProfileValue(groupContact,
+    id chatRoomData = WCAtlasRawProfileValue(groupContact,
         @[@"m_ChatRoomData", @"m_chatRoomData", @"chatRoomData"]);
     SEL selector = NSSelectorFromString(@"getInviterNameForUsername:");
     Method method = chatRoomData ? class_getInstanceMethod([chatRoomData class], selector) : NULL;
     if (method && method_getNumberOfArguments(method) == 3 &&
-        NeoWCMethodReturnsObject(method) && NeoWCMethodArgumentIsObject(method, 2)) {
+        WCAtlasMethodReturnsObject(method) && WCAtlasMethodArgumentIsObject(method, 2)) {
         @try {
             id value = ((id (*)(id, SEL, id))objc_msgSend)(chatRoomData, selector, memberUserName);
             if ([value isKindOfClass:NSString.class] && [value length] > 0) return value;
         } @catch (__unused NSException *exception) {}
     }
-    id fallback = NeoWCRawProfileValue(memberContact,
+    id fallback = WCAtlasRawProfileValue(memberContact,
         @[@"m_InviteUserName", @"m_inviteUserName", @"inviteUserName", @"inviterUserName"]);
     return [fallback isKindOfClass:NSString.class] && [fallback length] > 0 ? fallback : nil;
 }
 
-static NSInteger NeoWCGroupMemberRemovalScene(id groupContact,
+static NSInteger WCAtlasGroupMemberRemovalScene(id groupContact,
                                                id memberContact,
                                                NSString *memberUserName) {
-    NSString *selfUserName = NeoWCCurrentUserWXID();
-    NSString *groupUserName = NeoWCContactUserName(groupContact);
+    NSString *selfUserName = WCAtlasCurrentUserWXID();
+    NSString *groupUserName = WCAtlasContactUserName(groupContact);
     if (!groupContact || !memberContact || ![groupUserName hasSuffix:@"@chatroom"] ||
         memberUserName.length == 0 || selfUserName.length == 0 ||
         [memberUserName isEqualToString:selfUserName]) return 0;
 
     Class groupManagerClass = NSClassFromString(@"CGroupMgr");
-    id groupManager = groupManagerClass ? NeoWCServiceForClass(groupManagerClass) : nil;
+    id groupManager = groupManagerClass ? WCAtlasServiceForClass(groupManagerClass) : nil;
     SEL groupGetter = NSSelectorFromString(@"getContactByName:");
     Method groupGetterMethod = groupManager ? class_getInstanceMethod([groupManager class], groupGetter) : NULL;
     id resolvedGroupContact = groupContact;
     if (groupGetterMethod && method_getNumberOfArguments(groupGetterMethod) == 3 &&
-        NeoWCMethodReturnsObject(groupGetterMethod) &&
-        NeoWCMethodArgumentIsObject(groupGetterMethod, 2)) {
+        WCAtlasMethodReturnsObject(groupGetterMethod) &&
+        WCAtlasMethodArgumentIsObject(groupGetterMethod, 2)) {
         @try {
             id value = ((id (*)(id, SEL, id))objc_msgSend)(groupManager, groupGetter, groupUserName);
             if (value) resolvedGroupContact = value;
@@ -10076,8 +10076,8 @@ static NSInteger NeoWCGroupMemberRemovalScene(id groupContact,
     Method memberListMethod = groupManager
         ? class_getInstanceMethod([groupManager class], memberListSelector) : NULL;
     if (memberListMethod && method_getNumberOfArguments(memberListMethod) == 3 &&
-        NeoWCMethodReturnsObject(memberListMethod) &&
-        NeoWCMethodArgumentIsObject(memberListMethod, 2)) {
+        WCAtlasMethodReturnsObject(memberListMethod) &&
+        WCAtlasMethodArgumentIsObject(memberListMethod, 2)) {
         @try {
             id list = ((id (*)(id, SEL, id))objc_msgSend)(groupManager,
                 memberListSelector, resolvedGroupContact);
@@ -10088,26 +10088,26 @@ static NSInteger NeoWCGroupMemberRemovalScene(id groupContact,
         } @catch (__unused NSException *exception) {}
     }
     if (!memberListAvailable) {
-        isCurrentMember = [NeoWCGroupMemberUserNames(resolvedGroupContact) containsObject:memberUserName];
+        isCurrentMember = [WCAtlasGroupMemberUserNames(resolvedGroupContact) containsObject:memberUserName];
     }
     if (!isCurrentMember) return 0;
 
-    NSString *owner = NeoWCRawProfileValue(resolvedGroupContact,
+    NSString *owner = WCAtlasRawProfileValue(resolvedGroupContact,
         @[@"m_nsOwner", @"m_nsChatRoomOwner", @"ownerUserName", @"owner"]);
     if ([memberUserName isEqualToString:owner]) return 0;
     if ([selfUserName isEqualToString:owner]) return 1;
 
-    NSArray<NSString *> *admins = NeoWCProfileStringList(NeoWCRawProfileValue(resolvedGroupContact,
+    NSArray<NSString *> *admins = WCAtlasProfileStringList(WCAtlasRawProfileValue(resolvedGroupContact,
         @[@"m_nsChatRoomAdminList", @"m_nsAdminList", @"adminList", @"admins"]));
     if ([admins containsObject:selfUserName]) return 1;
 
-    NSString *inviter = NeoWCGroupMemberInviterUserName(resolvedGroupContact,
+    NSString *inviter = WCAtlasGroupMemberInviterUserName(resolvedGroupContact,
                                                          memberContact,
                                                          memberUserName);
     return [inviter isEqualToString:selfUserName] ? 2 : 0;
 }
 
-static BOOL NeoWCMethodArgumentIsIntegerScalar(Method method, unsigned int index) {
+static BOOL WCAtlasMethodArgumentIsIntegerScalar(Method method, unsigned int index) {
     if (!method || index >= method_getNumberOfArguments(method)) return NO;
     char type[16] = {0};
     method_getArgumentType(method, index, type, sizeof(type));
@@ -10117,19 +10117,19 @@ static BOOL NeoWCMethodArgumentIsIntegerScalar(Method method, unsigned int index
     return strchr("cCsSiIlLqQB", *cursor) != NULL;
 }
 
-static void NeoWCConfirmRemoveGroupMember(UIViewController *presenter,
+static void WCAtlasConfirmRemoveGroupMember(UIViewController *presenter,
                                           id groupContact,
                                           id memberContact,
                                           NSString *memberUserName,
                                           NSInteger scene) {
-    NSInteger currentScene = NeoWCGroupMemberRemovalScene(groupContact, memberContact, memberUserName);
+    NSInteger currentScene = WCAtlasGroupMemberRemovalScene(groupContact, memberContact, memberUserName);
     if (!presenter || currentScene <= 0) {
-        NeoWCShowTransientMessage(@"当前无权移出该成员", NO);
+        WCAtlasShowTransientMessage(@"当前无权移出该成员", NO);
         return;
     }
     scene = currentScene;
-    NSString *groupUserName = NeoWCContactUserName(groupContact);
-    NSString *displayName = NeoWCAvatarDisplayName(memberContact, memberUserName);
+    NSString *groupUserName = WCAtlasContactUserName(groupContact);
+    NSString *displayName = WCAtlasAvatarDisplayName(memberContact, memberUserName);
     NSString *message = [NSString stringWithFormat:@"确定将“%@”移出当前群聊？", displayName];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"移出群成员"
                                                                    message:message
@@ -10137,7 +10137,7 @@ static void NeoWCConfirmRemoveGroupMember(UIViewController *presenter,
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"移出" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
         Class managerClass = NSClassFromString(@"CGroupMgr");
-        id manager = managerClass ? NeoWCServiceForClass(managerClass) : nil;
+        id manager = managerClass ? WCAtlasServiceForClass(managerClass) : nil;
         SEL selector = NSSelectorFromString(@"DeleteGroupMember:withMemberList:scene:");
         if (![manager respondsToSelector:selector]) {
             selector = NSSelectorFromString(@"p_DeleteGroupMember:withMemberList:scene:");
@@ -10147,10 +10147,10 @@ static void NeoWCConfirmRemoveGroupMember(UIViewController *presenter,
         if (method) method_getReturnType(method, returnType, sizeof(returnType));
         if (!method || method_getNumberOfArguments(method) != 5 ||
             (returnType[0] != 'B' && returnType[0] != 'c') ||
-            !NeoWCMethodArgumentIsObject(method, 2) ||
-            !NeoWCMethodArgumentIsObject(method, 3) ||
-            !NeoWCMethodArgumentIsIntegerScalar(method, 4)) {
-            NeoWCShowTransientMessage(@"当前微信版本不支持移出成员", NO);
+            !WCAtlasMethodArgumentIsObject(method, 2) ||
+            !WCAtlasMethodArgumentIsObject(method, 3) ||
+            !WCAtlasMethodArgumentIsIntegerScalar(method, 4)) {
+            WCAtlasShowTransientMessage(@"当前微信版本不支持移出成员", NO);
             return;
         }
         BOOL accepted = NO;
@@ -10158,82 +10158,82 @@ static void NeoWCConfirmRemoveGroupMember(UIViewController *presenter,
             accepted = ((BOOL (*)(id, SEL, id, id, NSInteger))objc_msgSend)(manager,
                 selector, groupUserName, @[memberUserName], scene);
         } @catch (NSException *exception) {
-            NeoWCLog(@"移出群成员失败：%@", exception.reason ?: exception.name);
+            WCAtlasLog(@"移出群成员失败：%@", exception.reason ?: exception.name);
         }
-        NeoWCShowTransientMessage(accepted ? @"已提交移出请求" : @"移出成员失败", accepted);
+        WCAtlasShowTransientMessage(accepted ? @"已提交移出请求" : @"移出成员失败", accepted);
     }]];
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
-static void NeoWCOpenProfileInfoCard(id controller) {
-    id contact = objc_getAssociatedObject(controller, &NeoWCProfileContactKey);
-    BOOL group = [objc_getAssociatedObject(controller, &NeoWCProfileIsGroupKey) boolValue];
-    NSString *userName = NeoWCPrivateContactUserName(contact);
-    if (userName.length == 0) userName = objc_getAssociatedObject(controller, &NeoWCRawContactIDKey);
+static void WCAtlasOpenProfileInfoCard(id controller) {
+    id contact = objc_getAssociatedObject(controller, &WCAtlasProfileContactKey);
+    BOOL group = [objc_getAssociatedObject(controller, &WCAtlasProfileIsGroupKey) boolValue];
+    NSString *userName = WCAtlasPrivateContactUserName(contact);
+    if (userName.length == 0) userName = objc_getAssociatedObject(controller, &WCAtlasRawContactIDKey);
     if (userName.length == 0) return;
-    UIViewController *owner = NeoWCProfileOwnerViewController(controller);
-    UIViewController *officialController = !group ? NeoWCCreateOfficialSocialInformation(contact) : nil;
-    NSString *name = NeoWCPrivateContactDisplayName(contact, nil);
-    UIImage *avatar = NeoWCPrivateContactAvatarImage(contact);
-    NSString *chatRoomUserName = objc_getAssociatedObject(controller, &NeoWCProfileChatRoomKey);
-    NSMutableArray *rows = [NeoWCProfileInfoRows(contact, group) mutableCopy];
+    UIViewController *owner = WCAtlasProfileOwnerViewController(controller);
+    UIViewController *officialController = !group ? WCAtlasCreateOfficialSocialInformation(contact) : nil;
+    NSString *name = WCAtlasPrivateContactDisplayName(contact, nil);
+    UIImage *avatar = WCAtlasPrivateContactAvatarImage(contact);
+    NSString *chatRoomUserName = objc_getAssociatedObject(controller, &WCAtlasProfileChatRoomKey);
+    NSMutableArray *rows = [WCAtlasProfileInfoRows(contact, group) mutableCopy];
     if (!group && [chatRoomUserName hasSuffix:@"@chatroom"]) {
         [rows addObject:@{ @"title": @"所在群聊", @"value": chatRoomUserName }];
-        [rows addObjectsFromArray:NeoWCGroupMemberInfoRows(contact,
-            NeoWCContactForUserName(chatRoomUserName), userName)];
+        [rows addObjectsFromArray:WCAtlasGroupMemberInfoRows(contact,
+            WCAtlasContactForUserName(chatRoomUserName), userName)];
     }
     NSArray *baseRows = [rows copy];
-    NSArray *displayRows = NeoWCMergeInfoCardRows(baseRows,
-        officialController ? NeoWCOfficialSocialInformationRows(officialController) : @[]);
-    NeoWCContactInfoCardViewController *card = [[NeoWCContactInfoCardViewController alloc]
+    NSArray *displayRows = WCAtlasMergeInfoCardRows(baseRows,
+        officialController ? WCAtlasOfficialSocialInformationRows(officialController) : @[]);
+    WCAtlasContactInfoCardViewController *card = [[WCAtlasContactInfoCardViewController alloc]
         initWithTitle:(!group && [chatRoomUserName hasSuffix:@"@chatroom"]) ? @"群成员详细信息" : @"详细信息"
                avatar:avatar
                  name:name ?: userName
              userName:userName
              rows:displayRows];
     if (officialController) {
-        NeoWCWeakObjectBox *box = [NeoWCWeakObjectBox new];
+        WCAtlasWeakObjectBox *box = [WCAtlasWeakObjectBox new];
         box.object = card;
-        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoCardBoxKey,
+        objc_setAssociatedObject(officialController, &WCAtlasOfficialInfoCardBoxKey,
                                  box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(officialController, &NeoWCOfficialInfoBaseRowsKey,
+        objc_setAssociatedObject(officialController, &WCAtlasOfficialInfoBaseRowsKey,
                                  baseRows, OBJC_ASSOCIATION_COPY_NONATOMIC);
-        objc_setAssociatedObject(card, &NeoWCInfoCardOfficialControllerKey,
+        objc_setAssociatedObject(card, &WCAtlasInfoCardOfficialControllerKey,
                                  officialController, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        NeoWCRefreshInfoCardFromOfficialController(officialController);
+        WCAtlasRefreshInfoCardFromOfficialController(officialController);
     }
-    NeoWCConfigureInfoCardSwitches(card, userName, group);
+    WCAtlasConfigureInfoCardSwitches(card, userName, group);
     id detailGroupContact = group ? contact : ([chatRoomUserName hasSuffix:@"@chatroom"]
-        ? NeoWCContactForUserName(chatRoomUserName) : nil);
-    NeoWCConfigureInfoCardDetailActions(card, contact, detailGroupContact,
+        ? WCAtlasContactForUserName(chatRoomUserName) : nil);
+    WCAtlasConfigureInfoCardDetailActions(card, contact, detailGroupContact,
                                         userName, officialController);
     if (owner.navigationController) [owner.navigationController pushViewController:card animated:YES];
     else if (owner) [owner presentViewController:[[UINavigationController alloc] initWithRootViewController:card]
                                          animated:YES completion:nil];
 }
 
-static void NeoWCInjectRawIDCell(id controller, BOOL group) {
-    if (!NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey) || !controller) return;
+static void WCAtlasInjectRawIDCell(id controller, BOOL group) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasShowRawContactIDEnabledKey) || !controller) return;
     NSArray<NSString *> *contactNames = group ?
         @[@"m_chatRoomContact", @"chatRoomContact", @"contact", @"m_contact"] :
         @[@"m_contact", @"contact", @"contactInfo", @"m_contactInfo"];
-    id contact = NeoWCRawProfileValue(controller, contactNames);
-    NSString *rawID = NeoWCPrivateContactUserName(contact);
+    id contact = WCAtlasRawProfileValue(controller, contactNames);
+    NSString *rawID = WCAtlasPrivateContactUserName(contact);
     if (![rawID isKindOfClass:NSString.class] || rawID.length == 0) return;
 
-    id tableInfo = NeoWCRawProfileValue(controller,
+    id tableInfo = WCAtlasRawProfileValue(controller,
                                         @[@"m_tableViewInfo", @"tableViewInfo", @"m_tableViewMgr", @"tableViewMgr"]);
-    NSUInteger sectionCount = NeoWCCallUnsignedSelector(tableInfo, @"getSectionCount");
-    if (sectionCount == 0) sectionCount = NeoWCTableSections(tableInfo).count;
+    NSUInteger sectionCount = WCAtlasCallUnsignedSelector(tableInfo, @"getSectionCount");
+    if (sectionCount == 0) sectionCount = WCAtlasTableSections(tableInfo).count;
     if (!tableInfo || sectionCount == 0) return;
-    objc_setAssociatedObject(controller, &NeoWCProfileContactKey, contact, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(controller, &NeoWCProfileIsGroupKey, @(group), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NSString *chatRoomUserName = group ? rawID : NeoWCRawProfileValue(controller,
+    objc_setAssociatedObject(controller, &WCAtlasProfileContactKey, contact, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(controller, &WCAtlasProfileIsGroupKey, @(group), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSString *chatRoomUserName = group ? rawID : WCAtlasRawProfileValue(controller,
         @[@"m_nsChatRoomUserName", @"sessionUserName"]);
     if (![chatRoomUserName hasSuffix:@"@chatroom"]) {
-        chatRoomUserName = NeoWCRawProfileValue(contact, @[@"m_nsChatRoomUserName", @"sessionUserName"]);
+        chatRoomUserName = WCAtlasRawProfileValue(contact, @[@"m_nsChatRoomUserName", @"sessionUserName"]);
     }
-    objc_setAssociatedObject(controller, &NeoWCProfileChatRoomKey,
+    objc_setAssociatedObject(controller, &WCAtlasProfileChatRoomKey,
                              [chatRoomUserName hasSuffix:@"@chatroom"] ? chatRoomUserName : nil,
                              OBJC_ASSOCIATION_COPY_NONATOMIC);
     NSString *title = @"详细信息";
@@ -10241,14 +10241,14 @@ static void NeoWCInjectRawIDCell(id controller, BOOL group) {
     NSUInteger targetIndex = NSNotFound;
     NSInteger targetScore = NSIntegerMin;
     for (NSUInteger sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++) {
-        id section = NeoWCTableSectionAtIndex(tableInfo, sectionIndex);
+        id section = WCAtlasTableSectionAtIndex(tableInfo, sectionIndex);
         if (!section) continue;
-        if (NeoWCSectionContainsRawIDCell(section, title)) return;
-        NSUInteger cellCount = NeoWCTableCellCount(section);
+        if (WCAtlasSectionContainsRawIDCell(section, title)) return;
+        NSUInteger cellCount = WCAtlasTableCellCount(section);
         NSInteger sectionScore = -((NSInteger)sectionIndex);
         NSUInteger sectionTargetIndex = cellCount;
         for (NSUInteger cellIndex = 0; cellIndex < cellCount; cellIndex++) {
-            NSString *cellTitle = NeoWCTableCellTitle(NeoWCTableCellAtIndex(section, cellIndex));
+            NSString *cellTitle = WCAtlasTableCellTitle(WCAtlasTableCellAtIndex(section, cellIndex));
             if (cellTitle.length == 0) continue;
             if ([cellTitle containsString:@"微信号"] || [cellTitle containsString:@"群聊名称"]) {
                 sectionScore += 100;
@@ -10267,18 +10267,18 @@ static void NeoWCInjectRawIDCell(id controller, BOOL group) {
         }
     }
     if (!targetSection) {
-        targetSection = NeoWCTableSectionAtIndex(tableInfo, 0);
-        targetIndex = NeoWCTableCellCount(targetSection);
+        targetSection = WCAtlasTableSectionAtIndex(tableInfo, 0);
+        targetIndex = WCAtlasTableCellCount(targetSection);
     }
-    id cell = NeoWCCreateRawIDCell(controller, title, rawID);
+    id cell = WCAtlasCreateRawIDCell(controller, title, rawID);
     if (!cell || !targetSection) return;
-    objc_setAssociatedObject(cell, &NeoWCRawContactIDCellMarkerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if (!NeoWCInsertRawIDCell(targetSection, cell, targetIndex)) return;
-    objc_setAssociatedObject(controller, &NeoWCRawContactIDKey, rawID, OBJC_ASSOCIATION_COPY_NONATOMIC);
-    NeoWCCompatibilityMarkTriggered(@"raw-contact-id");
+    objc_setAssociatedObject(cell, &WCAtlasRawContactIDCellMarkerKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (!WCAtlasInsertRawIDCell(targetSection, cell, targetIndex)) return;
+    objc_setAssociatedObject(controller, &WCAtlasRawContactIDKey, rawID, OBJC_ASSOCIATION_COPY_NONATOMIC);
+    WCAtlasCompatibilityMarkTriggered(@"raw-contact-id");
 }
 
-static id NeoWCHomeObjectAtIndexPath(id target, NSArray<NSString *> *selectorNames, NSIndexPath *indexPath) {
+static id WCAtlasHomeObjectAtIndexPath(id target, NSArray<NSString *> *selectorNames, NSIndexPath *indexPath) {
     if (!target || !indexPath) return nil;
     for (NSString *selectorName in selectorNames) {
         SEL selector = NSSelectorFromString(selectorName);
@@ -10292,58 +10292,58 @@ static id NeoWCHomeObjectAtIndexPath(id target, NSArray<NSString *> *selectorNam
     return nil;
 }
 
-static id NeoWCHomeSessionCellData(id owner, UITableView *tableView, NSIndexPath *indexPath) {
+static id WCAtlasHomeSessionCellData(id owner, UITableView *tableView, NSIndexPath *indexPath) {
     // WeChatX uses these two native main-frame accessors. Reading through the
     // controller first avoids depending on a particular reused cell subclass.
-    id data = NeoWCHomeObjectAtIndexPath(owner,
+    id data = WCAtlasHomeObjectAtIndexPath(owner,
                                          @[@"getCellDataAtIndexPath:", @"getSessionInfoAtIndexPath:"],
                                          indexPath);
     if (data) return data;
     UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
-    data = NeoWCTweakValueForSelectorNames(cell, @[@"m_cellData", @"cellData", @"m_sessionInfo", @"sessionInfo"]);
+    data = WCAtlasTweakValueForSelectorNames(cell, @[@"m_cellData", @"cellData", @"m_sessionInfo", @"sessionInfo"]);
     if (data) return data;
     id delegate = tableView.delegate;
     if (delegate && delegate != owner) {
-        data = NeoWCHomeObjectAtIndexPath(delegate,
+        data = WCAtlasHomeObjectAtIndexPath(delegate,
                                           @[@"getCellDataAtIndexPath:", @"getSessionInfoAtIndexPath:"],
                                           indexPath);
     }
     return data;
 }
 
-static NSString *NeoWCHomeSessionUserName(id data) {
-    NSString *userName = NeoWCPrivateContactUserName(data);
+static NSString *WCAtlasHomeSessionUserName(id data) {
+    NSString *userName = WCAtlasPrivateContactUserName(data);
     if (userName.length == 0) {
-        id sessionInfo = NeoWCTweakValueForSelectorNames(data, @[@"m_sessionInfo", @"sessionInfo"]);
-        userName = NeoWCPrivateContactUserName(sessionInfo);
+        id sessionInfo = WCAtlasTweakValueForSelectorNames(data, @[@"m_sessionInfo", @"sessionInfo"]);
+        userName = WCAtlasPrivateContactUserName(sessionInfo);
     }
     return userName;
 }
 
-static BOOL NeoWCHomeBooleanValue(id object, NSArray<NSString *> *names) {
+static BOOL WCAtlasHomeBooleanValue(id object, NSArray<NSString *> *names) {
     for (NSString *name in names) {
         SEL selector = NSSelectorFromString(name);
         if ([object respondsToSelector:selector]) {
             @try { return ((BOOL (*)(id, SEL))objc_msgSend)(object, selector); }
             @catch (__unused NSException *exception) {}
         }
-        id value = NeoWCTweakSafeValue(object, name);
+        id value = WCAtlasTweakSafeValue(object, name);
         if ([value respondsToSelector:@selector(boolValue)]) return [value boolValue];
     }
     return NO;
 }
 
-static BOOL NeoWCHomeSessionMuted(id data) {
+static BOOL WCAtlasHomeSessionMuted(id data) {
     if ([data respondsToSelector:NSSelectorFromString(@"isSilent")]) {
-        return NeoWCHomeBooleanValue(data, @[@"isSilent"]);
+        return WCAtlasHomeBooleanValue(data, @[@"isSilent"]);
     }
     if ([data respondsToSelector:NSSelectorFromString(@"isChatStatusNotifyOpen")]) {
-        return !NeoWCHomeBooleanValue(data, @[@"isChatStatusNotifyOpen"]);
+        return !WCAtlasHomeBooleanValue(data, @[@"isChatStatusNotifyOpen"]);
     }
-    return NeoWCHomeBooleanValue(data, @[@"m_bIsSilent", @"m_isSilent"]);
+    return WCAtlasHomeBooleanValue(data, @[@"m_bIsSilent", @"m_isSilent"]);
 }
 
-static void NeoWCPushHomeController(id owner, id controller) {
+static void WCAtlasPushHomeController(id owner, id controller) {
     if (![owner isKindOfClass:UIViewController.class] || ![controller isKindOfClass:UIViewController.class]) return;
     UIViewController *presenter = owner;
     UINavigationController *navigationController = presenter.navigationController;
@@ -10351,7 +10351,7 @@ static void NeoWCPushHomeController(id owner, id controller) {
     else [presenter presentViewController:controller animated:YES completion:nil];
 }
 
-static id NeoWCHomeActionOwner(id owner, UITableView *tableView) {
+static id WCAtlasHomeActionOwner(id owner, UITableView *tableView) {
     if ([owner isKindOfClass:UIViewController.class]) return owner;
     UIResponder *responder = tableView;
     while ((responder = responder.nextResponder)) {
@@ -10360,34 +10360,34 @@ static id NeoWCHomeActionOwner(id owner, UITableView *tableView) {
     return owner;
 }
 
-static void NeoWCOpenHomeRemark(id owner, id contact, BOOL group) {
+static void WCAtlasOpenHomeRemark(id owner, id contact, BOOL group) {
     Class controllerClass = NSClassFromString(group ? @"ChatRoomRemarkEditViewController" : @"NewRemarkViewController");
     id controller = controllerClass ? [controllerClass new] : nil;
     if (!controller) return;
-    NeoWCTweakSetValue(controller, group ? @"chatRoomContact" : @"m_contact", contact);
-    NeoWCTweakSetValue(controller, group ? @"m_chatRoomContact" : @"contact", contact);
+    WCAtlasTweakSetValue(controller, group ? @"chatRoomContact" : @"m_contact", contact);
+    WCAtlasTweakSetValue(controller, group ? @"m_chatRoomContact" : @"contact", contact);
     SEL editSelector = NSSelectorFromString(@"setNeedEditState:");
     if ([controller respondsToSelector:editSelector]) ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, editSelector, YES);
-    NeoWCPushHomeController(owner, controller);
+    WCAtlasPushHomeController(owner, controller);
 }
 
-static void NeoWCOpenHomeMoments(id owner, id contact) {
+static void WCAtlasOpenHomeMoments(id owner, id contact) {
     Class controllerClass = NSClassFromString(@"WCListViewController");
     id controller = controllerClass ? [controllerClass new] : nil;
     if (!controller) return;
-    NeoWCTweakSetValue(controller, @"m_contact", contact);
-    NeoWCPushHomeController(owner, controller);
+    WCAtlasTweakSetValue(controller, @"m_contact", contact);
+    WCAtlasPushHomeController(owner, controller);
 }
 
-static id NeoWCHomeSessionInfoController(id contact, BOOL group) {
+static id WCAtlasHomeSessionInfoController(id contact, BOOL group) {
     Class controllerClass = NSClassFromString(group ? @"ChatRoomInfoViewController" : @"AddContactToChatRoomViewController");
     id controller = controllerClass ? [controllerClass new] : nil;
     if (!controller) return nil;
-    NeoWCTweakSetValue(controller, group ? @"m_chatRoomContact" : @"m_contact", contact);
+    WCAtlasTweakSetValue(controller, group ? @"m_chatRoomContact" : @"m_contact", contact);
     return controller;
 }
 
-static NSMutableSet *NeoWCRetainedHomeSessionControllers(void) {
+static NSMutableSet *WCAtlasRetainedHomeSessionControllers(void) {
     static NSMutableSet *controllers;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -10396,9 +10396,9 @@ static NSMutableSet *NeoWCRetainedHomeSessionControllers(void) {
     return controllers;
 }
 
-static void NeoWCRetainHomeSessionController(id controller) {
+static void WCAtlasRetainHomeSessionController(id controller) {
     if (!controller) return;
-    NSMutableSet *controllers = NeoWCRetainedHomeSessionControllers();
+    NSMutableSet *controllers = WCAtlasRetainedHomeSessionControllers();
     [controllers addObject:controller];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
@@ -10406,7 +10406,7 @@ static void NeoWCRetainHomeSessionController(id controller) {
     });
 }
 
-static void NeoWCRefreshHomeSessionTable(UITableView *tableView) {
+static void WCAtlasRefreshHomeSessionTable(UITableView *tableView) {
     if (!tableView) return;
     __weak UITableView *weakTableView = tableView;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
@@ -10415,7 +10415,7 @@ static void NeoWCRefreshHomeSessionTable(UITableView *tableView) {
     });
 }
 
-static void NeoWCSetHomeContactBoolean(id contact, NSString *selectorName, BOOL enabled) {
+static void WCAtlasSetHomeContactBoolean(id contact, NSString *selectorName, BOOL enabled) {
     SEL selector = NSSelectorFromString(selectorName);
     if (!contact || ![contact respondsToSelector:selector]) return;
     @try {
@@ -10424,12 +10424,12 @@ static void NeoWCSetHomeContactBoolean(id contact, NSString *selectorName, BOOL 
     }
 }
 
-static void NeoWCCommitHomeSessionToggle(id contact, BOOL group, NSString *selectorName, BOOL enabled) {
-    id controller = NeoWCHomeSessionInfoController(contact, group);
+static void WCAtlasCommitHomeSessionToggle(id contact, BOOL group, NSString *selectorName, BOOL enabled) {
+    id controller = WCAtlasHomeSessionInfoController(contact, group);
     SEL selector = NSSelectorFromString(selectorName);
     if (!controller || ![controller respondsToSelector:selector]) return;
     @try {
-        NeoWCRetainHomeSessionController(controller);
+        WCAtlasRetainHomeSessionController(controller);
         // Loading the native settings controller lets WeChat initialize its
         // backing state before the private setting action is dispatched.
         (void)((id (*)(id, SEL))objc_msgSend)(controller, @selector(view));
@@ -10442,17 +10442,17 @@ static void NeoWCCommitHomeSessionToggle(id contact, BOOL group, NSString *selec
     }
 }
 
-static void NeoWCCommitHomeMuteToggle(id contact, BOOL group, BOOL muted) {
+static void WCAtlasCommitHomeMuteToggle(id contact, BOOL group, BOOL muted) {
     BOOL desiredMuted = !muted;
     BOOL notifyOpen = !desiredMuted;
-    NeoWCSetHomeContactBoolean(contact, @"setChatStatusNotifyOpen:", notifyOpen);
-    NeoWCSetHomeContactBoolean(contact, @"setChatRoomNotify:", notifyOpen);
-    NeoWCCommitHomeSessionToggle(contact, group, @"setUpdateNotifyMuted:", desiredMuted);
+    WCAtlasSetHomeContactBoolean(contact, @"setChatStatusNotifyOpen:", notifyOpen);
+    WCAtlasSetHomeContactBoolean(contact, @"setChatRoomNotify:", notifyOpen);
+    WCAtlasCommitHomeSessionToggle(contact, group, @"setUpdateNotifyMuted:", desiredMuted);
 }
 
-typedef UISwipeActionsConfiguration *(*NeoWCHomeLeadingSwipeIMP)(id, SEL, UITableView *, NSIndexPath *);
+typedef UISwipeActionsConfiguration *(*WCAtlasHomeLeadingSwipeIMP)(id, SEL, UITableView *, NSIndexPath *);
 
-static NSMutableDictionary<NSString *, NSValue *> *NeoWCHomeLeadingSwipeOriginalIMPs(void) {
+static NSMutableDictionary<NSString *, NSValue *> *WCAtlasHomeLeadingSwipeOriginalIMPs(void) {
     static NSMutableDictionary<NSString *, NSValue *> *implementations;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -10461,40 +10461,40 @@ static NSMutableDictionary<NSString *, NSValue *> *NeoWCHomeLeadingSwipeOriginal
     return implementations;
 }
 
-static NeoWCHomeLeadingSwipeIMP NeoWCOriginalHomeLeadingSwipeForOwner(id owner) {
+static WCAtlasHomeLeadingSwipeIMP WCAtlasOriginalHomeLeadingSwipeForOwner(id owner) {
     for (Class candidate = object_getClass(owner); candidate; candidate = class_getSuperclass(candidate)) {
-        NSValue *value = NeoWCHomeLeadingSwipeOriginalIMPs()[NSStringFromClass(candidate)];
-        if (value) return (NeoWCHomeLeadingSwipeIMP)value.pointerValue;
+        NSValue *value = WCAtlasHomeLeadingSwipeOriginalIMPs()[NSStringFromClass(candidate)];
+        if (value) return (WCAtlasHomeLeadingSwipeIMP)value.pointerValue;
     }
     return NULL;
 }
 
-static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector,
+static UISwipeActionsConfiguration *WCAtlasHomeLeadingSwipe(id owner, SEL selector,
                                                            UITableView *tableView,
                                                            NSIndexPath *indexPath) {
-    NeoWCHomeLeadingSwipeIMP original = NeoWCOriginalHomeLeadingSwipeForOwner(owner);
-    if (!NeoWCEnhancementEnabled(NeoWCHomeSwipeActionsEnabledKey)) {
+    WCAtlasHomeLeadingSwipeIMP original = WCAtlasOriginalHomeLeadingSwipeForOwner(owner);
+    if (!WCAtlasEnhancementEnabled(WCAtlasHomeSwipeActionsEnabledKey)) {
         return original ? original(owner, selector, tableView, indexPath) : nil;
     }
-    id data = NeoWCHomeSessionCellData(owner, tableView, indexPath);
-    NSString *userName = NeoWCHomeSessionUserName(data);
+    id data = WCAtlasHomeSessionCellData(owner, tableView, indexPath);
+    NSString *userName = WCAtlasHomeSessionUserName(data);
     if (userName.length == 0) {
-        NeoWCLog(@"主页右滑：未取得会话数据，owner=%@ delegate=%@ row=%ld",
+        WCAtlasLog(@"主页右滑：未取得会话数据，owner=%@ delegate=%@ row=%ld",
                  NSStringFromClass([owner class]),
                  NSStringFromClass([tableView.delegate class]),
                  (long)indexPath.row);
         return original ? original(owner, selector, tableView, indexPath) : nil;
     }
-    id contact = NeoWCContactForUserName(userName) ?: data;
-    id actionOwner = NeoWCHomeActionOwner(owner, tableView);
+    id contact = WCAtlasContactForUserName(userName) ?: data;
+    id actionOwner = WCAtlasHomeActionOwner(owner, tableView);
     BOOL group = [userName hasSuffix:@"@chatroom"];
     BOOL supportsMoments = !group &&
                            ![userName hasPrefix:@"gh_"] &&
                            ![userName isEqualToString:@"filehelper"] &&
                            ![userName isEqualToString:@"weixin"];
-    id sessionInfo = NeoWCTweakValueForSelectorNames(data, @[@"m_sessionInfo", @"sessionInfo"]) ?: data;
-    BOOL muted = NeoWCHomeSessionMuted(contact);
-    BOOL top = NeoWCHomeBooleanValue(sessionInfo, @[@"m_bIsTop", @"isTop"]);
+    id sessionInfo = WCAtlasTweakValueForSelectorNames(data, @[@"m_sessionInfo", @"sessionInfo"]) ?: data;
+    BOOL muted = WCAtlasHomeSessionMuted(contact);
+    BOOL top = WCAtlasHomeBooleanValue(sessionInfo, @[@"m_bIsTop", @"isTop"]);
     __weak UITableView *weakTableView = tableView;
 
     UIContextualAction *remark = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
@@ -10502,7 +10502,7 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
                                                                         handler:^(__unused UIContextualAction *action,
                                                                                   __unused UIView *sourceView,
                                                                                   void (^completionHandler)(BOOL)) {
-        NeoWCOpenHomeRemark(actionOwner, contact, group);
+        WCAtlasOpenHomeRemark(actionOwner, contact, group);
         completionHandler(YES);
     }];
     remark.backgroundColor = UIColor.systemGrayColor;
@@ -10512,8 +10512,8 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
                                                                       handler:^(__unused UIContextualAction *action,
                                                                                 __unused UIView *sourceView,
                                                                                 void (^completionHandler)(BOOL)) {
-        NeoWCCommitHomeMuteToggle(contact, group, muted);
-        NeoWCRefreshHomeSessionTable(weakTableView);
+        WCAtlasCommitHomeMuteToggle(contact, group, muted);
+        WCAtlasRefreshHomeSessionTable(weakTableView);
         completionHandler(YES);
     }];
     mute.backgroundColor = UIColor.systemOrangeColor;
@@ -10523,8 +10523,8 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
                                                                      handler:^(__unused UIContextualAction *action,
                                                                                __unused UIView *sourceView,
                                                                                void (^completionHandler)(BOOL)) {
-        NeoWCCommitHomeSessionToggle(contact, group, @"onTopSession:", !top);
-        NeoWCRefreshHomeSessionTable(weakTableView);
+        WCAtlasCommitHomeSessionToggle(contact, group, @"onTopSession:", !top);
+        WCAtlasRefreshHomeSessionTable(weakTableView);
         completionHandler(YES);
     }];
     pin.backgroundColor = UIColor.systemBlueColor;
@@ -10536,8 +10536,8 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
                                                                            handler:^(__unused UIContextualAction *action,
                                                                                      __unused UIView *sourceView,
                                                                                      void (^completionHandler)(BOOL)) {
-            NeoWCCommitHomeSessionToggle(contact, YES, @"setChatBoxStatus:", YES);
-            NeoWCRefreshHomeSessionTable(weakTableView);
+            WCAtlasCommitHomeSessionToggle(contact, YES, @"setChatBoxStatus:", YES);
+            WCAtlasRefreshHomeSessionTable(weakTableView);
             completionHandler(YES);
         }];
         fold.backgroundColor = UIColor.systemPurpleColor;
@@ -10548,46 +10548,46 @@ static UISwipeActionsConfiguration *NeoWCHomeLeadingSwipe(id owner, SEL selector
                                                                              handler:^(__unused UIContextualAction *action,
                                                                                        __unused UIView *sourceView,
                                                                                        void (^completionHandler)(BOOL)) {
-            NeoWCOpenHomeMoments(actionOwner, contact);
+            WCAtlasOpenHomeMoments(actionOwner, contact);
             completionHandler(YES);
         }];
         moments.backgroundColor = UIColor.systemGreenColor;
         [actions insertObject:moments atIndex:1];
     }
-    NeoWCCompatibilityMarkTriggered(@"home-swipe-actions");
+    WCAtlasCompatibilityMarkTriggered(@"home-swipe-actions");
     UISwipeActionsConfiguration *configuration = [UISwipeActionsConfiguration configurationWithActions:actions];
     configuration.performsFirstActionWithFullSwipe = NO;
     return configuration;
 }
 
-static void NeoWCInstallHomeLeadingSwipeOnClass(Class controllerClass) {
+static void WCAtlasInstallHomeLeadingSwipeOnClass(Class controllerClass) {
     SEL selector = NSSelectorFromString(@"tableView:leadingSwipeActionsConfigurationForRowAtIndexPath:");
     if (!controllerClass) return;
     Method method = class_getInstanceMethod(controllerClass, selector);
     const char *types = "@@:@@";
     IMP currentImplementation = method ? method_getImplementation(method) : NULL;
-    if (currentImplementation == (IMP)NeoWCHomeLeadingSwipe) return;
+    if (currentImplementation == (IMP)WCAtlasHomeLeadingSwipe) return;
     if (method) {
         types = method_getTypeEncoding(method) ?: types;
-        NeoWCHomeLeadingSwipeOriginalIMPs()[NSStringFromClass(controllerClass)] =
+        WCAtlasHomeLeadingSwipeOriginalIMPs()[NSStringFromClass(controllerClass)] =
             [NSValue valueWithPointer:(const void *)currentImplementation];
     }
     // class_addMethod also handles an inherited implementation without mutating
     // the superclass. Only replace directly when this class already owns it.
-    if (class_addMethod(controllerClass, selector, (IMP)NeoWCHomeLeadingSwipe, types)) {
+    if (class_addMethod(controllerClass, selector, (IMP)WCAtlasHomeLeadingSwipe, types)) {
         return;
     }
     Method ownedMethod = class_getInstanceMethod(controllerClass, selector);
     if (!ownedMethod) return;
-    method_setImplementation(ownedMethod, (IMP)NeoWCHomeLeadingSwipe);
+    method_setImplementation(ownedMethod, (IMP)WCAtlasHomeLeadingSwipe);
 }
 
-static void NeoWCTryInstallHomeLeadingSwipe(void) {
-    NeoWCInstallHomeLeadingSwipeOnClass(objc_getClass("NewMainFrameViewController"));
+static void WCAtlasTryInstallHomeLeadingSwipe(void) {
+    WCAtlasInstallHomeLeadingSwipeOnClass(objc_getClass("NewMainFrameViewController"));
 }
 
-static UITableView *NeoWCHomeTableViewForController(id controller) {
-    id tableView = NeoWCTweakValueForSelectorNames(controller,
+static UITableView *WCAtlasHomeTableViewForController(id controller) {
+    id tableView = WCAtlasTweakValueForSelectorNames(controller,
                                                     @[@"tableView", @"m_tableView", @"mainTableView", @"m_mainTableView"]);
     if ([tableView isKindOfClass:UITableView.class]) return tableView;
     UIView *rootView = [controller isKindOfClass:UIViewController.class] ? [controller view] : nil;
@@ -10606,19 +10606,19 @@ static UITableView *NeoWCHomeTableViewForController(id controller) {
     return [tableView isKindOfClass:UITableView.class] ? tableView : nil;
 }
 
-__attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
-    NeoWCTryInstallHomeLeadingSwipe();
+__attribute__((constructor)) static void WCAtlasInstallHomeLeadingSwipe(void) {
+    WCAtlasTryInstallHomeLeadingSwipe();
     dispatch_async(dispatch_get_main_queue(), ^{
-        NeoWCTryInstallHomeLeadingSwipe();
+        WCAtlasTryInstallHomeLeadingSwipe();
     });
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        NeoWCTryInstallHomeLeadingSwipe();
+        WCAtlasTryInstallHomeLeadingSwipe();
     });
     [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidBecomeActiveNotification
                                                     object:nil
                                                      queue:NSOperationQueue.mainQueue
                                                 usingBlock:^(__unused NSNotification *note) {
-        NeoWCTryInstallHomeLeadingSwipe();
+        WCAtlasTryInstallHomeLeadingSwipe();
     }];
 }
 
@@ -10627,15 +10627,15 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 - (void)viewDidLoad {
     // Install before WeChat creates/assigns the table delegate. UIKit may cache
     // whether the delegate implements leading swipe actions during setup.
-    NeoWCInstallHomeLeadingSwipeOnClass(object_getClass(self));
+    WCAtlasInstallHomeLeadingSwipeOnClass(object_getClass(self));
     %orig;
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
-    UITableView *tableView = NeoWCHomeTableViewForController(self);
-    NeoWCInstallHomeLeadingSwipeOnClass(object_getClass(self));
-    if (tableView.delegate) NeoWCInstallHomeLeadingSwipeOnClass(object_getClass(tableView.delegate));
+    UITableView *tableView = WCAtlasHomeTableViewForController(self);
+    WCAtlasInstallHomeLeadingSwipeOnClass(object_getClass(self));
+    if (tableView.delegate) WCAtlasInstallHomeLeadingSwipeOnClass(object_getClass(tableView.delegate));
 }
 
 %end
@@ -10643,7 +10643,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook NewMainFrameCell
 
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
-    if (NeoWCEnhancementEnabled(NeoWCHomeSwipeActionsEnabledKey) &&
+    if (WCAtlasEnhancementEnabled(WCAtlasHomeSwipeActionsEnabledKey) &&
         [gestureRecognizer isKindOfClass:UIPanGestureRecognizer.class]) {
         CGPoint velocity = [(UIPanGestureRecognizer *)gestureRecognizer velocityInView:gestureRecognizer.view];
         // NewMainFrameCell owns a horizontal pan recognizer that can win before
@@ -10663,7 +10663,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
     // UITableView caches optional delegate capabilities inside setDelegate:.
     // Install the leading-swipe selector before passing the delegate to WeChat,
     // otherwise the method works only when startup timing happens to be lucky.
-    if (delegate) NeoWCInstallHomeLeadingSwipeOnClass(object_getClass(delegate));
+    if (delegate) WCAtlasInstallHomeLeadingSwipeOnClass(object_getClass(delegate));
     %orig(delegate);
 }
 
@@ -10673,41 +10673,41 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)initData {
     %orig;
-    NeoWCInjectRawIDCell(self, NO);
-    if (!NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey)) {
-        NeoWCInjectProfileConversationSwitches(self, NO);
+    WCAtlasInjectRawIDCell(self, NO);
+    if (!WCAtlasEnhancementEnabled(WCAtlasShowRawContactIDEnabledKey)) {
+        WCAtlasInjectProfileConversationSwitches(self, NO);
     }
 }
 
 - (void)reloadTableView {
     %orig;
-    NeoWCInjectRawIDCell(self, NO);
-    if (!NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey)) {
-        NeoWCInjectProfileConversationSwitches(self, NO);
+    WCAtlasInjectRawIDCell(self, NO);
+    if (!WCAtlasEnhancementEnabled(WCAtlasShowRawContactIDEnabledKey)) {
+        WCAtlasInjectProfileConversationSwitches(self, NO);
     }
 }
 
 %new
-- (void)neowc_copyRawContactID {
-    NSString *rawID = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
+- (void)wcatlas_copyRawContactID {
+    NSString *rawID = objc_getAssociatedObject(self, &WCAtlasRawContactIDKey);
     if (rawID.length > 0) UIPasteboard.generalPasteboard.string = rawID;
 }
 
 %new
-- (void)neowc_openInfoCard {
-    NeoWCOpenProfileInfoCard(self);
+- (void)wcatlas_openInfoCard {
+    WCAtlasOpenProfileInfoCard(self);
 }
 
 %new
-- (void)neowc_toggleProfileMessageBlock:(UISwitch *)sender {
-    NeoWCSetProfileMessageBlocked(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
+- (void)wcatlas_toggleProfileMessageBlock:(UISwitch *)sender {
+    WCAtlasSetProfileMessageBlocked(objc_getAssociatedObject(self, &WCAtlasRawContactIDKey), sender.isOn);
 }
 
 %new
-- (void)neowc_openProfileMessageBlockTypes {
-    NSString *username = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
-    UIViewController *controller = NeoWCMessageBlockTypeController(username);
-    UIViewController *owner = NeoWCProfileOwnerViewController(self);
+- (void)wcatlas_openProfileMessageBlockTypes {
+    NSString *username = objc_getAssociatedObject(self, &WCAtlasRawContactIDKey);
+    UIViewController *controller = WCAtlasMessageBlockTypeController(username);
+    UIViewController *owner = WCAtlasProfileOwnerViewController(self);
     if (controller && owner) {
         if (owner.navigationController) [owner.navigationController pushViewController:controller animated:YES];
         else [owner presentViewController:controller animated:YES completion:nil];
@@ -10715,8 +10715,8 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 %new
-- (void)neowc_toggleProfileSendConfirmation:(UISwitch *)sender {
-    NeoWCSendConfirmationSetProtected(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
+- (void)wcatlas_toggleProfileSendConfirmation:(UISwitch *)sender {
+    WCAtlasSendConfirmationSetProtected(objc_getAssociatedObject(self, &WCAtlasRawContactIDKey), sender.isOn);
 }
 
 %end
@@ -10725,37 +10725,37 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)onCRGDataUpdated {
     %orig;
-    if (NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey)) {
-        NeoWCInjectProfileConversationSwitches(self, NO);
+    if (WCAtlasEnhancementEnabled(WCAtlasShowRawContactIDEnabledKey)) {
+        WCAtlasInjectProfileConversationSwitches(self, NO);
     }
-    NeoWCRefreshInfoCardFromOfficialController(self);
+    WCAtlasRefreshInfoCardFromOfficialController(self);
 }
 
 - (void)reloadTableView {
     %orig;
-    if (NeoWCEnhancementEnabled(NeoWCShowRawContactIDEnabledKey)) {
-        NeoWCInjectProfileConversationSwitches(self, NO);
+    if (WCAtlasEnhancementEnabled(WCAtlasShowRawContactIDEnabledKey)) {
+        WCAtlasInjectProfileConversationSwitches(self, NO);
     }
-    if (objc_getAssociatedObject(self, &NeoWCOfficialInfoCardBoxKey)) {
-        NeoWCRefreshInfoCardFromOfficialController(self);
+    if (objc_getAssociatedObject(self, &WCAtlasOfficialInfoCardBoxKey)) {
+        WCAtlasRefreshInfoCardFromOfficialController(self);
     }
 }
 
 %new
-- (void)neowc_toggleProfileMessageBlock:(UISwitch *)sender {
-    NeoWCSetProfileMessageBlocked(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
+- (void)wcatlas_toggleProfileMessageBlock:(UISwitch *)sender {
+    WCAtlasSetProfileMessageBlocked(objc_getAssociatedObject(self, &WCAtlasRawContactIDKey), sender.isOn);
 }
 
 %new
-- (void)neowc_openProfileMessageBlockTypes {
-    NSString *username = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
-    UIViewController *controller = NeoWCMessageBlockTypeController(username);
+- (void)wcatlas_openProfileMessageBlockTypes {
+    NSString *username = objc_getAssociatedObject(self, &WCAtlasRawContactIDKey);
+    UIViewController *controller = WCAtlasMessageBlockTypeController(username);
     if (controller) [self.navigationController pushViewController:controller animated:YES];
 }
 
 %new
-- (void)neowc_toggleProfileSendConfirmation:(UISwitch *)sender {
-    NeoWCSendConfirmationSetProtected(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
+- (void)wcatlas_toggleProfileSendConfirmation:(UISwitch *)sender {
+    WCAtlasSendConfirmationSetProtected(objc_getAssociatedObject(self, &WCAtlasRawContactIDKey), sender.isOn);
 }
 
 %end
@@ -10764,43 +10764,43 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)initData {
     %orig;
-    NeoWCInjectRawIDCell(self, YES);
-    NeoWCInjectProfileConversationSwitches(self, YES);
+    WCAtlasInjectRawIDCell(self, YES);
+    WCAtlasInjectProfileConversationSwitches(self, YES);
 }
 
 - (void)reloadTableData {
     %orig;
-    NeoWCInjectRawIDCell(self, YES);
-    NeoWCInjectProfileConversationSwitches(self, YES);
+    WCAtlasInjectRawIDCell(self, YES);
+    WCAtlasInjectProfileConversationSwitches(self, YES);
 }
 
 - (void)reloadProfileTableData {
     %orig;
-    NeoWCInjectRawIDCell(self, YES);
-    NeoWCInjectProfileConversationSwitches(self, YES);
+    WCAtlasInjectRawIDCell(self, YES);
+    WCAtlasInjectProfileConversationSwitches(self, YES);
 }
 
 %new
-- (void)neowc_copyRawContactID {
-    NSString *rawID = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
+- (void)wcatlas_copyRawContactID {
+    NSString *rawID = objc_getAssociatedObject(self, &WCAtlasRawContactIDKey);
     if (rawID.length > 0) UIPasteboard.generalPasteboard.string = rawID;
 }
 
 %new
-- (void)neowc_openInfoCard {
-    NeoWCOpenProfileInfoCard(self);
+- (void)wcatlas_openInfoCard {
+    WCAtlasOpenProfileInfoCard(self);
 }
 
 %new
-- (void)neowc_toggleProfileMessageBlock:(UISwitch *)sender {
-    NeoWCSetProfileMessageBlocked(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
+- (void)wcatlas_toggleProfileMessageBlock:(UISwitch *)sender {
+    WCAtlasSetProfileMessageBlocked(objc_getAssociatedObject(self, &WCAtlasRawContactIDKey), sender.isOn);
 }
 
 %new
-- (void)neowc_openProfileMessageBlockTypes {
-    NSString *username = objc_getAssociatedObject(self, &NeoWCRawContactIDKey);
-    UIViewController *controller = NeoWCMessageBlockTypeController(username);
-    UIViewController *owner = NeoWCProfileOwnerViewController(self);
+- (void)wcatlas_openProfileMessageBlockTypes {
+    NSString *username = objc_getAssociatedObject(self, &WCAtlasRawContactIDKey);
+    UIViewController *controller = WCAtlasMessageBlockTypeController(username);
+    UIViewController *owner = WCAtlasProfileOwnerViewController(self);
     if (controller && owner) {
         if (owner.navigationController) [owner.navigationController pushViewController:controller animated:YES];
         else [owner presentViewController:controller animated:YES completion:nil];
@@ -10808,8 +10808,8 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 %new
-- (void)neowc_toggleProfileSendConfirmation:(UISwitch *)sender {
-    NeoWCSendConfirmationSetProtected(objc_getAssociatedObject(self, &NeoWCRawContactIDKey), sender.isOn);
+- (void)wcatlas_toggleProfileSendConfirmation:(UISwitch *)sender {
+    WCAtlasSendConfirmationSetProtected(objc_getAssociatedObject(self, &WCAtlasRawContactIDKey), sender.isOn);
 }
 
 %end
@@ -10817,15 +10817,15 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook SessionSelectController
 
 - (void)setMaxSelectionCount:(NSUInteger)count {
-    if (NeoWCEnhancementEnabled(NeoWCMultiSelectLimitEnabledKey)) {
-        NeoWCCompatibilityMarkTriggered(@"multi-select-limit");
+    if (WCAtlasEnhancementEnabled(WCAtlasMultiSelectLimitEnabledKey)) {
+        WCAtlasCompatibilityMarkTriggered(@"multi-select-limit");
     }
-    %orig(NeoWCEnhancementEnabled(NeoWCMultiSelectLimitEnabledKey) ? 999 : count);
+    %orig(WCAtlasEnhancementEnabled(WCAtlasMultiSelectLimitEnabledKey) ? 999 : count);
 }
 
 - (BOOL)ignoreMaxSelectionLimit {
-    if (NeoWCEnhancementEnabled(NeoWCMultiSelectLimitEnabledKey)) {
-        NeoWCCompatibilityMarkTriggered(@"multi-select-limit");
+    if (WCAtlasEnhancementEnabled(WCAtlasMultiSelectLimitEnabledKey)) {
+        WCAtlasCompatibilityMarkTriggered(@"multi-select-limit");
         return YES;
     }
     return %orig;
@@ -10836,8 +10836,8 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook ShortVideoToolbar
 
 - (CGFloat)sightCaptureMaxDuration {
-    if (NeoWCEnhancementEnabled(NeoWCMultiSelectLimitEnabledKey)) {
-        NeoWCCompatibilityMarkTriggered(@"multi-select-limit");
+    if (WCAtlasEnhancementEnabled(WCAtlasMultiSelectLimitEnabledKey)) {
+        WCAtlasCompatibilityMarkTriggered(@"multi-select-limit");
         return 999.0;
     }
     return %orig;
@@ -10849,7 +10849,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)layoutSubviews {
     %orig;
-    NeoWCUpdatePinnedMessageGlass((UIView *)self);
+    WCAtlasUpdatePinnedMessageGlass((UIView *)self);
 }
 
 %end
@@ -10857,60 +10857,60 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook BaseMsgContentViewController
 
 %new
-- (void)neowc_openChatSearch:(id)sender {
-    if (!NeoWCOpenOfficialChatSearch(self, sender)) {
-        NeoWCShowTransientMessage(@"当前微信版本暂不支持聊天记录搜索", NO);
+- (void)wcatlas_openChatSearch:(id)sender {
+    if (!WCAtlasOpenOfficialChatSearch(self, sender)) {
+        WCAtlasShowTransientMessage(@"当前微信版本暂不支持聊天记录搜索", NO);
     }
 }
 
 %new
-- (void)neowc_handleChatSearchEdgePan:(UIScreenEdgePanGestureRecognizer *)recognizer {
+- (void)wcatlas_handleChatSearchEdgePan:(UIScreenEdgePanGestureRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateEnded ||
-        ![objc_getAssociatedObject(self, &NeoWCChatSearchActiveKey) boolValue]) return;
+        ![objc_getAssociatedObject(self, &WCAtlasChatSearchActiveKey) boolValue]) return;
     UIView *gestureView = recognizer.view ?: self.view;
     CGPoint translation = [recognizer translationInView:gestureView];
     CGPoint velocity = [recognizer velocityInView:gestureView];
     if (translation.x > 44.0 || velocity.x > 260.0) {
-        NeoWCCleanupOfficialChatSearch(self);
+        WCAtlasCleanupOfficialChatSearch(self);
     }
 }
 
 - (void)msgSearchBarCancel {
-    if ([objc_getAssociatedObject(self, &NeoWCChatSearchActiveKey) boolValue]) {
-        NeoWCCleanupOfficialChatSearch(self);
+    if ([objc_getAssociatedObject(self, &WCAtlasChatSearchActiveKey) boolValue]) {
+        WCAtlasCleanupOfficialChatSearch(self);
         return;
     }
     %orig;
 }
 
 %new
-- (void)neowc_toggleSendConfirmation:(UILongPressGestureRecognizer *)recognizer {
+- (void)wcatlas_toggleSendConfirmation:(UILongPressGestureRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateBegan) return;
-    if (!NeoWCEnhancementEnabled(NeoWCSendConfirmationEnabledKey)) {
-        NeoWCShowTransientMessage(@"请先在 WCAtlas 设置中开启发送前确认", NO);
+    if (!WCAtlasEnhancementEnabled(WCAtlasSendConfirmationEnabledKey)) {
+        WCAtlasShowTransientMessage(@"请先在 WCAtlas 设置中开启发送前确认", NO);
         return;
     }
-    NSString *username = NeoWCChatUserName(self);
+    NSString *username = WCAtlasChatUserName(self);
     if (username.length == 0) {
-        NeoWCShowTransientMessage(@"无法识别当前会话", NO);
+        WCAtlasShowTransientMessage(@"无法识别当前会话", NO);
         return;
     }
-    BOOL protectedConversation = NeoWCSendConfirmationIsProtectedConversation(username);
-    NeoWCSendConfirmationSetProtected(username, !protectedConversation);
-    NeoWCShowTransientMessage(protectedConversation ? @"已关闭当前会话发送确认" : @"已开启当前会话发送确认", YES);
+    BOOL protectedConversation = WCAtlasSendConfirmationIsProtectedConversation(username);
+    WCAtlasSendConfirmationSetProtected(username, !protectedConversation);
+    WCAtlasShowTransientMessage(protectedConversation ? @"已关闭当前会话发送确认" : @"已开启当前会话发送确认", YES);
 }
 
 - (NSUInteger)uiMultiSelectMaxCount {
-    if (NeoWCEnhancementEnabled(NeoWCMultiSelectLimitEnabledKey)) {
-        NeoWCCompatibilityMarkTriggered(@"multi-select-limit");
+    if (WCAtlasEnhancementEnabled(WCAtlasMultiSelectLimitEnabledKey)) {
+        WCAtlasCompatibilityMarkTriggered(@"multi-select-limit");
         return 9999;
     }
     return %orig;
 }
 
 - (NSUInteger)getMultiSelectMaxCount {
-    if (NeoWCEnhancementEnabled(NeoWCMultiSelectLimitEnabledKey)) {
-        NeoWCCompatibilityMarkTriggered(@"multi-select-limit");
+    if (WCAtlasEnhancementEnabled(WCAtlasMultiSelectLimitEnabledKey)) {
+        WCAtlasCompatibilityMarkTriggered(@"multi-select-limit");
         return 9999;
     }
     return %orig;
@@ -10918,49 +10918,49 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)viewDidLoad {
     %orig;
-    NeoWCUpdateChatTopBar(self);
+    WCAtlasUpdateChatTopBar(self);
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     %orig(animated);
-    NeoWCCleanupOfficialChatSearch(self);
-    objc_setAssociatedObject(self, &NeoWCChatSearchTransitionKey, nil,
+    WCAtlasCleanupOfficialChatSearch(self);
+    objc_setAssociatedObject(self, &WCAtlasChatSearchTransitionKey, nil,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCVisibleChatController = self;
-    NeoWCSendConfirmationChatController = self;
-    NeoWCUpdateChatTopBar(self);
+    WCAtlasVisibleChatController = self;
+    WCAtlasSendConfirmationChatController = self;
+    WCAtlasUpdateChatTopBar(self);
 }
 
 - (void)updateTitleView:(id)titleView {
-    BOOL typingChanged = NeoWCSetChatTypingState(self, titleView);
+    BOOL typingChanged = WCAtlasSetChatTypingState(self, titleView);
     %orig(titleView);
-    if (typingChanged) NeoWCUpdateChatTopBar(self);
-    else NeoWCRefreshChatTopBarAfterWechatUpdate(self);
+    if (typingChanged) WCAtlasUpdateChatTopBar(self);
+    else WCAtlasRefreshChatTopBarAfterWechatUpdate(self);
 }
 
 - (void)updateTitleView:(id)titleView ignoreAnimation:(BOOL)ignoreAnimation {
-    BOOL typingChanged = NeoWCSetChatTypingState(self, titleView);
+    BOOL typingChanged = WCAtlasSetChatTypingState(self, titleView);
     %orig(titleView, ignoreAnimation);
-    if (typingChanged) NeoWCUpdateChatTopBar(self);
-    else NeoWCRefreshChatTopBarAfterWechatUpdate(self);
+    if (typingChanged) WCAtlasUpdateChatTopBar(self);
+    else WCAtlasRefreshChatTopBarAfterWechatUpdate(self);
 }
 
 - (void)ShowMultiSelectMoreOperation:(id)argument {
-    NeoWCCompatibilityMarkTriggered(@"multi-select-export");
-    BOOL hasNeoWCActions = NeoWCChatMultiSelectActions((UIViewController *)self).count > 0;
-    if (!hasNeoWCActions) {
+    WCAtlasCompatibilityMarkTriggered(@"multi-select-export");
+    BOOL hasWCAtlasActions = WCAtlasChatMultiSelectActions((UIViewController *)self).count > 0;
+    if (!hasWCAtlasActions) {
         %orig;
         return;
     }
-    objc_setAssociatedObject(self, &NeoWCChatExportBuildingMenuKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, &WCAtlasChatExportBuildingMenuKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     %orig;
-    objc_setAssociatedObject(self, &NeoWCChatExportBuildingMenuKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, &WCAtlasChatExportBuildingMenuKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 - (void)scrollActionSheet:(id)sheet didSelecteItem:(id)item {
-    NSString *identifier = NeoWCTweakSafeValue(item, @"userInfo");
+    NSString *identifier = WCAtlasTweakSafeValue(item, @"userInfo");
     BOOL isExportAction = NO;
-    for (NSDictionary *action in NeoWCChatMultiSelectActions((UIViewController *)self)) {
+    for (NSDictionary *action in WCAtlasChatMultiSelectActions((UIViewController *)self)) {
         if ([identifier isEqualToString:action[@"id"]]) { isExportAction = YES; break; }
     }
     if (isExportAction) {
@@ -10968,7 +10968,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
         if ([sheet respondsToSelector:dismissSelector]) ((void (*)(id, SEL, BOOL))objc_msgSend)(sheet, dismissSelector, YES);
         __weak UIViewController *weakController = (UIViewController *)self;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            NeoWCHandleChatMultiSelectAction(weakController, identifier);
+            WCAtlasHandleChatMultiSelectAction(weakController, identifier);
         });
         return;
     }
@@ -10977,10 +10977,10 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)viewWillDisappear:(BOOL)animated {
     %orig(animated);
-    BOOL enteringOfficialSearch = [objc_getAssociatedObject(self, &NeoWCChatSearchTransitionKey) boolValue];
-    if (NeoWCEnhancementEnabled(NeoWCChatTopBarCapsuleEnabledKey) && !enteringOfficialSearch) {
-        NeoWCApplyTransparentChatTopAppearance(self);
-        NeoWCApplyChatNavigationBackground(self, YES);
+    BOOL enteringOfficialSearch = [objc_getAssociatedObject(self, &WCAtlasChatSearchTransitionKey) boolValue];
+    if (WCAtlasEnhancementEnabled(WCAtlasChatTopBarCapsuleEnabledKey) && !enteringOfficialSearch) {
+        WCAtlasApplyTransparentChatTopAppearance(self);
+        WCAtlasApplyChatNavigationBackground(self, YES);
         id<UIViewControllerTransitionCoordinator> coordinator = self.transitionCoordinator;
         if (coordinator) {
             __weak BaseMsgContentViewController *weakController = self;
@@ -10991,9 +10991,9 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
                 UINavigationController *navigationController = weakNavigation;
                 if (!strongController) return;
                 if (context.isCancelled) {
-                    NeoWCUpdateChatTopBar(strongController);
+                    WCAtlasUpdateChatTopBar(strongController);
                 } else {
-                    NeoWCRestoreChatNavigationPresentationWithNavigation(strongController,
+                    WCAtlasRestoreChatNavigationPresentationWithNavigation(strongController,
                                                                          navigationController);
                 }
             }];
@@ -11001,40 +11001,40 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
     }
     UIViewController *controller = (UIViewController *)self;
     if (controller.isMovingFromParentViewController || controller.isBeingDismissed) {
-        if (NeoWCSendConfirmationChatController == self) NeoWCSendConfirmationChatController = nil;
-        NeoWCCancelPendingSendConfirmations();
-        NeoWCClearImageJokerOverrides();
+        if (WCAtlasSendConfirmationChatController == self) WCAtlasSendConfirmationChatController = nil;
+        WCAtlasCancelPendingSendConfirmations();
+        WCAtlasClearImageJokerOverrides();
     }
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     %orig(animated);
-    objc_setAssociatedObject(self, &NeoWCChatSearchTransitionKey, nil,
+    objc_setAssociatedObject(self, &WCAtlasChatSearchTransitionKey, nil,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCVisibleChatController = self;
-    NeoWCSendConfirmationChatController = self;
+    WCAtlasVisibleChatController = self;
+    WCAtlasSendConfirmationChatController = self;
     __weak UIViewController *weakController = (UIViewController *)self;
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *controller = weakController;
-        if (controller.view.window) NeoWCRefreshVisibleAntiRevokeCells();
+        if (controller.view.window) WCAtlasRefreshVisibleAntiRevokeCells();
     });
 }
 
 - (void)viewDidLayoutSubviews {
     %orig;
-    NeoWCRefreshChatTopBarAfterWechatUpdate(self);
+    WCAtlasRefreshChatTopBarAfterWechatUpdate(self);
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
     %orig(animated);
-    NeoWCRestoreChatNavigationPresentation(self);
-    if (NeoWCVisibleChatController == self) NeoWCVisibleChatController = nil;
+    WCAtlasRestoreChatNavigationPresentation(self);
+    if (WCAtlasVisibleChatController == self) WCAtlasVisibleChatController = nil;
 }
 
 - (void)dealloc {
-    NeoWCRemoveChatSearchEdgePan(self);
-    if (NeoWCSendConfirmationChatController == self) NeoWCSendConfirmationChatController = nil;
-    NeoWCClearImageJokerOverrides();
+    WCAtlasRemoveChatSearchEdgePan(self);
+    if (WCAtlasSendConfirmationChatController == self) WCAtlasSendConfirmationChatController = nil;
+    WCAtlasClearImageJokerOverrides();
     %orig;
 }
 
@@ -11043,21 +11043,21 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook MMScrollActionSheet
 
 - (void)showInView:(UIView *)view {
-    id delegate = NeoWCTweakSafeValue(self, @"delegate");
-    BOOL isExportMenu = [objc_getAssociatedObject(delegate, &NeoWCChatExportBuildingMenuKey) boolValue];
-    if (isExportMenu && NeoWCChatMultiSelectActions((UIViewController *)delegate).count > 0) {
-        NSArray *originalRows = NeoWCTweakSafeValue(self, @"itemArray");
+    id delegate = WCAtlasTweakSafeValue(self, @"delegate");
+    BOOL isExportMenu = [objc_getAssociatedObject(delegate, &WCAtlasChatExportBuildingMenuKey) boolValue];
+    if (isExportMenu && WCAtlasChatMultiSelectActions((UIViewController *)delegate).count > 0) {
+        NSArray *originalRows = WCAtlasTweakSafeValue(self, @"itemArray");
         if ([originalRows isKindOfClass:[NSArray class]] && originalRows.count > 0) {
             NSMutableArray *rows = [NSMutableArray arrayWithCapacity:originalRows.count];
             for (id originalRow in originalRows) {
                 NSMutableArray *row = [originalRow isKindOfClass:[NSArray class]] ? [originalRow mutableCopy] : [NSMutableArray array];
                 [rows addObject:row];
             }
-            for (NSDictionary *action in NeoWCChatMultiSelectActions((UIViewController *)delegate)) {
+            for (NSDictionary *action in WCAtlasChatMultiSelectActions((UIViewController *)delegate)) {
                 BOOL exists = NO;
                 for (NSArray *row in rows) {
                     for (id existingItem in row) {
-                        if ([NeoWCTweakSafeValue(existingItem, @"userInfo") isEqualToString:action[@"id"]]) { exists = YES; break; }
+                        if ([WCAtlasTweakSafeValue(existingItem, @"userInfo") isEqualToString:action[@"id"]]) { exists = YES; break; }
                     }
                     if (exists) break;
                 }
@@ -11068,12 +11068,12 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
                 UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:21.0 weight:UIImageSymbolWeightRegular];
                 UIImage *icon = [UIImage systemImageNamed:action[@"symbol"] withConfiguration:configuration];
                 icon = [icon imageWithTintColor:UIColor.labelColor renderingMode:UIImageRenderingModeAlwaysOriginal];
-                NeoWCTweakSetValue(exportItem, @"title", action[@"title"]);
-                NeoWCTweakSetValue(exportItem, @"iconImg", icon);
-                NeoWCTweakSetValue(exportItem, @"userInfo", action[@"id"]);
+                WCAtlasTweakSetValue(exportItem, @"title", action[@"title"]);
+                WCAtlasTweakSetValue(exportItem, @"iconImg", icon);
+                WCAtlasTweakSetValue(exportItem, @"userInfo", action[@"id"]);
                 [(NSMutableArray *)rows.firstObject addObject:exportItem];
             }
-            NeoWCTweakSetValue(self, @"itemArray", rows);
+            WCAtlasTweakSetValue(self, @"itemArray", rows);
         }
     }
     %orig;
@@ -11085,52 +11085,52 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (NSArray *)filteredMenuItems:(NSArray *)items {
     NSArray *filteredItems = %orig(items);
-    filteredItems = NeoWCOperationMenuItemsWithRepeat((CommonMessageCellView *)self, filteredItems);
-    id message = NeoWCMessageWrapForCell(self);
-    if (NeoWCMessageIsMusicCard(message)) {
-        filteredItems = NeoWCOperationMenuItemsWithMediaToVoice(self, filteredItems, NeoWCMediaToVoiceKindMusic);
-    } else if (NeoWCMessageIsConvertibleAudioFile(message)) {
-        filteredItems = NeoWCOperationMenuItemsWithMediaToVoice(self, filteredItems, NeoWCMediaToVoiceKindAudioFile);
+    filteredItems = WCAtlasOperationMenuItemsWithRepeat((CommonMessageCellView *)self, filteredItems);
+    id message = WCAtlasMessageWrapForCell(self);
+    if (WCAtlasMessageIsMusicCard(message)) {
+        filteredItems = WCAtlasOperationMenuItemsWithMediaToVoice(self, filteredItems, WCAtlasMediaToVoiceKindMusic);
+    } else if (WCAtlasMessageIsConvertibleAudioFile(message)) {
+        filteredItems = WCAtlasOperationMenuItemsWithMediaToVoice(self, filteredItems, WCAtlasMediaToVoiceKindAudioFile);
     }
-    if (NeoWCEnhancementEnabled(NeoWCLongPressMenuEnabledKey)) {
-        NeoWCCompatibilityMarkTriggered(@"long-press-menu");
+    if (WCAtlasEnhancementEnabled(WCAtlasLongPressMenuEnabledKey)) {
+        WCAtlasCompatibilityMarkTriggered(@"long-press-menu");
     }
-    return NeoWCManagedLongPressMenuItems(filteredItems);
+    return WCAtlasManagedLongPressMenuItems(filteredItems);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-    if (action == @selector(neowc_repeatMessage:)) {
-        return NeoWCMessageCanRepeat((CommonMessageCellView *)self);
+    if (action == @selector(wcatlas_repeatMessage:)) {
+        return WCAtlasMessageCanRepeat((CommonMessageCellView *)self);
     }
-    if (action == @selector(neowc_convertMusicToVoice:)) {
-        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindMusic) &&
-               NeoWCMessageIsMusicCard(NeoWCMessageWrapForCell(self));
+    if (action == @selector(wcatlas_convertMusicToVoice:)) {
+        return WCAtlasMediaToVoiceKindEnabled(WCAtlasMediaToVoiceKindMusic) &&
+               WCAtlasMessageIsMusicCard(WCAtlasMessageWrapForCell(self));
     }
-    if (action == @selector(neowc_convertAudioFileToVoice:)) {
-        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindAudioFile) &&
-               NeoWCMessageIsConvertibleAudioFile(NeoWCMessageWrapForCell(self));
+    if (action == @selector(wcatlas_convertAudioFileToVoice:)) {
+        return WCAtlasMediaToVoiceKindEnabled(WCAtlasMediaToVoiceKindAudioFile) &&
+               WCAtlasMessageIsConvertibleAudioFile(WCAtlasMessageWrapForCell(self));
     }
     return %orig;
 }
 
 %new
-- (void)neowc_repeatMessage:(id)sender {
+- (void)wcatlas_repeatMessage:(id)sender {
     (void)sender;
-    if (!NeoWCRepeatMessageWithConfirmation((CommonMessageCellView *)self)) {
-        NeoWCShowTransientMessage(@"这条消息暂时无法复读", NO);
+    if (!WCAtlasRepeatMessageWithConfirmation((CommonMessageCellView *)self)) {
+        WCAtlasShowTransientMessage(@"这条消息暂时无法复读", NO);
     }
 }
 
 %new
-- (void)neowc_convertMusicToVoice:(id)sender {
+- (void)wcatlas_convertMusicToVoice:(id)sender {
     (void)sender;
-    NeoWCPresentMediaToVoiceConfirmation(self, NeoWCMediaToVoiceKindMusic);
+    WCAtlasPresentMediaToVoiceConfirmation(self, WCAtlasMediaToVoiceKindMusic);
 }
 
 %new
-- (void)neowc_convertAudioFileToVoice:(id)sender {
+- (void)wcatlas_convertAudioFileToVoice:(id)sender {
     (void)sender;
-    NeoWCPresentMediaToVoiceConfirmation(self, NeoWCMediaToVoiceKindAudioFile);
+    WCAtlasPresentMediaToVoiceConfirmation(self, WCAtlasMediaToVoiceKindAudioFile);
 }
 
 %end
@@ -11139,22 +11139,22 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)viewDidLoad {
     %orig;
-    if (!NeoWCEnhancementEnabled(NeoWCEmoticonToSelfieEnabledKey) ||
-        [objc_getAssociatedObject(self, &NeoWCEmoticonPreviewLongPressKey) boolValue]) return;
-    id popoverView = NeoWCTweakValueForSelectorNames(self, @[@"popoverView"]);
+    if (!WCAtlasEnhancementEnabled(WCAtlasEmoticonToSelfieEnabledKey) ||
+        [objc_getAssociatedObject(self, &WCAtlasEmoticonPreviewLongPressKey) boolValue]) return;
+    id popoverView = WCAtlasTweakValueForSelectorNames(self, @[@"popoverView"]);
     SEL addSelector = NSSelectorFromString(@"addLongPressTarget:action:");
     if (![popoverView respondsToSelector:addSelector]) return;
     ((void (*)(id, SEL, id, SEL))objc_msgSend)(popoverView, addSelector, self,
-        NSSelectorFromString(@"neowc_handleEmoticonToSelfie:"));
-    objc_setAssociatedObject(self, &NeoWCEmoticonPreviewLongPressKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NSSelectorFromString(@"wcatlas_handleEmoticonToSelfie:"));
+    objc_setAssociatedObject(self, &WCAtlasEmoticonPreviewLongPressKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 %new
-- (void)neowc_handleEmoticonToSelfie:(UILongPressGestureRecognizer *)recognizer {
+- (void)wcatlas_handleEmoticonToSelfie:(UILongPressGestureRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateBegan ||
-        !NeoWCEnhancementEnabled(NeoWCEmoticonToSelfieEnabledKey)) return;
-    if (NeoWCSaveDataAsSelfieEmoticon(NeoWCPreviewEmoticonData(self))) {
-        NeoWCLog(@"表情已提交到自拍表情添加流程");
+        !WCAtlasEnhancementEnabled(WCAtlasEmoticonToSelfieEnabledKey)) return;
+    if (WCAtlasSaveDataAsSelfieEmoticon(WCAtlasPreviewEmoticonData(self))) {
+        WCAtlasLog(@"表情已提交到自拍表情添加流程");
     }
 }
 
@@ -11163,13 +11163,13 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook EmoticonMessageCellView
 
 - (NSArray *)filteredMenuItems:(NSArray *)items {
-    return NeoWCMenuItemsWithEmoticonToSelfie(self, %orig(items), @"CExtendInfoOfEmoticon");
+    return WCAtlasMenuItemsWithEmoticonToSelfie(self, %orig(items), @"CExtendInfoOfEmoticon");
 }
 
 %new
-- (void)neowc_saveEmoticonAsSelfie {
-    if (NeoWCEnhancementEnabled(NeoWCEmoticonToSelfieEnabledKey)) {
-        (void)NeoWCSaveCellEmoticonAsSelfie(self, @"CExtendInfoOfEmoticon", YES);
+- (void)wcatlas_saveEmoticonAsSelfie {
+    if (WCAtlasEnhancementEnabled(WCAtlasEmoticonToSelfieEnabledKey)) {
+        (void)WCAtlasSaveCellEmoticonAsSelfie(self, @"CExtendInfoOfEmoticon", YES);
     }
 }
 
@@ -11178,13 +11178,13 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook AppEmoticonMessageCellView
 
 - (NSArray *)filteredMenuItems:(NSArray *)items {
-    return NeoWCMenuItemsWithEmoticonToSelfie(self, %orig(items), @"CExtendInfoOfAPP");
+    return WCAtlasMenuItemsWithEmoticonToSelfie(self, %orig(items), @"CExtendInfoOfAPP");
 }
 
 %new
-- (void)neowc_saveEmoticonAsSelfie {
-    if (NeoWCEnhancementEnabled(NeoWCEmoticonToSelfieEnabledKey)) {
-        (void)NeoWCSaveCellEmoticonAsSelfie(self, @"CExtendInfoOfAPP", NO);
+- (void)wcatlas_saveEmoticonAsSelfie {
+    if (WCAtlasEnhancementEnabled(WCAtlasEmoticonToSelfieEnabledKey)) {
+        (void)WCAtlasSaveCellEmoticonAsSelfie(self, @"CExtendInfoOfAPP", NO);
     }
 }
 
@@ -11194,26 +11194,26 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    items = NeoWCOperationMenuItemsWithImageJoker(self, items);
-    return NeoWCOperationMenuItemsWithQuickReply(self, items);
+    items = WCAtlasOperationMenuItemsWithImageJoker(self, items);
+    return WCAtlasOperationMenuItemsWithQuickReply(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
     if (action == @selector(joker_handleImageMenuItem:)) {
-        return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageWrapForCell(self) != nil;
+        return WCAtlasEnhancementEnabled(WCAtlasChatJokerEnabledKey) && WCAtlasMessageWrapForCell(self) != nil;
     }
-    if (action == @selector(neowc_addToQuickReply:)) return NeoWCMessageCanAddToQuickReply(NeoWCMessageWrapForCell(self));
+    if (action == @selector(wcatlas_addToQuickReply:)) return WCAtlasMessageCanAddToQuickReply(WCAtlasMessageWrapForCell(self));
     return %orig;
 }
 
 - (id)getCoverImage {
-    UIImage *image = NeoWCImageJokerImageForMessage(NeoWCMessageWrapForCell(self));
+    UIImage *image = WCAtlasImageJokerImageForMessage(WCAtlasMessageWrapForCell(self));
     return image ?: %orig;
 }
 
 - (id)displayViewForImageBrowser {
     id displayView = %orig;
-    UIImage *image = NeoWCImageJokerImageForMessage(NeoWCMessageWrapForCell(self));
+    UIImage *image = WCAtlasImageJokerImageForMessage(WCAtlasMessageWrapForCell(self));
     SEL imageSelector = NSSelectorFromString(@"setImage:");
     if (image && [displayView respondsToSelector:imageSelector]) {
         ((void (*)(id, SEL, id))objc_msgSend)(displayView, imageSelector, image);
@@ -11223,21 +11223,21 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)layoutContentView {
     %orig;
-    UIImage *image = NeoWCImageJokerImageForMessage(NeoWCMessageWrapForCell(self));
-    id imageView = NeoWCTweakSafeValue(self, @"m_imageView");
+    UIImage *image = WCAtlasImageJokerImageForMessage(WCAtlasMessageWrapForCell(self));
+    id imageView = WCAtlasTweakSafeValue(self, @"m_imageView");
     if (image && [imageView isKindOfClass:[UIImageView class]]) ((UIImageView *)imageView).image = image;
 }
 
 %new
 - (void)joker_handleImageMenuItem:(id)sender {
     (void)sender;
-    NeoWCPresentImageJokerPickerForCell(self);
+    WCAtlasPresentImageJokerPickerForCell(self);
 }
 
 %new
-- (void)neowc_addToQuickReply:(id)sender {
+- (void)wcatlas_addToQuickReply:(id)sender {
     (void)sender;
-    NeoWCAddMessageToQuickReply(self);
+    WCAtlasAddMessageToQuickReply(self);
 }
 
 %end
@@ -11245,36 +11245,36 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook ImageMessageViewModel
 
 - (UIImage *)thumbImage {
-    UIImage *image = NeoWCImageJokerImageForObject(self);
+    UIImage *image = WCAtlasImageJokerImageForObject(self);
     return image ?: %orig;
 }
 
 - (UIImage *)maskedThumbImage {
-    UIImage *image = NeoWCImageJokerImageForObject(self);
+    UIImage *image = WCAtlasImageJokerImageForObject(self);
     return image ?: %orig;
 }
 
 - (NSData *)imageData {
-    NSData *data = NeoWCImageJokerDataForMessage(NeoWCImageJokerMessageForObject(self));
+    NSData *data = WCAtlasImageJokerDataForMessage(WCAtlasImageJokerMessageForObject(self));
     return data ?: %orig;
 }
 
 - (BOOL)isImageExists {
-    return NeoWCImageJokerImageForObject(self) ? YES : %orig;
+    return WCAtlasImageJokerImageForObject(self) ? YES : %orig;
 }
 
 - (CGSize)thumbImageSize {
-    UIImage *image = NeoWCImageJokerImageForObject(self);
+    UIImage *image = WCAtlasImageJokerImageForObject(self);
     if (!image) return %orig;
-    CGSize displaySize = NeoWCImageJokerDisplaySize(image);
+    CGSize displaySize = WCAtlasImageJokerDisplaySize(image);
     if (CGSizeEqualToSize(displaySize, CGSizeZero)) return %orig;
     return displaySize;
 }
 
 - (CGSize)measureContentViewSize:(CGSize)size {
-    UIImage *image = NeoWCImageJokerImageForObject(self);
+    UIImage *image = WCAtlasImageJokerImageForObject(self);
     if (!image) return %orig(size);
-    CGSize displaySize = NeoWCImageJokerDisplaySize(image);
+    CGSize displaySize = WCAtlasImageJokerDisplaySize(image);
     if (CGSizeEqualToSize(displaySize, CGSizeZero)) return %orig(size);
     return displaySize;
 }
@@ -11284,36 +11284,36 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook MMImgDataItem_Message
 
 - (NSData *)imageData {
-    NSData *data = NeoWCImageJokerDataForMessage(NeoWCImageJokerMessageForObject(self));
+    NSData *data = WCAtlasImageJokerDataForMessage(WCAtlasImageJokerMessageForObject(self));
     return data ?: %orig;
 }
 
 - (UIImage *)image {
-    UIImage *image = NeoWCImageJokerImageForObject(self);
+    UIImage *image = WCAtlasImageJokerImageForObject(self);
     return image ?: %orig;
 }
 
 - (UIImage *)hdImage {
-    UIImage *image = NeoWCImageJokerImageForObject(self);
+    UIImage *image = WCAtlasImageJokerImageForObject(self);
     return image ?: %orig;
 }
 
 - (NSString *)imagePath {
-    NSString *path = NeoWCImageJokerPathForMessage(NeoWCImageJokerMessageForObject(self));
+    NSString *path = WCAtlasImageJokerPathForMessage(WCAtlasImageJokerMessageForObject(self));
     return path ?: %orig;
 }
 
 - (NSString *)hdImagePath {
-    NSString *path = NeoWCImageJokerPathForMessage(NeoWCImageJokerMessageForObject(self));
+    NSString *path = WCAtlasImageJokerPathForMessage(WCAtlasImageJokerMessageForObject(self));
     return path ?: %orig;
 }
 
 - (BOOL)isHDImage {
-    return NeoWCImageJokerImageForObject(self) ? YES : %orig;
+    return WCAtlasImageJokerImageForObject(self) ? YES : %orig;
 }
 
 - (CGSize)hdImageSize {
-    UIImage *image = NeoWCImageJokerImageForObject(self);
+    UIImage *image = WCAtlasImageJokerImageForObject(self);
     return image ? image.size : %orig;
 }
 
@@ -11322,51 +11322,51 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook CMessageWrap
 
 + (NSString *)getJpgPathOfMsgMiddleImg:(id)message {
-    return NeoWCImageJokerPathForMessage(message) ?: %orig(message);
+    return WCAtlasImageJokerPathForMessage(message) ?: %orig(message);
 }
 
 + (NSString *)getJpgPathOfMsgHDImg:(id)message {
-    return NeoWCImageJokerPathForMessage(message) ?: %orig(message);
+    return WCAtlasImageJokerPathForMessage(message) ?: %orig(message);
 }
 
 + (NSString *)getJpgPathOfMsgHdOrMiddleImg:(id)message {
-    return NeoWCImageJokerPathForMessage(message) ?: %orig(message);
+    return WCAtlasImageJokerPathForMessage(message) ?: %orig(message);
 }
 
 + (NSString *)getPathOfMsgImg:(id)message {
-    return NeoWCImageJokerPathForMessage(message) ?: %orig(message);
+    return WCAtlasImageJokerPathForMessage(message) ?: %orig(message);
 }
 
 + (UIImage *)getMsgMiddleImg:(id)message {
-    return NeoWCImageJokerImageForMessage(message) ?: %orig(message);
+    return WCAtlasImageJokerImageForMessage(message) ?: %orig(message);
 }
 
 + (UIImage *)getMsgHDImg:(id)message {
-    return NeoWCImageJokerImageForMessage(message) ?: %orig(message);
+    return WCAtlasImageJokerImageForMessage(message) ?: %orig(message);
 }
 
 + (UIImage *)getMsgHdOrMiddleImg:(id)message {
-    return NeoWCImageJokerImageForMessage(message) ?: %orig(message);
+    return WCAtlasImageJokerImageForMessage(message) ?: %orig(message);
 }
 
 + (NSData *)getMsgMiddleImgData:(id)message {
-    return NeoWCImageJokerDataForMessage(message) ?: %orig(message);
+    return WCAtlasImageJokerDataForMessage(message) ?: %orig(message);
 }
 
 + (NSData *)getMsgMiddleImgData:(id)message canUseHeif:(BOOL)canUseHeif {
-    return NeoWCImageJokerDataForMessage(message) ?: %orig(message, canUseHeif);
+    return WCAtlasImageJokerDataForMessage(message) ?: %orig(message, canUseHeif);
 }
 
 + (NSData *)getMsgHDImgData:(id)message {
-    return NeoWCImageJokerDataForMessage(message) ?: %orig(message);
+    return WCAtlasImageJokerDataForMessage(message) ?: %orig(message);
 }
 
 + (NSData *)getMsgHdOrMiddleImgData:(id)message {
-    return NeoWCImageJokerDataForMessage(message) ?: %orig(message);
+    return WCAtlasImageJokerDataForMessage(message) ?: %orig(message);
 }
 
 + (NSData *)getMsgHdOrMiddleImgData:(id)message canUseHeif:(BOOL)canUseHeif {
-    return NeoWCImageJokerDataForMessage(message) ?: %orig(message, canUseHeif);
+    return WCAtlasImageJokerDataForMessage(message) ?: %orig(message, canUseHeif);
 }
 
 %end
@@ -11374,7 +11374,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook UploadVoiceWrap
 
 - (void)setM_uiVoiceForwardFlag:(unsigned int)forwardFlag {
-    %orig((NeoWCVoiceRepeatUploadIsActive() || NeoWCPrivateVoiceUploadCompatibilityActive()) ? 1 : forwardFlag);
+    %orig((WCAtlasVoiceRepeatUploadIsActive() || WCAtlasPrivateVoiceUploadCompatibilityActive()) ? 1 : forwardFlag);
 }
 
 %end
@@ -11382,7 +11382,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook UploadVoiceRequest
 
 - (void)setForwardFlag:(unsigned int)forwardFlag {
-    %orig((NeoWCVoiceRepeatUploadIsActive() || NeoWCPrivateVoiceUploadCompatibilityActive()) ? 1 : forwardFlag);
+    %orig((WCAtlasVoiceRepeatUploadIsActive() || WCAtlasPrivateVoiceUploadCompatibilityActive()) ? 1 : forwardFlag);
 }
 
 %end
@@ -11412,7 +11412,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
           endFlag,
           cancelFlag,
           voiceFormat,
-          NeoWCVoiceRepeatUploadIsActive() ? 1 : forwardFlag,
+          WCAtlasVoiceRepeatUploadIsActive() ? 1 : forwardFlag,
           msgSource,
           chatName);
 }
@@ -11444,7 +11444,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
           endFlag,
           cancelFlag,
           voiceFormat,
-          NeoWCVoiceRepeatUploadIsActive() ? 1 : forwardFlag,
+          WCAtlasVoiceRepeatUploadIsActive() ? 1 : forwardFlag,
           msgSource,
           chatName);
 }
@@ -11456,28 +11456,28 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    items = NeoWCOperationMenuItemsWithJoker(self, items, NO);
-    return NeoWCOperationMenuItemsWithQuickReply(self, items);
+    items = WCAtlasOperationMenuItemsWithJoker(self, items, NO);
+    return WCAtlasOperationMenuItemsWithQuickReply(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
     if (action == @selector(joker_handleMenuItem:)) {
-        return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageCanJokerEdit(NeoWCMessageWrapForCell(self));
+        return WCAtlasEnhancementEnabled(WCAtlasChatJokerEnabledKey) && WCAtlasMessageCanJokerEdit(WCAtlasMessageWrapForCell(self));
     }
-    if (action == @selector(neowc_addToQuickReply:)) return NeoWCMessageCanAddToQuickReply(NeoWCMessageWrapForCell(self));
+    if (action == @selector(wcatlas_addToQuickReply:)) return WCAtlasMessageCanAddToQuickReply(WCAtlasMessageWrapForCell(self));
     return %orig;
 }
 
 %new
 - (void)joker_handleMenuItem:(id)sender {
-    NeoWCCompatibilityMarkTriggered(@"chat-joker");
-    NeoWCPresentJokerEditorForCell(self, NO);
+    WCAtlasCompatibilityMarkTriggered(@"chat-joker");
+    WCAtlasPresentJokerEditorForCell(self, NO);
 }
 
 %new
-- (void)neowc_addToQuickReply:(id)sender {
+- (void)wcatlas_addToQuickReply:(id)sender {
     (void)sender;
-    NeoWCAddMessageToQuickReply(self);
+    WCAtlasAddMessageToQuickReply(self);
 }
 
 %end
@@ -11486,39 +11486,39 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    items = NeoWCOperationMenuItemsWithJoker(self, items, NO);
-    items = NeoWCOperationMenuItemsWithMediaToVoice(self, items, NeoWCMediaToVoiceKindMusic);
-    return NeoWCOperationMenuItemsWithQuickReply(self, items);
+    items = WCAtlasOperationMenuItemsWithJoker(self, items, NO);
+    items = WCAtlasOperationMenuItemsWithMediaToVoice(self, items, WCAtlasMediaToVoiceKindMusic);
+    return WCAtlasOperationMenuItemsWithQuickReply(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
     if (action == @selector(joker_handleMenuItem:)) {
-        return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey) && NeoWCMessageCanJokerEdit(NeoWCMessageWrapForCell(self));
+        return WCAtlasEnhancementEnabled(WCAtlasChatJokerEnabledKey) && WCAtlasMessageCanJokerEdit(WCAtlasMessageWrapForCell(self));
     }
-    if (action == @selector(neowc_addToQuickReply:)) return NeoWCMessageCanAddToQuickReply(NeoWCMessageWrapForCell(self));
-    if (action == @selector(neowc_convertMusicToVoice:)) {
-        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindMusic) &&
-               NeoWCMessageIsMusicCard(NeoWCMessageWrapForCell(self));
+    if (action == @selector(wcatlas_addToQuickReply:)) return WCAtlasMessageCanAddToQuickReply(WCAtlasMessageWrapForCell(self));
+    if (action == @selector(wcatlas_convertMusicToVoice:)) {
+        return WCAtlasMediaToVoiceKindEnabled(WCAtlasMediaToVoiceKindMusic) &&
+               WCAtlasMessageIsMusicCard(WCAtlasMessageWrapForCell(self));
     }
     return %orig;
 }
 
 %new
 - (void)joker_handleMenuItem:(id)sender {
-    NeoWCCompatibilityMarkTriggered(@"chat-joker");
-    NeoWCPresentJokerEditorForCell(self, NO);
+    WCAtlasCompatibilityMarkTriggered(@"chat-joker");
+    WCAtlasPresentJokerEditorForCell(self, NO);
 }
 
 %new
-- (void)neowc_addToQuickReply:(id)sender {
+- (void)wcatlas_addToQuickReply:(id)sender {
     (void)sender;
-    NeoWCAddMessageToQuickReply(self);
+    WCAtlasAddMessageToQuickReply(self);
 }
 
 %new
-- (void)neowc_convertMusicToVoice:(id)sender {
+- (void)wcatlas_convertMusicToVoice:(id)sender {
     (void)sender;
-    NeoWCPresentMediaToVoiceConfirmation(self, NeoWCMediaToVoiceKindMusic);
+    WCAtlasPresentMediaToVoiceConfirmation(self, WCAtlasMediaToVoiceKindMusic);
 }
 
 %end
@@ -11527,20 +11527,20 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    return NeoWCOperationMenuItemsWithMediaToVoice(self, items, NeoWCMediaToVoiceKindVideo);
+    return WCAtlasOperationMenuItemsWithMediaToVoice(self, items, WCAtlasMediaToVoiceKindVideo);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-    if (action == @selector(neowc_convertVideoToVoice:)) {
-        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindVideo) && NeoWCMessageWrapForCell(self) != nil;
+    if (action == @selector(wcatlas_convertVideoToVoice:)) {
+        return WCAtlasMediaToVoiceKindEnabled(WCAtlasMediaToVoiceKindVideo) && WCAtlasMessageWrapForCell(self) != nil;
     }
     return %orig;
 }
 
 %new
-- (void)neowc_convertVideoToVoice:(id)sender {
+- (void)wcatlas_convertVideoToVoice:(id)sender {
     (void)sender;
-    NeoWCPresentMediaToVoiceConfirmation(self, NeoWCMediaToVoiceKindVideo);
+    WCAtlasPresentMediaToVoiceConfirmation(self, WCAtlasMediaToVoiceKindVideo);
 }
 
 %end
@@ -11549,29 +11549,29 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    items = NeoWCOperationMenuItemsWithMediaToVoice(self, items, NeoWCMediaToVoiceKindAudioFile);
-    return NeoWCOperationMenuItemsWithQuickReply(self, items);
+    items = WCAtlasOperationMenuItemsWithMediaToVoice(self, items, WCAtlasMediaToVoiceKindAudioFile);
+    return WCAtlasOperationMenuItemsWithQuickReply(self, items);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-    if (action == @selector(neowc_addToQuickReply:)) return NeoWCMessageCanAddToQuickReply(NeoWCMessageWrapForCell(self));
-    if (action == @selector(neowc_convertAudioFileToVoice:)) {
-        return NeoWCMediaToVoiceKindEnabled(NeoWCMediaToVoiceKindAudioFile) &&
-               NeoWCMessageIsConvertibleAudioFile(NeoWCMessageWrapForCell(self));
+    if (action == @selector(wcatlas_addToQuickReply:)) return WCAtlasMessageCanAddToQuickReply(WCAtlasMessageWrapForCell(self));
+    if (action == @selector(wcatlas_convertAudioFileToVoice:)) {
+        return WCAtlasMediaToVoiceKindEnabled(WCAtlasMediaToVoiceKindAudioFile) &&
+               WCAtlasMessageIsConvertibleAudioFile(WCAtlasMessageWrapForCell(self));
     }
     return %orig;
 }
 
 %new
-- (void)neowc_addToQuickReply:(id)sender {
+- (void)wcatlas_addToQuickReply:(id)sender {
     (void)sender;
-    NeoWCAddMessageToQuickReply(self);
+    WCAtlasAddMessageToQuickReply(self);
 }
 
 %new
-- (void)neowc_convertAudioFileToVoice:(id)sender {
+- (void)wcatlas_convertAudioFileToVoice:(id)sender {
     (void)sender;
-    NeoWCPresentMediaToVoiceConfirmation(self, NeoWCMediaToVoiceKindAudioFile);
+    WCAtlasPresentMediaToVoiceConfirmation(self, WCAtlasMediaToVoiceKindAudioFile);
 }
 
 %end
@@ -11580,20 +11580,20 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (NSArray *)operationMenuItems {
     NSArray *items = %orig;
-    return NeoWCOperationMenuItemsWithJoker(self, items, YES);
+    return WCAtlasOperationMenuItemsWithJoker(self, items, YES);
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
     if (action == @selector(joker_handleMenuItem:)) {
-        return NeoWCEnhancementEnabled(NeoWCChatJokerEnabledKey);
+        return WCAtlasEnhancementEnabled(WCAtlasChatJokerEnabledKey);
     }
     return %orig;
 }
 
 %new
 - (void)joker_handleMenuItem:(id)sender {
-    NeoWCCompatibilityMarkTriggered(@"chat-joker");
-    NeoWCPresentJokerEditorForCell(self, YES);
+    WCAtlasCompatibilityMarkTriggered(@"chat-joker");
+    WCAtlasPresentJokerEditorForCell(self, YES);
 }
 
 %end
@@ -11602,46 +11602,46 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)layoutSubviews {
     %orig;
-    NeoWCSynchronizeMomentsForwardButton(self);
+    WCAtlasSynchronizeMomentsForwardButton(self);
 }
 
 - (void)editBlackList {
-    if (!NeoWCEnhancementEnabled(NeoWCMomentsQuickPermissionsKey)) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasMomentsQuickPermissionsKey)) {
         %orig;
         return;
     }
-    id dataItem = NeoWCMomentsValueForExactSelector(self, @"m_dataItem");
-    if (NeoWCMomentsUserNameForDataItem(dataItem).length == 0) {
+    id dataItem = WCAtlasMomentsValueForExactSelector(self, @"m_dataItem");
+    if (WCAtlasMomentsUserNameForDataItem(dataItem).length == 0) {
         %orig;
         return;
     }
-    NeoWCCompatibilityMarkTriggered(@"moments-quick-permissions");
-    NeoWCPendingMomentsPermissionDataItem = dataItem;
+    WCAtlasCompatibilityMarkTriggered(@"moments-quick-permissions");
+    WCAtlasPendingMomentsPermissionDataItem = dataItem;
     %orig;
     id capturedDataItem = dataItem;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (NeoWCPendingMomentsPermissionDataItem == capturedDataItem) NeoWCPendingMomentsPermissionDataItem = nil;
+        if (WCAtlasPendingMomentsPermissionDataItem == capturedDataItem) WCAtlasPendingMomentsPermissionDataItem = nil;
     });
 }
 
 - (void)initTimeLabel {
     %orig;
-    NeoWCApplyMomentsPreciseTime(self, YES);
+    WCAtlasApplyMomentsPreciseTime(self, YES);
 }
 
 - (void)updateWithDataItem:(id)dataItem actionAreaVM:(id)actionAreaVM {
     %orig(dataItem, actionAreaVM);
-    NeoWCCompatibilityMarkTriggered(@"moments-precise-time");
-    NeoWCApplyMomentsPreciseTime(self, YES);
-    NeoWCSynchronizeMomentsForwardButton(self);
+    WCAtlasCompatibilityMarkTriggered(@"moments-precise-time");
+    WCAtlasApplyMomentsPreciseTime(self, YES);
+    WCAtlasSynchronizeMomentsForwardButton(self);
 }
 
 - (void)initView {
     %orig;
-    NeoWCCompatibilityMarkTriggered(@"moments-like");
-    NeoWCSynchronizeMomentsCell(self);
-    BOOL shouldReplaceOperateButton = NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) &&
-                                      !NeoWCMomentsIsNativeDetailContext(self);
+    WCAtlasCompatibilityMarkTriggered(@"moments-like");
+    WCAtlasSynchronizeMomentsCell(self);
+    BOOL shouldReplaceOperateButton = WCAtlasEnhancementEnabled(WCAtlasMomentsQuickCommentKey) &&
+                                      !WCAtlasMomentsIsNativeDetailContext(self);
     if (shouldReplaceOperateButton) {
         @try {
             UIView *operateButton = [self valueForKey:@"m_operateBtn"];
@@ -11652,10 +11652,10 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
                 operateButton.tintColor = [UIColor darkGrayColor];
             }
         } @catch (__unused NSException *exception) {
-            NeoWCLog(@"当前微信版本无法调整朋友圈操作按钮外观");
+            WCAtlasLog(@"当前微信版本无法调整朋友圈操作按钮外观");
         }
     } else {
-        id operateButton = NeoWCMomentsObjectForSelector(self, @"m_operateBtn");
+        id operateButton = WCAtlasMomentsObjectForSelector(self, @"m_operateBtn");
         if ([operateButton isKindOfClass:[UIView class]]) {
             for (UIView *subview in [(UIView *)operateButton subviews]) {
                 if ([subview isKindOfClass:[UIImageView class]]) subview.hidden = NO;
@@ -11666,42 +11666,42 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)didMoveToWindow {
     %orig;
-    NeoWCSynchronizeMomentsCell(self);
-    NeoWCSynchronizeMomentsForwardButton(self);
+    WCAtlasSynchronizeMomentsCell(self);
+    WCAtlasSynchronizeMomentsForwardButton(self);
 }
 
 %new
-- (void)neowc_handleMomentsDoubleTap {
-    if (!NeoWCEnhancementEnabled(NeoWCMomentsDoubleTapLikeKey) ||
-        NeoWCMomentsIsNativeDetailContext(self)) return;
+- (void)wcatlas_handleMomentsDoubleTap {
+    if (!WCAtlasEnhancementEnabled(WCAtlasMomentsDoubleTapLikeKey) ||
+        WCAtlasMomentsIsNativeDetailContext(self)) return;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [self onAccessibilityLike];
-    NeoWCShowMomentsHeart(self);
-    NeoWCPlayMomentsLikeHaptic(defaults);
-    NeoWCLog(@"已通过双击点赞朋友圈");
+    WCAtlasShowMomentsHeart(self);
+    WCAtlasPlayMomentsLikeHaptic(defaults);
+    WCAtlasLog(@"已通过双击点赞朋友圈");
 }
 
 %new
-- (void)neowc_handleMomentsForward:(id)sender {
+- (void)wcatlas_handleMomentsForward:(id)sender {
     (void)sender;
-    id dataItem = NeoWCMomentsObjectForName(self, @"m_dataItem");
-    UIViewController *presenter = NeoWCJokerPresenterForCell(self);
-    if (!NeoWCMomentCanForward(dataItem) || !presenter) return;
-    NeoWCForwardMoment(dataItem, presenter);
+    id dataItem = WCAtlasMomentsObjectForName(self, @"m_dataItem");
+    UIViewController *presenter = WCAtlasJokerPresenterForCell(self);
+    if (!WCAtlasMomentCanForward(dataItem) || !presenter) return;
+    WCAtlasForwardMoment(dataItem, presenter);
 }
 
 %new
-- (void)neowc_handleMomentsSaveImages:(id)sender {
+- (void)wcatlas_handleMomentsSaveImages:(id)sender {
     (void)sender;
-    id dataItem = NeoWCMomentsObjectForName(self, @"m_dataItem");
-    UIViewController *presenter = NeoWCJokerPresenterForCell(self);
-    if (!NeoWCMomentCanSaveMedia(dataItem) || !presenter) return;
-    NeoWCSaveMomentMedia(dataItem, presenter);
+    id dataItem = WCAtlasMomentsObjectForName(self, @"m_dataItem");
+    UIViewController *presenter = WCAtlasJokerPresenterForCell(self);
+    if (!WCAtlasMomentCanSaveMedia(dataItem) || !presenter) return;
+    WCAtlasSaveMomentMedia(dataItem, presenter);
 }
 
 - (id)operateBtnImage:(BOOL)spring isSpringStyle:(BOOL)springStyle {
-    if (NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) &&
-        !NeoWCMomentsIsNativeDetailContext(self)) {
+    if (WCAtlasEnhancementEnabled(WCAtlasMomentsQuickCommentKey) &&
+        !WCAtlasMomentsIsNativeDetailContext(self)) {
         UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:16.0 weight:UIImageSymbolWeightMedium];
         return [[UIImage systemImageNamed:@"bubble.middle.bottom" withConfiguration:configuration] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     }
@@ -11713,13 +11713,13 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook WCTimeLineOperateButtonView
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
-    if (NeoWCEnhancementEnabled(NeoWCMomentsQuickCommentKey) &&
-        !NeoWCMomentsIsNativeDetailContext(self)) {
-        NeoWCMomentsDispatchingQuickComment = YES;
+    if (WCAtlasEnhancementEnabled(WCAtlasMomentsQuickCommentKey) &&
+        !WCAtlasMomentsIsNativeDetailContext(self)) {
+        WCAtlasMomentsDispatchingQuickComment = YES;
         @try {
             %orig;
         } @finally {
-            NeoWCMomentsDispatchingQuickComment = NO;
+            WCAtlasMomentsDispatchingQuickComment = NO;
         }
         return;
     }
@@ -11732,55 +11732,55 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)layoutSubviews {
     %orig;
-    NeoWCApplyMomentsFloatMenuSnapshot(self);
+    WCAtlasApplyMomentsFloatMenuSnapshot(self);
 }
 
 - (void)showWithItemData:(id)item tipPoint:(CGPoint)tipPoint {
-    NeoWCRestoreMomentsFloatMenu(self);
-    objc_setAssociatedObject(self, &NeoWCMomentsFloatSnapshotKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(self, &NeoWCMomentsFloatDataItemKey, item, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if (NeoWCMomentsDispatchingQuickComment) {
+    WCAtlasRestoreMomentsFloatMenu(self);
+    objc_setAssociatedObject(self, &WCAtlasMomentsFloatSnapshotKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, &WCAtlasMomentsFloatDataItemKey, item, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (WCAtlasMomentsDispatchingQuickComment) {
         BOOL animationsEnabled = [UIView areAnimationsEnabled];
         [UIView setAnimationsEnabled:NO];
         @try {
             %orig(item, tipPoint);
-            if (!NeoWCTriggerNativeMomentsComment(self)) [self hide];
+            if (!WCAtlasTriggerNativeMomentsComment(self)) [self hide];
         } @finally {
             [UIView setAnimationsEnabled:animationsEnabled];
         }
         return;
     }
     %orig(item, tipPoint);
-    NeoWCPrepareMomentsFloatMenu(self);
+    WCAtlasPrepareMomentsFloatMenu(self);
 }
 
 - (void)hide {
-    UIButton *button = objc_getAssociatedObject(self, &NeoWCMomentsFloatForwardButtonKey);
-    UIButton *saveButton = objc_getAssociatedObject(self, &NeoWCMomentsFloatSaveButtonKey);
+    UIButton *button = objc_getAssociatedObject(self, &WCAtlasMomentsFloatForwardButtonKey);
+    UIButton *saveButton = objc_getAssociatedObject(self, &WCAtlasMomentsFloatSaveButtonKey);
     button.hidden = YES;
     saveButton.hidden = YES;
-    NeoWCRestoreMomentsFloatMenu(self);
+    WCAtlasRestoreMomentsFloatMenu(self);
     %orig;
 }
 
 %new
-- (void)neowc_handleMomentsForward:(id)sender {
+- (void)wcatlas_handleMomentsForward:(id)sender {
     (void)sender;
-    id dataItem = objc_getAssociatedObject(self, &NeoWCMomentsFloatDataItemKey);
-    UIViewController *presenter = NeoWCJokerPresenterForCell(self);
+    id dataItem = objc_getAssociatedObject(self, &WCAtlasMomentsFloatDataItemKey);
+    UIViewController *presenter = WCAtlasJokerPresenterForCell(self);
     if (!dataItem || !presenter) return;
     [self hide];
-    NeoWCForwardMoment(dataItem, presenter);
+    WCAtlasForwardMoment(dataItem, presenter);
 }
 
 %new
-- (void)neowc_handleMomentsSaveImages:(id)sender {
+- (void)wcatlas_handleMomentsSaveImages:(id)sender {
     (void)sender;
-    id dataItem = objc_getAssociatedObject(self, &NeoWCMomentsFloatDataItemKey);
-    UIViewController *presenter = NeoWCJokerPresenterForCell(self);
+    id dataItem = objc_getAssociatedObject(self, &WCAtlasMomentsFloatDataItemKey);
+    UIViewController *presenter = WCAtlasJokerPresenterForCell(self);
     if (!dataItem || !presenter) return;
     [self hide];
-    NeoWCSaveMomentMedia(dataItem, presenter);
+    WCAtlasSaveMomentMedia(dataItem, presenter);
 }
 
 %end
@@ -11789,12 +11789,12 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (id)getValueOfProperty:(id)property inRuleSet:(id)ruleSet {
     id value = %orig(property, ruleSet);
-    return NeoWCScaledThemeValue(value, property, ruleSet);
+    return WCAtlasScaledThemeValue(value, property, ruleSet);
 }
 
 - (id)getValueOfProperty:(id)property inRuleSet:(id)ruleSet isAdapt:(BOOL)isAdapt {
     id value = %orig(property, ruleSet, isAdapt);
-    return NeoWCScaledThemeValue(value, property, ruleSet);
+    return WCAtlasScaledThemeValue(value, property, ruleSet);
 }
 
 %end
@@ -11803,12 +11803,12 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (unsigned int)m_uiGlobalFontLevel {
     unsigned int value = %orig;
-    return NeoWCEnhancementEnabled(NeoWCPageScaleEnabledKey) ? 1 : value;
+    return WCAtlasEnhancementEnabled(WCAtlasPageScaleEnabledKey) ? 1 : value;
 }
 
 - (unsigned int)m_uiWebviewFontLevel {
     unsigned int value = %orig;
-    return NeoWCEnhancementEnabled(NeoWCPageScaleEnabledKey) ? 1 : value;
+    return WCAtlasEnhancementEnabled(WCAtlasPageScaleEnabledKey) ? 1 : value;
 }
 
 %end
@@ -11817,19 +11817,19 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (id)initWithFrame:(CGRect)frame configuration:(id)configuration {
     id webView = %orig(frame, configuration);
-    NeoWCApplyWebViewTextScale(webView);
+    WCAtlasApplyWebViewTextScale(webView);
     return webView;
 }
 
 - (void)didMoveToWindow {
     %orig;
-    NeoWCApplyWebViewTextScale(self);
+    WCAtlasApplyWebViewTextScale(self);
 }
 
 - (void)_setTextZoomFactor:(CGFloat)factor {
-    if (NeoWCEnhancementEnabled(NeoWCPageScaleEnabledKey)) {
-        factor = NeoWCGlobalPageScaleFactor();
-        NeoWCCompatibilityMarkTriggered(@"page-scale");
+    if (WCAtlasEnhancementEnabled(WCAtlasPageScaleEnabledKey)) {
+        factor = WCAtlasGlobalPageScaleFactor();
+        WCAtlasCompatibilityMarkTriggered(@"page-scale");
     }
     %orig(factor);
 }
@@ -11840,7 +11840,7 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 + (id)getValueOfProperty:(id)property inRuleSet:(id)ruleSet {
     id value = %orig(property, ruleSet);
-    return NeoWCScaledThemeValue(value, property, ruleSet);
+    return WCAtlasScaledThemeValue(value, property, ruleSet);
 }
 
 %end
@@ -11857,20 +11857,20 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)SendImageMessageByMMAsset:(id)asset {
     NSString *target = [self getCurrentChatName];
-    if (NeoWCConsumeRepeatSendConfirmationBypass(target, 3, YES)) {
+    if (WCAtlasConsumeRepeatSendConfirmationBypass(target, 3, YES)) {
         %orig(asset);
         return;
     }
-    UIViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    UIViewController *presenter = WCAtlasSendConfirmationPresenterForTarget(target);
     if (!presenter) {
         %orig(asset);
         return;
     }
     id retainedAsset = asset;
-    BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter, target, @"图片：1 张", ^BOOL{
-        return NeoWCSendConfirmationValidateTarget(target);
+    BOOL held = WCAtlasPresentSendConfirmationIfNeeded(presenter, target, @"图片：1 张", ^BOOL{
+        return WCAtlasSendConfirmationValidateTarget(target);
     }, ^{
-        NeoWCArmImageSendConfirmationBypass(target);
+        WCAtlasArmImageSendConfirmationBypass(target);
         %orig(retainedAsset);
     });
     if (!held) %orig(asset);
@@ -11881,29 +11881,29 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook WeixinContentLogicController
 
 - (void)AddMsg:(id)message MsgWrap:(id)wrap {
-    if ([objc_getAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey) boolValue]) {
-        objc_setAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey, nil,
+    if ([objc_getAssociatedObject(wrap, &WCAtlasSendConfirmationNativeBypassKey) boolValue]) {
+        objc_setAssociatedObject(wrap, &WCAtlasSendConfirmationNativeBypassKey, nil,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig(message, wrap);
         return;
     }
-    NSUInteger messageType = [NeoWCTweakSafeValue(wrap, @"m_uiMessageType") unsignedIntegerValue];
-    NSString *target = NeoWCTweakSafeValue(wrap, @"m_nsToUsr");
+    NSUInteger messageType = [WCAtlasTweakSafeValue(wrap, @"m_uiMessageType") unsignedIntegerValue];
+    NSString *target = WCAtlasTweakSafeValue(wrap, @"m_nsToUsr");
     if (messageType != 3 || ![target isKindOfClass:NSString.class] ||
-        NeoWCConsumeImageSendConfirmationBypass(target) ||
-        NeoWCConsumeRepeatSendConfirmationBypass(target, 3, NO)) {
+        WCAtlasConsumeImageSendConfirmationBypass(target) ||
+        WCAtlasConsumeRepeatSendConfirmationBypass(target, 3, NO)) {
         %orig(message, wrap);
         return;
     }
-    UIViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    UIViewController *presenter = WCAtlasSendConfirmationPresenterForTarget(target);
     if (!presenter) {
         %orig(message, wrap);
         return;
     }
     id retainedMessage = message;
     id retainedWrap = wrap;
-    BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter, target, @"图片：1 张", ^BOOL{
-        return NeoWCSendConfirmationValidateTarget(target);
+    BOOL held = WCAtlasPresentSendConfirmationIfNeeded(presenter, target, @"图片：1 张", ^BOOL{
+        return WCAtlasSendConfirmationValidateTarget(target);
     }, ^{
         %orig(retainedMessage, retainedWrap);
     });
@@ -11915,32 +11915,32 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook CMessageMgr
 
 - (void)AddMsg:(NSString *)target MsgWrap:(CMessageWrap *)wrap {
-    NSInteger messageType = [NeoWCTweakSafeValue(wrap, @"m_uiMessageType") integerValue];
-    if ([objc_getAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey) boolValue]) {
-        objc_setAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey, nil,
+    NSInteger messageType = [WCAtlasTweakSafeValue(wrap, @"m_uiMessageType") integerValue];
+    if ([objc_getAssociatedObject(wrap, &WCAtlasSendConfirmationNativeBypassKey) boolValue]) {
+        objc_setAssociatedObject(wrap, &WCAtlasSendConfirmationNativeBypassKey, nil,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig(target, wrap);
         return;
     }
-    BOOL appEmoticon = NeoWCSendConfirmationMessageIsAppEmoticon(wrap);
+    BOOL appEmoticon = WCAtlasSendConfirmationMessageIsAppEmoticon(wrap);
     if (![target isKindOfClass:NSString.class] || (messageType != 1 && !appEmoticon)) {
         %orig(target, wrap);
         return;
     }
-    if (NeoWCConsumeRepeatSendConfirmationBypass(target, messageType, NO)) {
+    if (WCAtlasConsumeRepeatSendConfirmationBypass(target, messageType, NO)) {
         %orig(target, wrap);
         return;
     }
-    UIViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    UIViewController *presenter = WCAtlasSendConfirmationPresenterForTarget(target);
     if (!presenter) {
         %orig(target, wrap);
         return;
     }
-    NSString *summary = appEmoticon ? @"表情：1 个" : NeoWCSendConfirmationTextSummary(wrap);
+    NSString *summary = appEmoticon ? @"表情：1 个" : WCAtlasSendConfirmationTextSummary(wrap);
     NSString *retainedTarget = [target copy];
     CMessageWrap *retainedWrap = wrap;
-    BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter, target, summary, ^BOOL{
-        return NeoWCSendConfirmationValidateTarget(retainedTarget);
+    BOOL held = WCAtlasPresentSendConfirmationIfNeeded(presenter, target, summary, ^BOOL{
+        return WCAtlasSendConfirmationValidateTarget(retainedTarget);
     }, ^{
         %orig(retainedTarget, retainedWrap);
     });
@@ -11948,17 +11948,17 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 }
 
 - (id)AddVideoMsg:(id)message ToUsr:(NSString *)target VideoInfo:(id)videoInfo {
-    if (![target isKindOfClass:NSString.class] || NeoWCConsumeVideoSendConfirmationBypass(target) ||
-        NeoWCConsumeRepeatSendConfirmationBypass(target, 43, NO)) {
+    if (![target isKindOfClass:NSString.class] || WCAtlasConsumeVideoSendConfirmationBypass(target) ||
+        WCAtlasConsumeRepeatSendConfirmationBypass(target, 43, NO)) {
         return %orig(message, target, videoInfo);
     }
-    UIViewController *presenter = NeoWCSendConfirmationPresenterForTarget(target);
+    UIViewController *presenter = WCAtlasSendConfirmationPresenterForTarget(target);
     if (!presenter) return %orig(message, target, videoInfo);
     id retainedMessage = message;
     NSString *retainedTarget = [target copy];
     id retainedVideoInfo = videoInfo;
-    BOOL held = NeoWCPresentSendConfirmationIfNeeded(presenter, target, @"视频：1 个", ^BOOL{
-        return NeoWCSendConfirmationValidateTarget(retainedTarget);
+    BOOL held = WCAtlasPresentSendConfirmationIfNeeded(presenter, target, @"视频：1 个", ^BOOL{
+        return WCAtlasSendConfirmationValidateTarget(retainedTarget);
     }, ^{
         id ignoredResult = %orig(retainedMessage, retainedTarget, retainedVideoInfo);
         (void)ignoredResult;
@@ -11968,80 +11968,80 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (void)AsyncOnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
     %orig;
-    BOOL deleted = NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap);
+    BOOL deleted = WCAtlasDeleteBlockedIncomingMessage(self, sessionUserName, wrap);
     if (deleted) {
-        NeoWCCompatibilityMarkTriggered(@"message-block");
-    } else NeoWCAutomationHandleIncomingMessage(wrap);
+        WCAtlasCompatibilityMarkTriggered(@"message-block");
+    } else WCAtlasAutomationHandleIncomingMessage(wrap);
 }
 
 - (void)AsyncOnAddMsgForSession:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
     %orig;
-    BOOL deleted = NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap);
+    BOOL deleted = WCAtlasDeleteBlockedIncomingMessage(self, sessionUserName, wrap);
     if (deleted) {
-        NeoWCCompatibilityMarkTriggered(@"message-block");
-    } else NeoWCAutomationHandleIncomingMessage(wrap);
+        WCAtlasCompatibilityMarkTriggered(@"message-block");
+    } else WCAtlasAutomationHandleIncomingMessage(wrap);
 }
 
 - (void)AsyncOnAddMsgForSession:(NSString *)sessionUserName
                         MsgWrap:(CMessageWrap *)wrap
              NewMsgArriveNotify:(BOOL)notify {
     %orig;
-    BOOL deleted = NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, wrap);
+    BOOL deleted = WCAtlasDeleteBlockedIncomingMessage(self, sessionUserName, wrap);
     if (deleted) {
-        NeoWCCompatibilityMarkTriggered(@"message-block");
-    } else NeoWCAutomationHandleIncomingMessage(wrap);
+        WCAtlasCompatibilityMarkTriggered(@"message-block");
+    } else WCAtlasAutomationHandleIncomingMessage(wrap);
 }
 
 - (void)HandleMsgList:(NSString *)sessionUserName MsgList:(NSArray *)messages {
     %orig;
     if (![messages isKindOfClass:NSArray.class]) return;
     for (id message in messages) {
-        BOOL deleted = NeoWCDeleteBlockedIncomingMessage(self, sessionUserName, message);
+        BOOL deleted = WCAtlasDeleteBlockedIncomingMessage(self, sessionUserName, message);
         if (deleted) {
-            NeoWCCompatibilityMarkTriggered(@"message-block");
-        } else NeoWCAutomationHandleIncomingMessage(message);
+            WCAtlasCompatibilityMarkTriggered(@"message-block");
+        } else WCAtlasAutomationHandleIncomingMessage(message);
     }
 }
 
 - (void)onNewSyncNotAddDBMessage:(CMessageWrap *)wrap {
     static dispatch_once_t compatibilityOnce;
-    dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"anti-revoke"); });
+    dispatch_once(&compatibilityOnce, ^{ WCAtlasCompatibilityMarkTriggered(@"anti-revoke"); });
     @try {
-        if (NeoWCHandleRevokeMessage(self, wrap)) return;
+        if (WCAtlasHandleRevokeMessage(self, wrap)) return;
     } @catch (NSException *exception) {
-        NeoWCLog(@"防撤回兼容保护已回退微信原逻辑：%@", exception.reason ?: exception.name);
+        WCAtlasLog(@"防撤回兼容保护已回退微信原逻辑：%@", exception.reason ?: exception.name);
     }
     %orig;
-    NeoWCAutomationHandleIncomingMessage(wrap);
+    WCAtlasAutomationHandleIncomingMessage(wrap);
 }
 
 - (void)AddEmoticonMsg:(NSString *)message MsgWrap:(CMessageWrap *)wrap {
     static dispatch_once_t compatibilityOnce;
-    dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"game-selector"); });
-    BOOL repeatBypass = NeoWCConsumeRepeatSendConfirmationBypass(message, 47, NO);
+    dispatch_once(&compatibilityOnce, ^{ WCAtlasCompatibilityMarkTriggered(@"game-selector"); });
+    BOOL repeatBypass = WCAtlasConsumeRepeatSendConfirmationBypass(message, 47, NO);
     if (repeatBypass) {
         %orig(message, wrap);
         return;
     }
-    BOOL confirmationBypass = [objc_getAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey) boolValue];
+    BOOL confirmationBypass = [objc_getAssociatedObject(wrap, &WCAtlasSendConfirmationNativeBypassKey) boolValue];
     if (confirmationBypass) {
-        objc_setAssociatedObject(wrap, &NeoWCSendConfirmationNativeBypassKey, nil,
+        objc_setAssociatedObject(wrap, &WCAtlasSendConfirmationNativeBypassKey, nil,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     } else {
-        UIViewController *confirmationPresenter = NeoWCSendConfirmationPresenterForTarget(message);
+        UIViewController *confirmationPresenter = WCAtlasSendConfirmationPresenterForTarget(message);
         if (confirmationPresenter) {
             NSString *retainedTarget = [message copy];
             CMessageWrap *retainedWrap = wrap;
             __weak typeof(self) weakManager = self;
-            BOOL held = NeoWCPresentSendConfirmationIfNeeded(confirmationPresenter,
+            BOOL held = WCAtlasPresentSendConfirmationIfNeeded(confirmationPresenter,
                                                               retainedTarget,
                                                               @"表情：1 个",
                                                               ^BOOL{
-                return NeoWCSendConfirmationValidateTarget(retainedTarget);
+                return WCAtlasSendConfirmationValidateTarget(retainedTarget);
             }, ^{
                 id manager = weakManager;
                 if (!manager) return;
-                objc_setAssociatedObject(retainedWrap, &NeoWCSendConfirmationNativeBypassKey, @YES,
+                objc_setAssociatedObject(retainedWrap, &WCAtlasSendConfirmationNativeBypassKey, @YES,
                                          OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                 ((void (*)(id, SEL, id, id))objc_msgSend)(manager,
                                                           @selector(AddEmoticonMsg:MsgWrap:),
@@ -12052,34 +12052,34 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
         }
     }
     BOOL isGameMessage = wrap.m_uiMessageType == 47 && (wrap.m_uiGameType == 1 || wrap.m_uiGameType == 2);
-    if (!NeoWCEnhancementEnabled(NeoWCGameSelectorKey) || !isGameMessage) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasGameSelectorKey) || !isGameMessage) {
         %orig;
         return;
     }
-    if ([objc_getAssociatedObject(wrap, &NeoWCGameSelectorPresentedKey) boolValue]) return;
+    if ([objc_getAssociatedObject(wrap, &WCAtlasGameSelectorPresentedKey) boolValue]) return;
 
-    UIWindow *window = NeoWCActiveApplicationWindow();
-    UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
+    UIWindow *window = WCAtlasActiveApplicationWindow();
+    UIViewController *presenter = WCAtlasTopControllerForLoginToast(window.rootViewController);
     if (!presenter.view.window) {
         %orig;
         return;
     }
 
-    objc_setAssociatedObject(wrap, &NeoWCGameSelectorPresentedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NeoWCGameSelectorViewController *selector = [NeoWCGameSelectorViewController new];
+    objc_setAssociatedObject(wrap, &WCAtlasGameSelectorPresentedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    WCAtlasGameSelectorViewController *selector = [WCAtlasGameSelectorViewController new];
     selector.sourceType = wrap.m_uiGameType == 1 ? @"猜拳" : @"骰子";
     selector.modalPresentationStyle = UIModalPresentationOverFullScreen;
     selector.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
     selector.selectionHandler = ^(NSUInteger value, NSString *title) {
-        NSString *gameMD5 = NeoWCGameMD5ForContent(value);
+        NSString *gameMD5 = WCAtlasGameMD5ForContent(value);
         if (gameMD5.length > 0) wrap.m_nsEmoticonMD5 = gameMD5;
         wrap.m_uiGameContent = value;
-        objc_setAssociatedObject(wrap, &NeoWCGameSelectorPresentedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        NeoWCLog(@"小游戏结果已选择：%@（原始值 %lu）", title, (unsigned long)value);
+        objc_setAssociatedObject(wrap, &WCAtlasGameSelectorPresentedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        WCAtlasLog(@"小游戏结果已选择：%@（原始值 %lu）", title, (unsigned long)value);
         %orig(message, wrap);
     };
     selector.cancelHandler = ^{
-        objc_setAssociatedObject(wrap, &NeoWCGameSelectorPresentedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(wrap, &WCAtlasGameSelectorPresentedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     };
     [presenter presentViewController:selector animated:NO completion:nil];
 }
@@ -12089,16 +12089,16 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook MMNewSessionMgr
 
 - (void)OnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
-    if (NeoWCShouldBlockIncomingMessage(sessionUserName, wrap)) {
-        NeoWCCompatibilityMarkTriggered(@"message-block");
+    if (WCAtlasShouldBlockIncomingMessage(sessionUserName, wrap)) {
+        WCAtlasCompatibilityMarkTriggered(@"message-block");
         return;
     }
     %orig;
 }
 
 - (void)OnMsgNotAddDBNotify:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
-    if (NeoWCShouldBlockIncomingMessage(sessionUserName, wrap)) {
-        NeoWCCompatibilityMarkTriggered(@"message-block");
+    if (WCAtlasShouldBlockIncomingMessage(sessionUserName, wrap)) {
+        WCAtlasCompatibilityMarkTriggered(@"message-block");
         return;
     }
     %orig;
@@ -12109,10 +12109,10 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 %hook CContactMgr
 
 - (void)printContactImportantChangeData:(id)newContact oldContact:(id)oldContact {
-    id snapshot = NeoWCCaptureGroupMemberChange(newContact, oldContact);
-    if (snapshot) NeoWCCompatibilityMarkTriggered(@"group-member-reminder");
+    id snapshot = WCAtlasCaptureGroupMemberChange(newContact, oldContact);
+    if (snapshot) WCAtlasCompatibilityMarkTriggered(@"group-member-reminder");
     %orig;
-    if (snapshot) NeoWCCompleteGroupMemberChange(snapshot, self, newContact);
+    if (snapshot) WCAtlasCompleteGroupMemberChange(snapshot, self, newContact);
 }
 
 %end
@@ -12121,25 +12121,25 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (unsigned int)m7StepCount {
     static dispatch_once_t compatibilityOnce;
-    dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"steps"); });
+    dispatch_once(&compatibilityOnce, ^{ WCAtlasCompatibilityMarkTriggered(@"steps"); });
     unsigned int originalValue = %orig;
-    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    unsigned int configuredValue = WCAtlasConfiguredDailyStepCount();
     return configuredValue > 0 ? configuredValue : originalValue;
 }
 
 - (unsigned int)hkStepCount {
     unsigned int originalValue = %orig;
-    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    unsigned int configuredValue = WCAtlasConfiguredDailyStepCount();
     return configuredValue > 0 ? configuredValue : originalValue;
 }
 
 - (void)setM7StepCount:(unsigned int)value {
-    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    unsigned int configuredValue = WCAtlasConfiguredDailyStepCount();
     %orig(configuredValue > 0 ? configuredValue : value);
 }
 
 - (void)setHkStepCount:(unsigned int)value {
-    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    unsigned int configuredValue = WCAtlasConfiguredDailyStepCount();
     %orig(configuredValue > 0 ? configuredValue : value);
 }
 
@@ -12149,60 +12149,60 @@ __attribute__((constructor)) static void NeoWCInstallHomeLeadingSwipe(void) {
 
 - (unsigned int)stepCount {
     static dispatch_once_t compatibilityOnce;
-    dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"steps-upload"); });
+    dispatch_once(&compatibilityOnce, ^{ WCAtlasCompatibilityMarkTriggered(@"steps-upload"); });
     unsigned int originalValue = %orig;
-    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    unsigned int configuredValue = WCAtlasConfiguredDailyStepCount();
     return configuredValue > 0 ? configuredValue : originalValue;
 }
 
 - (unsigned int)m7StepCount {
     unsigned int originalValue = %orig;
-    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    unsigned int configuredValue = WCAtlasConfiguredDailyStepCount();
     return configuredValue > 0 ? configuredValue : originalValue;
 }
 
 - (unsigned int)hkStepCount {
     unsigned int originalValue = %orig;
-    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    unsigned int configuredValue = WCAtlasConfiguredDailyStepCount();
     return configuredValue > 0 ? configuredValue : originalValue;
 }
 
 - (void)setStepCount:(unsigned int)value {
-    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    unsigned int configuredValue = WCAtlasConfiguredDailyStepCount();
     %orig(configuredValue > 0 ? configuredValue : value);
 }
 
 - (void)setM7StepCount:(unsigned int)value {
-    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    unsigned int configuredValue = WCAtlasConfiguredDailyStepCount();
     %orig(configuredValue > 0 ? configuredValue : value);
 }
 
 - (void)setHkStepCount:(unsigned int)value {
-    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    unsigned int configuredValue = WCAtlasConfiguredDailyStepCount();
     %orig(configuredValue > 0 ? configuredValue : value);
 }
 
 %end
 
-static id NeoWCDirectMessageForViewModel(id viewModel) {
+static id WCAtlasDirectMessageForViewModel(id viewModel) {
     if (!viewModel) return nil;
-    id directContent = NeoWCTweakSafeValue(viewModel, @"m_nsContent");
+    id directContent = WCAtlasTweakSafeValue(viewModel, @"m_nsContent");
     if ([directContent isKindOfClass:NSString.class]) return viewModel;
     for (NSString *key in @[@"getCurrentMessageWrap", @"currentMessageWrap",
                             @"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap",
                             @"message", @"m_message"]) {
-        id message = NeoWCTweakSafeValue(viewModel, key);
+        id message = WCAtlasTweakSafeValue(viewModel, key);
         if (message) return message;
     }
     return nil;
 }
 
-static id NeoWCMessageForCellViewModel(id viewModel) {
-    id message = NeoWCDirectMessageForViewModel(viewModel);
+static id WCAtlasMessageForCellViewModel(id viewModel) {
+    id message = WCAtlasDirectMessageForViewModel(viewModel);
     if (message) return message;
 
-    id parentModel = NeoWCTweakSafeValue(viewModel, @"parentModel");
-    message = NeoWCDirectMessageForViewModel(parentModel);
+    id parentModel = WCAtlasTweakSafeValue(viewModel, @"parentModel");
+    message = WCAtlasDirectMessageForViewModel(parentModel);
     if (message) return message;
     return nil;
 }
@@ -12211,113 +12211,113 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 
 - (void)prepareForReuse {
     %orig;
-    NeoWCHideMessageTimeLabels(self);
-    UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
+    WCAtlasHideMessageTimeLabels(self);
+    UILabel *label = objc_getAssociatedObject(self, &WCAtlasAntiRevokeSideLabelKey);
     label.hidden = YES;
     label.text = nil;
 }
 
 - (void)layoutSubviews {
     %orig;
-    NeoWCLayoutMessageTimeLabels(self);
+    WCAtlasLayoutMessageTimeLabels(self);
 }
 
 - (void)onHeadImageLongPressed:(id)sender {
-    if (NeoWCPerformingNativeAvatarLongPress) {
+    if (WCAtlasPerformingNativeAvatarLongPress) {
         %orig(sender);
         return;
     }
-    NSInteger mode = [NSUserDefaults.standardUserDefaults integerForKey:NeoWCAvatarQuickMenuGestureKey];
-    BOOL enabled = NeoWCEnhancementEnabled(NeoWCAvatarQuickMenuGestureKey) &&
-                   mode == NeoWCAvatarQuickMenuGestureLongPress;
+    NSInteger mode = [NSUserDefaults.standardUserDefaults integerForKey:WCAtlasAvatarQuickMenuGestureKey];
+    BOOL enabled = WCAtlasEnhancementEnabled(WCAtlasAvatarQuickMenuGestureKey) &&
+                   mode == WCAtlasAvatarQuickMenuGestureLongPress;
     if (enabled && self.window) {
-        UIView *headView = NeoWCAvatarHeadViewForCell(self);
+        UIView *headView = WCAtlasAvatarHeadViewForCell(self);
         if (!headView && [sender isKindOfClass:UIView.class]) headView = sender;
         if (!headView && [sender isKindOfClass:UIGestureRecognizer.class]) {
             headView = ((UIGestureRecognizer *)sender).view;
         }
-        if (headView.window && NeoWCPresentAvatarQuickMenu(self, headView)) return;
+        if (headView.window && WCAtlasPresentAvatarQuickMenu(self, headView)) return;
     }
     %orig(sender);
 }
 
 - (void)setViewModel:(id)viewModel {
     %orig;
-    NeoWCHideMessageTimeLabels(self);
-    NeoWCScheduleMessageTimeRefresh(self);
-    NeoWCSynchronizeReplyGesture(self);
-    NeoWCSynchronizeAvatarQuickGesture(self);
-    [self neowc_scheduleAntiRevokeSidePromptRefresh];
+    WCAtlasHideMessageTimeLabels(self);
+    WCAtlasScheduleMessageTimeRefresh(self);
+    WCAtlasSynchronizeReplyGesture(self);
+    WCAtlasSynchronizeAvatarQuickGesture(self);
+    [self wcatlas_scheduleAntiRevokeSidePromptRefresh];
 }
 
 - (void)updateStatus {
     %orig;
-    NeoWCScheduleMessageTimeRefresh(self);
-    [self neowc_scheduleAntiRevokeSidePromptRefresh];
+    WCAtlasScheduleMessageTimeRefresh(self);
+    [self wcatlas_scheduleAntiRevokeSidePromptRefresh];
 }
 
 - (void)updateNodeStatus {
     %orig;
-    NeoWCScheduleMessageTimeRefresh(self);
-    [self neowc_scheduleAntiRevokeSidePromptRefresh];
+    WCAtlasScheduleMessageTimeRefresh(self);
+    [self wcatlas_scheduleAntiRevokeSidePromptRefresh];
 }
 
 - (void)didMoveToWindow {
     %orig;
-    NeoWCSynchronizeReplyGesture(self);
-    NeoWCSynchronizeAvatarQuickGesture(self);
+    WCAtlasSynchronizeReplyGesture(self);
+    WCAtlasSynchronizeAvatarQuickGesture(self);
     if (self.window) {
-        NeoWCScheduleMessageTimeRefresh(self);
-        [self neowc_scheduleAntiRevokeSidePromptRefresh];
+        WCAtlasScheduleMessageTimeRefresh(self);
+        [self wcatlas_scheduleAntiRevokeSidePromptRefresh];
     } else {
-        NeoWCHideMessageTimeLabels(self);
-        UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
+        WCAtlasHideMessageTimeLabels(self);
+        UILabel *label = objc_getAssociatedObject(self, &WCAtlasAntiRevokeSideLabelKey);
         if (label && !label.hidden) label.hidden = YES;
     }
 }
 
 - (void)handleTapReferMessage {
-    if (NeoWCJumpToReferencedMessage(self)) return;
+    if (WCAtlasJumpToReferencedMessage(self)) return;
     %orig;
 }
 
 - (void)handleTapForReferMsg:(id)sender {
-    if (NeoWCJumpToReferencedMessage(self)) return;
+    if (WCAtlasJumpToReferencedMessage(self)) return;
     %orig(sender);
 }
 
 %new
-- (void)neowc_handleReplyPan:(UIPanGestureRecognizer *)recognizer {
-    if (!NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey)) return;
+- (void)wcatlas_handleReplyPan:(UIPanGestureRecognizer *)recognizer {
+    if (!WCAtlasEnhancementEnabled(WCAtlasReplySwipeEnabledKey)) return;
     CGPoint translation = [recognizer translationInView:self];
     CGPoint velocity = [recognizer velocityInView:self];
-    CGFloat triggerDistance = NeoWCReplySwipeTriggerDistance();
+    CGFloat triggerDistance = WCAtlasReplySwipeTriggerDistance();
 
     if (recognizer.state == UIGestureRecognizerStateBegan) {
         BOOL rightward = velocity.x > 0.0;
-        if (NeoWCMessageSwipeAction(self, rightward) == NeoWCReplySwipeActionNone) return;
-        objc_setAssociatedObject(self, &NeoWCReplyPanRightwardKey, @(rightward), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (WCAtlasMessageSwipeAction(self, rightward) == WCAtlasReplySwipeActionNone) return;
+        objc_setAssociatedObject(self, &WCAtlasReplyPanRightwardKey, @(rightward), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(self,
-                                 &NeoWCReplyOriginalTransformKey,
+                                 &WCAtlasReplyOriginalTransformKey,
                                  [NSValue valueWithCGAffineTransform:self.transform],
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(self,
-                                 &NeoWCReplyTransformSnapshotsKey,
-                                 NeoWCReplyTransformSnapshots(self),
+                                 &WCAtlasReplyTransformSnapshotsKey,
+                                 WCAtlasReplyTransformSnapshots(self),
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
         [feedback prepare];
-        objc_setAssociatedObject(self, &NeoWCReplyFeedbackGeneratorKey, feedback, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(self, &NeoWCReplyFeedbackTriggeredKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(self, &WCAtlasReplyFeedbackGeneratorKey, feedback, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(self, &WCAtlasReplyFeedbackTriggeredKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
 
-    NSValue *originalTransformValue = objc_getAssociatedObject(self, &NeoWCReplyOriginalTransformKey);
+    NSValue *originalTransformValue = objc_getAssociatedObject(self, &WCAtlasReplyOriginalTransformKey);
     CGAffineTransform originalTransform = originalTransformValue
         ? originalTransformValue.CGAffineTransformValue
         : CGAffineTransformIdentity;
-    BOOL rightward = [objc_getAssociatedObject(self, &NeoWCReplyPanRightwardKey) boolValue];
-    NSArray<NeoWCReplyTransformSnapshot *> *snapshots = objc_getAssociatedObject(self, &NeoWCReplyTransformSnapshotsKey);
+    BOOL rightward = [objc_getAssociatedObject(self, &WCAtlasReplyPanRightwardKey) boolValue];
+    NSArray<WCAtlasReplyTransformSnapshot *> *snapshots = objc_getAssociatedObject(self, &WCAtlasReplyTransformSnapshotsKey);
 
     if (recognizer.state == UIGestureRecognizerStateChanged) {
         CGFloat distance = MAX(0.0, rightward ? translation.x : -translation.x);
@@ -12325,13 +12325,13 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
             distance = triggerDistance + MIN(10.0, (distance - triggerDistance) * 0.18);
         }
         CGFloat offset = rightward ? distance : -distance;
-        if (snapshots.count) NeoWCApplyReplyTransform(snapshots, offset);
+        if (snapshots.count) WCAtlasApplyReplyTransform(snapshots, offset);
         else self.transform = CGAffineTransformTranslate(originalTransform, offset, 0.0);
         if (distance >= triggerDistance &&
-            ![objc_getAssociatedObject(self, &NeoWCReplyFeedbackTriggeredKey) boolValue]) {
-            UIImpactFeedbackGenerator *feedback = objc_getAssociatedObject(self, &NeoWCReplyFeedbackGeneratorKey);
+            ![objc_getAssociatedObject(self, &WCAtlasReplyFeedbackTriggeredKey) boolValue]) {
+            UIImpactFeedbackGenerator *feedback = objc_getAssociatedObject(self, &WCAtlasReplyFeedbackGeneratorKey);
             [feedback impactOccurred];
-            objc_setAssociatedObject(self, &NeoWCReplyFeedbackTriggeredKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(self, &WCAtlasReplyFeedbackTriggeredKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         return;
     }
@@ -12346,12 +12346,12 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
                               ? (translation.x >= triggerDistance || velocity.x >= 700.0)
                               : (translation.x <= -triggerDistance || velocity.x <= -700.0));
     __weak CommonMessageCellView *weakCell = self;
-    if (shouldTrigger && self.window && NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey)) {
+    if (shouldTrigger && self.window && WCAtlasEnhancementEnabled(WCAtlasReplySwipeEnabledKey)) {
         dispatch_async(dispatch_get_main_queue(), ^{
             CommonMessageCellView *cell = weakCell;
-            if (!cell.window || !NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey)) return;
-            NeoWCReplySwipeAction currentAction = NeoWCMessageSwipeAction(cell, rightward);
-            NeoWCPerformMessageGestureAction(cell, currentAction);
+            if (!cell.window || !WCAtlasEnhancementEnabled(WCAtlasReplySwipeEnabledKey)) return;
+            WCAtlasReplySwipeAction currentAction = WCAtlasMessageSwipeAction(cell, rightward);
+            WCAtlasPerformMessageGestureAction(cell, currentAction);
         });
     }
     [UIView animateWithDuration:0.22
@@ -12360,72 +12360,72 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
           initialSpringVelocity:0.25
                         options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionAllowUserInteraction
                      animations:^{
-                         if (snapshots.count) NeoWCRestoreReplyTransforms(snapshots);
+                         if (snapshots.count) WCAtlasRestoreReplyTransforms(snapshots);
                          else weakCell.transform = originalTransform;
                      }
                      completion:^(BOOL finished) {
                          (void)finished;
                           CommonMessageCellView *cell = weakCell;
                           if (!cell) return;
-                          objc_setAssociatedObject(cell, &NeoWCReplyOriginalTransformKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                          objc_setAssociatedObject(cell, &NeoWCReplyTransformSnapshotsKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                          objc_setAssociatedObject(cell, &NeoWCReplyFeedbackGeneratorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                          objc_setAssociatedObject(cell, &NeoWCReplyFeedbackTriggeredKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                          objc_setAssociatedObject(cell, &NeoWCReplyPanRightwardKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                          objc_setAssociatedObject(cell, &WCAtlasReplyOriginalTransformKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                          objc_setAssociatedObject(cell, &WCAtlasReplyTransformSnapshotsKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                          objc_setAssociatedObject(cell, &WCAtlasReplyFeedbackGeneratorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                          objc_setAssociatedObject(cell, &WCAtlasReplyFeedbackTriggeredKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                          objc_setAssociatedObject(cell, &WCAtlasReplyPanRightwardKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                       }];
 }
 
 %new
-- (void)neowc_handleMessageTapAction:(UITapGestureRecognizer *)recognizer {
+- (void)wcatlas_handleMessageTapAction:(UITapGestureRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateRecognized ||
         !self.window ||
-        !NeoWCEnhancementEnabled(NeoWCReplySwipeEnabledKey)) return;
+        !WCAtlasEnhancementEnabled(WCAtlasReplySwipeEnabledKey)) return;
     NSString *selfKey = recognizer.numberOfTapsRequired >= 3
-        ? NeoWCMessageTripleTapSelfActionKey
-        : NeoWCMessageDoubleTapSelfActionKey;
+        ? WCAtlasMessageTripleTapSelfActionKey
+        : WCAtlasMessageDoubleTapSelfActionKey;
     NSString *otherKey = recognizer.numberOfTapsRequired >= 3
-        ? NeoWCMessageTripleTapOtherActionKey
-        : NeoWCMessageDoubleTapOtherActionKey;
-    NeoWCReplySwipeAction action = NeoWCMessageGestureAction(self, selfKey, otherKey);
-    NeoWCPerformMessageGestureAction(self, action);
+        ? WCAtlasMessageTripleTapOtherActionKey
+        : WCAtlasMessageDoubleTapOtherActionKey;
+    WCAtlasReplySwipeAction action = WCAtlasMessageGestureAction(self, selfKey, otherKey);
+    WCAtlasPerformMessageGestureAction(self, action);
 }
 
 %new
-- (void)neowc_scheduleAntiRevokeSidePromptRefresh {
-    UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
-    if (!NeoWCUsesAntiRevokeSidePrompt()) {
+- (void)wcatlas_scheduleAntiRevokeSidePromptRefresh {
+    UILabel *label = objc_getAssociatedObject(self, &WCAtlasAntiRevokeSideLabelKey);
+    if (!WCAtlasUsesAntiRevokeSidePrompt()) {
         if (label && !label.hidden) label.hidden = YES;
         return;
     }
-    if ([objc_getAssociatedObject(self, &NeoWCAntiRevokeSideRefreshScheduledKey) boolValue]) return;
-    objc_setAssociatedObject(self, &NeoWCAntiRevokeSideRefreshScheduledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if ([objc_getAssociatedObject(self, &WCAtlasAntiRevokeSideRefreshScheduledKey) boolValue]) return;
+    objc_setAssociatedObject(self, &WCAtlasAntiRevokeSideRefreshScheduledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     __weak CommonMessageCellView *weakCell = self;
     dispatch_async(dispatch_get_main_queue(), ^{
         CommonMessageCellView *cell = weakCell;
         if (!cell) return;
-        if (cell.window) [cell neowc_refreshAntiRevokeSidePrompt];
+        if (cell.window) [cell wcatlas_refreshAntiRevokeSidePrompt];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{
             CommonMessageCellView *delayedCell = weakCell;
             if (!delayedCell) return;
-            objc_setAssociatedObject(delayedCell, &NeoWCAntiRevokeSideRefreshScheduledKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            if (delayedCell.window) [delayedCell neowc_refreshAntiRevokeSidePrompt];
+            objc_setAssociatedObject(delayedCell, &WCAtlasAntiRevokeSideRefreshScheduledKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            if (delayedCell.window) [delayedCell wcatlas_refreshAntiRevokeSidePrompt];
         });
     });
 }
 
 %new
-- (void)neowc_refreshAntiRevokeSidePrompt {
-    UILabel *label = objc_getAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey);
-    BOOL useSidePromptStyle = NeoWCUsesAntiRevokeSidePrompt();
+- (void)wcatlas_refreshAntiRevokeSidePrompt {
+    UILabel *label = objc_getAssociatedObject(self, &WCAtlasAntiRevokeSideLabelKey);
+    BOOL useSidePromptStyle = WCAtlasUsesAntiRevokeSidePrompt();
     if (!useSidePromptStyle) {
         if (label && !label.hidden) label.hidden = YES;
         return;
     }
-    id viewModel = NeoWCTweakSafeValue(self, @"viewModel");
-    if (!viewModel) viewModel = NeoWCTweakSafeValue(self, @"m_viewModel");
-    id message = NeoWCMessageForCellViewModel(viewModel);
-    NSString *prompt = NeoWCAntiRevokeSidePromptForMessage(message);
+    id viewModel = WCAtlasTweakSafeValue(self, @"viewModel");
+    if (!viewModel) viewModel = WCAtlasTweakSafeValue(self, @"m_viewModel");
+    id message = WCAtlasMessageForCellViewModel(viewModel);
+    NSString *prompt = WCAtlasAntiRevokeSidePromptForMessage(message);
     BOOL useSidePrompt = prompt.length > 0;
     if (!useSidePrompt) {
         if (label && !label.hidden) label.hidden = YES;
@@ -12441,20 +12441,20 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
         label.numberOfLines = 1;
         label.layer.zPosition = 1000.0;
         [self addSubview:label];
-        objc_setAssociatedObject(self, &NeoWCAntiRevokeSideLabelKey, label, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(self, &WCAtlasAntiRevokeSideLabelKey, label, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     if (label.superview != self) [self addSubview:label];
     if (label.hidden) label.hidden = NO;
     if (label.alpha != 1.0) label.alpha = 1.0;
     if (![label.text isEqualToString:prompt]) label.text = prompt;
-    UIColor *promptColor = NeoWCDynamicColorForDefaultsKeys(NeoWCAntiRevokeSideLightTextColorKey,
-                                                            NeoWCAntiRevokeSideDarkTextColorKey,
-                                                            NeoWCAntiRevokeSideTextColorKey,
+    UIColor *promptColor = WCAtlasDynamicColorForDefaultsKeys(WCAtlasAntiRevokeSideLightTextColorKey,
+                                                            WCAtlasAntiRevokeSideDarkTextColorKey,
+                                                            WCAtlasAntiRevokeSideTextColorKey,
                                                             UIColor.tertiaryLabelColor,
                                                             UIColor.tertiaryLabelColor);
     if (![label.textColor isEqual:promptColor]) label.textColor = promptColor;
 
-    UIView *bubbleView = NeoWCMessageSideAnchorView(self);
+    UIView *bubbleView = WCAtlasMessageSideAnchorView(self);
     if (!bubbleView) {
         if (!label.hidden) label.hidden = YES;
         return;
@@ -12463,10 +12463,10 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
     CGSize promptSize = [prompt sizeWithAttributes:@{ NSFontAttributeName: label.font }];
     CGFloat labelWidth = MIN(160.0, MAX(36.0, ceil(promptSize.width) + 8.0));
     CGFloat labelHeight = 18.0;
-    BOOL isSender = [NeoWCTweakSafeValue(viewModel, @"isSender") boolValue];
+    BOOL isSender = [WCAtlasTweakSafeValue(viewModel, @"isSender") boolValue];
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    id storedOffsetX = [defaults objectForKey:NeoWCAntiRevokeSideOffsetXKey];
-    id storedOffsetY = [defaults objectForKey:NeoWCAntiRevokeSideOffsetYKey];
+    id storedOffsetX = [defaults objectForKey:WCAtlasAntiRevokeSideOffsetXKey];
+    id storedOffsetY = [defaults objectForKey:WCAtlasAntiRevokeSideOffsetYKey];
     CGFloat offsetX = storedOffsetX ? [storedOffsetX doubleValue] : 0.0;
     CGFloat offsetY = storedOffsetY ? [storedOffsetY doubleValue] : 10.0;
     CGFloat x = isSender ? CGRectGetMinX(bubbleFrame) - labelWidth - 7.0 + offsetX : CGRectGetMaxX(bubbleFrame) + 7.0 - offsetX;
@@ -12483,43 +12483,43 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 
 - (void)layoutSubviews {
     %orig;
-    BOOL wasApplied = [objc_getAssociatedObject(self, &NeoWCAntiRevokeSystemColorAppliedKey) boolValue];
-    if (!NeoWCEnhancementEnabled(NeoWCAntiRevokeKey) && !wasApplied) return;
-    [self neowc_applyAntiRevokeTextColor];
+    BOOL wasApplied = [objc_getAssociatedObject(self, &WCAtlasAntiRevokeSystemColorAppliedKey) boolValue];
+    if (!WCAtlasEnhancementEnabled(WCAtlasAntiRevokeKey) && !wasApplied) return;
+    [self wcatlas_applyAntiRevokeTextColor];
 }
 
 %new
-- (void)neowc_applyAntiRevokeTextColor {
-    id viewModel = NeoWCTweakSafeValue(self, @"viewModel");
-    id message = NeoWCTweakSafeValue(viewModel, @"messageWrap");
-    id richTextView = [self respondsToSelector:@selector(getRichTextView)] ? [self getRichTextView] : NeoWCTweakSafeValue(self, @"m_richTextView");
+- (void)wcatlas_applyAntiRevokeTextColor {
+    id viewModel = WCAtlasTweakSafeValue(self, @"viewModel");
+    id message = WCAtlasTweakSafeValue(viewModel, @"messageWrap");
+    id richTextView = [self respondsToSelector:@selector(getRichTextView)] ? [self getRichTextView] : WCAtlasTweakSafeValue(self, @"m_richTextView");
     if (!richTextView) return;
-    UIColor *originalColor = objc_getAssociatedObject(richTextView, &NeoWCAntiRevokeOriginalSystemTextColorKey);
+    UIColor *originalColor = objc_getAssociatedObject(richTextView, &WCAtlasAntiRevokeOriginalSystemTextColorKey);
     if (!originalColor) {
-        id currentColor = NeoWCTweakSafeValue(richTextView, @"textColor");
-        if (![currentColor isKindOfClass:[UIColor class]]) currentColor = NeoWCTweakSafeValue(richTextView, @"oTextColor");
+        id currentColor = WCAtlasTweakSafeValue(richTextView, @"textColor");
+        if (![currentColor isKindOfClass:[UIColor class]]) currentColor = WCAtlasTweakSafeValue(richTextView, @"oTextColor");
         if ([currentColor isKindOfClass:[UIColor class]]) {
             originalColor = currentColor;
-            objc_setAssociatedObject(richTextView, &NeoWCAntiRevokeOriginalSystemTextColorKey, originalColor, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(richTextView, &WCAtlasAntiRevokeOriginalSystemTextColorKey, originalColor, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
     }
-    BOOL shouldApply = NeoWCEnhancementEnabled(NeoWCAntiRevokeKey) && NeoWCAntiRevokeIsLocalPromptMessage(message);
+    BOOL shouldApply = WCAtlasEnhancementEnabled(WCAtlasAntiRevokeKey) && WCAtlasAntiRevokeIsLocalPromptMessage(message);
     UIColor *color = shouldApply
-        ? NeoWCDynamicColorForDefaultsKeys(NeoWCAntiRevokeLocalLightTextColorKey,
-                                           NeoWCAntiRevokeLocalDarkTextColorKey,
-                                           NeoWCAntiRevokeLocalTextColorKey,
+        ? WCAtlasDynamicColorForDefaultsKeys(WCAtlasAntiRevokeLocalLightTextColorKey,
+                                           WCAtlasAntiRevokeLocalDarkTextColorKey,
+                                           WCAtlasAntiRevokeLocalTextColorKey,
                                            UIColor.secondaryLabelColor,
                                            UIColor.secondaryLabelColor)
         : originalColor;
     if (color) {
-        UIColor *currentColor = NeoWCTweakSafeValue(richTextView, @"textColor");
+        UIColor *currentColor = WCAtlasTweakSafeValue(richTextView, @"textColor");
         if (![currentColor isEqual:color]) {
-            NeoWCTweakSetValue(richTextView, @"textColor", color);
-            NeoWCTweakSetValue(richTextView, @"oTextColor", color);
+            WCAtlasTweakSetValue(richTextView, @"textColor", color);
+            WCAtlasTweakSetValue(richTextView, @"oTextColor", color);
             if ([richTextView isKindOfClass:[UIView class]]) [(UIView *)richTextView setNeedsDisplay];
         }
     }
-    objc_setAssociatedObject(self, &NeoWCAntiRevokeSystemColorAppliedKey,
+    objc_setAssociatedObject(self, &WCAtlasAntiRevokeSystemColorAppliedKey,
                              shouldApply ? @YES : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
@@ -12529,19 +12529,19 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 
 - (unsigned int)stepCount {
     unsigned int originalValue = %orig;
-    unsigned int configuredValue = NeoWCConfiguredDailyStepCount();
+    unsigned int configuredValue = WCAtlasConfiguredDailyStepCount();
     return configuredValue > 0 ? configuredValue : originalValue;
 }
 
 - (BOOL)isAd {
     static dispatch_once_t compatibilityOnce;
-    dispatch_once(&compatibilityOnce, ^{ NeoWCCompatibilityMarkTriggered(@"ad-block"); });
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    dispatch_once(&compatibilityOnce, ^{ WCAtlasCompatibilityMarkTriggered(@"ad-block"); });
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (BOOL)isVideoAd {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
@@ -12550,8 +12550,8 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 %hook RoomContentLogicController
 
 - (NSArray *)getDefaultTitleTailSubViews {
-    if (NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey)) {
-        NeoWCCompatibilityMarkTriggered(@"hide-chat-mute-icon");
+    if (WCAtlasEnhancementEnabled(WCAtlasHideChatMuteIconKey)) {
+        WCAtlasCompatibilityMarkTriggered(@"hide-chat-mute-icon");
         return @[];
     }
     return %orig;
@@ -12559,7 +12559,7 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 
 - (id)getMemeberCountLabel {
     id label = %orig;
-    if (NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey) && [label isKindOfClass:[UILabel class]]) {
+    if (WCAtlasEnhancementEnabled(WCAtlasHideChatMuteIconKey) && [label isKindOfClass:[UILabel class]]) {
         ((UILabel *)label).hidden = YES;
         ((UILabel *)label).text = @"";
     }
@@ -12567,13 +12567,13 @@ static id NeoWCMessageForCellViewModel(id viewModel) {
 }
 
 - (CGFloat)GetTitleLabelOffset {
-    if (NeoWCEnhancementEnabled(NeoWCHideChatMuteIconKey)) return 0.0;
+    if (WCAtlasEnhancementEnabled(WCAtlasHideChatMuteIconKey)) return 0.0;
     return %orig;
 }
 
 %end
 
-static BOOL NeoWCViewIsInsideNavigationChrome(UIView *view,
+static BOOL WCAtlasViewIsInsideNavigationChrome(UIView *view,
                                                BaseMsgContentViewController *controller) {
     UINavigationBar *navigationBar = controller.navigationController.navigationBar;
     for (UIView *ancestor = view; ancestor; ancestor = ancestor.superview) {
@@ -12583,56 +12583,56 @@ static BOOL NeoWCViewIsInsideNavigationChrome(UIView *view,
     return NO;
 }
 
-static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
+static void WCAtlasObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
     BOOL typing = [text isKindOfClass:NSString.class] && [text containsString:@"正在输入"];
-    BOOL tracked = [objc_getAssociatedObject(label, &NeoWCChatTypingStatusLabelMarkerKey) boolValue];
+    BOOL tracked = [objc_getAssociatedObject(label, &WCAtlasChatTypingStatusLabelMarkerKey) boolValue];
     if (!typing && !tracked) return;
 
     if (typing && !label.window) {
-        objc_setAssociatedObject(label, &NeoWCChatTypingStatusLabelMarkerKey,
+        objc_setAssociatedObject(label, &WCAtlasChatTypingStatusLabelMarkerKey,
                                  @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
 
-    BaseMsgContentViewController *controller = NeoWCResolveVisibleChatController();
+    BaseMsgContentViewController *controller = WCAtlasResolveVisibleChatController();
     if (!controller) return;
-    if (typing && !NeoWCViewIsInsideNavigationChrome(label, controller)) {
-        objc_setAssociatedObject(label, &NeoWCChatTypingStatusLabelMarkerKey,
+    if (typing && !WCAtlasViewIsInsideNavigationChrome(label, controller)) {
+        objc_setAssociatedObject(label, &WCAtlasChatTypingStatusLabelMarkerKey,
                                  nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
 
-    objc_setAssociatedObject(label, &NeoWCChatTypingStatusLabelMarkerKey,
+    objc_setAssociatedObject(label, &WCAtlasChatTypingStatusLabelMarkerKey,
                              typing ? @YES : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if (!NeoWCSetChatTypingState(controller, label)) return;
+    if (!WCAtlasSetChatTypingState(controller, label)) return;
     __weak BaseMsgContentViewController *weakController = controller;
     dispatch_async(dispatch_get_main_queue(), ^{
         BaseMsgContentViewController *strongController = weakController;
-        if (strongController && strongController.view.window) NeoWCUpdateChatTopBar(strongController);
+        if (strongController && strongController.view.window) WCAtlasUpdateChatTopBar(strongController);
     });
 }
 
 %hook MMUILabel
 
 - (void)setText:(NSString *)text {
-    NSString *contactsText = NeoWCResponderIsInsideControllerClass(self, @"ContactsViewController")
-        ? NeoWCContactsCountTextForOriginal(text)
+    NSString *contactsText = WCAtlasResponderIsInsideControllerClass(self, @"ContactsViewController")
+        ? WCAtlasContactsCountTextForOriginal(text)
         : nil;
     if (contactsText.length > 0 && ![contactsText isEqualToString:text]) {
-        NeoWCCompatibilityMarkTriggered(@"contacts-count");
+        WCAtlasCompatibilityMarkTriggered(@"contacts-count");
     }
     NSString *resolvedText = contactsText ?: text;
     %orig(resolvedText);
-    NeoWCObserveTypingStatusLabel(self, resolvedText);
+    WCAtlasObserveTypingStatusLabel(self, resolvedText);
 }
 
 - (void)didMoveToWindow {
     %orig;
-    if (self.window && NeoWCResponderIsInsideControllerClass(self, @"ContactsViewController")) {
-        NSString *contactsText = NeoWCContactsCountTextForOriginal(self.text);
+    if (self.window && WCAtlasResponderIsInsideControllerClass(self, @"ContactsViewController")) {
+        NSString *contactsText = WCAtlasContactsCountTextForOriginal(self.text);
         if (contactsText.length > 0 && ![contactsText isEqualToString:self.text]) self.text = contactsText;
     }
-    NeoWCObserveTypingStatusLabel(self, self.text);
+    WCAtlasObserveTypingStatusLabel(self, self.text);
 }
 
 %end
@@ -12641,20 +12641,20 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 
 - (void)didMoveToSuperview {
     %orig;
-    if (NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey) &&
-        NeoWCViewIsInsideWalletHeader((UIView *)self)) {
-        NeoWCInstallWalletLongPressIfNeeded((UIView *)self, self, @selector(neowc_walletHandleLongPress:));
+    if (WCAtlasEnhancementEnabled(WCAtlasWalletBalanceEnabledKey) &&
+        WCAtlasViewIsInsideWalletHeader((UIView *)self)) {
+        WCAtlasInstallWalletLongPressIfNeeded((UIView *)self, self, @selector(wcatlas_walletHandleLongPress:));
     } else {
-        NeoWCRemoveWalletLongPressIfNeeded((UIView *)self);
+        WCAtlasRemoveWalletLongPressIfNeeded((UIView *)self);
     }
 }
 
 - (void)updateNumber:(unsigned long long)number {
-    unsigned long long balanceFen = NeoWCViewIsInsideWalletHeader((UIView *)self)
-        ? NeoWCWalletBalanceFenOverride()
+    unsigned long long balanceFen = WCAtlasViewIsInsideWalletHeader((UIView *)self)
+        ? WCAtlasWalletBalanceFenOverride()
         : 0;
     if (balanceFen > 0) {
-        NeoWCCompatibilityMarkTriggered(@"wallet-balance");
+        WCAtlasCompatibilityMarkTriggered(@"wallet-balance");
         %orig(balanceFen);
         return;
     }
@@ -12662,19 +12662,19 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 }
 
 - (void)defaultNumber:(unsigned long long)number {
-    unsigned long long balanceFen = NeoWCViewIsInsideWalletHeader((UIView *)self)
-        ? NeoWCWalletBalanceFenOverride()
+    unsigned long long balanceFen = WCAtlasViewIsInsideWalletHeader((UIView *)self)
+        ? WCAtlasWalletBalanceFenOverride()
         : 0;
     %orig(balanceFen > 0 ? balanceFen : number);
 }
 
 %new
-- (void)neowc_walletHandleLongPress:(UILongPressGestureRecognizer *)recognizer {
+- (void)wcatlas_walletHandleLongPress:(UILongPressGestureRecognizer *)recognizer {
     if (recognizer.state == UIGestureRecognizerStateBegan &&
-        NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey)) {
-        NeoWCCompatibilityMarkTriggered(@"wallet-balance");
-        id headerView = NeoWCWalletHeaderForView((UIView *)self);
-        NeoWCPresentWalletBalanceEditor(headerView);
+        WCAtlasEnhancementEnabled(WCAtlasWalletBalanceEnabledKey)) {
+        WCAtlasCompatibilityMarkTriggered(@"wallet-balance");
+        id headerView = WCAtlasWalletHeaderForView((UIView *)self);
+        WCAtlasPresentWalletBalanceEditor(headerView);
     }
 }
 
@@ -12684,40 +12684,40 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 
 - (void)didMoveToSuperview {
     %orig;
-    if (NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey)) {
-        NeoWCInstallWalletLongPressIfNeeded((UIView *)self, self, @selector(neowc_walletHeaderHandleLongPress:));
+    if (WCAtlasEnhancementEnabled(WCAtlasWalletBalanceEnabledKey)) {
+        WCAtlasInstallWalletLongPressIfNeeded((UIView *)self, self, @selector(wcatlas_walletHeaderHandleLongPress:));
     } else {
-        NeoWCRemoveWalletLongPressIfNeeded((UIView *)self);
+        WCAtlasRemoveWalletLongPressIfNeeded((UIView *)self);
     }
-    NeoWCRefreshWalletHeaderBalance(self);
+    WCAtlasRefreshWalletHeaderBalance(self);
 }
 
 - (void)handleUpdateWalletBalance {
     %orig;
-    NeoWCRefreshWalletHeaderBalance(self);
+    WCAtlasRefreshWalletHeaderBalance(self);
 }
 
 - (void)setupTimeoutNumber {
     %orig;
-    NeoWCRefreshWalletHeaderBalance(self);
+    WCAtlasRefreshWalletHeaderBalance(self);
 }
 
 - (void)updateBalanceEntryView {
     %orig;
-    NeoWCRefreshWalletHeaderBalance(self);
+    WCAtlasRefreshWalletHeaderBalance(self);
 }
 
 - (void)updateBalanceAndRefreshView {
     %orig;
-    NeoWCRefreshWalletHeaderBalance(self);
+    WCAtlasRefreshWalletHeaderBalance(self);
 }
 
 %new
-- (void)neowc_walletHeaderHandleLongPress:(UILongPressGestureRecognizer *)recognizer {
+- (void)wcatlas_walletHeaderHandleLongPress:(UILongPressGestureRecognizer *)recognizer {
     if (recognizer.state == UIGestureRecognizerStateBegan &&
-        NeoWCEnhancementEnabled(NeoWCWalletBalanceEnabledKey)) {
-        NeoWCCompatibilityMarkTriggered(@"wallet-balance");
-        NeoWCPresentWalletBalanceEditor(self);
+        WCAtlasEnhancementEnabled(WCAtlasWalletBalanceEnabledKey)) {
+        WCAtlasCompatibilityMarkTriggered(@"wallet-balance");
+        WCAtlasPresentWalletBalanceEditor(self);
     }
 }
 
@@ -12726,7 +12726,7 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook MMWebViewConfig
 
 + (BOOL)isEnableWebDebugFunctions {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return YES;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return YES;
     return %orig;
 }
 
@@ -12735,7 +12735,7 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook NSURL
 
 + (instancetype)URLWithString:(NSString *)URLString {
-    return %orig(NeoWCAdBlockerRewrittenURLString(URLString));
+    return %orig(WCAtlasAdBlockerRewrittenURLString(URLString));
 }
 
 %end
@@ -12743,7 +12743,7 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook WebviewJSEventHandler_adDataReport
 
 - (void)handleJSEvent:(id)event HandlerFacade:(id)facade ExtraData:(id)extraData {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(event, facade, extraData);
 }
 
@@ -12752,72 +12752,72 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook WCAdvertiseStatMgr
 
 - (id)getAdvertiseInfoForItem:(id)item {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return %orig(nil);
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return %orig(nil);
     return %orig(item);
 }
 
 - (void)logSphereViewWithSphereReportInfo:(id)reportInfo dataItem:(id)dataItem scene:(unsigned int)scene {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(reportInfo, dataItem, scene);
 }
 
 - (void)logSphereViewInDetailWithWrapInfo:(id)wrapInfo dataItem:(id)dataItem {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(wrapInfo, dataItem);
 }
 
 - (void)logSphereViewInTimeLineWithWrapInfo:(id)wrapInfo dataItem:(id)dataItem {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(wrapInfo, dataItem);
 }
 
 - (void)logHeadImageH5:(id)value {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(value);
 }
 
 - (void)logADBrandProfile:(id)value {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(value);
 }
 
 - (void)logADFloatView:(id)value {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(value);
 }
 
 - (void)logADPoiH5:(id)value {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(value);
 }
 
 - (void)logADH5:(id)value withUserInfo:(id)userInfo reportType:(unsigned int)reportType {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(value, userInfo, reportType);
 }
 
 - (void)logADH5:(id)value {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(value);
 }
 
 - (void)logADDetail:(id)detail dataItem:(id)dataItem {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(detail, dataItem);
 }
 
 - (void)logADCommentLog:(id)value {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(value);
 }
 
 - (void)logADBodyLog:(id)value {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(value);
 }
 
 - (void)reportAllFeedsADLog {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig;
 }
 
@@ -12826,12 +12826,12 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook WAAppTaskSplashADConfig
 
 - (BOOL)canShowSplashADWindow {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (BOOL)launchShow {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
@@ -12840,7 +12840,7 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook WAJSEventHandler_showSplashAd
 
 - (void)handleJSEvent:(id)event {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(event);
 }
 
@@ -12849,7 +12849,7 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook WAJSEventHandler_showSplashAdMenu
 
 - (void)handleJSEvent:(id)event {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(event);
 }
 
@@ -12858,7 +12858,7 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook BrandTLExptConfig
 
 - (BOOL)isExptNotShowAd {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return YES;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return YES;
     return %orig;
 }
 
@@ -12867,7 +12867,7 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook BSTLExptConfig
 
 - (BOOL)isExptNotShowAd {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return YES;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return YES;
     return %orig;
 }
 
@@ -12876,12 +12876,12 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook BrandTLFlutterViewController
 
 - (BOOL)enableAd {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (void)setEnableAd:(BOOL)enabled {
-    %orig(NeoWCEnhancementEnabled(NeoWCAdBlockerKey) ? NO : enabled);
+    %orig(WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey) ? NO : enabled);
 }
 
 %end
@@ -12889,12 +12889,12 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook BoxBrandTLFlutterViewController
 
 - (BOOL)enableAd {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (void)setEnableAd:(BOOL)enabled {
-    %orig(NeoWCEnhancementEnabled(NeoWCAdBlockerKey) ? NO : enabled);
+    %orig(WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey) ? NO : enabled);
 }
 
 %end
@@ -12902,12 +12902,12 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook BSTimelineFlutterViewController
 
 - (BOOL)enableAd {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (void)setEnableAd:(BOOL)enabled {
-    %orig(NeoWCEnhancementEnabled(NeoWCAdBlockerKey) ? NO : enabled);
+    %orig(WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey) ? NO : enabled);
 }
 
 %end
@@ -12915,7 +12915,7 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook _TtC6WeChat19MagicAdBrandService
 
 - (BOOL)isBrandTimelineOpen {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
@@ -12924,22 +12924,22 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook MagicAdPushMgrService
 
 - (void)onServiceInit {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig;
 }
 
 - (void)handleAdMsg:(id)message {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(message);
 }
 
 - (void)OnGetNewXmlMsg:(id)xml Type:(unsigned int)type MsgWrap:(id)message {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(xml, type, message);
 }
 
 - (id)getSpecificSlotMsg:(id)slot withBizName:(id)bizName {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return nil;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return nil;
     return %orig(slot, bizName);
 }
 
@@ -12949,17 +12949,17 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook BrandTimelineMsgMgr
 
 - (NSArray *)getInsertedAdCardListWithLimit:(NSUInteger)limit {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return @[];
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return @[];
     return %orig(limit);
 }
 
 - (BOOL)isAdDataLegal:(id)data {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig(data);
 }
 
 - (BOOL)getAdCardExposeInToday {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return YES;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return YES;
     return %orig;
 }
 
@@ -12968,17 +12968,17 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook BoxBrandTimelineMsgMgr
 
 - (NSArray *)getInsertedAdCardListWithLimit:(NSUInteger)limit {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return @[];
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return @[];
     return %orig(limit);
 }
 
 - (BOOL)isAdDataLegal:(id)data {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig(data);
 }
 
 - (BOOL)getAdCardExposeInToday {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return YES;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return YES;
     return %orig;
 }
 
@@ -12987,7 +12987,7 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook WAJSEventHandler_adOperateWXData
 
 - (void)handleJSEvent:(id)event {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(event);
 }
 
@@ -12996,42 +12996,42 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook WCUserComment
 
 - (BOOL)isAdvertiserComment {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (BOOL)isRefAdvertiserComment {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (BOOL)isAdPreferInfo {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (BOOL)isAtedAdvertiserComment {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (BOOL)isAdBossFirstComment {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (BOOL)isAdBossFirstLike {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (id)adExtInfo {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return nil;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return nil;
     return %orig;
 }
 
 - (void)setAdExtInfo:(id)info {
-    %orig(NeoWCEnhancementEnabled(NeoWCAdBlockerKey) ? nil : info);
+    %orig(WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey) ? nil : info);
 }
 
 %end
@@ -13039,17 +13039,17 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook BrandTLCanvasCardMgr
 
 + (BOOL)isAdRequestOpen {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 + (BOOL)isAdCardOpen {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (void)handleBizAdNotifyNewXml:(id)xml {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(xml);
 }
 
@@ -13059,47 +13059,47 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook JailBreakHelper
 
 + (id)loadSetting {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return nil;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return nil;
     return %orig;
 }
 
 - (instancetype)init {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return nil;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return nil;
     return %orig;
 }
 
 + (NSString *)getJailbreakPath {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return nil;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return nil;
     return %orig;
 }
 
 + (NSString *)getJailbreakRootDir {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return nil;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return nil;
     return %orig;
 }
 
 + (BOOL)JailBroken {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (BOOL)HasInstallJailbreakPluginInvalidIAPPurchase {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (BOOL)HasInstallJailbreakPlugin:(id)plugin {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig(plugin);
 }
 
 - (BOOL)IsJailBreak {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
 - (BOOL)isOverADay {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
@@ -13108,7 +13108,7 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook CUtility
 
 + (BOOL)isBeingDebugged {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
@@ -13117,7 +13117,7 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook TSEnvironment
 
 + (BOOL)isBeingDebugged {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return NO;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return NO;
     return %orig;
 }
 
@@ -13126,17 +13126,17 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook ClientCheckMgr
 
 - (void)reportAppList:(id)appList {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(appList);
 }
 
 - (void)checkHookWithSeq:(id)sequence {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(sequence);
 }
 
 - (void)checkHook:(id)value {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(value);
 }
 
@@ -13145,12 +13145,12 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
                        offset:(unsigned long long)offset
                    bufferSize:(unsigned int)bufferSize
                           seq:(unsigned int)sequence {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(consistency, fileName, offset, bufferSize, sequence);
 }
 
 - (void)checkConsistency:(id)value {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig(value);
 }
 
@@ -13159,33 +13159,33 @@ static void NeoWCObserveTypingStatusLabel(MMUILabel *label, NSString *text) {
 %hook WCCrashBlockExtensionHandler
 
 - (void)renewInfoForReport {
-    if (NeoWCEnhancementEnabled(NeoWCAdBlockerKey)) return;
+    if (WCAtlasEnhancementEnabled(WCAtlasAdBlockerKey)) return;
     %orig;
 }
 
 %end
 
-static void NeoWCApplyRedEnvelopeDetail(WCRedEnvelopesRedEnvelopesDetailViewController *controller) {
-    id delegate = NeoWCTweakValueForSelectorNames(controller, @[@"m_delegate"]) ?: NeoWCTweakSafeValue(controller, @"m_delegate");
+static void WCAtlasApplyRedEnvelopeDetail(WCRedEnvelopesRedEnvelopesDetailViewController *controller) {
+    id delegate = WCAtlasTweakValueForSelectorNames(controller, @[@"m_delegate"]) ?: WCAtlasTweakSafeValue(controller, @"m_delegate");
     Class logicClass = NSClassFromString(@"WCRedEnvelopesReceiveControlLogic");
     if (logicClass && ![delegate isKindOfClass:logicClass]) return;
-    id data = NeoWCTweakValueForSelectorNames(delegate, @[@"m_data"]) ?: NeoWCTweakSafeValue(delegate, @"m_data");
+    id data = WCAtlasTweakValueForSelectorNames(delegate, @[@"m_data"]) ?: WCAtlasTweakSafeValue(delegate, @"m_data");
     Class dataClass = NSClassFromString(@"WCRedEnvelopesControlData");
     if (dataClass && ![data isKindOfClass:dataClass]) return;
-    id detail = NeoWCTweakValueForSelectorNames(data, @[@"m_oWCRedEnvelopesDetailInfo"]) ?:
-                NeoWCTweakSafeValue(data, @"m_oWCRedEnvelopesDetailInfo");
+    id detail = WCAtlasTweakValueForSelectorNames(data, @[@"m_oWCRedEnvelopesDetailInfo"]) ?:
+                WCAtlasTweakSafeValue(data, @"m_oWCRedEnvelopesDetailInfo");
     Class detailClass = NSClassFromString(@"WCRedEnvelopesDetailInfo");
     if (!detail || (detailClass && ![detail isKindOfClass:detailClass])) return;
-    UILabel *nickNameLabel = NeoWCTweakSafeValue(controller, @"nickNameLabel");
-    UILabel *receivedInfoLabel = NeoWCTweakSafeValue(controller, @"m_receivedInfoLable");
+    UILabel *nickNameLabel = WCAtlasTweakSafeValue(controller, @"nickNameLabel");
+    UILabel *receivedInfoLabel = WCAtlasTweakSafeValue(controller, @"m_receivedInfoLable");
     if (![receivedInfoLabel isKindOfClass:[UILabel class]]) return;
-    NSAttributedString *original = objc_getAssociatedObject(receivedInfoLabel, &NeoWCRedEnvelopeOriginalAttributedTextKey);
+    NSAttributedString *original = objc_getAssociatedObject(receivedInfoLabel, &WCAtlasRedEnvelopeOriginalAttributedTextKey);
     if (!original) {
         original = receivedInfoLabel.attributedText ?: [[NSAttributedString alloc] initWithString:receivedInfoLabel.text ?: @""];
-        objc_setAssociatedObject(receivedInfoLabel, &NeoWCRedEnvelopeOriginalAttributedTextKey,
+        objc_setAssociatedObject(receivedInfoLabel, &WCAtlasRedEnvelopeOriginalAttributedTextKey,
                                  original, OBJC_ASSOCIATION_COPY_NONATOMIC);
     }
-    if (!NeoWCEnhancementEnabled(NeoWCRedEnvelopeDetailEnabledKey)) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasRedEnvelopeDetailEnabledKey)) {
         receivedInfoLabel.attributedText = original;
         return;
     }
@@ -13202,25 +13202,25 @@ static void NeoWCApplyRedEnvelopeDetail(WCRedEnvelopesRedEnvelopesDetailViewCont
     SEL receivedCountSelector = NSSelectorFromString(@"m_lRecNum");
     long long totalAmount = [detail respondsToSelector:totalAmountSelector]
         ? ((long long (*)(id, SEL))objc_msgSend)(detail, totalAmountSelector)
-        : [NeoWCTweakSafeValue(detail, @"m_lTotalAmount") longLongValue];
+        : [WCAtlasTweakSafeValue(detail, @"m_lTotalAmount") longLongValue];
     long long receivedAmount = [detail respondsToSelector:receivedAmountSelector]
         ? ((long long (*)(id, SEL))objc_msgSend)(detail, receivedAmountSelector)
-        : [NeoWCTweakSafeValue(detail, @"m_lRecAmount") longLongValue];
+        : [WCAtlasTweakSafeValue(detail, @"m_lRecAmount") longLongValue];
     long long totalCount = [detail respondsToSelector:totalCountSelector]
         ? ((long long (*)(id, SEL))objc_msgSend)(detail, totalCountSelector)
-        : [NeoWCTweakSafeValue(detail, @"m_lTotalNum") longLongValue];
+        : [WCAtlasTweakSafeValue(detail, @"m_lTotalNum") longLongValue];
     long long receivedCount = [detail respondsToSelector:receivedCountSelector]
         ? ((long long (*)(id, SEL))objc_msgSend)(detail, receivedCountSelector)
-        : [NeoWCTweakSafeValue(detail, @"m_lRecNum") longLongValue];
+        : [WCAtlasTweakSafeValue(detail, @"m_lRecNum") longLongValue];
     double remainingAmount = MAX(0LL, totalAmount - receivedAmount) / 100.0;
     long long remainingCount = MAX(0LL, totalCount - receivedCount);
     NSString *displayText = [NSString stringWithFormat:@"总 %.2f元｜已领 %lld个｜剩余 %lld个 · %.2f元",
                              totalAmount / 100.0, receivedCount, remainingCount, remainingAmount];
-    CGFloat size = [[NSUserDefaults standardUserDefaults] doubleForKey:NeoWCRedEnvelopeDetailFontSizeKey];
+    CGFloat size = [[NSUserDefaults standardUserDefaults] doubleForKey:WCAtlasRedEnvelopeDetailFontSizeKey];
     UIFont *font = [UIFont systemFontOfSize:size >= 10.0 && size <= 24.0 ? size : 14.0 weight:UIFontWeightRegular];
     UIColor *color = receivedInfoLabel.textColor ?: [UIColor colorWithWhite:1.0 alpha:0.7];
     receivedInfoLabel.numberOfLines = 1;
-    receivedInfoLabel.textAlignment = [[NSUserDefaults standardUserDefaults] boolForKey:NeoWCRedEnvelopeDetailCenterKey]
+    receivedInfoLabel.textAlignment = [[NSUserDefaults standardUserDefaults] boolForKey:WCAtlasRedEnvelopeDetailCenterKey]
         ? NSTextAlignmentCenter
         : NSTextAlignmentNatural;
     receivedInfoLabel.attributedText = [[NSAttributedString alloc] initWithString:displayText
@@ -13229,12 +13229,12 @@ static void NeoWCApplyRedEnvelopeDetail(WCRedEnvelopesRedEnvelopesDetailViewCont
     CGRect frame = receivedInfoLabel.frame;
     frame.size.width = MAX(frame.size.width, 220.0);
     receivedInfoLabel.frame = frame;
-    NeoWCCompatibilityMarkTriggered(@"red-envelope-detail");
+    WCAtlasCompatibilityMarkTriggered(@"red-envelope-detail");
 }
 
-static BOOL NeoWCPresentCallConfirmation(VoIPBubbleMessageCellView *cell, BOOL video) {
-    UIWindow *window = NeoWCActiveApplicationWindow();
-    UIViewController *presenter = NeoWCTopControllerForLoginToast(window.rootViewController);
+static BOOL WCAtlasPresentCallConfirmation(VoIPBubbleMessageCellView *cell, BOOL video) {
+    UIWindow *window = WCAtlasActiveApplicationWindow();
+    UIViewController *presenter = WCAtlasTopControllerForLoginToast(window.rootViewController);
     if (!presenter.view.window || presenter.presentedViewController) return NO;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:video ? @"发起视频通话？" : @"发起语音通话？"
                                                                    message:@"确认后将立即呼叫对方"
@@ -13245,13 +13245,13 @@ static BOOL NeoWCPresentCallConfirmation(VoIPBubbleMessageCellView *cell, BOOL v
         (void)action;
         VoIPBubbleMessageCellView *strongCell = weakCell;
         if (!strongCell) return;
-        const void *key = video ? &NeoWCCallVideoConfirmedKey : &NeoWCCallVoiceConfirmedKey;
+        const void *key = video ? &WCAtlasCallVideoConfirmedKey : &WCAtlasCallVoiceConfirmedKey;
         objc_setAssociatedObject(strongCell, key, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         SEL selector = video ? @selector(startVideoVoip) : @selector(startVoiceVoip);
         ((void (*)(id, SEL))objc_msgSend)(strongCell, selector);
     }]];
     [presenter presentViewController:alert animated:YES completion:nil];
-    NeoWCCompatibilityMarkTriggered(@"call-confirm");
+    WCAtlasCompatibilityMarkTriggered(@"call-confirm");
     return YES;
 }
 
@@ -13259,7 +13259,7 @@ static BOOL NeoWCPresentCallConfirmation(VoIPBubbleMessageCellView *cell, BOOL v
 
 - (void)viewWillAppear:(BOOL)animated {
     %orig(animated);
-    NeoWCApplyRedEnvelopeDetail(self);
+    WCAtlasApplyRedEnvelopeDetail(self);
 }
 
 %end
@@ -13267,31 +13267,31 @@ static BOOL NeoWCPresentCallConfirmation(VoIPBubbleMessageCellView *cell, BOOL v
 %hook VoIPBubbleMessageCellView
 
 - (void)startVoiceVoip {
-    if ([objc_getAssociatedObject(self, &NeoWCCallVoiceConfirmedKey) boolValue]) {
-        objc_setAssociatedObject(self, &NeoWCCallVoiceConfirmedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if ([objc_getAssociatedObject(self, &WCAtlasCallVoiceConfirmedKey) boolValue]) {
+        objc_setAssociatedObject(self, &WCAtlasCallVoiceConfirmedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig;
         return;
     }
-    if (!NeoWCEnhancementEnabled(NeoWCCallConfirmEnabledKey)) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasCallConfirmEnabledKey)) {
         %orig;
         return;
     }
-    if (!NeoWCPresentCallConfirmation(self, NO)) {
+    if (!WCAtlasPresentCallConfirmation(self, NO)) {
         %orig;
     }
 }
 
 - (void)startVideoVoip {
-    if ([objc_getAssociatedObject(self, &NeoWCCallVideoConfirmedKey) boolValue]) {
-        objc_setAssociatedObject(self, &NeoWCCallVideoConfirmedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if ([objc_getAssociatedObject(self, &WCAtlasCallVideoConfirmedKey) boolValue]) {
+        objc_setAssociatedObject(self, &WCAtlasCallVideoConfirmedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig;
         return;
     }
-    if (!NeoWCEnhancementEnabled(NeoWCCallConfirmEnabledKey)) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasCallConfirmEnabledKey)) {
         %orig;
         return;
     }
-    if (!NeoWCPresentCallConfirmation(self, YES)) {
+    if (!WCAtlasPresentCallConfirmation(self, YES)) {
         %orig;
     }
 }
@@ -13301,39 +13301,39 @@ static BOOL NeoWCPresentCallConfirmation(VoIPBubbleMessageCellView *cell, BOOL v
 %hook ScanQRCodeLogicController
 
 - (void)onDetectCodesWithMarkDotInfoList:(id)list isCameraScan:(BOOL)isCameraScan {
-    BOOL disguise = NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey);
-    if (disguise) NeoWCCompatibilityMarkTriggered(@"qr-camera-source");
+    BOOL disguise = WCAtlasEnhancementEnabled(WCAtlasQRCodeCameraSourceEnabledKey);
+    if (disguise) WCAtlasCompatibilityMarkTriggered(@"qr-camera-source");
     BOOL cameraScan = disguise ? YES : isCameraScan;
     %orig(list, cameraScan);
 }
 
 - (BOOL)isInScanSceneAndUseCameraScan {
-    if (NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey)) return YES;
+    if (WCAtlasEnhancementEnabled(WCAtlasQRCodeCameraSourceEnabledKey)) return YES;
     return %orig;
 }
 
 - (NSInteger)fromScene {
-    if (NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey)) return 1;
+    if (WCAtlasEnhancementEnabled(WCAtlasQRCodeCameraSourceEnabledKey)) return 1;
     return %orig;
 }
 
 - (NSInteger)m_sourceType {
-    if (NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey)) return 0;
+    if (WCAtlasEnhancementEnabled(WCAtlasQRCodeCameraSourceEnabledKey)) return 0;
     return %orig;
 }
 
 - (NSInteger)fromRawScene {
-    if (NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey)) return 0;
+    if (WCAtlasEnhancementEnabled(WCAtlasQRCodeCameraSourceEnabledKey)) return 0;
     return %orig;
 }
 
 - (NSInteger)picFrom {
-    if (NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey)) return 0;
+    if (WCAtlasEnhancementEnabled(WCAtlasQRCodeCameraSourceEnabledKey)) return 0;
     return %orig;
 }
 
 - (void)setIsFromAlbum:(BOOL)isFromAlbum {
-    BOOL value = NeoWCEnhancementEnabled(NeoWCQRCodeCameraSourceEnabledKey) ? NO : isFromAlbum;
+    BOOL value = WCAtlasEnhancementEnabled(WCAtlasQRCodeCameraSourceEnabledKey) ? NO : isFromAlbum;
     %orig(value);
 }
 
@@ -13343,32 +13343,32 @@ static BOOL NeoWCPresentCallConfirmation(VoIPBubbleMessageCellView *cell, BOOL v
 
 - (void)layoutSubviews {
     %orig;
-    NeoWCCompatibilityMarkTriggered(@"device-login");
-    if (!NeoWCEnhancementEnabled(NeoWCAutoDeviceLoginKey)) return;
-    if ([objc_getAssociatedObject(self, &NeoWCDeviceCardDidConfirmKey) boolValue]) return;
-    objc_setAssociatedObject(self, &NeoWCDeviceCardDidConfirmKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    WCAtlasCompatibilityMarkTriggered(@"device-login");
+    if (!WCAtlasEnhancementEnabled(WCAtlasAutoDeviceLoginKey)) return;
+    if ([objc_getAssociatedObject(self, &WCAtlasDeviceCardDidConfirmKey) boolValue]) return;
+    objc_setAssociatedObject(self, &WCAtlasDeviceCardDidConfirmKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     dispatch_async(dispatch_get_main_queue(), ^{
         [self onTapConfirmButton];
-        NeoWCLog(@"已自动确认多设备登录");
-        NeoWCShowTransientHUD(@"已自动确认设备登录", @"desktopcomputer");
+        WCAtlasLog(@"已自动确认多设备登录");
+        WCAtlasShowTransientHUD(@"已自动确认设备登录", @"desktopcomputer");
     });
 }
 
 %end
 
-static id (*NeoWCOriginalRedEnvelopeInitWithData)(id, SEL, id) = NULL;
-static id (*NeoWCOriginalRedEnvelopeInitWithDataSceneType)(id, SEL, id, NSUInteger, NSUInteger) = NULL;
-static void (*NeoWCOriginalRedEnvelopeSetupWithData)(id, SEL, id) = NULL;
-static void (*NeoWCOriginalRedEnvelopeRefreshWithData)(id, SEL, id) = NULL;
-static NSInteger (*NeoWCOriginalRedEnvelopeSetupCurrentMode)(id, SEL) = NULL;
-static void (*NeoWCOriginalRedEnvelopeViewDidLoad)(id, SEL) = NULL;
+static id (*WCAtlasOriginalRedEnvelopeInitWithData)(id, SEL, id) = NULL;
+static id (*WCAtlasOriginalRedEnvelopeInitWithDataSceneType)(id, SEL, id, NSUInteger, NSUInteger) = NULL;
+static void (*WCAtlasOriginalRedEnvelopeSetupWithData)(id, SEL, id) = NULL;
+static void (*WCAtlasOriginalRedEnvelopeRefreshWithData)(id, SEL, id) = NULL;
+static NSInteger (*WCAtlasOriginalRedEnvelopeSetupCurrentMode)(id, SEL) = NULL;
+static void (*WCAtlasOriginalRedEnvelopeViewDidLoad)(id, SEL) = NULL;
 
-static void NeoWCApplyExclusiveRedEnvelopeContact(id controller, id data) {
-    id contact = objc_getAssociatedObject(data, &NeoWCExclusiveRedEnvelopeContactKey);
+static void WCAtlasApplyExclusiveRedEnvelopeContact(id controller, id data) {
+    id contact = objc_getAssociatedObject(data, &WCAtlasExclusiveRedEnvelopeContactKey);
     if (!controller || !data || !contact) return;
-    objc_setAssociatedObject(controller, &NeoWCExclusiveRedEnvelopeViewContactKey,
+    objc_setAssociatedObject(controller, &WCAtlasExclusiveRedEnvelopeViewContactKey,
                              contact, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(controller, &NeoWCExclusiveRedEnvelopeViewDataKey,
+    objc_setAssociatedObject(controller, &WCAtlasExclusiveRedEnvelopeViewDataKey,
                              data, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     SEL selector = NSSelectorFromString(@"setSelectedMemberContact:");
     if ([data respondsToSelector:selector]) {
@@ -13376,20 +13376,20 @@ static void NeoWCApplyExclusiveRedEnvelopeContact(id controller, id data) {
     }
 }
 
-static BOOL NeoWCRedEnvelopeControllerIsExclusive(id controller) {
+static BOOL WCAtlasRedEnvelopeControllerIsExclusive(id controller) {
     SEL selector = NSSelectorFromString(@"isExclusiveHbMode");
     return [controller respondsToSelector:selector] &&
            ((BOOL (*)(id, SEL))objc_msgSend)(controller, selector);
 }
 
-static void NeoWCSetRedEnvelopeControllerMode(id controller, NSInteger mode) {
+static void WCAtlasSetRedEnvelopeControllerMode(id controller, NSInteger mode) {
     SEL selector = NSSelectorFromString(@"setCurrentMode:");
     if ([controller respondsToSelector:selector]) {
         ((void (*)(id, SEL, NSInteger))objc_msgSend)(controller, selector, mode);
     }
 }
 
-static void NeoWCSetExclusiveRedEnvelopeData(id data, id contact, NSInteger mode) {
+static void WCAtlasSetExclusiveRedEnvelopeData(id data, id contact, NSInteger mode) {
     SEL modeSelector = NSSelectorFromString(@"setCurrentLaunchRedEnvMode:");
     if ([data respondsToSelector:modeSelector]) {
         ((void (*)(id, SEL, NSInteger))objc_msgSend)(data, modeSelector, mode);
@@ -13400,19 +13400,19 @@ static void NeoWCSetExclusiveRedEnvelopeData(id data, id contact, NSInteger mode
     }
 }
 
-static NSInteger NeoWCSelectExclusiveRedEnvelopeMode(id controller,
+static NSInteger WCAtlasSelectExclusiveRedEnvelopeMode(id controller,
                                                       NSInteger originalMode,
                                                       BOOL reloadContent) {
-    id contact = objc_getAssociatedObject(controller, &NeoWCExclusiveRedEnvelopeViewContactKey);
-    id data = objc_getAssociatedObject(controller, &NeoWCExclusiveRedEnvelopeViewDataKey);
+    id contact = objc_getAssociatedObject(controller, &WCAtlasExclusiveRedEnvelopeViewContactKey);
+    id data = objc_getAssociatedObject(controller, &WCAtlasExclusiveRedEnvelopeViewDataKey);
     if (!contact || !data) return originalMode;
-    if (reloadContent && NeoWCRedEnvelopeControllerIsExclusive(controller)) return originalMode;
+    if (reloadContent && WCAtlasRedEnvelopeControllerIsExclusive(controller)) return originalMode;
 
     for (NSInteger mode = 0; mode < 9; mode++) {
-        NeoWCSetRedEnvelopeControllerMode(controller, mode);
-        if (!NeoWCRedEnvelopeControllerIsExclusive(controller)) continue;
-        NeoWCSetRedEnvelopeControllerMode(controller, mode);
-        NeoWCSetExclusiveRedEnvelopeData(data, contact, mode);
+        WCAtlasSetRedEnvelopeControllerMode(controller, mode);
+        if (!WCAtlasRedEnvelopeControllerIsExclusive(controller)) continue;
+        WCAtlasSetRedEnvelopeControllerMode(controller, mode);
+        WCAtlasSetExclusiveRedEnvelopeData(data, contact, mode);
         if (reloadContent) {
             SEL reloadSelector = NSSelectorFromString(@"reloadContentView");
             if ([controller respondsToSelector:reloadSelector]) {
@@ -13421,155 +13421,155 @@ static NSInteger NeoWCSelectExclusiveRedEnvelopeMode(id controller,
         }
         return mode;
     }
-    if (!reloadContent) NeoWCSetRedEnvelopeControllerMode(controller, originalMode);
+    if (!reloadContent) WCAtlasSetRedEnvelopeControllerMode(controller, originalMode);
     return originalMode;
 }
 
-static id NeoWCRedEnvelopeInitWithData(id self, SEL command, id data) {
-    NeoWCPrepareExclusiveRedEnvelopeData(data);
-    return NeoWCOriginalRedEnvelopeInitWithData
-        ? NeoWCOriginalRedEnvelopeInitWithData(self, command, data) : nil;
+static id WCAtlasRedEnvelopeInitWithData(id self, SEL command, id data) {
+    WCAtlasPrepareExclusiveRedEnvelopeData(data);
+    return WCAtlasOriginalRedEnvelopeInitWithData
+        ? WCAtlasOriginalRedEnvelopeInitWithData(self, command, data) : nil;
 }
 
-static id NeoWCRedEnvelopeInitWithDataSceneType(id self,
+static id WCAtlasRedEnvelopeInitWithDataSceneType(id self,
                                                 SEL command,
                                                 id data,
                                                 NSUInteger scene,
                                                 NSUInteger type) {
-    NeoWCPrepareExclusiveRedEnvelopeData(data);
-    return NeoWCOriginalRedEnvelopeInitWithDataSceneType
-        ? NeoWCOriginalRedEnvelopeInitWithDataSceneType(self, command, data, scene, type) : nil;
+    WCAtlasPrepareExclusiveRedEnvelopeData(data);
+    return WCAtlasOriginalRedEnvelopeInitWithDataSceneType
+        ? WCAtlasOriginalRedEnvelopeInitWithDataSceneType(self, command, data, scene, type) : nil;
 }
 
-static void NeoWCRedEnvelopeSetupWithData(id self, SEL command, id data) {
-    NeoWCApplyExclusiveRedEnvelopeContact(self, data);
-    if (NeoWCOriginalRedEnvelopeSetupWithData) {
-        NeoWCOriginalRedEnvelopeSetupWithData(self, command, data);
+static void WCAtlasRedEnvelopeSetupWithData(id self, SEL command, id data) {
+    WCAtlasApplyExclusiveRedEnvelopeContact(self, data);
+    if (WCAtlasOriginalRedEnvelopeSetupWithData) {
+        WCAtlasOriginalRedEnvelopeSetupWithData(self, command, data);
     }
 }
 
-static void NeoWCRedEnvelopeRefreshWithData(id self, SEL command, id data) {
-    NeoWCApplyExclusiveRedEnvelopeContact(self, data);
-    if (NeoWCOriginalRedEnvelopeRefreshWithData) {
-        NeoWCOriginalRedEnvelopeRefreshWithData(self, command, data);
+static void WCAtlasRedEnvelopeRefreshWithData(id self, SEL command, id data) {
+    WCAtlasApplyExclusiveRedEnvelopeContact(self, data);
+    if (WCAtlasOriginalRedEnvelopeRefreshWithData) {
+        WCAtlasOriginalRedEnvelopeRefreshWithData(self, command, data);
     }
 }
 
-static NSInteger NeoWCRedEnvelopeSetupCurrentMode(id self, SEL command) {
-    NSInteger originalMode = NeoWCOriginalRedEnvelopeSetupCurrentMode
-        ? NeoWCOriginalRedEnvelopeSetupCurrentMode(self, command) : 0;
-    return NeoWCSelectExclusiveRedEnvelopeMode(self, originalMode, NO);
+static NSInteger WCAtlasRedEnvelopeSetupCurrentMode(id self, SEL command) {
+    NSInteger originalMode = WCAtlasOriginalRedEnvelopeSetupCurrentMode
+        ? WCAtlasOriginalRedEnvelopeSetupCurrentMode(self, command) : 0;
+    return WCAtlasSelectExclusiveRedEnvelopeMode(self, originalMode, NO);
 }
 
-static void NeoWCRedEnvelopeViewDidLoad(id self, SEL command) {
-    if (NeoWCOriginalRedEnvelopeViewDidLoad) NeoWCOriginalRedEnvelopeViewDidLoad(self, command);
-    (void)NeoWCSelectExclusiveRedEnvelopeMode(self, 0, YES);
+static void WCAtlasRedEnvelopeViewDidLoad(id self, SEL command) {
+    if (WCAtlasOriginalRedEnvelopeViewDidLoad) WCAtlasOriginalRedEnvelopeViewDidLoad(self, command);
+    (void)WCAtlasSelectExclusiveRedEnvelopeMode(self, 0, YES);
 }
 
-static const char *NeoWCUnqualifiedMethodType(const char *type) {
+static const char *WCAtlasUnqualifiedMethodType(const char *type) {
     if (!type) return "";
     while (*type && strchr("rnNoORV", *type)) type++;
     return type;
 }
 
-static BOOL NeoWCMethodReturnsVoid(Method method) {
+static BOOL WCAtlasMethodReturnsVoid(Method method) {
     char *type = method ? method_copyReturnType(method) : NULL;
-    BOOL matches = type && strcmp(NeoWCUnqualifiedMethodType(type), @encode(void)) == 0;
+    BOOL matches = type && strcmp(WCAtlasUnqualifiedMethodType(type), @encode(void)) == 0;
     if (type) free(type);
     return matches;
 }
 
-static BOOL NeoWCMethodArgumentIsObject(Method method, unsigned int index) {
+static BOOL WCAtlasMethodArgumentIsObject(Method method, unsigned int index) {
     char *type = method ? method_copyArgumentType(method, index) : NULL;
-    BOOL matches = NeoWCUnqualifiedMethodType(type)[0] == '@';
+    BOOL matches = WCAtlasUnqualifiedMethodType(type)[0] == '@';
     if (type) free(type);
     return matches;
 }
 
-static BOOL NeoWCMethodArgumentIsSelector(Method method, unsigned int index) {
+static BOOL WCAtlasMethodArgumentIsSelector(Method method, unsigned int index) {
     char *type = method ? method_copyArgumentType(method, index) : NULL;
-    BOOL matches = type && strcmp(NeoWCUnqualifiedMethodType(type), @encode(SEL)) == 0;
+    BOOL matches = type && strcmp(WCAtlasUnqualifiedMethodType(type), @encode(SEL)) == 0;
     if (type) free(type);
     return matches;
 }
 
-static BOOL NeoWCMethodReturnsObject(Method method) {
+static BOOL WCAtlasMethodReturnsObject(Method method) {
     char *type = method ? method_copyReturnType(method) : NULL;
-    BOOL matches = NeoWCUnqualifiedMethodType(type)[0] == '@';
+    BOOL matches = WCAtlasUnqualifiedMethodType(type)[0] == '@';
     if (type) free(type);
     return matches;
 }
 
-static BOOL NeoWCMethodTypeIsInteger(const char *type) {
-    const char value = NeoWCUnqualifiedMethodType(type)[0];
+static BOOL WCAtlasMethodTypeIsInteger(const char *type) {
+    const char value = WCAtlasUnqualifiedMethodType(type)[0];
     return value && strchr("cCsSiIlLqQB", value) != NULL;
 }
 
-static BOOL NeoWCMethodReturnsInteger(Method method) {
+static BOOL WCAtlasMethodReturnsInteger(Method method) {
     char *type = method ? method_copyReturnType(method) : NULL;
-    BOOL matches = NeoWCMethodTypeIsInteger(type);
+    BOOL matches = WCAtlasMethodTypeIsInteger(type);
     if (type) free(type);
     return matches;
 }
 
-static BOOL NeoWCMethodArgumentIsInteger(Method method, unsigned int index) {
+static BOOL WCAtlasMethodArgumentIsInteger(Method method, unsigned int index) {
     char *type = method ? method_copyArgumentType(method, index) : NULL;
-    BOOL matches = NeoWCMethodTypeIsInteger(type);
+    BOOL matches = WCAtlasMethodTypeIsInteger(type);
     if (type) free(type);
     return matches;
 }
 
-typedef void (*NeoWCAudioDeviceStartedSuccessIMP)(id, SEL, uintptr_t);
-static NeoWCAudioDeviceStartedSuccessIMP NeoWCOriginalAudioDeviceStartedSuccess;
+typedef void (*WCAtlasAudioDeviceStartedSuccessIMP)(id, SEL, uintptr_t);
+static WCAtlasAudioDeviceStartedSuccessIMP WCAtlasOriginalAudioDeviceStartedSuccess;
 
-static void NeoWCAudioDeviceStartedSuccess(id self, SEL selector, uintptr_t value) {
-    if (NeoWCOriginalAudioDeviceStartedSuccess) {
-        NeoWCOriginalAudioDeviceStartedSuccess(self, selector, value);
+static void WCAtlasAudioDeviceStartedSuccess(id self, SEL selector, uintptr_t value) {
+    if (WCAtlasOriginalAudioDeviceStartedSuccess) {
+        WCAtlasOriginalAudioDeviceStartedSuccess(self, selector, value);
     }
-    NeoWCCallAudioNotifyAudioDeviceStarted();
-    if (!NeoWCEnhancementEnabled(NeoWCAutoSpeakerphoneEnabledKey)) return;
+    WCAtlasCallAudioNotifyAudioDeviceStarted();
+    if (!WCAtlasEnhancementEnabled(WCAtlasAutoSpeakerphoneEnabledKey)) return;
     SEL audioModeSelector = NSSelectorFromString(@"isAudioMode");
     if (![self respondsToSelector:audioModeSelector] ||
         !((BOOL (*)(id, SEL))objc_msgSend)(self, audioModeSelector)) return;
     SEL speakerSelector = NSSelectorFromString(@"SetSpeakerPhone:");
     if (![self respondsToSelector:speakerSelector]) return;
     ((void (*)(id, SEL, BOOL))objc_msgSend)(self, speakerSelector, YES);
-    NeoWCCompatibilityMarkTriggered(@"auto-speakerphone");
+    WCAtlasCompatibilityMarkTriggered(@"auto-speakerphone");
 }
 
-static void NeoWCInstallAutoSpeakerphoneHook(void) {
+static void WCAtlasInstallAutoSpeakerphoneHook(void) {
     Class managerClass = NSClassFromString(@"VoipUIManager");
     SEL selector = NSSelectorFromString(@"audioDeviceStartedSuccess:");
     Method method = managerClass ? class_getInstanceMethod(managerClass, selector) : NULL;
-    if (!method || method_getNumberOfArguments(method) != 3 || !NeoWCMethodReturnsVoid(method) ||
-        (!NeoWCMethodArgumentIsObject(method, 2) && !NeoWCMethodArgumentIsInteger(method, 2))) return;
+    if (!method || method_getNumberOfArguments(method) != 3 || !WCAtlasMethodReturnsVoid(method) ||
+        (!WCAtlasMethodArgumentIsObject(method, 2) && !WCAtlasMethodArgumentIsInteger(method, 2))) return;
     IMP original = NULL;
-    MSHookMessageEx(managerClass, selector, (IMP)NeoWCAudioDeviceStartedSuccess, &original);
-    NeoWCOriginalAudioDeviceStartedSuccess = (NeoWCAudioDeviceStartedSuccessIMP)original;
+    MSHookMessageEx(managerClass, selector, (IMP)WCAtlasAudioDeviceStartedSuccess, &original);
+    WCAtlasOriginalAudioDeviceStartedSuccess = (WCAtlasAudioDeviceStartedSuccessIMP)original;
 }
 
-static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
+static void WCAtlasInstallExclusiveRedEnvelopeHooks(void) {
     Class logicClass = NSClassFromString(@"WCRedEnvelopesSendControlLogic");
     if (logicClass) {
         SEL selector = NSSelectorFromString(@"initWithData:");
         Method method = class_getInstanceMethod(logicClass, selector);
         if (method && method_getNumberOfArguments(method) == 3 &&
-            NeoWCMethodReturnsObject(method) && NeoWCMethodArgumentIsObject(method, 2)) {
+            WCAtlasMethodReturnsObject(method) && WCAtlasMethodArgumentIsObject(method, 2)) {
             IMP original = NULL;
-            MSHookMessageEx(logicClass, selector, (IMP)NeoWCRedEnvelopeInitWithData, &original);
-            NeoWCOriginalRedEnvelopeInitWithData =
+            MSHookMessageEx(logicClass, selector, (IMP)WCAtlasRedEnvelopeInitWithData, &original);
+            WCAtlasOriginalRedEnvelopeInitWithData =
                 (id (*)(id, SEL, id))original;
         }
 
         selector = NSSelectorFromString(@"initWithData:Scene:RedEnvelopesType:");
         method = class_getInstanceMethod(logicClass, selector);
         if (method && method_getNumberOfArguments(method) == 5 &&
-            NeoWCMethodReturnsObject(method) && NeoWCMethodArgumentIsObject(method, 2) &&
-            NeoWCMethodArgumentIsInteger(method, 3) && NeoWCMethodArgumentIsInteger(method, 4)) {
+            WCAtlasMethodReturnsObject(method) && WCAtlasMethodArgumentIsObject(method, 2) &&
+            WCAtlasMethodArgumentIsInteger(method, 3) && WCAtlasMethodArgumentIsInteger(method, 4)) {
             IMP original = NULL;
             MSHookMessageEx(logicClass, selector,
-                            (IMP)NeoWCRedEnvelopeInitWithDataSceneType, &original);
-            NeoWCOriginalRedEnvelopeInitWithDataSceneType =
+                            (IMP)WCAtlasRedEnvelopeInitWithDataSceneType, &original);
+            WCAtlasOriginalRedEnvelopeInitWithDataSceneType =
                 (id (*)(id, SEL, id, NSUInteger, NSUInteger))original;
         }
     }
@@ -13580,35 +13580,35 @@ static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
     SEL selector = NSSelectorFromString(@"setupWithData:");
     Method method = class_getInstanceMethod(controllerClass, selector);
     if (method && method_getNumberOfArguments(method) == 3 &&
-        NeoWCMethodReturnsVoid(method) && NeoWCMethodArgumentIsObject(method, 2)) {
+        WCAtlasMethodReturnsVoid(method) && WCAtlasMethodArgumentIsObject(method, 2)) {
         IMP original = NULL;
-        MSHookMessageEx(controllerClass, selector, (IMP)NeoWCRedEnvelopeSetupWithData, &original);
-        NeoWCOriginalRedEnvelopeSetupWithData = (void (*)(id, SEL, id))original;
+        MSHookMessageEx(controllerClass, selector, (IMP)WCAtlasRedEnvelopeSetupWithData, &original);
+        WCAtlasOriginalRedEnvelopeSetupWithData = (void (*)(id, SEL, id))original;
     }
 
     selector = NSSelectorFromString(@"refreshViewWithData:");
     method = class_getInstanceMethod(controllerClass, selector);
     if (method && method_getNumberOfArguments(method) == 3 &&
-        NeoWCMethodReturnsVoid(method) && NeoWCMethodArgumentIsObject(method, 2)) {
+        WCAtlasMethodReturnsVoid(method) && WCAtlasMethodArgumentIsObject(method, 2)) {
         IMP original = NULL;
-        MSHookMessageEx(controllerClass, selector, (IMP)NeoWCRedEnvelopeRefreshWithData, &original);
-        NeoWCOriginalRedEnvelopeRefreshWithData = (void (*)(id, SEL, id))original;
+        MSHookMessageEx(controllerClass, selector, (IMP)WCAtlasRedEnvelopeRefreshWithData, &original);
+        WCAtlasOriginalRedEnvelopeRefreshWithData = (void (*)(id, SEL, id))original;
     }
 
     selector = NSSelectorFromString(@"setupCurrentMode");
     method = class_getInstanceMethod(controllerClass, selector);
-    if (method && method_getNumberOfArguments(method) == 2 && NeoWCMethodReturnsInteger(method)) {
+    if (method && method_getNumberOfArguments(method) == 2 && WCAtlasMethodReturnsInteger(method)) {
         IMP original = NULL;
-        MSHookMessageEx(controllerClass, selector, (IMP)NeoWCRedEnvelopeSetupCurrentMode, &original);
-        NeoWCOriginalRedEnvelopeSetupCurrentMode = (NSInteger (*)(id, SEL))original;
+        MSHookMessageEx(controllerClass, selector, (IMP)WCAtlasRedEnvelopeSetupCurrentMode, &original);
+        WCAtlasOriginalRedEnvelopeSetupCurrentMode = (NSInteger (*)(id, SEL))original;
     }
 
     selector = NSSelectorFromString(@"viewDidLoad");
     method = class_getInstanceMethod(controllerClass, selector);
-    if (method && method_getNumberOfArguments(method) == 2 && NeoWCMethodReturnsVoid(method)) {
+    if (method && method_getNumberOfArguments(method) == 2 && WCAtlasMethodReturnsVoid(method)) {
         IMP original = NULL;
-        MSHookMessageEx(controllerClass, selector, (IMP)NeoWCRedEnvelopeViewDidLoad, &original);
-        NeoWCOriginalRedEnvelopeViewDidLoad = (void (*)(id, SEL))original;
+        MSHookMessageEx(controllerClass, selector, (IMP)WCAtlasRedEnvelopeViewDidLoad, &original);
+        WCAtlasOriginalRedEnvelopeViewDidLoad = (void (*)(id, SEL))original;
     }
 }
 
@@ -13616,15 +13616,15 @@ static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
 
 - (void)viewDidLayoutSubviews {
     %orig;
-    NeoWCTryAuthorizeGame(self);
+    WCAtlasTryAuthorizeGame(self);
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
-    NeoWCCompatibilityMarkTriggered(@"game-login");
-    if (NeoWCTryAuthorizeGame(self)) return;
+    WCAtlasCompatibilityMarkTriggered(@"game-login");
+    if (WCAtlasTryAuthorizeGame(self)) return;
     dispatch_async(dispatch_get_main_queue(), ^{
-        NeoWCTryAuthorizeGame(self);
+        WCAtlasTryAuthorizeGame(self);
     });
 }
 
@@ -13632,13 +13632,13 @@ static void NeoWCInstallExclusiveRedEnvelopeHooks(void) {
 
 %ctor {
     %init;
-    NeoWCAutomationStart();
-    NeoWCMomentsCommentAntiDeleteInstallHooks();
-    NeoWCMomentsTailInstallHooks();
-    NeoWCCallAudioInstallHooks();
-    NeoWCInstallAutoSpeakerphoneHook();
-    NeoWCInstallExclusiveRedEnvelopeHooks();
+    WCAtlasAutomationStart();
+    WCAtlasMomentsCommentAntiDeleteInstallHooks();
+    WCAtlasMomentsTailInstallHooks();
+    WCAtlasCallAudioInstallHooks();
+    WCAtlasInstallAutoSpeakerphoneHook();
+    WCAtlasInstallExclusiveRedEnvelopeHooks();
     if ([CADisplayLink instancesRespondToSelector:@selector(setPreferredFrameRateRange:)]) {
-        %init(NeoWCHighRefreshRateRange);
+        %init(WCAtlasHighRefreshRateRange);
     }
 }
