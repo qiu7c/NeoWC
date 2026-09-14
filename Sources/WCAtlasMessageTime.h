@@ -11,5 +11,8 @@ FOUNDATION_EXPORT void WCAtlasLayoutMessageTimeLabels(UIView *cell);
 /// Shared lightweight message anchor used by message-time and anti-revoke
 /// side labels. It never scans the complete private view hierarchy.
 FOUNDATION_EXPORT UIView * _Nullable WCAtlasMessageSideAnchorView(UIView *cell);
+/// Returns the currently visible bubble-side time label, if any. This lets
+/// other per-message annotations avoid occupying the same frame.
+FOUNDATION_EXPORT UILabel * _Nullable WCAtlasVisibleMessageTimeSideLabel(UIView *cell);
 
 NS_ASSUME_NONNULL_END

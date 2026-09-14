@@ -345,8 +345,10 @@ static char WCAtlasGameSelectorPresentedKey;
 static char WCAtlasChatExportBuildingMenuKey;
 static char WCAtlasAntiRevokeSideLabelKey;
 static char WCAtlasAntiRevokeSideRefreshScheduledKey;
+static char WCAtlasAntiRevokeSideRefreshGenerationKey;
 static char WCAtlasAntiRevokeOriginalSystemTextColorKey;
 static char WCAtlasAntiRevokeSystemColorAppliedKey;
+static NSString *const WCAtlasAntiRevokeSideLabelIdentifier = @"com.qiu7c.wcatlas.anti-revoke.side-label";
 static char WCAtlasEditedImageKey;
 static char WCAtlasEditConversationUserNameKey;
 static char WCAtlasEditPresenterControllerKey;
@@ -12222,19 +12224,76 @@ static id WCAtlasMessageForCellViewModel(id viewModel) {
     return nil;
 }
 
+static NSString *WCAtlasMessageIdentityComponent(id message, NSArray<NSString *> *keys) {
+    id value = nil;
+    for (NSString *key in keys) {
+        value = WCAtlasTweakSafeValue(message, key);
+        if (value) break;
+    }
+    if ([value isKindOfClass:NSString.class]) return value;
+    if ([value respondsToSelector:@selector(stringValue)]) return [value stringValue];
+    return nil;
+}
+
+static NSString *WCAtlasMessageIdentityForCell(CommonMessageCellView *cell) {
+    id viewModel = WCAtlasTweakSafeValue(cell, @"viewModel");
+    if (!viewModel) viewModel = WCAtlasTweakSafeValue(cell, @"m_viewModel");
+    id message = WCAtlasMessageForCellViewModel(viewModel);
+    if (!viewModel || !message) return nil;
+    NSString *localID = WCAtlasMessageIdentityComponent(message, @[@"m_uiMesLocalID", @"localID"]);
+    NSString *serverID = WCAtlasMessageIdentityComponent(message, @[@"m_n64MesSvrID", @"svrID"]);
+    NSString *createTime = WCAtlasMessageIdentityComponent(message, @[@"m_uiCreateTime", @"createTime"]);
+    NSString *fromUser = WCAtlasMessageIdentityComponent(message, @[@"m_nsFromUsr", @"fromUsr"]);
+    NSString *toUser = WCAtlasMessageIdentityComponent(message, @[@"m_nsToUsr", @"toUsr"]);
+    if (localID.length == 0 && serverID.length == 0 && createTime.length == 0) {
+        return [NSString stringWithFormat:@"vm:%p|msg:%p",
+                (__bridge void *)viewModel, (__bridge void *)message];
+    }
+    return [NSString stringWithFormat:@"%@|%@|%@|%@|%@",
+            localID ?: @"", serverID ?: @"", createTime ?: @"",
+            fromUser ?: @"", toUser ?: @""];
+}
+
+static BOOL WCAtlasMessageIdentityMatchesCell(CommonMessageCellView *cell, NSString *expectedIdentity) {
+    NSString *currentIdentity = WCAtlasMessageIdentityForCell(cell);
+    return currentIdentity == expectedIdentity || [currentIdentity isEqualToString:expectedIdentity];
+}
+
+static void WCAtlasRemoveDuplicateAntiRevokeSideLabels(CommonMessageCellView *cell, UILabel *preferred) {
+    // The prompt is always a direct child of the message cell. Keep cleanup
+    // cheap because it also runs during native layoutSubviews callbacks.
+    for (UIView *subview in cell.subviews.copy) {
+        if (subview != preferred && [subview isKindOfClass:UILabel.class] &&
+            [subview.accessibilityIdentifier isEqualToString:WCAtlasAntiRevokeSideLabelIdentifier]) {
+            [subview removeFromSuperview];
+        }
+    }
+}
+
+static void WCAtlasInvalidateAntiRevokeSidePrompt(CommonMessageCellView *cell) {
+    NSUInteger generation = [objc_getAssociatedObject(cell, &WCAtlasAntiRevokeSideRefreshGenerationKey) unsignedIntegerValue];
+    objc_setAssociatedObject(cell, &WCAtlasAntiRevokeSideRefreshGenerationKey,
+                             @(generation + 1), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(cell, &WCAtlasAntiRevokeSideRefreshScheduledKey,
+                             nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    UILabel *label = objc_getAssociatedObject(cell, &WCAtlasAntiRevokeSideLabelKey);
+    WCAtlasRemoveDuplicateAntiRevokeSideLabels(cell, label);
+    label.hidden = YES;
+    label.text = nil;
+}
+
 %hook CommonMessageCellView
 
 - (void)prepareForReuse {
     %orig;
     WCAtlasHideMessageTimeLabels(self);
-    UILabel *label = objc_getAssociatedObject(self, &WCAtlasAntiRevokeSideLabelKey);
-    label.hidden = YES;
-    label.text = nil;
+    WCAtlasInvalidateAntiRevokeSidePrompt(self);
 }
 
 - (void)layoutSubviews {
     %orig;
     WCAtlasLayoutMessageTimeLabels(self);
+    if (WCAtlasUsesAntiRevokeSidePrompt()) [self wcatlas_refreshAntiRevokeSidePrompt];
 }
 
 - (void)onHeadImageLongPressed:(id)sender {
@@ -12259,6 +12318,7 @@ static id WCAtlasMessageForCellViewModel(id viewModel) {
 - (void)setViewModel:(id)viewModel {
     %orig;
     WCAtlasHideMessageTimeLabels(self);
+    WCAtlasInvalidateAntiRevokeSidePrompt(self);
     WCAtlasScheduleMessageTimeRefresh(self);
     WCAtlasSynchronizeReplyGesture(self);
     WCAtlasSynchronizeAvatarQuickGesture(self);
@@ -12286,8 +12346,7 @@ static id WCAtlasMessageForCellViewModel(id viewModel) {
         [self wcatlas_scheduleAntiRevokeSidePromptRefresh];
     } else {
         WCAtlasHideMessageTimeLabels(self);
-        UILabel *label = objc_getAssociatedObject(self, &WCAtlasAntiRevokeSideLabelKey);
-        if (label && !label.hidden) label.hidden = YES;
+        WCAtlasInvalidateAntiRevokeSidePrompt(self);
     }
 }
 
@@ -12408,23 +12467,34 @@ static id WCAtlasMessageForCellViewModel(id viewModel) {
 %new
 - (void)wcatlas_scheduleAntiRevokeSidePromptRefresh {
     UILabel *label = objc_getAssociatedObject(self, &WCAtlasAntiRevokeSideLabelKey);
+    WCAtlasRemoveDuplicateAntiRevokeSideLabels(self, label);
     if (!WCAtlasUsesAntiRevokeSidePrompt()) {
-        if (label && !label.hidden) label.hidden = YES;
+        if (label) {
+            label.hidden = YES;
+            label.text = nil;
+        }
         return;
     }
     if ([objc_getAssociatedObject(self, &WCAtlasAntiRevokeSideRefreshScheduledKey) boolValue]) return;
     objc_setAssociatedObject(self, &WCAtlasAntiRevokeSideRefreshScheduledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSUInteger generation = [objc_getAssociatedObject(self, &WCAtlasAntiRevokeSideRefreshGenerationKey) unsignedIntegerValue];
+    NSString *messageIdentity = WCAtlasMessageIdentityForCell(self);
     __weak CommonMessageCellView *weakCell = self;
     dispatch_async(dispatch_get_main_queue(), ^{
         CommonMessageCellView *cell = weakCell;
         if (!cell) return;
-        if (cell.window) [cell wcatlas_refreshAntiRevokeSidePrompt];
+        BOOL generationMatches = [objc_getAssociatedObject(cell, &WCAtlasAntiRevokeSideRefreshGenerationKey) unsignedIntegerValue] == generation;
+        BOOL messageMatches = WCAtlasMessageIdentityMatchesCell(cell, messageIdentity);
+        if (cell.window && generationMatches && messageMatches) [cell wcatlas_refreshAntiRevokeSidePrompt];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{
             CommonMessageCellView *delayedCell = weakCell;
             if (!delayedCell) return;
+            if ([objc_getAssociatedObject(delayedCell, &WCAtlasAntiRevokeSideRefreshGenerationKey) unsignedIntegerValue] != generation) return;
             objc_setAssociatedObject(delayedCell, &WCAtlasAntiRevokeSideRefreshScheduledKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            if (delayedCell.window) [delayedCell wcatlas_refreshAntiRevokeSidePrompt];
+            if (delayedCell.window && WCAtlasMessageIdentityMatchesCell(delayedCell, messageIdentity)) {
+                [delayedCell wcatlas_refreshAntiRevokeSidePrompt];
+            }
         });
     });
 }
@@ -12432,9 +12502,13 @@ static id WCAtlasMessageForCellViewModel(id viewModel) {
 %new
 - (void)wcatlas_refreshAntiRevokeSidePrompt {
     UILabel *label = objc_getAssociatedObject(self, &WCAtlasAntiRevokeSideLabelKey);
+    WCAtlasRemoveDuplicateAntiRevokeSideLabels(self, label);
     BOOL useSidePromptStyle = WCAtlasUsesAntiRevokeSidePrompt();
     if (!useSidePromptStyle) {
-        if (label && !label.hidden) label.hidden = YES;
+        if (label) {
+            label.hidden = YES;
+            label.text = nil;
+        }
         return;
     }
     id viewModel = WCAtlasTweakSafeValue(self, @"viewModel");
@@ -12443,7 +12517,10 @@ static id WCAtlasMessageForCellViewModel(id viewModel) {
     NSString *prompt = WCAtlasAntiRevokeSidePromptForMessage(message);
     BOOL useSidePrompt = prompt.length > 0;
     if (!useSidePrompt) {
-        if (label && !label.hidden) label.hidden = YES;
+        if (label) {
+            label.hidden = YES;
+            label.text = nil;
+        }
         return;
     }
 
@@ -12454,11 +12531,16 @@ static id WCAtlasMessageForCellViewModel(id viewModel) {
         label.textColor = [UIColor tertiaryLabelColor];
         label.textAlignment = NSTextAlignmentCenter;
         label.numberOfLines = 1;
+        label.adjustsFontSizeToFitWidth = YES;
+        label.minimumScaleFactor = 0.72;
         label.layer.zPosition = 1000.0;
+        label.accessibilityIdentifier = WCAtlasAntiRevokeSideLabelIdentifier;
         [self addSubview:label];
         objc_setAssociatedObject(self, &WCAtlasAntiRevokeSideLabelKey, label, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     if (label.superview != self) [self addSubview:label];
+    label.accessibilityIdentifier = WCAtlasAntiRevokeSideLabelIdentifier;
+    WCAtlasRemoveDuplicateAntiRevokeSideLabels(self, label);
     if (label.hidden) label.hidden = NO;
     if (label.alpha != 1.0) label.alpha = 1.0;
     if (![label.text isEqualToString:prompt]) label.text = prompt;
@@ -12475,8 +12557,13 @@ static id WCAtlasMessageForCellViewModel(id viewModel) {
         return;
     }
     CGRect bubbleFrame = [bubbleView convertRect:bubbleView.bounds toView:self];
+    if (CGRectIsNull(bubbleFrame) || CGRectIsInfinite(bubbleFrame) || CGRectIsEmpty(bubbleFrame) ||
+        !CGRectIntersectsRect(bubbleFrame, CGRectInset(self.bounds, -80.0, -80.0))) {
+        label.hidden = YES;
+        return;
+    }
     CGSize promptSize = [prompt sizeWithAttributes:@{ NSFontAttributeName: label.font }];
-    CGFloat labelWidth = MIN(160.0, MAX(36.0, ceil(promptSize.width) + 8.0));
+    CGFloat desiredWidth = MIN(160.0, MAX(36.0, ceil(promptSize.width) + 8.0));
     CGFloat labelHeight = 18.0;
     BOOL isSender = [WCAtlasTweakSafeValue(viewModel, @"isSender") boolValue];
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -12484,9 +12571,39 @@ static id WCAtlasMessageForCellViewModel(id viewModel) {
     id storedOffsetY = [defaults objectForKey:WCAtlasAntiRevokeSideOffsetYKey];
     CGFloat offsetX = storedOffsetX ? [storedOffsetX doubleValue] : 0.0;
     CGFloat offsetY = storedOffsetY ? [storedOffsetY doubleValue] : 10.0;
-    CGFloat x = isSender ? CGRectGetMinX(bubbleFrame) - labelWidth - 7.0 + offsetX : CGRectGetMaxX(bubbleFrame) + 7.0 - offsetX;
-    x = MIN(MAX(4.0, x), MAX(4.0, CGRectGetWidth(self.bounds) - labelWidth - 4.0));
+    CGFloat cellWidth = CGRectGetWidth(self.bounds);
+    CGFloat gap = 7.0;
+    CGFloat availableWidth = isSender ? CGRectGetMinX(bubbleFrame) - gap - 4.0
+                                      : cellWidth - CGRectGetMaxX(bubbleFrame) - gap - 4.0;
+    if (availableWidth < 36.0) {
+        label.hidden = YES;
+        return;
+    }
+    CGFloat labelWidth = MIN(desiredWidth, availableWidth);
+    CGFloat x = isSender ? CGRectGetMinX(bubbleFrame) - labelWidth - gap + offsetX
+                         : CGRectGetMaxX(bubbleFrame) + gap - offsetX;
+    CGFloat sideMinimumX = isSender ? 4.0 : CGRectGetMaxX(bubbleFrame) + gap;
+    CGFloat sideMaximumX = isSender ? CGRectGetMinX(bubbleFrame) - gap - labelWidth
+                                    : cellWidth - labelWidth - 4.0;
+    x = MIN(MAX(sideMinimumX, x), MAX(sideMinimumX, sideMaximumX));
     CGFloat y = CGRectGetMidY(bubbleFrame) - labelHeight * 0.5 + offsetY;
+    y = MIN(MAX(0.0, y), MAX(0.0, CGRectGetHeight(self.bounds) - labelHeight));
+    UILabel *messageTimeLabel = WCAtlasVisibleMessageTimeSideLabel(self);
+    if (messageTimeLabel) {
+        CGRect timeFrame = [messageTimeLabel.superview convertRect:messageTimeLabel.frame toView:self];
+        CGRect proposed = CGRectMake(x, y, labelWidth, labelHeight);
+        if (CGRectIntersectsRect(CGRectInset(proposed, -2.0, -2.0), timeFrame)) {
+            CGFloat belowY = CGRectGetMaxY(timeFrame) + 2.0;
+            CGFloat aboveY = CGRectGetMinY(timeFrame) - labelHeight - 2.0;
+            CGFloat maximumY = MAX(0.0, CGRectGetHeight(self.bounds) - labelHeight);
+            if (belowY <= maximumY) y = belowY;
+            else if (aboveY >= 0.0) y = aboveY;
+            else {
+                label.hidden = YES;
+                return;
+            }
+        }
+    }
     CGRect targetFrame = CGRectIntegral(CGRectMake(x, y, labelWidth, labelHeight));
     if (!CGRectEqualToRect(label.frame, targetFrame)) label.frame = targetFrame;
     [self bringSubviewToFront:label];

@@ -9,6 +9,8 @@ static const void *WCAtlasMessageTimeAvatarLabelKey = &WCAtlasMessageTimeAvatarL
 static const void *WCAtlasMessageTimeBubbleLabelKey = &WCAtlasMessageTimeBubbleLabelKey;
 static const void *WCAtlasMessageTimeRefreshPendingKey = &WCAtlasMessageTimeRefreshPendingKey;
 static const void *WCAtlasMessageTimeRefreshGenerationKey = &WCAtlasMessageTimeRefreshGenerationKey;
+static NSString *const WCAtlasMessageTimeAvatarLabelIdentifier = @"com.qiu7c.wcatlas.message-time.avatar";
+static NSString *const WCAtlasMessageTimeBubbleLabelIdentifier = @"com.qiu7c.wcatlas.message-time.bubble";
 
 static id WCAtlasMessageTimeValue(id object, NSString *key) {
     if (!object || key.length == 0) return nil;
@@ -36,6 +38,39 @@ static id WCAtlasMessageTimeMessage(id viewModel) {
     if (message) return message;
     id parent = WCAtlasMessageTimeValue(viewModel, @"parentModel");
     return WCAtlasMessageTimeFirstValue(parent, @[@"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap"]);
+}
+
+static NSString *WCAtlasMessageTimeObjectString(id object, NSArray<NSString *> *keys) {
+    id value = WCAtlasMessageTimeFirstValue(object, keys);
+    if ([value isKindOfClass:NSString.class]) return value;
+    if ([value respondsToSelector:@selector(stringValue)]) return [value stringValue];
+    return nil;
+}
+
+/// Cell reuse can leave delayed layout work targeting a different message.
+/// Use the same stable fields WeChatX validates (local/server ID, create time,
+/// sender and recipient), with object identity only as a last-resort fallback.
+static NSString *WCAtlasMessageTimeIdentity(UIView *cell) {
+    id viewModel = WCAtlasMessageTimeViewModel(cell);
+    id message = WCAtlasMessageTimeMessage(viewModel);
+    if (!viewModel || !message) return nil;
+    NSString *localID = WCAtlasMessageTimeObjectString(message, @[@"m_uiMesLocalID", @"localID"]);
+    NSString *serverID = WCAtlasMessageTimeObjectString(message, @[@"m_n64MesSvrID", @"svrID"]);
+    NSString *createTime = WCAtlasMessageTimeObjectString(message, @[@"m_uiCreateTime", @"createTime"]);
+    NSString *fromUser = WCAtlasMessageTimeObjectString(message, @[@"m_nsFromUsr", @"fromUsr"]);
+    NSString *toUser = WCAtlasMessageTimeObjectString(message, @[@"m_nsToUsr", @"toUsr"]);
+    if (localID.length == 0 && serverID.length == 0 && createTime.length == 0) {
+        return [NSString stringWithFormat:@"vm:%p|msg:%p",
+                (__bridge void *)viewModel, (__bridge void *)message];
+    }
+    return [NSString stringWithFormat:@"%@|%@|%@|%@|%@",
+            localID ?: @"", serverID ?: @"", createTime ?: @"",
+            fromUser ?: @"", toUser ?: @""];
+}
+
+static BOOL WCAtlasMessageTimeIdentityMatches(UIView *cell, NSString *expectedIdentity) {
+    NSString *currentIdentity = WCAtlasMessageTimeIdentity(cell);
+    return currentIdentity == expectedIdentity || [currentIdentity isEqualToString:expectedIdentity];
 }
 
 static NSTimeInterval WCAtlasMessageTimeCreateTime(id message, id viewModel) {
@@ -76,6 +111,27 @@ static BOOL WCAtlasMessageTimeAnchorIsUsable(id value) {
     return !view.hidden && view.alpha > 0.01 && CGRectGetWidth(view.bounds) > 1.0 && CGRectGetHeight(view.bounds) > 1.0;
 }
 
+static BOOL WCAtlasMessageTimeFrameIsUsable(CGRect frame, CGRect cellBounds) {
+    if (CGRectIsNull(frame) || CGRectIsInfinite(frame) || CGRectIsEmpty(frame)) return NO;
+    if (!isfinite(CGRectGetMinX(frame)) || !isfinite(CGRectGetMinY(frame)) ||
+        !isfinite(CGRectGetWidth(frame)) || !isfinite(CGRectGetHeight(frame))) return NO;
+    return CGRectIntersectsRect(frame, CGRectInset(cellBounds, -80.0, -80.0));
+}
+
+static void WCAtlasMessageTimeRemoveDuplicateLabels(UIView *cell,
+                                                     NSString *identifier,
+                                                     UILabel *preferred) {
+    if (!cell || identifier.length == 0) return;
+    // WCAtlas owns these labels and always attaches them directly to the cell.
+    // A direct scan keeps this safe to run from every layoutSubviews pass.
+    for (UIView *subview in cell.subviews.copy) {
+        if (subview != preferred && [subview isKindOfClass:UILabel.class] &&
+            [subview.accessibilityIdentifier isEqualToString:identifier]) {
+            [subview removeFromSuperview];
+        }
+    }
+}
+
 UIView *WCAtlasMessageSideAnchorView(UIView *cell) {
     if (!cell) return nil;
     SEL selector = NSSelectorFromString(@"getBgImageView");
@@ -105,10 +161,12 @@ UIView *WCAtlasMessageSideAnchorView(UIView *cell) {
     return nil;
 }
 
-static UILabel *WCAtlasMessageTimeLabel(UIView *cell, const void *key) {
+static UILabel *WCAtlasMessageTimeLabel(UIView *cell, const void *key, NSString *identifier) {
     UILabel *label = objc_getAssociatedObject(cell, key);
     if (label) {
         if (label.superview != cell) [cell addSubview:label];
+        label.accessibilityIdentifier = identifier;
+        WCAtlasMessageTimeRemoveDuplicateLabels(cell, identifier, label);
         return label;
     }
     label = [[UILabel alloc] initWithFrame:CGRectZero];
@@ -118,16 +176,26 @@ static UILabel *WCAtlasMessageTimeLabel(UIView *cell, const void *key) {
     label.minimumScaleFactor = 0.72;
     label.userInteractionEnabled = NO;
     label.layer.zPosition = 900.0;
+    label.accessibilityIdentifier = identifier;
     [cell addSubview:label];
     objc_setAssociatedObject(cell, key, label, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    WCAtlasMessageTimeRemoveDuplicateLabels(cell, identifier, label);
     return label;
 }
 
 static void WCAtlasSetMessageTimeLabelsHidden(UIView *cell) {
     UILabel *avatar = objc_getAssociatedObject(cell, WCAtlasMessageTimeAvatarLabelKey);
     UILabel *bubble = objc_getAssociatedObject(cell, WCAtlasMessageTimeBubbleLabelKey);
+    WCAtlasMessageTimeRemoveDuplicateLabels(cell, WCAtlasMessageTimeAvatarLabelIdentifier, avatar);
+    WCAtlasMessageTimeRemoveDuplicateLabels(cell, WCAtlasMessageTimeBubbleLabelIdentifier, bubble);
     avatar.hidden = YES;
     bubble.hidden = YES;
+}
+
+UILabel *WCAtlasVisibleMessageTimeSideLabel(UIView *cell) {
+    UILabel *label = objc_getAssociatedObject(cell, WCAtlasMessageTimeBubbleLabelKey);
+    if (!label || label.hidden || label.alpha <= 0.01 || label.superview == nil) return nil;
+    return label;
 }
 
 void WCAtlasHideMessageTimeLabels(UIView *cell) {
@@ -154,6 +222,10 @@ static NSString *WCAtlasMessageTimeText(NSTimeInterval time, NSString *format) {
 }
 
 static void WCAtlasRefreshMessageTimeLabels(UIView *cell) {
+    UILabel *existingAvatar = objc_getAssociatedObject(cell, WCAtlasMessageTimeAvatarLabelKey);
+    UILabel *existingBubble = objc_getAssociatedObject(cell, WCAtlasMessageTimeBubbleLabelKey);
+    WCAtlasMessageTimeRemoveDuplicateLabels(cell, WCAtlasMessageTimeAvatarLabelIdentifier, existingAvatar);
+    WCAtlasMessageTimeRemoveDuplicateLabels(cell, WCAtlasMessageTimeBubbleLabelIdentifier, existingBubble);
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     BOOL enabled = WCAtlasEnhancementEnabled(WCAtlasChatMessageTimeEnabledKey);
     BOOL bubbleSide = [defaults boolForKey:WCAtlasChatMessageTimeBubbleSideKey];
@@ -198,17 +270,26 @@ static void WCAtlasRefreshMessageTimeLabels(UIView *cell) {
     if (belowAvatar) {
         UIView *avatar = WCAtlasMessageTimeAvatarView(cell);
         if (avatar) {
-            avatarLabel = WCAtlasMessageTimeLabel(cell, WCAtlasMessageTimeAvatarLabelKey);
+            avatarLabel = WCAtlasMessageTimeLabel(cell, WCAtlasMessageTimeAvatarLabelKey,
+                                                  WCAtlasMessageTimeAvatarLabelIdentifier);
             CGRect frame = [avatar convertRect:avatar.bounds toView:cell];
-            avatarLabel.text = text;
-            avatarLabel.font = font;
-            avatarLabel.textColor = color;
-            CGFloat avatarSpacing = MIN(8.0, MAX(-6.0, [defaults doubleForKey:WCAtlasChatMessageTimeAvatarSpacingKey]));
-            avatarLabel.frame = CGRectMake(CGRectGetMidX(frame) - labelWidth * 0.5,
-                                           CGRectGetMaxY(frame) + avatarSpacing,
-                                           labelWidth,
-                                           labelHeight);
-            avatarLabel.hidden = NO;
+            if (!WCAtlasMessageTimeFrameIsUsable(frame, cell.bounds)) {
+                avatarLabel.hidden = YES;
+                frame = CGRectNull;
+            }
+            if (!CGRectIsNull(frame)) {
+                avatarLabel.text = text;
+                avatarLabel.font = font;
+                avatarLabel.textColor = color;
+                CGFloat avatarSpacing = MIN(8.0, MAX(-6.0, [defaults doubleForKey:WCAtlasChatMessageTimeAvatarSpacingKey]));
+                CGFloat fittedWidth = MIN(labelWidth, MAX(0.0, CGRectGetWidth(cell.bounds) - 4.0));
+                CGFloat x = CGRectGetMidX(frame) - fittedWidth * 0.5;
+                CGFloat y = CGRectGetMaxY(frame) + avatarSpacing;
+                x = MIN(MAX(2.0, x), MAX(2.0, CGRectGetWidth(cell.bounds) - fittedWidth - 2.0));
+                y = MIN(MAX(0.0, y), MAX(0.0, CGRectGetHeight(cell.bounds) - labelHeight));
+                avatarLabel.frame = CGRectMake(x, y, fittedWidth, labelHeight);
+                avatarLabel.hidden = NO;
+            }
         } else {
             avatarLabel.hidden = YES;
         }
@@ -221,29 +302,36 @@ static void WCAtlasRefreshMessageTimeLabels(UIView *cell) {
         UIView *bubble = WCAtlasMessageSideAnchorView(cell);
         if (bubble) {
             CGRect frame = [bubble convertRect:bubble.bounds toView:cell];
-            CGFloat gap = 5.0;
-            CGFloat cellWidth = CGRectGetWidth(cell.bounds);
-            CGFloat availableWidth = isSender ? CGRectGetMinX(frame) - gap - 2.0
-                                              : cellWidth - CGRectGetMaxX(frame) - gap - 2.0;
-            if (availableWidth >= 40.0) {
-                CGFloat fittedWidth = MIN(labelWidth, availableWidth);
-                CGFloat x = isSender ? CGRectGetMinX(frame) - fittedWidth - gap : CGRectGetMaxX(frame) + gap;
-                bubbleLabel = WCAtlasMessageTimeLabel(cell, WCAtlasMessageTimeBubbleLabelKey);
-                bubbleLabel.text = text;
-                bubbleLabel.font = font;
-                bubbleLabel.textColor = color;
-                NSInteger verticalPosition = MIN(2, MAX(0, [defaults integerForKey:WCAtlasChatMessageTimeBubbleVerticalPositionKey]));
-                CGFloat y = CGRectGetMinY(frame);
-                if (verticalPosition == 1) y = CGRectGetMidY(frame) - labelHeight * 0.5;
-                else if (verticalPosition == 2) y = CGRectGetMaxY(frame) - labelHeight;
-                y = MIN(MAX(0.0, y), MAX(0.0, CGRectGetHeight(cell.bounds) - labelHeight));
-                bubbleLabel.frame = CGRectMake(x,
-                                               y,
-                                               fittedWidth,
-                                               labelHeight);
-                bubbleLabel.hidden = NO;
-            } else {
+            if (!WCAtlasMessageTimeFrameIsUsable(frame, cell.bounds)) {
                 bubbleLabel.hidden = YES;
+                frame = CGRectNull;
+            }
+            if (!CGRectIsNull(frame)) {
+                CGFloat gap = 5.0;
+                CGFloat cellWidth = CGRectGetWidth(cell.bounds);
+                CGFloat availableWidth = isSender ? CGRectGetMinX(frame) - gap - 2.0
+                                                  : cellWidth - CGRectGetMaxX(frame) - gap - 2.0;
+                if (availableWidth >= 40.0) {
+                    CGFloat fittedWidth = MIN(labelWidth, availableWidth);
+                    CGFloat x = isSender ? CGRectGetMinX(frame) - fittedWidth - gap : CGRectGetMaxX(frame) + gap;
+                    bubbleLabel = WCAtlasMessageTimeLabel(cell, WCAtlasMessageTimeBubbleLabelKey,
+                                                          WCAtlasMessageTimeBubbleLabelIdentifier);
+                    bubbleLabel.text = text;
+                    bubbleLabel.font = font;
+                    bubbleLabel.textColor = color;
+                    NSInteger verticalPosition = MIN(2, MAX(0, [defaults integerForKey:WCAtlasChatMessageTimeBubbleVerticalPositionKey]));
+                    CGFloat y = CGRectGetMinY(frame);
+                    if (verticalPosition == 1) y = CGRectGetMidY(frame) - labelHeight * 0.5;
+                    else if (verticalPosition == 2) y = CGRectGetMaxY(frame) - labelHeight;
+                    y = MIN(MAX(0.0, y), MAX(0.0, CGRectGetHeight(cell.bounds) - labelHeight));
+                    bubbleLabel.frame = CGRectMake(x,
+                                                   y,
+                                                   fittedWidth,
+                                                   labelHeight);
+                    bubbleLabel.hidden = NO;
+                } else {
+                    bubbleLabel.hidden = YES;
+                }
             }
         } else {
             bubbleLabel.hidden = YES;
@@ -255,8 +343,11 @@ static void WCAtlasRefreshMessageTimeLabels(UIView *cell) {
 }
 
 void WCAtlasLayoutMessageTimeLabels(UIView *cell) {
-    if (!cell || !cell.window ||
-        !WCAtlasEnhancementEnabled(WCAtlasChatMessageTimeEnabledKey)) return;
+    if (!cell) return;
+    if (!cell.window || !WCAtlasEnhancementEnabled(WCAtlasChatMessageTimeEnabledKey)) {
+        WCAtlasSetMessageTimeLabelsHidden(cell);
+        return;
+    }
     [UIView performWithoutAnimation:^{
         WCAtlasRefreshMessageTimeLabels(cell);
     }];
@@ -271,24 +362,24 @@ void WCAtlasScheduleMessageTimeRefresh(UIView *cell) {
     if ([objc_getAssociatedObject(cell, WCAtlasMessageTimeRefreshPendingKey) boolValue]) return;
     objc_setAssociatedObject(cell, WCAtlasMessageTimeRefreshPendingKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     NSUInteger generation = [objc_getAssociatedObject(cell, WCAtlasMessageTimeRefreshGenerationKey) unsignedIntegerValue];
+    NSString *messageIdentity = WCAtlasMessageTimeIdentity(cell);
     __weak UIView *weakCell = cell;
     dispatch_async(dispatch_get_main_queue(), ^{
         UIView *strongCell = weakCell;
         if (!strongCell ||
             [objc_getAssociatedObject(strongCell, WCAtlasMessageTimeRefreshGenerationKey) unsignedIntegerValue] != generation) return;
-        WCAtlasRefreshMessageTimeLabels(strongCell);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.08 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (WCAtlasMessageTimeIdentityMatches(strongCell, messageIdentity)) {
+            WCAtlasRefreshMessageTimeLabels(strongCell);
+        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIView *delayedCell = weakCell;
             if (!delayedCell ||
                 [objc_getAssociatedObject(delayedCell, WCAtlasMessageTimeRefreshGenerationKey) unsignedIntegerValue] != generation) return;
-            WCAtlasRefreshMessageTimeLabels(delayedCell);
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.18 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                UIView *finalCell = weakCell;
-                if (!finalCell ||
-                    [objc_getAssociatedObject(finalCell, WCAtlasMessageTimeRefreshGenerationKey) unsignedIntegerValue] != generation) return;
-                objc_setAssociatedObject(finalCell, WCAtlasMessageTimeRefreshPendingKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                WCAtlasRefreshMessageTimeLabels(finalCell);
-            });
+            objc_setAssociatedObject(delayedCell, WCAtlasMessageTimeRefreshPendingKey,
+                                     nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            if (WCAtlasMessageTimeIdentityMatches(delayedCell, messageIdentity)) {
+                WCAtlasRefreshMessageTimeLabels(delayedCell);
+            }
         });
     });
 }
