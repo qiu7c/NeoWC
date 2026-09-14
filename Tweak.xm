@@ -12513,6 +12513,13 @@ static void WCAtlasInvalidateAntiRevokeSidePrompt(CommonMessageCellView *cell) {
     }
     id viewModel = WCAtlasTweakSafeValue(self, @"viewModel");
     if (!viewModel) viewModel = WCAtlasTweakSafeValue(self, @"m_viewModel");
+    if (!WCAtlasShouldShowSplitMessageMetadata(viewModel, NO)) {
+        if (label) {
+            label.hidden = YES;
+            label.text = nil;
+        }
+        return;
+    }
     id message = WCAtlasMessageForCellViewModel(viewModel);
     NSString *prompt = WCAtlasAntiRevokeSidePromptForMessage(message);
     BOOL useSidePrompt = prompt.length > 0;

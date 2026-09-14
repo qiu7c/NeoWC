@@ -118,6 +118,32 @@ static BOOL WCAtlasMessageTimeFrameIsUsable(CGRect frame, CGRect cellBounds) {
     return CGRectIntersectsRect(frame, CGRectInset(cellBounds, -80.0, -80.0));
 }
 
+BOOL WCAtlasShouldShowSplitMessageMetadata(id viewModel, BOOL preferHeadPart) {
+    if (!viewModel) return NO;
+    Class splitClass = NSClassFromString(@"TextMessageSubViewModel");
+    BOOL isSplitModel = splitClass ? [viewModel isKindOfClass:splitClass]
+                                   : [NSStringFromClass([viewModel class]) isEqualToString:@"TextMessageSubViewModel"];
+    if (!isSplitModel) return YES;
+
+    id parentModel = WCAtlasMessageTimeValue(viewModel, @"parentModel");
+    id value = WCAtlasMessageTimeValue(parentModel, @"subViewModels");
+    if ([value isKindOfClass:NSArray.class]) {
+        NSArray *subViewModels = value;
+        if (subViewModels.count > 1) {
+            NSUInteger index = [subViewModels indexOfObjectIdenticalTo:viewModel];
+            if (index != NSNotFound) {
+                return preferHeadPart ? index == 0 : index == subViewModels.count - 1;
+            }
+        }
+    }
+
+    // Version fallback used by WeChat's long-split models when the parent
+    // collection is unavailable during an intermediate layout pass.
+    NSString *partKey = preferHeadPart ? @"isHeadPart" : @"isTailPart";
+    id partValue = WCAtlasMessageTimeValue(viewModel, partKey);
+    return partValue ? [partValue boolValue] : YES;
+}
+
 static void WCAtlasMessageTimeRemoveDuplicateLabels(UIView *cell,
                                                      NSString *identifier,
                                                      UILabel *preferred) {
@@ -240,6 +266,10 @@ static void WCAtlasRefreshMessageTimeLabels(UIView *cell) {
     id viewModel = WCAtlasMessageTimeViewModel(cell);
     if (!viewModel) {
         WCAtlasHideMessageTimeLabels(cell);
+        return;
+    }
+    if (!WCAtlasShouldShowSplitMessageMetadata(viewModel, belowAvatar)) {
+        WCAtlasSetMessageTimeLabelsHidden(cell);
         return;
     }
     id message = WCAtlasMessageTimeMessage(viewModel);
