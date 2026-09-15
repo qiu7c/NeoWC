@@ -45,6 +45,8 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/WCAtlasInfoListViewController.h"
 #import "Sources/WCAtlasSilkEncoder.h"
 #import "Sources/WCAtlasInAppNotification.h"
+#import "Sources/WCAtlasMentionHighlight.h"
+#import "Sources/WCAtlasHomeCategories.h"
 
 @interface WCActionSheet : NSObject
 - (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
@@ -10295,46 +10297,12 @@ static void WCAtlasInjectRawIDCell(id controller, BOOL group) {
     WCAtlasCompatibilityMarkTriggered(@"raw-contact-id");
 }
 
-static id WCAtlasHomeObjectAtIndexPath(id target, NSArray<NSString *> *selectorNames, NSIndexPath *indexPath) {
-    if (!target || !indexPath) return nil;
-    for (NSString *selectorName in selectorNames) {
-        SEL selector = NSSelectorFromString(selectorName);
-        if (![target respondsToSelector:selector]) continue;
-        @try {
-            id value = ((id (*)(id, SEL, NSIndexPath *))objc_msgSend)(target, selector, indexPath);
-            if (value) return value;
-        } @catch (__unused NSException *exception) {
-        }
-    }
-    return nil;
-}
-
 static id WCAtlasHomeSessionCellData(id owner, UITableView *tableView, NSIndexPath *indexPath) {
-    // WeChatX uses these two native main-frame accessors. Reading through the
-    // controller first avoids depending on a particular reused cell subclass.
-    id data = WCAtlasHomeObjectAtIndexPath(owner,
-                                         @[@"getCellDataAtIndexPath:", @"getSessionInfoAtIndexPath:"],
-                                         indexPath);
-    if (data) return data;
-    UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
-    data = WCAtlasTweakValueForSelectorNames(cell, @[@"m_cellData", @"cellData", @"m_sessionInfo", @"sessionInfo"]);
-    if (data) return data;
-    id delegate = tableView.delegate;
-    if (delegate && delegate != owner) {
-        data = WCAtlasHomeObjectAtIndexPath(delegate,
-                                          @[@"getCellDataAtIndexPath:", @"getSessionInfoAtIndexPath:"],
-                                          indexPath);
-    }
-    return data;
+    return WCAtlasPrivateHomeSessionData(owner, tableView, indexPath);
 }
 
 static NSString *WCAtlasHomeSessionUserName(id data) {
-    NSString *userName = WCAtlasPrivateContactUserName(data);
-    if (userName.length == 0) {
-        id sessionInfo = WCAtlasTweakValueForSelectorNames(data, @[@"m_sessionInfo", @"sessionInfo"]);
-        userName = WCAtlasPrivateContactUserName(sessionInfo);
-    }
-    return userName;
+    return WCAtlasPrivateHomeSessionUserName(data);
 }
 
 static BOOL WCAtlasHomeBooleanValue(id object, NSArray<NSString *> *names) {
@@ -10653,6 +10621,7 @@ __attribute__((constructor)) static void WCAtlasInstallHomeLeadingSwipe(void) {
     UITableView *tableView = WCAtlasHomeTableViewForController(self);
     WCAtlasInstallHomeLeadingSwipeOnClass(object_getClass(self));
     if (tableView.delegate) WCAtlasInstallHomeLeadingSwipeOnClass(object_getClass(tableView.delegate));
+    WCAtlasHomeCategoriesAttach(self, tableView);
 }
 
 %end
@@ -10680,7 +10649,10 @@ __attribute__((constructor)) static void WCAtlasInstallHomeLeadingSwipe(void) {
     // UITableView caches optional delegate capabilities inside setDelegate:.
     // Install the leading-swipe selector before passing the delegate to WeChat,
     // otherwise the method works only when startup timing happens to be lucky.
-    if (delegate) WCAtlasInstallHomeLeadingSwipeOnClass(object_getClass(delegate));
+    if (delegate) {
+        WCAtlasInstallHomeLeadingSwipeOnClass(object_getClass(delegate));
+        WCAtlasHomeCategoriesInstallProjectionOnClass(object_getClass(delegate));
+    }
     %orig(delegate);
 }
 
@@ -13776,6 +13748,7 @@ static void WCAtlasInstallExclusiveRedEnvelopeHooks(void) {
     WCAtlasMomentsCommentAntiDeleteInstallHooks();
     WCAtlasMomentsTailInstallHooks();
     WCAtlasCallAudioInstallHooks();
+    WCAtlasMentionHighlightInstallHooks();
     WCAtlasInstallAutoSpeakerphoneHook();
     WCAtlasInstallExclusiveRedEnvelopeHooks();
     if ([CADisplayLink instancesRespondToSelector:@selector(setPreferredFrameRateRange:)]) {

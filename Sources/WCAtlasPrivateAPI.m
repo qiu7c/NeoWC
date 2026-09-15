@@ -225,6 +225,36 @@ NSString *WCAtlasPrivateContactDisplayName(id contact, NSString *fallback) {
     return WCAtlasPrivateNonemptyString(fallback);
 }
 
+NSString *WCAtlasPrivateGroupMemberDisplayName(id groupContact, id memberContact) {
+    NSCAssert(NSThread.isMainThread, @"Group member names must be read on the main thread");
+    if (!memberContact) return nil;
+    id manager = WCAtlasPrivateService(@"CContactMgr");
+    SEL twoContactSelector = NSSelectorFromString(@"getChatRoomDisplayNameWithContact:chatContact:");
+    for (id target in @[manager ?: NSNull.null, groupContact ?: NSNull.null]) {
+        if (target == NSNull.null) continue;
+        NSMethodSignature *signature = WCAtlasPrivateSignature(target, twoContactSelector, 4);
+        if (!signature || !WCAtlasPrivateTypeIsObject(signature.methodReturnType) ||
+            !WCAtlasPrivateObjectArguments(signature, NSMakeRange(2, 2))) continue;
+        @try {
+            NSString *name = WCAtlasPrivateNonemptyString(
+                ((id (*)(id, SEL, id, id))objc_msgSend)(target, twoContactSelector,
+                                                        memberContact, groupContact));
+            if (name.length > 0) return name;
+        } @catch (__unused NSException *exception) {}
+    }
+    SEL oneContactSelector = NSSelectorFromString(@"getChatRoomDisplayNameWithContact:");
+    NSMethodSignature *signature = WCAtlasPrivateSignature(groupContact, oneContactSelector, 3);
+    if (signature && WCAtlasPrivateTypeIsObject(signature.methodReturnType) &&
+        WCAtlasPrivateObjectArguments(signature, NSMakeRange(2, 1))) {
+        @try {
+            NSString *name = WCAtlasPrivateNonemptyString(
+                ((id (*)(id, SEL, id))objc_msgSend)(groupContact, oneContactSelector, memberContact));
+            if (name.length > 0) return name;
+        } @catch (__unused NSException *exception) {}
+    }
+    return WCAtlasPrivateContactDisplayName(memberContact, nil);
+}
+
 NSString *WCAtlasPrivateNotificationDisplayName(NSString *userName, NSString *eventFallback) {
     NSCAssert(NSThread.isMainThread, @"Notification contact names must be resolved on the main thread");
     NSString *normalizedUserName = WCAtlasPrivateNonemptyString(userName);
@@ -378,6 +408,127 @@ NSArray *WCAtlasPrivateGroupContactList(void) {
     return groups;
 }
 
+#pragma mark - Homepage Sessions
+
+static id WCAtlasPrivateHomeObjectAtIndexPath(id target, NSIndexPath *indexPath) {
+    if (!target || !indexPath) return nil;
+    for (NSString *selectorName in @[@"getCellDataAtIndexPath:", @"getSessionInfoAtIndexPath:"]) {
+        SEL selector = NSSelectorFromString(selectorName);
+        NSMethodSignature *signature = WCAtlasPrivateSignature(target, selector, 3);
+        if (!signature || !WCAtlasPrivateTypeIsObject(signature.methodReturnType) ||
+            !WCAtlasPrivateObjectArguments(signature, NSMakeRange(2, 1))) continue;
+        @try {
+            id value = ((id (*)(id, SEL, id))objc_msgSend)(target, selector, indexPath);
+            if (value) return value;
+        } @catch (__unused NSException *exception) {}
+    }
+    return nil;
+}
+
+id WCAtlasPrivateHomeSessionData(id owner, UITableView *tableView, NSIndexPath *indexPath) {
+    NSCAssert(NSThread.isMainThread, @"Homepage sessions must be read on the main thread");
+    if (!indexPath) return nil;
+    id data = WCAtlasPrivateHomeObjectAtIndexPath(owner, indexPath);
+    if (data) return data;
+    if (!tableView) return nil;
+    UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
+    data = WCAtlasPrivateObjectField(cell, @[@"m_cellData", @"cellData", @"m_sessionInfo", @"sessionInfo"]);
+    if (data) return data;
+    id delegate = tableView.delegate;
+    return delegate != owner ? WCAtlasPrivateHomeObjectAtIndexPath(delegate, indexPath) : nil;
+}
+
+NSString *WCAtlasPrivateHomeSessionUserName(id sessionData) {
+    NSString *userName = WCAtlasPrivateContactUserName(sessionData);
+    if (userName.length > 0) return userName;
+    id nested = WCAtlasPrivateObjectField(sessionData, @[@"m_sessionInfo", @"sessionInfo"]);
+    return WCAtlasPrivateContactUserName(nested);
+}
+
+#pragma mark - Rich Text Mentions
+
+static id WCAtlasPrivateMentionMessageWrap(id richTextView) {
+    id delegate = WCAtlasPrivateObjectField(richTextView, @[@"linkDelegate", @"delegate", @"m_delegate"]);
+    NSMutableArray *candidates = [NSMutableArray array];
+    if (delegate) [candidates addObject:delegate];
+    id responder = richTextView;
+    for (NSUInteger depth = 0; responder && depth < 10; depth++) {
+        if (![candidates containsObject:responder]) [candidates addObject:responder];
+        id next = WCAtlasPrivateNoArgumentObject(responder, @"nextResponder");
+        if (!next || next == responder) break;
+        responder = next;
+    }
+    for (id object in candidates) {
+        id wrap = WCAtlasPrivateObjectField(object, @[@"getCurrentMessageWrap", @"currentMessageWrap",
+                                                       @"messageWrap", @"m_messageWrap", @"msgWrap"]);
+        if (wrap) return wrap;
+        id viewModel = WCAtlasPrivateObjectField(object, @[@"viewModel", @"m_viewModel"]);
+        wrap = WCAtlasPrivateObjectField(viewModel, @[@"getCurrentMessageWrap", @"messageWrap",
+                                                       @"m_messageWrap", @"msgWrap"]);
+        if (wrap) return wrap;
+    }
+    return nil;
+}
+
+NSArray<NSString *> *WCAtlasPrivateMentionUserNames(id richTextView) {
+    NSCAssert(NSThread.isMainThread, @"Mention metadata must be read on the main thread");
+    id message = WCAtlasPrivateMentionMessageWrap(richTextView);
+    id raw = WCAtlasPrivateObjectField(message, @[@"m_nsAtUserList", @"atUserList"]);
+    if (![raw isKindOfClass:NSString.class] || [raw length] == 0) return @[];
+    NSMutableArray<NSString *> *result = [NSMutableArray array];
+    NSCharacterSet *separators = [NSCharacterSet characterSetWithCharactersInString:@",;| \t\r\n"];
+    for (NSString *part in [raw componentsSeparatedByCharactersInSet:separators]) {
+        NSString *userName = [part stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (userName.length > 0) [result addObject:userName];
+    }
+    return result;
+}
+
+static BOOL WCAtlasPrivateSetFirstValue(id object, id value, NSArray<NSString *> *keys) {
+    for (NSString *key in keys) {
+        @try {
+            [object setValue:value forKey:key];
+            return YES;
+        } @catch (__unused NSException *exception) {}
+    }
+    return NO;
+}
+
+id WCAtlasPrivateMentionLinkStyle(NSRange range, NSString *URLString,
+                                  UIColor *normalColor, UIColor *highlightedColor) {
+    NSCAssert(NSThread.isMainThread, @"Mention styles must be created on the main thread");
+    Class styleClass = NSClassFromString(@"LinkStyle");
+    if (!styleClass || range.location == NSNotFound || range.length == 0 || URLString.length == 0) return nil;
+    id style = [[styleClass alloc] init];
+    if (!style || !WCAtlasPrivateSetFirstValue(style, [NSValue valueWithRange:range],
+                                               @[@"range", @"displayRange", @"originalRange"]) ||
+        !WCAtlasPrivateSetFirstValue(style, URLString, @[@"nsUrl", @"url", @"URL"])) return nil;
+    WCAtlasPrivateSetFirstValue(style, normalColor, @[@"oTextColor", @"textColor", @"linkColor"]);
+    WCAtlasPrivateSetFirstValue(style, highlightedColor,
+                               @[@"oHighlightedColor", @"highlightedColor", @"linkHLColor"]);
+    WCAtlasPrivateSetFirstValue(style, @YES, @[@"bHandleTextClick", @"handleTextClick"]);
+    return style;
+}
+
+static NSString *WCAtlasPrivateMentionLinkURLStringAtDepth(id event, NSUInteger depth) {
+    if (!event || depth > 4) return nil;
+    if ([event isKindOfClass:NSString.class]) return event;
+    if ([event isKindOfClass:NSURL.class]) return [event absoluteString];
+    if ([event isKindOfClass:NSDictionary.class]) {
+        for (NSString *key in @[@"url", @"URL", @"nsUrl", @"link", @"style"]) {
+            NSString *candidate = WCAtlasPrivateMentionLinkURLStringAtDepth(event[key], depth + 1);
+            if (candidate.length > 0) return candidate;
+        }
+    }
+    id nested = WCAtlasPrivateObjectField(event, @[@"nsUrl", @"url", @"URL", @"linkStyle", @"style"]);
+    return nested == event ? nil : WCAtlasPrivateMentionLinkURLStringAtDepth(nested, depth + 1);
+}
+
+NSString *WCAtlasPrivateMentionLinkURLString(id event) {
+    NSCAssert(NSThread.isMainThread, @"Mention link events must be read on the main thread");
+    return WCAtlasPrivateMentionLinkURLStringAtDepth(event, 0);
+}
+
 #pragma mark - Moments Upload Metadata
 
 id WCAtlasPrivateCreateMomentsAppInfo(NSString *appID, NSString *appName) {
@@ -514,11 +665,15 @@ static UIViewController *WCAtlasPrivateProfileController(id contact,
         WCAtlasPrivateObjectArguments(setterSignature, NSMakeRange(2, 1))) {
         @try {
             ((void (*)(id, SEL, id))objc_msgSend)(controller, setter, contact);
+            @try { [controller setValue:contact forKey:@"m_chatContact"]; }
+            @catch (__unused NSException *exception) {}
             return controller;
         } @catch (__unused NSException *exception) {}
     }
     @try {
         [controller setValue:contact forKey:@"m_contact"];
+        @try { [controller setValue:contact forKey:@"m_chatContact"]; }
+        @catch (__unused NSException *exception) {}
         return controller;
     } @catch (NSException *exception) {
         WCAtlasLog(@"资料页联系人注入失败 %@：%@", userName,

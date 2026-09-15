@@ -11,6 +11,8 @@
 #import "WCAtlasMomentsReminder.h"
 #import "WCAtlasInAppNotification.h"
 #import "WCAtlasPluginManager.h"
+#import "WCAtlasMentionHighlight.h"
+#import "WCAtlasHomeCategories.h"
 #import <stdlib.h>
 
 NSString *const WCAtlasEnabledKey = @"com.qiu7c.wcatlas.enabled";
@@ -168,6 +170,10 @@ void WCAtlasSettingsRegisterDefaults(void) {
         WCAtlasMessageTripleTapOtherActionKey: @(WCAtlasReplySwipeActionNone),
         WCAtlasAvatarQuickMenuGestureKey: @(WCAtlasAvatarQuickMenuGestureOff),
         WCAtlasQuoteJumpEnabledKey: @NO,
+        WCAtlasMentionHighlightEnabledKey: @NO,
+        WCAtlasHomeCategoriesEnabledKey: @NO,
+        WCAtlasHomeCategoriesDataKey: @[],
+        WCAtlasHomeCategoriesSelectedKey: @"",
         WCAtlasQuoteJumpImageEnabledKey: @YES,
         WCAtlasQuoteJumpVideoEnabledKey: @YES,
         WCAtlasChatSearchButtonEnabledKey: @NO,
@@ -382,6 +388,7 @@ static NSArray<WCAtlasSettingSection *> *WCAtlasMessageSections(NSUserDefaults *
         WCAtlasItem(@"消息 +1", @"在可复读消息的长按菜单中加入 +1", @"plus.message", WCAtlasSettingRowKindSwitch, WCAtlasMessageRepeatMenuEnabledKey, nil, WCAtlasSettingActionNone),
         WCAtlasItem(@"表情存入自拍", @"在表情菜单中存入自拍表情", @"camera", WCAtlasSettingRowKindSwitch, WCAtlasEmoticonToSelfieEnabledKey, nil, WCAtlasSettingActionNone),
         WCAtlasItem(@"语音转发", @"在语音长按菜单中显示转发", @"waveform.badge.plus", WCAtlasSettingRowKindSwitch, WCAtlasVoiceForwardEnabledKey, nil, WCAtlasSettingActionNone),
+        WCAtlasItem(@"群聊 @ 高亮", @"高亮消息中的 @ 对象，点击打开联系人资料", @"at", WCAtlasSettingRowKindSwitch, WCAtlasMentionHighlightEnabledKey, nil, WCAtlasSettingActionNone),
     ]];
     WCAtlasAddFeature(interaction,
                     WCAtlasItem(@"媒体转语音", @"把音频文件、聊天视频和音乐卡片转成真正的微信语音", @"waveform", WCAtlasSettingRowKindSwitch, WCAtlasMediaToVoiceEnabledKey, nil, WCAtlasSettingActionNone),
@@ -692,6 +699,11 @@ static NSArray<WCAtlasSettingSection *> *WCAtlasInterfaceSections(NSUserDefaults
     ]];
     [display addObject:WCAtlasItem(@"开启强制高刷", @"前台锁定为设备支持的最高刷新率", @"speedometer", WCAtlasSettingRowKindSwitch, WCAtlasScrollHighRefreshRateEnabledKey, nil, WCAtlasSettingActionNone)];
     [display addObject:WCAtlasItem(@"主页右滑扩展", @"增加备注、朋友圈、折叠群聊、勿扰与置顶操作", @"rectangle.and.hand.point.up.left", WCAtlasSettingRowKindSwitch, WCAtlasHomeSwipeActionsEnabledKey, nil, WCAtlasSettingActionNone)];
+    WCAtlasAddFeature(display,
+                     WCAtlasItem(@"首页会话归类", @"在微信首页创建多个分类，并在分类内继续建立文件夹", @"rectangle.3.group", WCAtlasSettingRowKindSwitch, WCAtlasHomeCategoriesEnabledKey, nil, WCAtlasSettingActionNone),
+                     @[WCAtlasItem(@"管理分类与文件夹", @"添加分类、文件夹并选择好友或群聊", @"folder.badge.gearshape", WCAtlasSettingRowKindDetail, nil, @"管理", WCAtlasSettingActionHomeCategories)],
+                     defaults,
+                     collapsed);
     NSMutableArray *chatCapsules = [NSMutableArray array];
     NSInteger glassStyle = [defaults integerForKey:WCAtlasChatGlassStyleKey];
     NSString *glassStyleName = glassStyle == 1 ? @"伪液态" : @"磨砂玻璃";

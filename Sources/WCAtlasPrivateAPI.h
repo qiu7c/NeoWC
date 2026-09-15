@@ -61,7 +61,17 @@ FOUNDATION_EXPORT NSString * _Nullable WCAtlasPrivateContactUserName(id _Nullabl
 /// @discussion Thread-safe for already-owned objects. Object-return getters are ABI-checked;
 /// older fields are KVC fallbacks and failures continue to the next candidate.
 FOUNDATION_EXPORT NSString * _Nullable WCAtlasPrivateContactDisplayName(id _Nullable contact,
-                                                                      NSString * _Nullable fallback);
+                                                                       NSString * _Nullable fallback);
+
+/// Resolves a member's display name inside a specific WeChat group.
+/// @param groupContact Group contact that owns the member-card naming context.
+/// @param memberContact Contact whose room alias/display name is requested.
+/// @return The room-specific display name, then unified contact display name, or nil.
+/// @discussion Call on the main thread. Tries the verified object/object display-name selectors
+/// on the contact service and group contact. Missing selectors, incompatible ABI, nil contacts,
+/// and exceptions fall back to the unified remark/nickname reader without changing either object.
+FOUNDATION_EXPORT NSString * _Nullable WCAtlasPrivateGroupMemberDisplayName(id _Nullable groupContact,
+                                                                           id _Nullable memberContact);
 
 /// Resolves the user-facing name used in WCAtlas-generated notifications.
 /// @param userName Stable WeChat username used only to load the contact and as the final fallback.
@@ -127,6 +137,53 @@ FOUNDATION_EXPORT NSArray *WCAtlasPrivateContactList(void);
 /// suffix remains the cross-version fallback. Missing services and failed sources are skipped.
 FOUNDATION_EXPORT NSArray *WCAtlasPrivateGroupContactList(void);
 
+/// Resolves WeChat's native homepage session model for a table row.
+/// @param owner Main-frame controller or its active table delegate.
+/// @param tableView Native homepage table containing the row.
+/// @param indexPath Native, unmodified index path supplied by WeChat.
+/// @return The native session/contact model, or nil for non-session and unsupported rows.
+/// @discussion Main-thread only. Tries the verified main-frame accessors first, then the reused
+/// cell and active delegate. Object return/argument ABI is checked; exceptions and unavailable
+/// selectors fall through without modifying the table or session database.
+FOUNDATION_EXPORT id _Nullable WCAtlasPrivateHomeSessionData(id _Nullable owner,
+                                                             UITableView * _Nullable tableView,
+                                                             NSIndexPath * _Nullable indexPath);
+
+/// Reads the stable wxid/chatroom identifier from a native homepage session model.
+/// @param sessionData Object returned by `WCAtlasPrivateHomeSessionData`.
+/// @return A non-empty wxid/chatroom identifier, or nil when the row is not a session.
+/// @discussion Thread-safe for an already-owned model. Uses the unified contact field reader and
+/// the native nested session model fallback; unsupported layouts return nil.
+FOUNDATION_EXPORT NSString * _Nullable WCAtlasPrivateHomeSessionUserName(id _Nullable sessionData);
+
+/// Reads the official ordered mention-user list for a WeChat rich-text message view.
+/// @param richTextView Native `RichTextView` currently receiving message styles.
+/// @return Ordered wxids from the message's official `m_nsAtUserList`, or an empty array.
+/// @discussion Main-thread only. Resolves the native cell through its link delegate/responder
+/// chain, then the current message wrap. Missing fields, unsupported view-model layouts, malformed
+/// values, and exceptions return an empty array; visible text is never used to guess identities.
+FOUNDATION_EXPORT NSArray<NSString *> *WCAtlasPrivateMentionUserNames(id _Nullable richTextView);
+
+/// Builds a native WeChat `LinkStyle` for one UTF-16 text range.
+/// @param range Range in the exact NSString passed to WeChat's rich-text style method.
+/// @param URLString Opaque URL delivered back through WeChat's native link event.
+/// @param normalColor Normal foreground/link color.
+/// @param highlightedColor Touch-highlight color.
+/// @return A fully initialized native style, or nil when the class/fields are unsupported.
+/// @discussion Main-thread only. Uses KVC-compatible native fields with ordered version fallbacks;
+/// any missing required range/URL field or exception returns nil instead of a partial style.
+FOUNDATION_EXPORT id _Nullable WCAtlasPrivateMentionLinkStyle(NSRange range,
+                                                              NSString *URLString,
+                                                              UIColor *normalColor,
+                                                              UIColor *highlightedColor);
+
+/// Extracts the native link URL from a WeChat rich-text click event or style object.
+/// @param event String, URL, dictionary, event wrapper, or native link-style object.
+/// @return URL text when exposed by a compatible object field, otherwise nil.
+/// @discussion Main-thread only. Traversal is cycle-checked and depth-limited. Unsupported event
+/// layouts and exceptions return nil and preserve WeChat's original click handling.
+FOUNDATION_EXPORT NSString * _Nullable WCAtlasPrivateMentionLinkURLString(id _Nullable event);
+
 #pragma mark - Moments Upload Metadata
 
 /// Builds WeChat's native Moments source-application metadata object.
@@ -172,7 +229,9 @@ FOUNDATION_EXPORT void WCAtlasPrivateResignMomentsComposerInput(id _Nullable com
 /// @param userName WeChat username to resolve and inject into the native controller.
 /// @return YES only after a controller was constructed, injected, and pushed.
 /// @discussion Must be called on the main thread. Uses `setM_contact:` when its object ABI is
-/// available and falls back to KVC; missing contacts/controllers/navigation return NO.
+/// available and falls back to KVC, then best-effort injects `m_chatContact` for group-member
+/// context. Missing contacts/controllers/navigation return NO; unavailable secondary context
+/// does not prevent the normal profile-page fallback.
 FOUNDATION_EXPORT BOOL WCAtlasPushPrivateContactProfile(UIViewController *source,
                                                       NSString *userName);
 
