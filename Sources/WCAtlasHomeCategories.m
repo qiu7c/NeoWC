@@ -219,21 +219,22 @@ void WCAtlasHomeCategoriesInstallProjectionOnClass(Class ownerClass) {
 
 @end
 
-void WCAtlasHomeCategoriesAttach(UIViewController *controller, UITableView *tableView) {
-    if (!controller || !tableView) return;
-    WCAtlasHomeCategoriesInstallProjectionOnClass([controller class]);
+void WCAtlasHomeCategoriesAttach(id controller, UITableView *tableView) {
+    if (![controller isKindOfClass:UIViewController.class] || !tableView) return;
+    UIViewController *hostController = (UIViewController *)controller;
+    WCAtlasHomeCategoriesInstallProjectionOnClass([hostController class]);
     WCAtlasHomeCategoriesInstallProjectionOnClass([tableView.delegate class]);
-    objc_setAssociatedObject(tableView, &WCAtlasHomeCategoryControllerKey, controller, OBJC_ASSOCIATION_ASSIGN);
+    objc_setAssociatedObject(tableView, &WCAtlasHomeCategoryControllerKey, hostController, OBJC_ASSOCIATION_ASSIGN);
     if (tableView.delegate) objc_setAssociatedObject(tableView.delegate, &WCAtlasHomeCategoryControllerKey,
-                                                     controller, OBJC_ASSOCIATION_ASSIGN);
-    WCAtlasHomeCategoryBar *bar = objc_getAssociatedObject(controller, &WCAtlasHomeCategoryBarKey);
+                                                     hostController, OBJC_ASSOCIATION_ASSIGN);
+    WCAtlasHomeCategoryBar *bar = objc_getAssociatedObject(hostController, &WCAtlasHomeCategoryBarKey);
     BOOL enabled = WCAtlasEnhancementEnabled(WCAtlasHomeCategoriesEnabledKey) && WCAtlasHomeCategories().count > 0;
     if (!enabled) {
         if (bar) {
             NSValue *original = objc_getAssociatedObject(tableView, &WCAtlasHomeCategoryOriginalInsetKey);
             if (original) tableView.contentInset = original.UIEdgeInsetsValue;
             [bar removeFromSuperview];
-            objc_setAssociatedObject(controller, &WCAtlasHomeCategoryBarKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(hostController, &WCAtlasHomeCategoryBarKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             [tableView reloadData];
         }
         return;
@@ -246,19 +247,19 @@ void WCAtlasHomeCategoriesAttach(UIViewController *controller, UITableView *tabl
         tableView.contentInset = inset;
         bar = [[WCAtlasHomeCategoryBar alloc] initWithTableView:tableView];
         bar.translatesAutoresizingMaskIntoConstraints = NO;
-        [controller.view addSubview:bar];
+        [hostController.view addSubview:bar];
         [NSLayoutConstraint activateConstraints:@[
             [bar.leadingAnchor constraintEqualToAnchor:tableView.leadingAnchor],
             [bar.trailingAnchor constraintEqualToAnchor:tableView.trailingAnchor],
             [bar.topAnchor constraintEqualToAnchor:tableView.topAnchor],
             [bar.heightAnchor constraintEqualToConstant:44.0],
         ]];
-        objc_setAssociatedObject(controller, &WCAtlasHomeCategoryBarKey, bar, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(hostController, &WCAtlasHomeCategoryBarKey, bar, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     } else {
         bar.tableView = tableView;
         [bar reloadButtons];
     }
-    [controller.view bringSubviewToFront:bar];
+    [hostController.view bringSubviewToFront:bar];
 }
 
 #pragma mark - Management UI
