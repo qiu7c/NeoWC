@@ -128,7 +128,7 @@ static void WCAtlasSetMentionStyles(id self, SEL _cmd, id styles, id contentObje
         WCAtlasOriginalSetMentionStyles(self, _cmd, styles, contentObject);
         return;
     }
-    NSString *chatUserName = WCAtlasPrivateChatUserName(nil);
+    NSString *chatUserName = WCAtlasPrivateMentionChatUserName(self);
     id groupContact = [chatUserName hasSuffix:@"@chatroom"] ? WCAtlasPrivateContact(chatUserName) : nil;
     if (!groupContact) {
         WCAtlasOriginalSetMentionStyles(self, _cmd, styles, contentObject);
@@ -156,20 +156,25 @@ static void WCAtlasSetMentionStyles(id self, SEL _cmd, id styles, id contentObje
         id style = WCAtlasMentionLinkStyle(range, WCAtlasMentionIsAllUserName(userName) ? @"notify@all" : userName);
         if (style) [merged addObject:style];
     }
-    WCAtlasOriginalSetMentionStyles(self, _cmd, merged.count > originalStyles.count ? merged : styles, contentObject);
+    if (merged.count > originalStyles.count) {
+        WCAtlasPrivateEnableMentionClickHandling(self);
+        WCAtlasOriginalSetMentionStyles(self, _cmd, merged, contentObject);
+    } else {
+        WCAtlasOriginalSetMentionStyles(self, _cmd, styles, contentObject);
+    }
 }
 
-static void WCAtlasHandleMentionClick(id event) {
-    if (!WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) return;
+static BOOL WCAtlasHandleMentionClick(id event) {
+    if (!WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) return NO;
     NSString *URLString = WCAtlasMentionStringFromEvent(event);
     NSString *prefix = [WCAtlasMentionURLScheme stringByAppendingString:@"://"];
-    if (![URLString hasPrefix:prefix]) return;
+    if (![URLString hasPrefix:prefix]) return NO;
     NSString *encoded = [URLString substringFromIndex:prefix.length];
     NSString *userName = encoded.stringByRemovingPercentEncoding ?: encoded;
-    if (userName.length == 0 || WCAtlasMentionIsAllUserName(userName)) return;
+    if (userName.length == 0 || WCAtlasMentionIsAllUserName(userName)) return YES;
     NSTimeInterval now = NSDate.timeIntervalSinceReferenceDate;
     if ([WCAtlasLastOpenedMentionUserName isEqualToString:userName] &&
-        now - WCAtlasLastOpenedMentionTime < 0.5) return;
+        now - WCAtlasLastOpenedMentionTime < 0.5) return YES;
     WCAtlasLastOpenedMentionUserName = [userName copy];
     WCAtlasLastOpenedMentionTime = now;
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -178,16 +183,17 @@ static void WCAtlasHandleMentionClick(id event) {
             WCAtlasLog(@"@ 资料页适配失败：%@", userName);
         }
     });
+    return YES;
 }
 
 static void WCAtlasClickMentionLinkEvent(id self, SEL _cmd, id event) {
+    if (WCAtlasHandleMentionClick(event)) return;
     if (WCAtlasOriginalClickMentionLinkEvent) WCAtlasOriginalClickMentionLinkEvent(self, _cmd, event);
-    WCAtlasHandleMentionClick(event);
 }
 
 static void WCAtlasClickMentionTextEvent(id self, SEL _cmd, id event) {
+    if (WCAtlasHandleMentionClick(event)) return;
     if (WCAtlasOriginalClickMentionTextEvent) WCAtlasOriginalClickMentionTextEvent(self, _cmd, event);
-    WCAtlasHandleMentionClick(event);
 }
 
 #pragma mark - Hook Installation

@@ -278,8 +278,26 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 @end
 
 @interface MMNewSessionMgr : NSObject
+- (id)GetSessionByUserName:(NSString *)userName;
+- (void)fulFillSession:(id)session;
+- (void)fulFillSession:(id)session loadDetails:(BOOL)loadDetails;
+- (BOOL)isNeedSaveSessionInfo:(id)session;
 - (void)OnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap;
 - (void)OnMsgNotAddDBNotify:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap;
+@end
+
+@interface MainSessionMgr : NSObject
+- (void)updateMainSessionList;
+- (void)updateMainSessionListNotify:(BOOL)notify;
+- (void)rebuildMainSessions;
+@end
+
+@interface MainFrameCellData : NSObject
+- (instancetype)initWithSessionInfo:(id)sessionInfo;
+- (void)makeTextForNameLabel;
+- (void)makeTextForMessageLabel;
+- (void)updateData:(id)data;
+- (void)updateDataFieldForUI;
 @end
 
 @interface CContactMgr : NSObject
@@ -10463,6 +10481,7 @@ static UISwipeActionsConfiguration *WCAtlasHomeLeadingSwipe(id owner, SEL select
     }
     id data = WCAtlasHomeSessionCellData(owner, tableView, indexPath);
     NSString *userName = WCAtlasHomeSessionUserName(data);
+    if (WCAtlasHomeCategoriesIsSyntheticUserName(userName)) return nil;
     if (userName.length == 0) {
         WCAtlasLog(@"主页右滑：未取得会话数据，owner=%@ delegate=%@ row=%ld",
                  NSStringFromClass([owner class]),
@@ -10621,7 +10640,30 @@ __attribute__((constructor)) static void WCAtlasInstallHomeLeadingSwipe(void) {
     UITableView *tableView = WCAtlasHomeTableViewForController(self);
     WCAtlasInstallHomeLeadingSwipeOnClass(object_getClass(self));
     if (tableView.delegate) WCAtlasInstallHomeLeadingSwipeOnClass(object_getClass(tableView.delegate));
-    WCAtlasHomeCategoriesAttach(self, tableView);
+    WCAtlasPrivateRefreshHomeSessionList();
+}
+
+- (void)handleSelectIndexPath:(NSIndexPath *)indexPath tableView:(UITableView *)tableView {
+    if (WCAtlasHomeCategoriesHandleSelection(self, tableView, indexPath)) return;
+    %orig;
+}
+
+- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)style forRowAtIndexPath:(NSIndexPath *)indexPath {
+    id session = WCAtlasPrivateHomeSessionData(self, tableView, indexPath);
+    if (WCAtlasHomeCategoriesIsSyntheticUserName(WCAtlasPrivateHomeSessionUserName(session))) return;
+    %orig;
+}
+
+- (void)onLogicDeleteSessionByUsername:(id)value {
+    NSString *userName = [value isKindOfClass:NSString.class] ? value : WCAtlasPrivateHomeSessionUserName(value);
+    if (WCAtlasHomeCategoriesIsSyntheticUserName(userName)) return;
+    %orig;
+}
+
+- (void)onLogicHideSession:(id)value {
+    NSString *userName = [value isKindOfClass:NSString.class] ? value : WCAtlasPrivateHomeSessionUserName(value);
+    if (WCAtlasHomeCategoriesIsSyntheticUserName(userName)) return;
+    %orig;
 }
 
 %end
@@ -10651,9 +10693,58 @@ __attribute__((constructor)) static void WCAtlasInstallHomeLeadingSwipe(void) {
     // otherwise the method works only when startup timing happens to be lucky.
     if (delegate) {
         WCAtlasInstallHomeLeadingSwipeOnClass(object_getClass(delegate));
-        WCAtlasHomeCategoriesInstallProjectionOnClass(object_getClass(delegate));
     }
     %orig(delegate);
+}
+
+%end
+
+%hook MainSessionMgr
+
+- (void)updateMainSessionList {
+    %orig;
+    WCAtlasHomeCategoriesApplyToSessionManager(self);
+}
+
+- (void)updateMainSessionListNotify:(BOOL)notify {
+    WCAtlasHomeCategoriesApplyToSessionManager(self);
+    %orig(notify);
+    WCAtlasHomeCategoriesApplyToSessionManager(self);
+}
+
+- (void)rebuildMainSessions {
+    %orig;
+    WCAtlasHomeCategoriesApplyToSessionManager(self);
+}
+
+%end
+
+%hook MainFrameCellData
+
+- (instancetype)initWithSessionInfo:(id)sessionInfo {
+    id value = %orig;
+    WCAtlasHomeCategoriesConfigureCellData(value);
+    return value;
+}
+
+- (void)makeTextForNameLabel {
+    %orig;
+    WCAtlasHomeCategoriesConfigureCellData(self);
+}
+
+- (void)makeTextForMessageLabel {
+    %orig;
+    WCAtlasHomeCategoriesConfigureCellData(self);
+}
+
+- (void)updateData:(id)data {
+    %orig;
+    WCAtlasHomeCategoriesConfigureCellData(self);
+}
+
+- (void)updateDataFieldForUI {
+    %orig;
+    WCAtlasHomeCategoriesConfigureCellData(self);
 }
 
 %end
@@ -12076,6 +12167,28 @@ __attribute__((constructor)) static void WCAtlasInstallHomeLeadingSwipe(void) {
 %end
 
 %hook MMNewSessionMgr
+
+- (id)GetSessionByUserName:(NSString *)userName {
+    id syntheticSession = WCAtlasHomeCategoriesIsSyntheticUserName(userName)
+        ? WCAtlasPrivateHomeCategorySession(userName) : nil;
+    if (syntheticSession) return syntheticSession;
+    return %orig;
+}
+
+- (void)fulFillSession:(id)session {
+    if (WCAtlasHomeCategoriesIsSyntheticUserName(WCAtlasPrivateHomeSessionUserName(session))) return;
+    %orig;
+}
+
+- (void)fulFillSession:(id)session loadDetails:(BOOL)loadDetails {
+    if (WCAtlasHomeCategoriesIsSyntheticUserName(WCAtlasPrivateHomeSessionUserName(session))) return;
+    %orig(session, loadDetails);
+}
+
+- (BOOL)isNeedSaveSessionInfo:(id)session {
+    if (WCAtlasHomeCategoriesIsSyntheticUserName(WCAtlasPrivateHomeSessionUserName(session))) return NO;
+    return %orig;
+}
 
 - (void)OnAddMsg:(NSString *)sessionUserName MsgWrap:(CMessageWrap *)wrap {
     if (WCAtlasShouldBlockIncomingMessage(sessionUserName, wrap)) {
