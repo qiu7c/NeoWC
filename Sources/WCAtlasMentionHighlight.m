@@ -15,6 +15,8 @@ static NSString *const WCAtlasMentionURLScheme = @"wcatlas-mention";
 static void (*WCAtlasOriginalSetMentionStyles)(id, SEL, id, id);
 static void (*WCAtlasOriginalClickMentionLinkEvent)(id, SEL, id);
 static void (*WCAtlasOriginalClickMentionTextEvent)(id, SEL, id);
+static void (*WCAtlasOriginalSetMentionViewModel)(id, SEL, id);
+static void (*WCAtlasOriginalLayoutMentionCell)(id, SEL);
 static NSString *WCAtlasLastOpenedMentionUserName;
 static NSTimeInterval WCAtlasLastOpenedMentionTime;
 
@@ -89,6 +91,27 @@ static NSRange WCAtlasMentionRange(NSString *content, NSArray<NSString *> *names
     return NSMakeRange(NSNotFound, 0);
 }
 
+static NSArray<NSValue *> *WCAtlasMentionVisibleRanges(NSString *content) {
+    NSMutableArray<NSValue *> *ranges = [NSMutableArray array];
+    NSCharacterSet *hardTerminators = [NSCharacterSet characterSetWithCharactersInString:
+        @"\u2004\u2005\t\r\n,，。！？!?：:；;（）()[]【】<>"];
+    NSUInteger cursor = 0;
+    while (cursor < content.length) {
+        NSRange at = [content rangeOfString:@"@" options:0 range:NSMakeRange(cursor, content.length - cursor)];
+        if (at.location == NSNotFound) break;
+        NSUInteger end = at.location + 1;
+        while (end < content.length) {
+            unichar character = [content characterAtIndex:end];
+            if ([hardTerminators characterIsMember:character]) break;
+            if (character == ' ' && end > at.location + 1) break;
+            end++;
+        }
+        if (end > at.location + 1) [ranges addObject:[NSValue valueWithRange:NSMakeRange(at.location, end - at.location)]];
+        cursor = MAX(end, at.location + 1);
+    }
+    return ranges;
+}
+
 #pragma mark - Link Styles
 
 static NSString *WCAtlasMentionURLString(NSString *userName) {
@@ -130,13 +153,11 @@ static void WCAtlasSetMentionStyles(id self, SEL _cmd, id styles, id contentObje
     }
     NSString *chatUserName = WCAtlasPrivateMentionChatUserName(self);
     id groupContact = [chatUserName hasSuffix:@"@chatroom"] ? WCAtlasPrivateContact(chatUserName) : nil;
-    if (!groupContact) {
-        WCAtlasOriginalSetMentionStyles(self, _cmd, styles, contentObject);
-        return;
-    }
     NSMutableArray *merged = [originalStyles mutableCopy];
     NSMutableIndexSet *claimed = [NSMutableIndexSet indexSet];
     NSMutableDictionary<NSString *, NSMutableSet<NSString *> *> *ownersByDisplayName = [NSMutableDictionary dictionary];
+    NSArray<NSValue *> *visibleRanges = WCAtlasMentionVisibleRanges(content);
+    NSUInteger fallbackRangeIndex = 0;
     for (NSString *userName in userNames) {
         for (NSString *name in WCAtlasMentionDisplayCandidates(userName, groupContact)) {
             NSMutableSet *owners = ownersByDisplayName[name];
@@ -152,6 +173,13 @@ static void WCAtlasSetMentionStyles(id self, SEL _cmd, id styles, id contentObje
             }]];
         }
         NSRange range = WCAtlasMentionRange(content, candidates, claimed);
+        while (range.location == NSNotFound && fallbackRangeIndex < visibleRanges.count) {
+            NSRange fallback = visibleRanges[fallbackRangeIndex++].rangeValue;
+            if (![claimed intersectsIndexesInRange:fallback]) {
+                range = fallback;
+                [claimed addIndexesInRange:fallback];
+            }
+        }
         if (range.location == NSNotFound || NSMaxRange(range) > content.length) continue;
         id style = WCAtlasMentionLinkStyle(range, WCAtlasMentionIsAllUserName(userName) ? @"notify@all" : userName);
         if (style) [merged addObject:style];
@@ -196,6 +224,20 @@ static void WCAtlasClickMentionTextEvent(id self, SEL _cmd, id event) {
     if (WCAtlasOriginalClickMentionTextEvent) WCAtlasOriginalClickMentionTextEvent(self, _cmd, event);
 }
 
+static void WCAtlasSetMentionViewModel(id self, SEL _cmd, id viewModel) {
+    BOOL enabled = WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey);
+    if (enabled) WCAtlasPrivateBindMentionContext(self, viewModel, NO);
+    WCAtlasOriginalSetMentionViewModel(self, _cmd, viewModel);
+    WCAtlasPrivateBindMentionContext(self, viewModel, enabled);
+}
+
+static void WCAtlasLayoutMentionCell(id self, SEL _cmd) {
+    WCAtlasOriginalLayoutMentionCell(self, _cmd);
+    if (WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) {
+        WCAtlasPrivateBindMentionContext(self, nil, YES);
+    }
+}
+
 #pragma mark - Hook Installation
 
 void WCAtlasMentionHighlightInstallHooks(void) {
@@ -231,6 +273,26 @@ void WCAtlasMentionHighlightInstallHooks(void) {
         }
         if (!installedClickHook) {
             WCAtlasLog(@"@ 高亮只启用显示：点击事件 ABI 不支持");
+        }
+
+        Class textCellClass = NSClassFromString(@"TextMessageCellView");
+        SEL viewModelSelector = NSSelectorFromString(@"setViewModel:");
+        Method viewModelMethod = textCellClass ? class_getInstanceMethod(textCellClass, viewModelSelector) : NULL;
+        if (WCAtlasMentionMethodHasObjectArguments(viewModelMethod, 1)) {
+            original = NULL;
+            MSHookMessageEx(textCellClass, viewModelSelector, (IMP)WCAtlasSetMentionViewModel, &original);
+            WCAtlasOriginalSetMentionViewModel = (void (*)(id, SEL, id))original;
+        } else {
+            WCAtlasLog(@"@ 高亮上下文未安装：TextMessageCellView setViewModel: ABI 不支持");
+        }
+        SEL layoutSelector = NSSelectorFromString(@"layoutContentView");
+        Method layoutMethod = textCellClass ? class_getInstanceMethod(textCellClass, layoutSelector) : NULL;
+        if (WCAtlasMentionMethodHasObjectArguments(layoutMethod, 0)) {
+            original = NULL;
+            MSHookMessageEx(textCellClass, layoutSelector, (IMP)WCAtlasLayoutMentionCell, &original);
+            WCAtlasOriginalLayoutMentionCell = (void (*)(id, SEL))original;
+        } else {
+            WCAtlasLog(@"@ 高亮刷新未安装：TextMessageCellView layoutContentView ABI 不支持");
         }
     });
 }

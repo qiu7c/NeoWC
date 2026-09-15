@@ -438,11 +438,17 @@ id WCAtlasPrivateHomeSessionData(id owner, UITableView *tableView, NSIndexPath *
     return delegate != owner ? WCAtlasPrivateHomeObjectAtIndexPath(delegate, indexPath) : nil;
 }
 
-NSString *WCAtlasPrivateHomeSessionUserName(id sessionData) {
+static NSString *WCAtlasPrivateHomeSessionUserNameAtDepth(id sessionData, NSUInteger depth) {
+    if (!sessionData || depth > 4) return nil;
     NSString *userName = WCAtlasPrivateContactUserName(sessionData);
     if (userName.length > 0) return userName;
-    id nested = WCAtlasPrivateObjectField(sessionData, @[@"m_sessionInfo", @"sessionInfo"]);
-    return WCAtlasPrivateContactUserName(nested);
+    id nested = WCAtlasPrivateObjectField(sessionData,
+        @[@"m_cellData", @"cellData", @"m_sessionInfo", @"sessionInfo", @"m_contact", @"contact"]);
+    return nested == sessionData ? nil : WCAtlasPrivateHomeSessionUserNameAtDepth(nested, depth + 1);
+}
+
+NSString *WCAtlasPrivateHomeSessionUserName(id sessionData) {
+    return WCAtlasPrivateHomeSessionUserNameAtDepth(sessionData, 0);
 }
 
 static BOOL WCAtlasPrivateInvokeObjectSetter(id receiver, NSString *name, id value) {
@@ -518,12 +524,18 @@ id WCAtlasPrivateHomeCategorySession(NSString *userName) {
     return userName.length > 0 ? WCAtlasPrivateHomeCategorySessionCache()[userName] : nil;
 }
 
-BOOL WCAtlasPrivateConfigureHomeCategoryCellData(id cellData, NSString *title, NSString *subtitle) {
+BOOL WCAtlasPrivateConfigureHomeCategoryCellData(id cellData, NSString *title, NSString *subtitle,
+                                                 NSString *avatarUserName) {
     NSCAssert(NSThread.isMainThread, @"Homepage category cell data must be formatted on the main thread");
     if (!cellData || title.length == 0) return NO;
     if (!WCAtlasPrivateInvokeObjectSetter(cellData, @"setM_textForNameLabel:", title) ||
         !WCAtlasPrivateInvokeObjectSetter(cellData, @"setM_textForMessageLabel:", subtitle ?: @"") ||
         !WCAtlasPrivateInvokeObjectSetter(cellData, @"setM_textForTimeLabel:", @"")) return NO;
+    if (avatarUserName.length > 0) {
+        WCAtlasPrivateInvokeObjectSetter(cellData, @"setM_nsHeadImgUsrName:", avatarUserName);
+        NSString *URLString = WCAtlasPrivateContactHeadImageURL(WCAtlasPrivateContact(avatarUserName));
+        if (URLString.length > 0) WCAtlasPrivateInvokeObjectSetter(cellData, @"setM_nsHeadImgUrl:", URLString);
+    }
     SEL updateSelector = NSSelectorFromString(@"updateWidthForNameLabel");
     NSMethodSignature *signature = WCAtlasPrivateSignature(cellData, updateSelector, 2);
     if (signature && WCAtlasPrivateTypeIsVoid(signature.methodReturnType)) {
@@ -603,7 +615,24 @@ BOOL WCAtlasPrivateRefreshHomeSessionList(void) {
 
 #pragma mark - Rich Text Mentions
 
+static char WCAtlasPrivateMentionMessageKey;
+static char WCAtlasPrivateMentionRefreshedMessageKey;
+
+static id WCAtlasPrivateMessageWrapFromViewModel(id viewModel) {
+    if (!viewModel) return nil;
+    id content = WCAtlasPrivateObjectField(viewModel, @[@"m_nsContent", @"content"]);
+    if ([content isKindOfClass:NSString.class]) return viewModel;
+    id message = WCAtlasPrivateObjectField(viewModel,
+        @[@"getCurrentMessageWrap", @"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap", @"message"]);
+    if (message) return message;
+    id parent = WCAtlasPrivateObjectField(viewModel, @[@"parentModel", @"m_parentModel"]);
+    return WCAtlasPrivateObjectField(parent,
+        @[@"getCurrentMessageWrap", @"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap", @"message"]);
+}
+
 static id WCAtlasPrivateMentionMessageWrap(id richTextView) {
+    id associated = objc_getAssociatedObject(richTextView, &WCAtlasPrivateMentionMessageKey);
+    if (associated) return associated;
     NSMutableArray *candidates = [NSMutableArray array];
     for (NSString *field in @[@"linkDelegate", @"layoutDelegate", @"delegate", @"m_delegate"]) {
         id delegate = WCAtlasPrivateObjectField(richTextView, @[field]);
@@ -633,6 +662,36 @@ static id WCAtlasPrivateMentionMessageWrap(id richTextView) {
         if (wrap) return wrap;
     }
     return nil;
+}
+
+BOOL WCAtlasPrivateBindMentionContext(id cell, id viewModel, BOOL refresh) {
+    NSCAssert(NSThread.isMainThread, @"Mention context must be bound on the main thread");
+    if (!cell) return NO;
+    id richTextView = WCAtlasPrivateObjectField(cell, @[@"getRichTextView", @"richTextView", @"m_richTextView"]);
+    id message = WCAtlasPrivateMessageWrapFromViewModel(viewModel);
+    if (!message) {
+        message = WCAtlasPrivateObjectField(cell,
+            @[@"getCurrentMessageWrap", @"currentMessageWrap", @"messageWrap", @"m_messageWrap", @"msgWrap"]);
+    }
+    if (!richTextView || !message) return NO;
+    objc_setAssociatedObject(richTextView, &WCAtlasPrivateMentionMessageKey,
+                             message, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (!refresh) return YES;
+    if (objc_getAssociatedObject(richTextView, &WCAtlasPrivateMentionRefreshedMessageKey) == message) return YES;
+    id styles = WCAtlasPrivateObjectField(richTextView, @[@"arrStyles"]);
+    id content = WCAtlasPrivateObjectField(richTextView, @[@"getContent", @"content", @"nsContent"]);
+    if (![styles isKindOfClass:NSArray.class] || ![content isKindOfClass:NSString.class]) return YES;
+    SEL selector = NSSelectorFromString(@"setArrStyles:withContent:");
+    NSMethodSignature *signature = WCAtlasPrivateSignature(richTextView, selector, 4);
+    if (!signature || !WCAtlasPrivateTypeIsVoid(signature.methodReturnType) ||
+        !WCAtlasPrivateObjectArguments(signature, NSMakeRange(2, 2))) return YES;
+    @try {
+        ((void (*)(id, SEL, id, id))objc_msgSend)(richTextView, selector, styles, content);
+        objc_setAssociatedObject(richTextView, &WCAtlasPrivateMentionRefreshedMessageKey,
+                                 message, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    @catch (__unused NSException *exception) {}
+    return YES;
 }
 
 NSArray<NSString *> *WCAtlasPrivateMentionUserNames(id richTextView) {

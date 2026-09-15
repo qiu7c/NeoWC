@@ -202,6 +202,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 @end
 
 @interface SessionSelectController : UIViewController
+- (BOOL)onShouldFilterContact:(id)contact;
 @end
 
 @interface ShortVideoToolbar : UIView
@@ -7250,6 +7251,20 @@ static BOOL WCAtlasConsumeVideoSendConfirmationBypass(NSString *target) {
         }
     }
     WCAtlasApplyGlobalAvatarRoundingToHeadView(self);
+    NSString *userName = WCAtlasTweakValueForSelectorNames(self, @[@"nsUsrName"]);
+    if (WCAtlasHomeCategoriesIsSyntheticUserName(userName)) {
+        id imageView = WCAtlasTweakValueForSelectorNames(self, @[@"headImageView"]);
+        if ([imageView isKindOfClass:UIImageView.class]) {
+            UIImage *image = WCAtlasHomeCategoryIconImageForUserName(userName);
+            BOOL custom = image != WCAtlasHomeCategoryIconImage();
+            ((UIImageView *)imageView).image = image;
+            ((UIImageView *)imageView).contentMode = custom ? UIViewContentModeScaleAspectFill
+                                                            : UIViewContentModeScaleAspectFit;
+            ((UIImageView *)imageView).clipsToBounds = custom;
+            ((UIImageView *)imageView).layer.cornerRadius = custom
+                ? CGRectGetHeight(((UIImageView *)imageView).bounds) * 0.2 : 0.0;
+        }
+    }
 }
 
 - (void)didMoveToWindow {
@@ -10476,6 +10491,9 @@ static UISwipeActionsConfiguration *WCAtlasHomeLeadingSwipe(id owner, SEL select
                                                            UITableView *tableView,
                                                            NSIndexPath *indexPath) {
     WCAtlasHomeLeadingSwipeIMP original = WCAtlasOriginalHomeLeadingSwipeForOwner(owner);
+    UISwipeActionsConfiguration *categoryActions =
+        WCAtlasHomeCategoriesLeadingSwipeActions(owner, tableView, indexPath);
+    if (categoryActions) return categoryActions;
     if (!WCAtlasEnhancementEnabled(WCAtlasHomeSwipeActionsEnabledKey)) {
         return original ? original(owner, selector, tableView, indexPath) : nil;
     }
@@ -10671,6 +10689,9 @@ __attribute__((constructor)) static void WCAtlasInstallHomeLeadingSwipe(void) {
 %hook NewMainFrameCell
 
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
+    NSString *sessionUserName = WCAtlasPrivateHomeSessionUserName(self);
+    if (WCAtlasHomeCategoriesIsSyntheticUserName(sessionUserName) &&
+        [gestureRecognizer isKindOfClass:UIPanGestureRecognizer.class]) return NO;
     if (WCAtlasEnhancementEnabled(WCAtlasHomeSwipeActionsEnabledKey) &&
         [gestureRecognizer isKindOfClass:UIPanGestureRecognizer.class]) {
         CGPoint velocity = [(UIPanGestureRecognizer *)gestureRecognizer velocityInView:gestureRecognizer.view];
@@ -10908,6 +10929,15 @@ __attribute__((constructor)) static void WCAtlasInstallHomeLeadingSwipe(void) {
         WCAtlasCompatibilityMarkTriggered(@"multi-select-limit");
         return YES;
     }
+    return %orig;
+}
+
+- (BOOL)onShouldFilterContact:(id)contact {
+    // Homepage categories are transient virtual sessions. They must never be
+    // exposed as forwarding targets, even when the native selector reuses the
+    // main-session snapshot for its recent-conversation section or search.
+    NSString *userName = WCAtlasPrivateHomeSessionUserName(contact);
+    if (WCAtlasHomeCategoriesIsSyntheticUserName(userName)) return YES;
     return %orig;
 }
 

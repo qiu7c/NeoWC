@@ -153,7 +153,8 @@ FOUNDATION_EXPORT id _Nullable WCAtlasPrivateHomeSessionData(id _Nullable owner,
 /// @param sessionData Object returned by `WCAtlasPrivateHomeSessionData`.
 /// @return A non-empty wxid/chatroom identifier, or nil when the row is not a session.
 /// @discussion Thread-safe for an already-owned model. Uses the unified contact field reader and
-/// the native nested session model fallback; unsupported layouts return nil.
+/// recursively checks native cell-data, session-info, and contact wrappers with a bounded depth;
+/// unsupported layouts and cycles return nil.
 FOUNDATION_EXPORT NSString * _Nullable WCAtlasPrivateHomeSessionUserName(id _Nullable sessionData);
 
 /// Replaces WCAtlas's synthetic category sessions in WeChat's native homepage session array.
@@ -183,14 +184,16 @@ FOUNDATION_EXPORT id _Nullable WCAtlasPrivateHomeCategorySession(NSString * _Nul
 /// Applies category title/subtitle text to a native `MainFrameCellData` object.
 /// @param cellData The native cell model after its original formatter has run.
 /// @param title Nonempty first-level category title.
-/// @param subtitle Category group/folder summary; an empty string is allowed.
+/// @param subtitle Optional secondary text; pass an empty string for a title-only category row.
+/// @param avatarUserName Optional native conversation username whose avatar should represent the category.
 /// @return YES when the three object setters for name, message, and time labels are compatible.
 /// @discussion Main-thread only. The adapter writes title, subtitle, and an empty time label in
 /// that order, then invokes the optional no-argument `updateWidthForNameLabel`. Missing required
 /// object-setter ABI or exceptions return NO and retain WeChat's original formatting.
 FOUNDATION_EXPORT BOOL WCAtlasPrivateConfigureHomeCategoryCellData(id _Nullable cellData,
                                                                   NSString *title,
-                                                                  NSString *subtitle);
+                                                                  NSString *subtitle,
+                                                                  NSString * _Nullable avatarUserName);
 
 /// Requests a native homepage-session refresh after WCAtlas category settings change.
 /// @return YES after invoking `updateMainSessionListNotify:` or the older
@@ -224,6 +227,19 @@ FOUNDATION_EXPORT NSString * _Nullable WCAtlasPrivateMentionChatUserName(id _Nul
 /// selectors, non-void return ABI, non-integer argument ABI, or exceptions return NO; visual
 /// highlighting may still work while click navigation remains unavailable on that version.
 FOUNDATION_EXPORT BOOL WCAtlasPrivateEnableMentionClickHandling(id _Nullable richTextView);
+
+/// Binds a text-message cell's official message wrap to its native rich-text view.
+/// @param cell A live `TextMessageCellView` received by the verified `setViewModel:` hook.
+/// @param viewModel The exact object passed to WeChat's original setter; may itself be a message wrap.
+/// @param refresh Whether to replay the rich view's current styles/content after the original setter.
+/// @return YES when a rich-text view and official message wrap were resolved and associated.
+/// @discussion Main-thread only. Call once before the original setter with refresh=NO, then once
+/// after it with refresh=YES. Message identity comes only from native wrap fields. The refresh path
+/// invokes `setArrStyles:withContent:` only after verifying its void/object/object ABI. Unsupported
+/// layouts return NO and leave WeChat rendering unchanged; no visible text is used to infer wxids.
+FOUNDATION_EXPORT BOOL WCAtlasPrivateBindMentionContext(id _Nullable cell,
+                                                        id _Nullable viewModel,
+                                                        BOOL refresh);
 
 /// Builds a native WeChat `LinkStyle` for one UTF-16 text range.
 /// @param range Range in the exact NSString passed to WeChat's rich-text style method.

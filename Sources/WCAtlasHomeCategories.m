@@ -9,6 +9,8 @@ NSString *const WCAtlasHomeCategoriesEnabledKey = @"com.qiu7c.wcatlas.home.categ
 NSString *const WCAtlasHomeCategoriesDataKey = @"com.qiu7c.wcatlas.home.categories.data";
 
 static NSString *const WCAtlasHomeCategorySessionPrefix = @"wcatlas_home_category_";
+static NSString *const WCAtlasHomeCategoryAvatarFileKey = @"avatarFile";
+static NSString *const WCAtlasHomeCategoryAvatarDirectoryName = @"WCAtlas/HomeCategoryAvatars";
 
 #pragma mark - Persistent Model
 
@@ -39,8 +41,12 @@ static NSDictionary *WCAtlasHomeCategory(id raw) {
         NSDictionary *folder = WCAtlasHomeFolder(value);
         if (folder) [folders addObject:folder];
     }
-    return @{@"id": identifier, @"title": title,
-             @"sessions": WCAtlasHomeStringArray(raw[@"sessions"]), @"folders": folders};
+    NSMutableDictionary *category = [@{@"id": identifier, @"title": title,
+        @"sessions": WCAtlasHomeStringArray(raw[@"sessions"]), @"folders": folders} mutableCopy];
+    NSString *avatarFile = [raw[WCAtlasHomeCategoryAvatarFileKey] isKindOfClass:NSString.class]
+        ? [raw[WCAtlasHomeCategoryAvatarFileKey] lastPathComponent] : nil;
+    if (avatarFile.length > 0) category[WCAtlasHomeCategoryAvatarFileKey] = avatarFile;
+    return category;
 }
 
 static NSArray<NSDictionary *> *WCAtlasHomeCategories(void) {
@@ -53,17 +59,42 @@ static NSArray<NSDictionary *> *WCAtlasHomeCategories(void) {
     return categories;
 }
 
+static NSCache<NSString *, UIImage *> *WCAtlasHomeCategoryAvatarCache(void) {
+    static NSCache<NSString *, UIImage *> *cache;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ cache = [NSCache new]; });
+    return cache;
+}
+
+static NSURL *WCAtlasHomeCategoryAvatarDirectory(void) {
+    NSURL *support = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
+                                                          inDomains:NSUserDomainMask].firstObject;
+    NSURL *directory = [support URLByAppendingPathComponent:WCAtlasHomeCategoryAvatarDirectoryName
+                                                isDirectory:YES];
+    [NSFileManager.defaultManager createDirectoryAtURL:directory
+                           withIntermediateDirectories:YES attributes:nil error:nil];
+    return directory;
+}
+
+static NSURL *WCAtlasHomeCategoryAvatarURL(NSString *fileName) {
+    NSString *safeName = [fileName isKindOfClass:NSString.class] ? fileName.lastPathComponent : nil;
+    return safeName.length > 0
+        ? [WCAtlasHomeCategoryAvatarDirectory() URLByAppendingPathComponent:safeName isDirectory:NO] : nil;
+}
+
 static void WCAtlasSetHomeCategories(NSArray<NSDictionary *> *categories) {
     [NSUserDefaults.standardUserDefaults setObject:categories ?: @[] forKey:WCAtlasHomeCategoriesDataKey];
+    [WCAtlasHomeCategoryAvatarCache() removeAllObjects];
     dispatch_async(dispatch_get_main_queue(), ^{ WCAtlasPrivateRefreshHomeSessionList(); });
 }
 
-static NSSet<NSString *> *WCAtlasSessionsInCategory(NSDictionary *category) {
-    NSMutableSet *sessions = [NSMutableSet setWithArray:WCAtlasHomeStringArray(category[@"sessions"])];
+static NSArray<NSString *> *WCAtlasOrderedSessionsInCategory(NSDictionary *category) {
+    NSMutableOrderedSet<NSString *> *sessions = [NSMutableOrderedSet orderedSetWithArray:
+        WCAtlasHomeStringArray(category[@"sessions"])];
     for (NSDictionary *folder in [category[@"folders"] isKindOfClass:NSArray.class] ? category[@"folders"] : @[]) {
         [sessions addObjectsFromArray:WCAtlasHomeStringArray(folder[@"sessions"])];
     }
-    return sessions;
+    return sessions.array;
 }
 
 static NSString *WCAtlasHomeConversationTitle(NSString *userName) {
@@ -99,7 +130,8 @@ void WCAtlasHomeCategoriesApplyToSessionManager(id sessionManager) {
     NSMutableArray<NSDictionary<NSString *, NSString *> *> *entries = [NSMutableArray array];
     if (enabled) {
         for (NSDictionary *category in categories) {
-            NSSet<NSString *> *sessions = WCAtlasSessionsInCategory(category);
+            NSArray<NSString *> *orderedSessions = WCAtlasOrderedSessionsInCategory(category);
+            NSSet<NSString *> *sessions = [NSSet setWithArray:orderedSessions];
             for (NSString *userName in sessions) if ([userName hasSuffix:@"@chatroom"]) [hidden addObject:userName];
             NSString *identifier = category[@"id"];
             NSString *title = category[@"title"];
@@ -107,9 +139,7 @@ void WCAtlasHomeCategoriesApplyToSessionManager(id sessionManager) {
             [entries addObject:@{
                 @"userName": [WCAtlasHomeCategorySessionPrefix stringByAppendingString:identifier],
                 @"title": title,
-                @"subtitle": [NSString stringWithFormat:@"%lu 个群聊 · %lu 个文件夹",
-                              (unsigned long)sessions.count,
-                              (unsigned long)[category[@"folders"] count]]
+                @"subtitle": @""
             }];
         }
     }
@@ -124,6 +154,7 @@ BOOL WCAtlasHomeCategoriesHandleSelection(id controller, UITableView *tableView,
     if (!category) return NO;
     WCAtlasHomeCategoryBrowserController *browser = [WCAtlasHomeCategoryBrowserController new];
     browser.categoryID = category[@"id"];
+    browser.hidesBottomBarWhenPushed = YES;
     UINavigationController *navigation = [(UIViewController *)controller navigationController];
     if (!navigation) return NO;
     [navigation pushViewController:browser animated:YES];
@@ -134,11 +165,8 @@ void WCAtlasHomeCategoriesConfigureCellData(id cellData) {
     NSString *userName = WCAtlasPrivateHomeSessionUserName(cellData);
     NSDictionary *category = WCAtlasHomeCategoryForSyntheticUserName(userName);
     if (!category) return;
-    NSSet<NSString *> *sessions = WCAtlasSessionsInCategory(category);
-    NSString *subtitle = [NSString stringWithFormat:@"%lu 个群聊 · %lu 个文件夹",
-                          (unsigned long)sessions.count,
-                          (unsigned long)[category[@"folders"] count]];
-    WCAtlasPrivateConfigureHomeCategoryCellData(cellData, category[@"title"], subtitle);
+    NSString *avatarUserName = [WCAtlasHomeCategorySessionPrefix stringByAppendingString:category[@"id"] ?: @""];
+    WCAtlasPrivateConfigureHomeCategoryCellData(cellData, category[@"title"], @"", avatarUserName);
 }
 
 #pragma mark - Management UI
@@ -154,6 +182,279 @@ static NSUInteger WCAtlasCategoryIndex(NSString *identifier, NSArray *categories
     }];
 }
 
+static NSArray<NSDictionary *> *WCAtlasHomeCombinedItems(NSDictionary *category, NSDictionary *folder) {
+    NSMutableArray<NSDictionary *> *items = [NSMutableArray array];
+    if (!folder) {
+        for (NSDictionary *child in [category[@"folders"] isKindOfClass:NSArray.class] ? category[@"folders"] : @[]) {
+            [items addObject:@{@"kind": @"folder", @"value": child}];
+        }
+    }
+    for (NSString *userName in WCAtlasHomeStringArray((folder ?: category)[@"sessions"])) {
+        [items addObject:@{@"kind": @"session", @"value": userName}];
+    }
+    return items;
+}
+
+static const NSInteger WCAtlasHomeAvatarViewTag = 0x57434156;
+
+static UIImage *WCAtlasHomeAvatarPlaceholder(NSString *symbolName, UIColor *color) {
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:22.0
+                                                                                                  weight:UIImageSymbolWeightRegular];
+    UIImage *symbol = [[UIImage systemImageNamed:symbolName withConfiguration:configuration]
+        imageWithTintColor:color renderingMode:UIImageRenderingModeAlwaysOriginal];
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(40.0, 40.0), NO, UIScreen.mainScreen.scale);
+    CGSize size = symbol.size;
+    [symbol drawInRect:CGRectMake((40.0 - size.width) * 0.5, (40.0 - size.height) * 0.5,
+                                  size.width, size.height)];
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return image;
+}
+
+UIImage *WCAtlasHomeCategoryIconImage(void) {
+    static UIImage *image;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        image = WCAtlasHomeAvatarPlaceholder(@"folder.fill",
+            [UIColor colorWithRed:0.20 green:0.48 blue:0.92 alpha:1.0]);
+    });
+    return image;
+}
+
+UIImage *WCAtlasHomeCategoryIconImageForUserName(NSString *userName) {
+    NSDictionary *category = WCAtlasHomeCategoryForSyntheticUserName(userName);
+    NSString *identifier = category[@"id"];
+    NSString *avatarFile = category[WCAtlasHomeCategoryAvatarFileKey];
+    if (identifier.length == 0 || avatarFile.length == 0) return WCAtlasHomeCategoryIconImage();
+    UIImage *cached = [WCAtlasHomeCategoryAvatarCache() objectForKey:identifier];
+    if (cached) return cached;
+    UIImage *image = [UIImage imageWithContentsOfFile:WCAtlasHomeCategoryAvatarURL(avatarFile).path];
+    if (!image) return WCAtlasHomeCategoryIconImage();
+    [WCAtlasHomeCategoryAvatarCache() setObject:image forKey:identifier];
+    return image;
+}
+
+static void WCAtlasHomeConfigureFolderImage(UITableViewCell *cell) {
+    [[cell.imageView viewWithTag:WCAtlasHomeAvatarViewTag] removeFromSuperview];
+    cell.imageView.image = WCAtlasHomeCategoryIconImage();
+    cell.imageView.layer.cornerRadius = 0.0;
+}
+
+static void WCAtlasHomeConfigureCategoryImage(UITableViewCell *cell, NSDictionary *category) {
+    [[cell.imageView viewWithTag:WCAtlasHomeAvatarViewTag] removeFromSuperview];
+    NSString *identifier = category[@"id"];
+    NSString *userName = identifier.length > 0
+        ? [WCAtlasHomeCategorySessionPrefix stringByAppendingString:identifier] : nil;
+    NSString *avatarFile = category[WCAtlasHomeCategoryAvatarFileKey];
+    BOOL custom = avatarFile.length > 0 &&
+                  [NSFileManager.defaultManager fileExistsAtPath:WCAtlasHomeCategoryAvatarURL(avatarFile).path];
+    cell.imageView.image = WCAtlasHomeCategoryIconImageForUserName(userName);
+    cell.imageView.layer.cornerRadius = custom ? 8.0 : 0.0;
+    cell.imageView.clipsToBounds = custom;
+    cell.imageView.contentMode = custom ? UIViewContentModeScaleAspectFill : UIViewContentModeScaleAspectFit;
+}
+
+static void WCAtlasHomeConfigureConversationImage(UITableViewCell *cell, NSString *userName) {
+    [[cell.imageView viewWithTag:WCAtlasHomeAvatarViewTag] removeFromSuperview];
+    id contact = WCAtlasPrivateContact(userName);
+    UIImage *cached = WCAtlasPrivateContactAvatarImage(contact);
+    if (cached) {
+        cell.imageView.image = cached;
+        cell.imageView.layer.cornerRadius = 6.0;
+        cell.imageView.clipsToBounds = YES;
+        return;
+    }
+    cell.imageView.image = WCAtlasHomeAvatarPlaceholder(@"person.2.fill", UIColor.secondaryLabelColor);
+    UIView *avatar = WCAtlasPrivateContactAvatarView(contact, userName, YES);
+    if (!avatar) return;
+    avatar.tag = WCAtlasHomeAvatarViewTag;
+    avatar.frame = CGRectMake(0.0, 0.0, 40.0, 40.0);
+    avatar.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    avatar.userInteractionEnabled = NO;
+    cell.imageView.clipsToBounds = YES;
+    cell.imageView.layer.cornerRadius = 6.0;
+    [cell.imageView addSubview:avatar];
+}
+
+#pragma mark - Homepage Category Actions
+
+static char WCAtlasHomeCategoryAvatarPickerDelegateKey;
+
+static BOOL WCAtlasHomeMutateCategory(NSString *identifier,
+                                      void (^mutation)(NSMutableDictionary *category)) {
+    if (identifier.length == 0 || !mutation) return NO;
+    NSMutableArray<NSDictionary *> *categories = [WCAtlasHomeCategories() mutableCopy];
+    NSUInteger index = WCAtlasCategoryIndex(identifier, categories);
+    if (index == NSNotFound) return NO;
+    NSMutableDictionary *category = [categories[index] mutableCopy];
+    mutation(category);
+    categories[index] = category;
+    WCAtlasSetHomeCategories(categories);
+    return YES;
+}
+
+static UIViewController *WCAtlasHomeCategoryPresenter(id controller, UITableView *tableView) {
+    UIViewController *presenter = [controller isKindOfClass:UIViewController.class] ? controller : nil;
+    for (UIResponder *responder = tableView; !presenter && responder; responder = responder.nextResponder) {
+        if ([responder isKindOfClass:UIViewController.class]) presenter = (UIViewController *)responder;
+    }
+    while (presenter.presentedViewController) presenter = presenter.presentedViewController;
+    return presenter;
+}
+
+static void WCAtlasHomeRemoveCategoryAvatarFile(NSString *fileName) {
+    NSURL *URL = WCAtlasHomeCategoryAvatarURL(fileName);
+    if (URL) [NSFileManager.defaultManager removeItemAtURL:URL error:nil];
+}
+
+static NSString *WCAtlasHomeStoreOriginalCategoryAvatar(
+    NSDictionary<UIImagePickerControllerInfoKey, id> *info) {
+    NSURL *sourceURL = [info[UIImagePickerControllerImageURL] isKindOfClass:NSURL.class]
+        ? info[UIImagePickerControllerImageURL] : nil;
+    NSData *data = sourceURL ? [NSData dataWithContentsOfURL:sourceURL options:NSDataReadingMappedIfSafe error:nil] : nil;
+    NSString *extension = sourceURL.pathExtension.lowercaseString;
+    NSCharacterSet *invalid = [NSCharacterSet.alphanumericCharacterSet invertedSet];
+    if (extension.length == 0 || extension.length > 8 ||
+        [extension rangeOfCharacterFromSet:invalid].location != NSNotFound) extension = @"jpg";
+    if (data.length == 0) {
+        UIImage *image = [info[UIImagePickerControllerOriginalImage] isKindOfClass:UIImage.class]
+            ? info[UIImagePickerControllerOriginalImage] : nil;
+        data = image ? UIImageJPEGRepresentation(image, 1.0) : nil;
+        extension = @"jpg";
+    }
+    if (data.length == 0) return nil;
+    NSString *fileName = [NSUUID.UUID.UUIDString.lowercaseString stringByAppendingPathExtension:extension];
+    NSURL *destination = WCAtlasHomeCategoryAvatarURL(fileName);
+    return [data writeToURL:destination options:NSDataWritingAtomic error:nil] ? fileName : nil;
+}
+
+@interface WCAtlasHomeCategoryAvatarPickerDelegate : NSObject
+    <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@property (nonatomic, copy) NSString *categoryID;
+@end
+
+@implementation WCAtlasHomeCategoryAvatarPickerDelegate
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)imagePickerController:(UIImagePickerController *)picker
+didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey, id> *)info {
+    NSString *avatarFile = WCAtlasHomeStoreOriginalCategoryAvatar(info);
+    if (avatarFile.length > 0) {
+        __block NSString *oldAvatarFile = nil;
+        BOOL updated = WCAtlasHomeMutateCategory(self.categoryID, ^(NSMutableDictionary *category) {
+            oldAvatarFile = category[WCAtlasHomeCategoryAvatarFileKey];
+            category[WCAtlasHomeCategoryAvatarFileKey] = avatarFile;
+        });
+        if (updated) WCAtlasHomeRemoveCategoryAvatarFile(oldAvatarFile);
+        else WCAtlasHomeRemoveCategoryAvatarFile(avatarFile);
+    }
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
+@end
+
+
+static void WCAtlasHomePresentCategoryRename(UIViewController *presenter, NSDictionary *category) {
+    if (!presenter || !category) return;
+    NSString *identifier = category[@"id"];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"重命名分类"
+                                                                   message:nil
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.text = category[@"title"];
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault
+                                           handler:^(__unused UIAlertAction *action) {
+        NSString *title = [alert.textFields.firstObject.text
+            stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (title.length == 0) return;
+        WCAtlasHomeMutateCategory(identifier, ^(NSMutableDictionary *mutableCategory) {
+            mutableCategory[@"title"] = title;
+        });
+    }]];
+    [presenter presentViewController:alert animated:YES completion:nil];
+}
+
+static void WCAtlasHomePresentCategoryAvatar(UIViewController *presenter, NSDictionary *category) {
+    if (!presenter || !category) return;
+    NSString *identifier = category[@"id"];
+    NSString *currentAvatarFile = category[WCAtlasHomeCategoryAvatarFileKey];
+    BOOL hasCustomAvatar = currentAvatarFile.length > 0 &&
+        [NSFileManager.defaultManager fileExistsAtPath:WCAtlasHomeCategoryAvatarURL(currentAvatarFile).path];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"分类头像"
+                                                                    message:nil
+                                                             preferredStyle:UIAlertControllerStyleActionSheet];
+    if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"从相册选择" style:UIAlertActionStyleDefault
+                                               handler:^(__unused UIAlertAction *action) {
+            UIImagePickerController *picker = [UIImagePickerController new];
+            picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+            picker.allowsEditing = NO;
+            WCAtlasHomeCategoryAvatarPickerDelegate *delegate = [WCAtlasHomeCategoryAvatarPickerDelegate new];
+            delegate.categoryID = identifier;
+            picker.delegate = delegate;
+            objc_setAssociatedObject(picker, &WCAtlasHomeCategoryAvatarPickerDelegateKey, delegate,
+                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            [presenter presentViewController:picker animated:YES completion:nil];
+        }]];
+    }
+    if (hasCustomAvatar) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"恢复默认头像" style:UIAlertActionStyleDestructive
+                                               handler:^(__unused UIAlertAction *action) {
+            WCAtlasHomeMutateCategory(identifier, ^(NSMutableDictionary *mutableCategory) {
+                NSString *avatarFile = mutableCategory[WCAtlasHomeCategoryAvatarFileKey];
+                [mutableCategory removeObjectForKey:WCAtlasHomeCategoryAvatarFileKey];
+                WCAtlasHomeRemoveCategoryAvatarFile(avatarFile);
+            });
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) {
+        popover.sourceView = presenter.view;
+        popover.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
+                                        CGRectGetMidY(presenter.view.bounds), 1.0, 1.0);
+    }
+    [presenter presentViewController:sheet animated:YES completion:nil];
+}
+
+UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id controller,
+                                                                       UITableView *tableView,
+                                                                       NSIndexPath *indexPath) {
+    NSCAssert(NSThread.isMainThread, @"Homepage category actions require the main thread");
+    if (!tableView || !indexPath) return nil;
+    id session = WCAtlasPrivateHomeSessionData(controller, tableView, indexPath);
+    NSDictionary *category = WCAtlasHomeCategoryForSyntheticUserName(WCAtlasPrivateHomeSessionUserName(session));
+    UIViewController *presenter = WCAtlasHomeCategoryPresenter(controller, tableView);
+    if (!category || !presenter) return nil;
+    UIContextualAction *rename = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                                          title:@"重命名"
+                                                                        handler:^(__unused UIContextualAction *action,
+                                                                                  __unused UIView *sourceView,
+                                                                                  void (^completionHandler)(BOOL)) {
+        completionHandler(YES);
+        dispatch_async(dispatch_get_main_queue(), ^{ WCAtlasHomePresentCategoryRename(presenter, category); });
+    }];
+    rename.backgroundColor = UIColor.systemBlueColor;
+    UIContextualAction *avatar = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                                          title:@"更换头像"
+                                                                        handler:^(__unused UIContextualAction *action,
+                                                                                  __unused UIView *sourceView,
+                                                                                  void (^completionHandler)(BOOL)) {
+        completionHandler(YES);
+        dispatch_async(dispatch_get_main_queue(), ^{ WCAtlasHomePresentCategoryAvatar(presenter, category); });
+    }];
+    avatar.backgroundColor = UIColor.systemPurpleColor;
+    UISwipeActionsConfiguration *configuration = [UISwipeActionsConfiguration configurationWithActions:@[rename, avatar]];
+    configuration.performsFirstActionWithFullSwipe = NO;
+    return configuration;
+}
+
 @implementation WCAtlasHomeCategoryBrowserController
 
 - (NSDictionary *)category {
@@ -164,43 +465,41 @@ static NSUInteger WCAtlasCategoryIndex(NSString *identifier, NSArray *categories
     for (NSDictionary *folder in [self.category[@"folders"] isKindOfClass:NSArray.class] ? self.category[@"folders"] : @[]) if ([folder[@"id"] isEqualToString:self.folderID]) return folder;
     return nil;
 }
-- (void)viewDidLoad { [super viewDidLoad]; self.title = (self.folder ?: self.category)[@"title"] ?: @"分类"; }
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return self.folderID ? 1 : 2; }
+- (void)viewDidLoad { [super viewDidLoad]; self.title = (self.folder ?: self.category)[@"title"] ?: @"分类"; self.hidesBottomBarWhenPushed = YES; }
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 1; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    (void)tableView;
-    if (!self.folderID && section == 0) return [(NSArray *)self.category[@"folders"] count];
-    return [WCAtlasHomeStringArray((self.folder ?: self.category)[@"sessions"]) count];
-}
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section { (void)tableView; return !self.folderID && section == 0 ? @"文件夹" : @"群聊"; }
-- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    (void)tableView;
-    return section == [self numberOfSectionsInTableView:tableView] - 1 ? @"点击首页分类 Cell 进入此页面；群聊仍由微信原生聊天页打开。" : nil;
+    (void)tableView; (void)section;
+    return WCAtlasHomeCombinedItems(self.category, self.folder).count;
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"browser"] ?: [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"browser"];
-    if (!self.folderID && indexPath.section == 0) {
-        NSDictionary *folder = self.category[@"folders"][indexPath.row];
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"browser"] ?: [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"browser"];
+    NSDictionary *item = WCAtlasHomeCombinedItems(self.category, self.folder)[indexPath.row];
+    if ([item[@"kind"] isEqualToString:@"folder"]) {
+        NSDictionary *folder = item[@"value"];
         cell.textLabel.text = folder[@"title"];
-        cell.detailTextLabel.text = [NSString stringWithFormat:@"%lu 个群聊", (unsigned long)[folder[@"sessions"] count]];
+        WCAtlasHomeConfigureFolderImage(cell);
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     } else {
-        NSString *userName = WCAtlasHomeStringArray((self.folder ?: self.category)[@"sessions"])[indexPath.row];
+        NSString *userName = item[@"value"];
         cell.textLabel.text = WCAtlasHomeConversationTitle(userName);
-        cell.detailTextLabel.text = userName;
+        WCAtlasHomeConfigureConversationImage(cell, userName);
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     }
     return cell;
 }
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (!self.folderID && indexPath.section == 0) {
+    NSDictionary *item = WCAtlasHomeCombinedItems(self.category, self.folder)[indexPath.row];
+    if ([item[@"kind"] isEqualToString:@"folder"]) {
+        NSDictionary *folder = item[@"value"];
         WCAtlasHomeCategoryBrowserController *browser = [WCAtlasHomeCategoryBrowserController new];
         browser.categoryID = self.categoryID;
-        browser.folderID = self.category[@"folders"][indexPath.row][@"id"];
+        browser.folderID = folder[@"id"];
+        browser.hidesBottomBarWhenPushed = YES;
         [self.navigationController pushViewController:browser animated:YES];
         return;
     }
-    NSString *userName = WCAtlasHomeStringArray((self.folder ?: self.category)[@"sessions"])[indexPath.row];
+    NSString *userName = item[@"value"];
     WCAtlasPushPrivateChat(self, userName, YES);
 }
 
@@ -215,14 +514,13 @@ static NSUInteger WCAtlasCategoryIndex(NSString *identifier, NSArray *categories
 }
 - (void)viewWillAppear:(BOOL)animated { [super viewWillAppear:animated]; [self.tableView reloadData]; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { (void)tableView; (void)section; return MAX(1, (NSInteger)WCAtlasHomeCategories().count); }
-- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section { (void)tableView; (void)section; return @"每个一级分类都会作为一个原生会话 Cell 显示在微信首页；已归类群聊从首页收起，进入分类后仍可继续使用文件夹整理。"; }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"category"] ?: [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"category"];
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"category"] ?: [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"category"];
     NSArray *categories = WCAtlasHomeCategories();
-    if (categories.count == 0) { cell.textLabel.text = @"暂无分类"; cell.detailTextLabel.text = @"点击右上角 + 新建"; cell.accessoryType = UITableViewCellAccessoryNone; return cell; }
+    if (categories.count == 0) { cell.textLabel.text = @"暂无分类，点击右上角 + 新建"; cell.imageView.image = nil; cell.accessoryType = UITableViewCellAccessoryNone; return cell; }
     NSDictionary *category = categories[indexPath.row];
     cell.textLabel.text = category[@"title"];
-    cell.detailTextLabel.text = [NSString stringWithFormat:@"%lu 个群聊 · %lu 个文件夹", (unsigned long)WCAtlasSessionsInCategory(category).count, (unsigned long)[category[@"folders"] count]];
+    WCAtlasHomeConfigureCategoryImage(cell, category);
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     return cell;
 }
@@ -235,8 +533,9 @@ static NSUInteger WCAtlasCategoryIndex(NSString *identifier, NSArray *categories
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)style forRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView; if (style != UITableViewCellEditingStyleDelete) return;
     NSMutableArray *categories = [WCAtlasHomeCategories() mutableCopy]; if (indexPath.row >= categories.count) return;
+    NSString *avatarFile = categories[indexPath.row][WCAtlasHomeCategoryAvatarFileKey];
     [categories removeObjectAtIndex:indexPath.row];
-    WCAtlasSetHomeCategories(categories); [self.tableView reloadData];
+    WCAtlasSetHomeCategories(categories); WCAtlasHomeRemoveCategoryAvatarFile(avatarFile); [self.tableView reloadData];
 }
 - (void)addCategory {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建首页分类" message:nil preferredStyle:UIAlertControllerStyleAlert];
@@ -267,24 +566,26 @@ static NSUInteger WCAtlasCategoryIndex(NSString *identifier, NSArray *categories
     [super viewDidLoad]; self.title = (self.folder ?: self.category)[@"title"] ?: @"归类";
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(addItem)];
 }
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return self.folderID ? 1 : 2; }
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { (void)tableView; return section == 0 ? MAX(1, (NSInteger)self.sessions.count) : MAX(1, (NSInteger)[self.category[@"folders"] count]); }
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section { (void)tableView; return section == 0 ? @"群聊" : @"文件夹"; }
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 1; }
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { (void)tableView; (void)section; return MAX(1, (NSInteger)WCAtlasHomeCombinedItems(self.category, self.folder).count); }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"detail"] ?: [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"detail"];
-    if (indexPath.section == 0) {
-        NSArray *sessions = self.sessions; if (sessions.count == 0) { cell.textLabel.text = @"暂无群聊"; cell.detailTextLabel.text = @"点击右上角 + 选择"; cell.accessoryType = UITableViewCellAccessoryNone; return cell; }
-        NSString *userName = sessions[indexPath.row]; cell.textLabel.text = WCAtlasHomeConversationTitle(userName); cell.detailTextLabel.text = userName; cell.accessoryType = UITableViewCellAccessoryNone;
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"detail"] ?: [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"detail"];
+    NSArray *items = WCAtlasHomeCombinedItems(self.category, self.folder);
+    if (items.count == 0) { cell.textLabel.text = @"暂无内容"; cell.imageView.image = nil; cell.accessoryType = UITableViewCellAccessoryNone; return cell; }
+    NSDictionary *item = items[indexPath.row];
+    if ([item[@"kind"] isEqualToString:@"session"]) {
+        NSString *userName = item[@"value"]; cell.textLabel.text = WCAtlasHomeConversationTitle(userName); WCAtlasHomeConfigureConversationImage(cell, userName); cell.accessoryType = UITableViewCellAccessoryNone;
     } else {
-        NSArray *folders = self.category[@"folders"]; if (folders.count == 0) { cell.textLabel.text = @"暂无文件夹"; cell.detailTextLabel.text = @"点击右上角 + 创建"; cell.accessoryType = UITableViewCellAccessoryNone; return cell; }
-        NSDictionary *folder = folders[indexPath.row]; cell.textLabel.text = folder[@"title"]; cell.detailTextLabel.text = [NSString stringWithFormat:@"%lu 个群聊", (unsigned long)[folder[@"sessions"] count]]; cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        NSDictionary *folder = item[@"value"]; cell.textLabel.text = folder[@"title"]; WCAtlasHomeConfigureFolderImage(cell); cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     }
     return cell;
 }
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:YES]; if (indexPath.section == 0 || self.folderID) return;
-    NSArray *folders = self.category[@"folders"]; if (indexPath.row >= folders.count) return;
-    WCAtlasHomeCategoryDetailController *detail = [WCAtlasHomeCategoryDetailController new]; detail.categoryID = self.categoryID; detail.folderID = folders[indexPath.row][@"id"];
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    NSArray *items = WCAtlasHomeCombinedItems(self.category, self.folder); if (indexPath.row >= items.count) return;
+    NSDictionary *item = items[indexPath.row]; if (![item[@"kind"] isEqualToString:@"folder"]) return;
+    NSDictionary *folder = item[@"value"];
+    WCAtlasHomeCategoryDetailController *detail = [WCAtlasHomeCategoryDetailController new]; detail.categoryID = self.categoryID; detail.folderID = folder[@"id"];
     [self.navigationController pushViewController:detail animated:YES];
 }
 - (void)addItem {
@@ -350,7 +651,10 @@ static NSUInteger WCAtlasCategoryIndex(NSString *identifier, NSArray *categories
 }
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)style forRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView; if (style != UITableViewCellEditingStyleDelete) return;
-    if (indexPath.section == 0) { NSMutableArray *sessions = [self.sessions mutableCopy]; if (indexPath.row < sessions.count) { [sessions removeObjectAtIndex:indexPath.row]; [self saveSessions:sessions]; } return; }
-    NSMutableArray *categories = [WCAtlasHomeCategories() mutableCopy]; NSUInteger index = WCAtlasCategoryIndex(self.categoryID, categories); if (index == NSNotFound) return; NSMutableDictionary *category = [categories[index] mutableCopy]; NSMutableArray *folders = [category[@"folders"] mutableCopy]; if (indexPath.row < folders.count) { [folders removeObjectAtIndex:indexPath.row]; category[@"folders"] = folders; categories[index] = category; WCAtlasSetHomeCategories(categories); [self.tableView reloadData]; }
+    NSArray *items = WCAtlasHomeCombinedItems(self.category, self.folder); if (indexPath.row >= items.count) return;
+    NSDictionary *item = items[indexPath.row];
+    if ([item[@"kind"] isEqualToString:@"session"]) { NSMutableArray *sessions = [self.sessions mutableCopy]; [sessions removeObject:item[@"value"]]; [self saveSessions:sessions]; return; }
+    NSDictionary *targetFolder = item[@"value"];
+    NSMutableArray *categories = [WCAtlasHomeCategories() mutableCopy]; NSUInteger index = WCAtlasCategoryIndex(self.categoryID, categories); if (index == NSNotFound) return; NSMutableDictionary *category = [categories[index] mutableCopy]; NSMutableArray *folders = [category[@"folders"] mutableCopy]; NSUInteger folderIndex = [folders indexOfObjectPassingTest:^BOOL(NSDictionary *folder, NSUInteger idx, BOOL *stop) { (void)idx; (void)stop; return [folder[@"id"] isEqualToString:targetFolder[@"id"]]; }]; if (folderIndex != NSNotFound) { [folders removeObjectAtIndex:folderIndex]; category[@"folders"] = folders; categories[index] = category; WCAtlasSetHomeCategories(categories); [self.tableView reloadData]; }
 }
 @end
