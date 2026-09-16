@@ -469,7 +469,58 @@ static void WCAtlasPrivateSetHomeScalar(id object, NSString *key, NSNumber *valu
     @catch (__unused NSException *exception) {}
 }
 
-static id WCAtlasPrivateCreateHomeCategorySession(NSDictionary<NSString *, NSString *> *entry) {
+static NSUInteger WCAtlasPrivateHomeUnsignedValue(id object, NSArray<NSString *> *names) {
+    for (NSString *name in names) {
+        SEL selector = NSSelectorFromString(name);
+        NSMethodSignature *signature = WCAtlasPrivateSignature(object, selector, 2);
+        if (signature) {
+            @try {
+                if (WCAtlasPrivateTypeIsInteger(signature.methodReturnType)) {
+                    return ((NSUInteger (*)(id, SEL))objc_msgSend)(object, selector);
+                }
+                if (WCAtlasPrivateTypeIsObject(signature.methodReturnType)) {
+                    id value = ((id (*)(id, SEL))objc_msgSend)(object, selector);
+                    if ([value respondsToSelector:@selector(unsignedIntegerValue)]) {
+                        return [value unsignedIntegerValue];
+                    }
+                }
+            } @catch (__unused NSException *exception) {}
+        }
+        @try {
+            id value = [object valueForKey:name];
+            if ([value respondsToSelector:@selector(unsignedIntegerValue)]) {
+                return [value unsignedIntegerValue];
+            }
+        } @catch (__unused NSException *exception) {}
+    }
+    return 0;
+}
+
+static NSUInteger WCAtlasPrivateHomeCategoryUnreadCount(NSArray *memberUserNames) {
+    if (![memberUserNames isKindOfClass:NSArray.class] || memberUserNames.count == 0) return 0;
+    id manager = WCAtlasPrivateService(@"MMNewSessionMgr");
+    SEL selector = NSSelectorFromString(@"GetSessionByUserName:");
+    NSMethodSignature *signature = WCAtlasPrivateSignature(manager, selector, 3);
+    if (!signature || !WCAtlasPrivateTypeIsObject(signature.methodReturnType) ||
+        !WCAtlasPrivateObjectArguments(signature, NSMakeRange(2, 1))) return 0;
+    NSUInteger total = 0;
+    NSMutableSet<NSString *> *seen = [NSMutableSet set];
+    for (id value in memberUserNames) {
+        NSString *userName = WCAtlasPrivateNonemptyString(value);
+        if (userName.length == 0 || [userName hasPrefix:@"wcatlas_home_category_"] ||
+            [seen containsObject:userName]) continue;
+        [seen addObject:userName];
+        @try {
+            id session = ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
+            NSUInteger unread = WCAtlasPrivateHomeUnsignedValue(
+                session, @[@"m_uUnReadCount", @"unReadCount", @"unreadCount"]);
+            total = unread > NSUIntegerMax - total ? NSUIntegerMax : total + unread;
+        } @catch (__unused NSException *exception) {}
+    }
+    return total;
+}
+
+static id WCAtlasPrivateCreateHomeCategorySession(NSDictionary *entry) {
     NSString *userName = WCAtlasPrivateNonemptyString(entry[@"userName"]);
     NSString *title = WCAtlasPrivateNonemptyString(entry[@"title"]);
     if (userName.length == 0 || title.length == 0) return nil;
@@ -489,7 +540,8 @@ static id WCAtlasPrivateCreateHomeCategorySession(NSDictionary<NSString *, NSStr
             !WCAtlasPrivateInvokeObjectSetter(session, @"setM_contact:", contact)) return nil;
         NSString *subtitle = WCAtlasPrivateNonemptyString(entry[@"subtitle"]);
         WCAtlasPrivateInvokeObjectSetter(session, @"setM_draftMsg:", subtitle ?: @"");
-        WCAtlasPrivateSetHomeScalar(session, @"m_uUnReadCount", @0);
+        NSUInteger unreadCount = WCAtlasPrivateHomeCategoryUnreadCount(entry[@"sessionUserNames"]);
+        WCAtlasPrivateSetHomeScalar(session, @"m_uUnReadCount", @(unreadCount));
         WCAtlasPrivateSetHomeScalar(session, @"m_bShowUnReadAsRedDot", @NO);
         WCAtlasPrivateSetHomeScalar(session, @"m_uLastTime", @0);
         WCAtlasPrivateSetHomeScalar(session, @"m_bShouldUpdateTimeField", @NO);
@@ -548,7 +600,7 @@ BOOL WCAtlasPrivateConfigureHomeCategoryCellData(id cellData, NSString *title, N
 BOOL WCAtlasPrivateReplaceHomeCategorySessions(
     id sessionManager,
     NSSet<NSString *> *hiddenUserNames,
-    NSArray<NSDictionary<NSString *, NSString *> *> *categoryEntries) {
+    NSArray<NSDictionary *> *categoryEntries) {
     NSCAssert(NSThread.isMainThread, @"Homepage sessions must be replaced on the main thread");
     if (!sessionManager) return NO;
     SEL getter = NSSelectorFromString(@"normalSessions");

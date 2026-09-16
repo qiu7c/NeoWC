@@ -13,6 +13,6 @@ WCAtlas_FILES = Tweak.xm $(wildcard Sources/*.m) $(wildcard Vendor/Silk/src/*.c)
 WCAtlas_CFLAGS = -IVendor/Silk/interface -IVendor/Silk/src -ffunction-sections -fdata-sections
 WCAtlas_OBJCFLAGS = -fobjc-arc
 WCAtlas_LDFLAGS = -Wl,-dead_strip
-WCAtlas_FRAMEWORKS = UIKit Foundation QuartzCore CoreImage Photos AVFoundation AudioToolbox AVKit UniformTypeIdentifiers UserNotifications JavaScriptCore
+WCAtlas_FRAMEWORKS = UIKit Foundation QuartzCore CoreImage Photos AVFoundation AudioToolbox AVKit UniformTypeIdentifiers UserNotifications JavaScriptCore Security
 
 include $(THEOS_MAKE_PATH)/tweak.mk

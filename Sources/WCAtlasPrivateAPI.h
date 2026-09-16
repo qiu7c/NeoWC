@@ -160,19 +160,24 @@ FOUNDATION_EXPORT NSString * _Nullable WCAtlasPrivateHomeSessionUserName(id _Nul
 /// Replaces WCAtlas's synthetic category sessions in WeChat's native homepage session array.
 /// @param sessionManager A live `MainSessionMgr` instance received by its update hooks.
 /// @param hiddenUserNames Stable chatroom usernames that should be removed from the native root list.
-/// @param categoryEntries Ordered dictionaries containing nonempty `userName`, `title`, and optional
-/// `subtitle` strings. One native `MMSessionInfo` is created for each valid entry.
+/// @param categoryEntries Ordered dictionaries containing nonempty `userName` and `title` strings,
+/// an optional `subtitle` string, and an optional `sessionUserNames` string array. The array names
+/// the real conversations whose native unread counts should be aggregated into the category row.
+/// One native `MMSessionInfo` is created for each valid entry.
 /// @return YES after a compatible mutable `normalSessions` snapshot was filtered and written back;
 /// NO leaves WeChat's original session array untouched.
 /// @discussion Main-thread only. Existing WCAtlas synthetic sessions are removed first, assigned
 /// chatrooms are hidden, and replacement sessions are inserted immediately after native pinned
 /// sessions. The adapter verifies object getter/setter ABIs and uses guarded KVC only for scalar
-/// fields whose concrete widths vary between WeChat versions. Missing classes, malformed entries,
-/// incompatible accessors, or exceptions fail closed; no database rows are created or modified.
+/// fields whose concrete widths vary between WeChat versions. Member sessions are resolved through
+/// the service-center `MMNewSessionMgr` and `GetSessionByUserName:`; unread getters accept either
+/// integer or NSNumber return ABIs, then guarded KVC is the older-version fallback. Missing classes,
+/// malformed entries, incompatible accessors, or exceptions fail closed; no database rows are
+/// created or modified.
 FOUNDATION_EXPORT BOOL WCAtlasPrivateReplaceHomeCategorySessions(
     id _Nullable sessionManager,
     NSSet<NSString *> *hiddenUserNames,
-    NSArray<NSDictionary<NSString *, NSString *> *> *categoryEntries);
+    NSArray<NSDictionary *> *categoryEntries);
 
 /// Returns the in-memory native synthetic session for a WCAtlas category username.
 /// @param userName Exact synthetic username previously supplied in a category entry.

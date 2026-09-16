@@ -338,6 +338,11 @@ static OSStatus WCAtlasAudioComponentInstanceDispose(AudioComponentInstance inst
 - (void)stopCurrentRecording;
 - (void)pickVoiceEffect;
 - (void)pickTTS;
+- (void)presentFishTTSSettings;
+- (void)presentFishTTSModelPicker;
+- (void)presentFishTTSVoicePicker;
+- (void)presentFishTTSAddVoicePreset;
+- (void)presentFishTTSDeleteVoicePresetPicker;
 @end
 
 static void WCAtlasCallCollectLabels(UIView *view, NSMutableArray<UILabel *> *labels) {
@@ -822,12 +827,246 @@ static NSData *WCAtlasCallPCMDataAtPath(NSString *path, NSError **error) {
     });
 }
 
+- (void)presentFishTTSModelPicker {
+    UIViewController *presenter = self.hostController;
+    if (!presenter.viewIfLoaded.window) return;
+    NSArray<NSDictionary<NSString *, NSString *> *> *models = @[
+        @{@"id": @"s2.1-pro-free", @"name": @"S2.1 Pro 免费版"},
+        @{@"id": @"s2.1-pro", @"name": @"S2.1 Pro 正式版"},
+        @{@"id": @"s2-pro", @"name": @"S2 Pro 兼容版"}
+    ];
+    NSString *selected = WCAtlasFishAudioModel();
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择 Fish Audio 模型"
+        message:@"免费版默认启用；正式版和兼容版会消耗账户额度。"
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary *model in models) {
+        NSString *identifier = model[@"id"];
+        NSString *title = [identifier isEqualToString:selected]
+            ? [@"✓  " stringByAppendingString:model[@"name"]] : model[@"name"];
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *action) {
+                WCAtlasSetFishAudioModel(identifier);
+                weakSelf.statusLabel.text = [NSString stringWithFormat:@"Fish TTS：%@", model[@"name"]];
+            }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    popover.sourceView = presenter.view;
+    popover.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
+                                    CGRectGetMidY(presenter.view.bounds), 1.0, 1.0);
+    [presenter presentViewController:sheet animated:YES completion:nil];
+}
+
+static NSString *WCAtlasFishTTSVoicePresetName(NSString *referenceID) {
+    if (referenceID.length == 0) return nil;
+    for (NSDictionary<NSString *, NSString *> *preset in WCAtlasFishAudioVoicePresets()) {
+        if ([preset[@"referenceID"] isEqualToString:referenceID]) return preset[@"name"];
+    }
+    return nil;
+}
+
+static NSString *WCAtlasFishTTSReferenceIDFromInput(NSString *input) {
+    NSString *value = [input stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (value.length == 0) return @"";
+    NSURLComponents *components = [NSURLComponents componentsWithString:value];
+    for (NSURLQueryItem *item in components.queryItems ?: @[]) {
+        if ([item.name isEqualToString:@"modelId"] && item.value.length > 0) return item.value;
+    }
+    NSArray<NSString *> *pathComponents = components.URL.pathComponents;
+    NSUInteger marker = [pathComponents indexOfObject:@"m"];
+    if (marker != NSNotFound && marker + 1 < pathComponents.count) return pathComponents[marker + 1];
+    return value;
+}
+
+- (void)presentFishTTSAddVoicePreset {
+    UIViewController *presenter = self.hostController;
+    if (!presenter.viewIfLoaded.window) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"添加 Fish Audio 音色"
+        message:@"可粘贴音色 reference_id、包含 modelId 的完整链接，或 fish.audio/m/ 音色链接。"
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"预设名称";
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"音色 ID 或完整链接";
+        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        field.autocorrectionType = UITextAutocorrectionTypeNo;
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    __weak typeof(self) weakSelf = self;
+    __weak UIAlertController *weakAlert = alert;
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"添加并使用" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            UIAlertController *inputAlert = weakAlert;
+            NSString *name = inputAlert.textFields.firstObject.text ?: @"";
+            NSString *input = inputAlert.textFields.count > 1 ? inputAlert.textFields[1].text : @"";
+            NSString *referenceID = WCAtlasFishTTSReferenceIDFromInput(input);
+            if (!WCAtlasAddFishAudioVoicePreset(name, referenceID)) {
+                weakSelf.statusLabel.text = @"音色名称和 ID 不能为空";
+                return;
+            }
+            WCAtlasSetFishAudioReferenceID(referenceID);
+            weakSelf.statusLabel.text = [NSString stringWithFormat:@"Fish TTS 音色：%@", name];
+        }]];
+    [presenter presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentFishTTSDeleteVoicePresetPicker {
+    UIViewController *presenter = self.hostController;
+    if (!presenter.viewIfLoaded.window) return;
+    NSArray<NSDictionary<NSString *, NSString *> *> *presets = WCAtlasFishAudioVoicePresets();
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"删除音色预设"
+        message:presets.count > 0 ? @"内置预设删除后也不会自动恢复。" : @"当前没有可删除的音色预设。"
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary<NSString *, NSString *> *preset in presets) {
+        NSString *name = preset[@"name"];
+        NSString *referenceID = preset[@"referenceID"];
+        [sheet addAction:[UIAlertAction actionWithTitle:name style:UIAlertActionStyleDestructive
+            handler:^(__unused UIAlertAction *action) {
+                WCAtlasRemoveFishAudioVoicePreset(referenceID);
+                weakSelf.statusLabel.text = [NSString stringWithFormat:@"已删除音色预设：%@", name];
+            }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    popover.sourceView = presenter.view;
+    popover.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
+                                    CGRectGetMidY(presenter.view.bounds), 1.0, 1.0);
+    [presenter presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentFishTTSVoicePicker {
+    UIViewController *presenter = self.hostController;
+    if (!presenter.viewIfLoaded.window) return;
+    NSString *selected = WCAtlasFishAudioReferenceID();
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择 Fish Audio 音色"
+        message:@"预设只保存音色 ID；生成时仍使用当前选择的基础模型。"
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    NSString *defaultTitle = selected.length == 0 ? @"✓  默认音色" : @"默认音色";
+    [sheet addAction:[UIAlertAction actionWithTitle:defaultTitle style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            WCAtlasSetFishAudioReferenceID(nil);
+            weakSelf.statusLabel.text = @"Fish TTS 音色：默认音色";
+        }]];
+    for (NSDictionary<NSString *, NSString *> *preset in WCAtlasFishAudioVoicePresets()) {
+        NSString *name = preset[@"name"];
+        NSString *referenceID = preset[@"referenceID"];
+        NSString *title = [referenceID isEqualToString:selected]
+            ? [@"✓  " stringByAppendingString:name] : name;
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *action) {
+                WCAtlasSetFishAudioReferenceID(referenceID);
+                weakSelf.statusLabel.text = [NSString stringWithFormat:@"Fish TTS 音色：%@", name];
+            }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"添加音色预设" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf presentFishTTSAddVoicePreset]; });
+        }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"删除音色预设" style:UIAlertActionStyleDestructive
+        handler:^(__unused UIAlertAction *action) {
+            dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf presentFishTTSDeleteVoicePresetPicker]; });
+        }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"浏览官方音色库" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            NSURL *URL = [NSURL URLWithString:@"https://fish.audio/discovery/"];
+            if (URL) [UIApplication.sharedApplication openURL:URL options:@{} completionHandler:nil];
+        }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    popover.sourceView = presenter.view;
+    popover.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
+                                    CGRectGetMidY(presenter.view.bounds), 1.0, 1.0);
+    [presenter presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentFishTTSSettings {
+    UIViewController *presenter = self.hostController;
+    if (!presenter.viewIfLoaded.window) return;
+    BOOL hasKey = WCAtlasFishAudioAPIKey().length > 0;
+    NSString *message = [NSString stringWithFormat:
+        @"模型：%@\nAPI Key 只保存在本机 Keychain，不会进入配置导出。音色 ID 可从音色详情页网址 /m/ 后复制；留空使用默认音色。",
+        WCAtlasFishAudioModel()];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Fish Audio TTS 设置"
+        message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = hasKey ? @"API Key 已保存，留空保持不变" : @"粘贴 Fish Audio API Key";
+        field.secureTextEntry = YES;
+        field.textContentType = UITextContentTypePassword;
+        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        field.autocorrectionType = UITextAutocorrectionTypeNo;
+    }];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"音色 reference_id（可留空）";
+        field.text = WCAtlasFishAudioReferenceID();
+        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        field.autocorrectionType = UITextAutocorrectionTypeNo;
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    __weak typeof(self) weakSelf = self;
+    __weak UIAlertController *weakAlert = alert;
+    void (^saveValues)(BOOL) = ^(BOOL showResult) {
+        UIAlertController *settingsAlert = weakAlert;
+        NSString *key = settingsAlert.textFields.firstObject.text ?: @"";
+        NSString *referenceID = settingsAlert.textFields.count > 1 ? settingsAlert.textFields[1].text : @"";
+        NSError *keyError = nil;
+        if (key.length > 0 && !WCAtlasSetFishAudioAPIKey(key, &keyError)) {
+            weakSelf.statusLabel.text = keyError.localizedDescription ?: @"API Key 保存失败";
+            return;
+        }
+        WCAtlasSetFishAudioReferenceID(referenceID);
+        if (showResult) {
+            weakSelf.statusLabel.text = WCAtlasFishAudioAPIKey().length > 0
+                ? @"Fish Audio TTS 设置已保存" : @"请继续填写 Fish Audio API Key";
+        }
+    };
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"获取 Key" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            NSURL *URL = WCAtlasFishAudioAPIKeysURL();
+            if (URL) [UIApplication.sharedApplication openURL:URL options:@{} completionHandler:nil];
+        }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"选择音色" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            saveValues(NO);
+            dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf presentFishTTSVoicePicker]; });
+        }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"选择模型" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            saveValues(NO);
+            dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf presentFishTTSModelPicker]; });
+        }]];
+    if (hasKey) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"删除 Key" style:UIAlertActionStyleDestructive
+            handler:^(__unused UIAlertAction *action) {
+                NSError *error = nil;
+                WCAtlasSetFishAudioAPIKey(@"", &error);
+                weakSelf.statusLabel.text = error.localizedDescription ?: @"Fish Audio API Key 已删除";
+            }]];
+    }
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) { saveValues(YES); }]];
+    [presenter presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)pickTTS {
     UIViewController *presenter = self.hostController;
     if (!presenter.viewIfLoaded.window ||
         !WCAtlasEnhancementEnabled(WCAtlasCallVoiceDisguiseEnabledKey)) return;
+    if (WCAtlasFishAudioAPIKey().length == 0) {
+        [self presentFishTTSSettings];
+        return;
+    }
+    NSString *referenceID = WCAtlasFishAudioReferenceID();
+    NSString *voiceDescription = WCAtlasFishTTSVoicePresetName(referenceID) ?: (referenceID.length > 0 ? @"自定义音色" : @"默认音色");
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"生成通话语音"
-        message:@"使用系统普通话音色生成，完成后自动保存到消息库并播放给对端。"
+        message:[NSString stringWithFormat:@"Fish Audio · %@ · %@\n完成后自动保存到消息库并播放给对端。",
+                 WCAtlasFishAudioModel(), voiceDescription]
         preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
         field.placeholder = @"输入要说的话";
@@ -836,11 +1075,16 @@ static NSData *WCAtlasCallPCMDataAtPath(NSString *path, NSError **error) {
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel
                                            handler:nil]];
     __weak typeof(self) weakSelf = self;
+    __weak UIAlertController *weakGenerationAlert = alert;
+    [alert addAction:[UIAlertAction actionWithTitle:@"设置" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf presentFishTTSSettings]; });
+        }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"生成并播放" style:UIAlertActionStyleDefault
         handler:^(__unused UIAlertAction *action) {
-            NSString *text = alert.textFields.firstObject.text ?: @"";
-            weakSelf.statusLabel.text = @"正在生成 TTS…";
-            WCAtlasGenerateLocalSpeech(text, ^(NSURL *outputURL, NSError *generationError) {
+            NSString *text = weakGenerationAlert.textFields.firstObject.text ?: @"";
+            weakSelf.statusLabel.text = @"正在请求 Fish Audio…";
+            WCAtlasGenerateFishAudioSpeech(text, ^(NSURL *outputURL, NSError *generationError) {
                 if (generationError || !outputURL) {
                     weakSelf.statusLabel.text = generationError.localizedDescription ?: @"TTS 生成失败";
                     return;

@@ -11,6 +11,7 @@ NSString *const WCAtlasHomeCategoriesDataKey = @"com.qiu7c.wcatlas.home.categori
 static NSString *const WCAtlasHomeCategorySessionPrefix = @"wcatlas_home_category_";
 static NSString *const WCAtlasHomeCategoryAvatarFileKey = @"avatarFile";
 static NSString *const WCAtlasHomeCategoryAvatarDirectoryName = @"WCAtlas/HomeCategoryAvatars";
+static const CGFloat WCAtlasHomeCategoryRowHeight = 64.0;
 
 #pragma mark - Persistent Model
 
@@ -127,7 +128,7 @@ void WCAtlasHomeCategoriesApplyToSessionManager(id sessionManager) {
     NSArray<NSDictionary *> *categories = WCAtlasHomeCategories();
     BOOL enabled = WCAtlasEnhancementEnabled(WCAtlasHomeCategoriesEnabledKey) && categories.count > 0;
     NSMutableSet<NSString *> *hidden = [NSMutableSet set];
-    NSMutableArray<NSDictionary<NSString *, NSString *> *> *entries = [NSMutableArray array];
+    NSMutableArray<NSDictionary *> *entries = [NSMutableArray array];
     if (enabled) {
         for (NSDictionary *category in categories) {
             NSArray<NSString *> *orderedSessions = WCAtlasOrderedSessionsInCategory(category);
@@ -139,7 +140,8 @@ void WCAtlasHomeCategoriesApplyToSessionManager(id sessionManager) {
             [entries addObject:@{
                 @"userName": [WCAtlasHomeCategorySessionPrefix stringByAppendingString:identifier],
                 @"title": title,
-                @"subtitle": @""
+                @"subtitle": @"",
+                @"sessionUserNames": orderedSessions
             }];
         }
     }
@@ -465,7 +467,13 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
     for (NSDictionary *folder in [self.category[@"folders"] isKindOfClass:NSArray.class] ? self.category[@"folders"] : @[]) if ([folder[@"id"] isEqualToString:self.folderID]) return folder;
     return nil;
 }
-- (void)viewDidLoad { [super viewDidLoad]; self.title = (self.folder ?: self.category)[@"title"] ?: @"分类"; self.hidesBottomBarWhenPushed = YES; }
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = (self.folder ?: self.category)[@"title"] ?: @"分类";
+    self.hidesBottomBarWhenPushed = YES;
+    self.tableView.rowHeight = WCAtlasHomeCategoryRowHeight;
+    self.tableView.estimatedRowHeight = WCAtlasHomeCategoryRowHeight;
+}
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 1; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     (void)tableView; (void)section;
@@ -510,6 +518,8 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"首页群聊归类";
+    self.tableView.rowHeight = WCAtlasHomeCategoryRowHeight;
+    self.tableView.estimatedRowHeight = WCAtlasHomeCategoryRowHeight;
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(addCategory)];
 }
 - (void)viewWillAppear:(BOOL)animated { [super viewWillAppear:animated]; [self.tableView reloadData]; }
@@ -564,6 +574,8 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
 - (NSArray<NSString *> *)sessions { return WCAtlasHomeStringArray((self.folder ?: self.category)[@"sessions"]); }
 - (void)viewDidLoad {
     [super viewDidLoad]; self.title = (self.folder ?: self.category)[@"title"] ?: @"归类";
+    self.tableView.rowHeight = WCAtlasHomeCategoryRowHeight;
+    self.tableView.estimatedRowHeight = WCAtlasHomeCategoryRowHeight;
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(addItem)];
 }
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 1; }
