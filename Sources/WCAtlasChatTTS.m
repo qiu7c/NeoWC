@@ -48,8 +48,14 @@ static void WCAtlasChatTTSReport(WCAtlasChatTTSStatusHandler status,
 
 static BOOL WCAtlasChatTTSStillInConversation(UIViewController *presenter, NSString *userName) {
     if (!presenter.viewIfLoaded.window || userName.length == 0) return NO;
+    NSString *presenterUserName = WCAtlasPrivateChatUserName(presenter);
+    if ([presenterUserName isEqualToString:userName]) return YES;
+    Class chatControllerClass = NSClassFromString(@"BaseMsgContentViewController");
+    if (presenterUserName.length == 0 && chatControllerClass &&
+        [presenter isKindOfClass:chatControllerClass]) return YES;
     UIViewController *current = WCAtlasPrivateCurrentChatController();
-    return current == presenter && [WCAtlasPrivateChatUserName(current) isEqualToString:userName];
+    return current.viewIfLoaded.window &&
+        [WCAtlasPrivateChatUserName(current) isEqualToString:userName];
 }
 
 static void WCAtlasChatTTSGenerateAndSend(UIViewController *presenter,

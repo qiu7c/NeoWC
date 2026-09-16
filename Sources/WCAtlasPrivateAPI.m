@@ -137,6 +137,72 @@ UIViewController *WCAtlasPrivateCurrentChatController(void) {
     return nil;
 }
 
+static UIViewController *WCAtlasPrivateVisibleChatControllerCandidate(id candidate) {
+    Class chatControllerClass = NSClassFromString(@"BaseMsgContentViewController");
+    if (!candidate || !chatControllerClass) return nil;
+    if ([candidate isKindOfClass:UIViewController.class]) {
+        UIViewController *controller = candidate;
+        for (UIViewController *current = controller; current; current = current.parentViewController) {
+            if ([current isKindOfClass:chatControllerClass] && current.isViewLoaded && current.view.window) {
+                return current;
+            }
+        }
+        if ([controller isKindOfClass:UINavigationController.class]) {
+            UIViewController *visible = ((UINavigationController *)controller).visibleViewController;
+            if ([visible isKindOfClass:chatControllerClass] && visible.isViewLoaded && visible.view.window) {
+                return visible;
+            }
+        }
+    }
+    return nil;
+}
+
+UIViewController *WCAtlasPrivateChatControllerForInputToolView(id inputToolView) {
+    NSCAssert(NSThread.isMainThread, @"Input-tool chat resolution must run on the main thread");
+    if (!inputToolView) return WCAtlasPrivateCurrentChatController();
+    NSMutableArray *candidates = [NSMutableArray array];
+    for (NSString *selectorName in @[@"getViewController", @"GetCurrentViewController"]) {
+        id value = WCAtlasPrivateNoArgumentObject(inputToolView, selectorName);
+        if (value) [candidates addObject:value];
+    }
+    for (NSString *fieldName in @[@"_uiDelegate", @"uiDelegate", @"_parentView", @"parentView", @"delegate"]) {
+        id value = WCAtlasPrivateObjectField(inputToolView, @[fieldName]);
+        if (value) [candidates addObject:value];
+    }
+    if ([inputToolView isKindOfClass:UIView.class]) {
+        UIResponder *responder = inputToolView;
+        for (NSUInteger depth = 0; responder && depth < 16; depth++) {
+            responder = responder.nextResponder;
+            if (responder) [candidates addObject:responder];
+        }
+    }
+    for (id candidate in [candidates copy]) {
+        UIViewController *controller = WCAtlasPrivateVisibleChatControllerCandidate(candidate);
+        if (controller) return controller;
+        for (NSString *selectorName in @[@"getViewController", @"GetCurrentViewController"]) {
+            controller = WCAtlasPrivateVisibleChatControllerCandidate(
+                WCAtlasPrivateNoArgumentObject(candidate, selectorName));
+            if (controller) return controller;
+        }
+    }
+    return WCAtlasPrivateCurrentChatController();
+}
+
+NSString *WCAtlasPrivateChatUserNameForInputToolView(id inputToolView) {
+    NSCAssert(NSThread.isMainThread, @"Input-tool chat-name resolution must run on the main thread");
+    for (NSString *selectorName in @[@"currentChatId", @"currentSessionId", @"getChatName",
+                                     @"getCurrentChatName", @"getChatUserName"]) {
+        NSString *userName = WCAtlasPrivateNonemptyString(
+            WCAtlasPrivateNoArgumentObject(inputToolView, selectorName));
+        if (userName.length > 0) return userName;
+    }
+    id contact = WCAtlasPrivateObjectField(inputToolView, @[@"contact", @"_contact"]);
+    NSString *userName = WCAtlasPrivateContactUserName(contact);
+    if (userName.length > 0) return userName;
+    UIViewController *controller = WCAtlasPrivateChatControllerForInputToolView(inputToolView);
+    return WCAtlasPrivateChatUserName(controller);
+}
+
 id WCAtlasPrivateChatContact(id chatController) {
     if (!chatController) chatController = WCAtlasPrivateCurrentChatController();
     for (NSString *selectorName in @[@"GetContact", @"GetCContact"]) {

@@ -23,6 +23,25 @@ FOUNDATION_EXPORT id _Nullable WCAtlasPrivateService(NSString *className);
 /// The class-name check is the stable fallback when no cached chat controller is available.
 FOUNDATION_EXPORT UIViewController * _Nullable WCAtlasPrivateCurrentChatController(void);
 
+/// Resolves the owning chat controller from a WeChat `MMInputToolView` instance.
+/// @param inputToolView The live input toolbar receiving the gesture or send callback.
+/// @return Its visible `BaseMsgContentViewController`, or the global current-chat fallback.
+/// @discussion Main-thread only. Tries the current no-argument object-return selectors
+/// `getViewController` and `GetCurrentViewController`, then guarded delegate/parent fields and
+/// the UIKit responder chain. Every candidate must resolve to a visible chat controller;
+/// unsupported selectors and incompatible return ABIs are skipped without invocation.
+FOUNDATION_EXPORT UIViewController * _Nullable WCAtlasPrivateChatControllerForInputToolView(
+    id _Nullable inputToolView);
+
+/// Resolves the exact friend/group username represented by a live WeChat input toolbar.
+/// @param inputToolView The `MMInputToolView` associated with the active conversation.
+/// @return A trimmed username such as a wxid or `...@chatroom`, or nil when unavailable.
+/// @discussion Main-thread only. Uses the verified no-argument object-return paths
+/// `getChatName`, `currentChatId`, and `currentSessionId`, then the toolbar contact and owning
+/// controller. Empty values and unsupported versions fall through to the global chat adapter.
+FOUNDATION_EXPORT NSString * _Nullable WCAtlasPrivateChatUserNameForInputToolView(
+    id _Nullable inputToolView);
+
 /// Resolves the contact object owned by a WeChat chat controller.
 /// @param chatController A current or explicitly supplied chat controller.
 /// @return The chat contact, or nil when all guarded getters/fields are unavailable.

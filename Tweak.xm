@@ -7247,8 +7247,8 @@ static BOOL WCAtlasConsumeVideoSendConfirmationBypass(NSString *target) {
 - (void)wcatlas_handleChatTTSLongPress:(UILongPressGestureRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateBegan ||
         !WCAtlasEnhancementEnabled(WCAtlasChatTTSEnabledKey)) return;
-    UIViewController *controller = WCAtlasPrivateCurrentChatController();
-    NSString *userName = WCAtlasPrivateChatUserName(controller);
+    UIViewController *controller = WCAtlasPrivateChatControllerForInputToolView(self);
+    NSString *userName = WCAtlasPrivateChatUserNameForInputToolView(self);
     if (!controller.viewIfLoaded.window || userName.length == 0) {
         WCAtlasShowTransientMessage(@"当前页面不是可用的聊天会话", NO);
         return;
@@ -7260,8 +7260,8 @@ static BOOL WCAtlasConsumeVideoSendConfirmationBypass(NSString *target) {
 
 - (void)sendMsgWithText:(id)text {
     if (WCAtlasEnhancementEnabled(WCAtlasChatTTSEnabledKey) && [text isKindOfClass:NSString.class]) {
-        UIViewController *controller = WCAtlasPrivateCurrentChatController();
-        NSString *userName = WCAtlasPrivateChatUserName(controller);
+        UIViewController *controller = WCAtlasPrivateChatControllerForInputToolView(self);
+        NSString *userName = WCAtlasPrivateChatUserNameForInputToolView(self);
         __weak MMInputToolView *weakToolView = self;
         NSString *triggerCommand = [text copy];
         BOOL consumed = WCAtlasChatTTSConsumeTriggeredText(controller, userName, text, ^{
