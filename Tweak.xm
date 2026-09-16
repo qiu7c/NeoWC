@@ -10783,6 +10783,15 @@ __attribute__((constructor)) static void WCAtlasInstallHomeLeadingSwipe(void) {
 
 %end
 
+%hook MainFrameItemView
+
+- (void)layoutSubviews {
+    %orig;
+    WCAtlasHomeCategoriesLayoutUnreadBadge(self);
+}
+
+%end
+
 %hook MainFrameTableView
 
 - (void)setDelegate:(id<UITableViewDelegate>)delegate {

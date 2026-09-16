@@ -157,20 +157,21 @@ static UIViewController *WCAtlasPrivateVisibleChatControllerCandidate(id candida
     return nil;
 }
 
-UIViewController *WCAtlasPrivateChatControllerForInputToolView(id inputToolView) {
-    NSCAssert(NSThread.isMainThread, @"Input-tool chat resolution must run on the main thread");
-    if (!inputToolView) return WCAtlasPrivateCurrentChatController();
+UIViewController *WCAtlasPrivateChatControllerForView(id sourceView) {
+    NSCAssert(NSThread.isMainThread, @"View chat resolution must run on the main thread");
+    if (!sourceView) return WCAtlasPrivateCurrentChatController();
     NSMutableArray *candidates = [NSMutableArray array];
     for (NSString *selectorName in @[@"getViewController", @"GetCurrentViewController"]) {
-        id value = WCAtlasPrivateNoArgumentObject(inputToolView, selectorName);
+        id value = WCAtlasPrivateNoArgumentObject(sourceView, selectorName);
         if (value) [candidates addObject:value];
     }
-    for (NSString *fieldName in @[@"_uiDelegate", @"uiDelegate", @"_parentView", @"parentView", @"delegate"]) {
-        id value = WCAtlasPrivateObjectField(inputToolView, @[fieldName]);
+    for (NSString *fieldName in @[@"_uiDelegate", @"uiDelegate", @"_parentView", @"parentView",
+                                  @"linkDelegate", @"layoutDelegate", @"delegate", @"m_delegate"]) {
+        id value = WCAtlasPrivateObjectField(sourceView, @[fieldName]);
         if (value) [candidates addObject:value];
     }
-    if ([inputToolView isKindOfClass:UIView.class]) {
-        UIResponder *responder = inputToolView;
+    if ([sourceView isKindOfClass:UIView.class]) {
+        UIResponder *responder = sourceView;
         for (NSUInteger depth = 0; responder && depth < 16; depth++) {
             responder = responder.nextResponder;
             if (responder) [candidates addObject:responder];
@@ -186,6 +187,11 @@ UIViewController *WCAtlasPrivateChatControllerForInputToolView(id inputToolView)
         }
     }
     return WCAtlasPrivateCurrentChatController();
+}
+
+UIViewController *WCAtlasPrivateChatControllerForInputToolView(id inputToolView) {
+    NSCAssert(NSThread.isMainThread, @"Input-tool chat resolution must run on the main thread");
+    return WCAtlasPrivateChatControllerForView(inputToolView);
 }
 
 NSString *WCAtlasPrivateChatUserNameForInputToolView(id inputToolView) {
@@ -642,6 +648,13 @@ id WCAtlasPrivateHomeCategorySession(NSString *userName) {
     return userName.length > 0 ? WCAtlasPrivateHomeCategorySessionCache()[userName] : nil;
 }
 
+NSUInteger WCAtlasPrivateHomeCategoryUnreadCountForUserName(NSString *userName) {
+    NSCAssert(NSThread.isMainThread, @"Homepage category unread counts must be read on the main thread");
+    id session = WCAtlasPrivateHomeCategorySession(userName);
+    return WCAtlasPrivateHomeUnsignedValue(
+        session, @[@"m_uUnReadCount", @"unReadCount", @"unreadCount"]);
+}
+
 BOOL WCAtlasPrivateConfigureHomeCategoryCellData(id cellData, NSString *title, NSString *subtitle,
                                                  NSString *avatarUserName) {
     NSCAssert(NSThread.isMainThread, @"Homepage category cell data must be formatted on the main thread");
@@ -738,14 +751,22 @@ static char WCAtlasPrivateMentionRefreshedMessageKey;
 
 static id WCAtlasPrivateMessageWrapFromViewModel(id viewModel) {
     if (!viewModel) return nil;
-    id content = WCAtlasPrivateObjectField(viewModel, @[@"m_nsContent", @"content"]);
-    if ([content isKindOfClass:NSString.class]) return viewModel;
     id message = WCAtlasPrivateObjectField(viewModel,
         @[@"getCurrentMessageWrap", @"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap", @"message"]);
     if (message) return message;
     id parent = WCAtlasPrivateObjectField(viewModel, @[@"parentModel", @"m_parentModel"]);
-    return WCAtlasPrivateObjectField(parent,
+    message = WCAtlasPrivateObjectField(parent,
         @[@"getCurrentMessageWrap", @"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap", @"message"]);
+    if (message) return message;
+    // Only a real CMessageWrap (or a compatible wrapper exposing message metadata)
+    // may be used directly. TextMessageViewModel also exposes text content, so a
+    // content-only check incorrectly binds the view model and loses m_nsAtUserList.
+    Class messageWrapClass = NSClassFromString(@"CMessageWrap");
+    if (messageWrapClass && [viewModel isKindOfClass:messageWrapClass]) return viewModel;
+    id messageType = WCAtlasPrivateObjectField(viewModel, @[@"m_uiMessageType"]);
+    id fromUser = WCAtlasPrivateObjectField(viewModel, @[@"m_nsFromUsr"]);
+    id toUser = WCAtlasPrivateObjectField(viewModel, @[@"m_nsToUsr"]);
+    return messageType && (fromUser || toUser) ? viewModel : nil;
 }
 
 static id WCAtlasPrivateMentionMessageWrap(id richTextView) {
@@ -788,6 +809,10 @@ BOOL WCAtlasPrivateBindMentionContext(id cell, id viewModel, BOOL refresh) {
     id richTextView = WCAtlasPrivateObjectField(cell, @[@"getRichTextView", @"richTextView", @"m_richTextView"]);
     id message = WCAtlasPrivateMessageWrapFromViewModel(viewModel);
     if (!message) {
+        message = WCAtlasPrivateMessageWrapFromViewModel(WCAtlasPrivateObjectField(cell,
+            @[@"viewModel", @"m_viewModel"]));
+    }
+    if (!message) {
         message = WCAtlasPrivateObjectField(cell,
             @[@"getCurrentMessageWrap", @"currentMessageWrap", @"messageWrap", @"m_messageWrap", @"msgWrap"]);
     }
@@ -822,6 +847,20 @@ NSArray<NSString *> *WCAtlasPrivateMentionUserNames(id richTextView) {
             if ([value isKindOfClass:NSString.class] && [value length] > 0) [result addObject:value];
         }
         return result;
+    }
+    if (![raw isKindOfClass:NSString.class] || [raw length] == 0) {
+        NSString *source = WCAtlasPrivateNonemptyString(
+            WCAtlasPrivateObjectField(message, @[@"m_nsMsgSource", @"msgSource"]));
+        if (source.length > 0) {
+            NSRange open = [source rangeOfString:@"<atuserlist>" options:NSCaseInsensitiveSearch];
+            NSRange close = [source rangeOfString:@"</atuserlist>" options:NSCaseInsensitiveSearch];
+            if (open.location != NSNotFound && close.location != NSNotFound &&
+                close.location >= NSMaxRange(open)) {
+                raw = [source substringWithRange:NSMakeRange(NSMaxRange(open),
+                    close.location - NSMaxRange(open))];
+                raw = [(NSString *)raw stringByReplacingOccurrencesOfString:@"&amp;" withString:@"&"];
+            }
+        }
     }
     if (![raw isKindOfClass:NSString.class] || [raw length] == 0) return @[];
     NSCharacterSet *separators = [NSCharacterSet characterSetWithCharactersInString:@",;| \t\r\n"];

@@ -23,6 +23,15 @@ FOUNDATION_EXPORT id _Nullable WCAtlasPrivateService(NSString *className);
 /// The class-name check is the stable fallback when no cached chat controller is available.
 FOUNDATION_EXPORT UIViewController * _Nullable WCAtlasPrivateCurrentChatController(void);
 
+/// Resolves a visible chat controller owned by an arbitrary live WeChat view.
+/// @param view A rich-text view, input toolbar, cell, or related live UI object.
+/// @return Its visible `BaseMsgContentViewController`, or the global current-chat fallback.
+/// @discussion Main-thread only. Walks guarded controller getters, delegate/parent fields,
+/// and the UIKit responder chain. Object-return ABIs are verified before invocation; unsupported
+/// versions and detached views fall back without retaining the source view.
+FOUNDATION_EXPORT UIViewController * _Nullable WCAtlasPrivateChatControllerForView(
+    id _Nullable view);
+
 /// Resolves the owning chat controller from a WeChat `MMInputToolView` instance.
 /// @param inputToolView The live input toolbar receiving the gesture or send callback.
 /// @return Its visible `BaseMsgContentViewController`, or the global current-chat fallback.
@@ -205,6 +214,17 @@ FOUNDATION_EXPORT BOOL WCAtlasPrivateReplaceHomeCategorySessions(
 /// it never queries or writes WeChat's session database and has no older-version fallback.
 FOUNDATION_EXPORT id _Nullable WCAtlasPrivateHomeCategorySession(NSString * _Nullable userName);
 
+/// Reads the aggregated unread count stored on an in-memory synthetic homepage category session.
+/// @param userName Exact WCAtlas synthetic category username.
+/// @return The current aggregate count, or zero when the category is disabled, has no unread
+/// messages, or the current WeChat version exposes no compatible unread field.
+/// @discussion Main-thread only. The adapter reads only WCAtlas's cached synthetic `MMSessionInfo`.
+/// It accepts integer and NSNumber return ABIs for `m_uUnReadCount`, `unReadCount`, and
+/// `unreadCount`, then uses guarded KVC as the older-version fallback. It never queries or mutates
+/// WeChat's session database.
+FOUNDATION_EXPORT NSUInteger WCAtlasPrivateHomeCategoryUnreadCountForUserName(
+    NSString * _Nullable userName);
+
 /// Applies category title/subtitle text to a native `MainFrameCellData` object.
 /// @param cellData The native cell model after its original formatter has run.
 /// @param title Nonempty first-level category title.
@@ -229,9 +249,10 @@ FOUNDATION_EXPORT BOOL WCAtlasPrivateRefreshHomeSessionList(void);
 
 /// Reads the official ordered mention-user list for a WeChat rich-text message view.
 /// @param richTextView Native `RichTextView` currently receiving message styles.
-/// @return Ordered wxids from the message's official `m_nsAtUserList`, or an empty array.
+/// @return Ordered wxids from the message's official mention metadata, or an empty array.
 /// @discussion Main-thread only. Resolves the native cell through its link delegate/responder
-/// chain, then the current message wrap. Missing fields, unsupported view-model layouts, malformed
+/// chain, then the current message wrap. Reads `m_nsAtUserList` first and falls back to the official
+/// `<atuserlist>` node in `m_nsMsgSource`. Missing fields, unsupported view-model layouts, malformed
 /// values, and exceptions return an empty array; visible text is never used to guess identities.
 FOUNDATION_EXPORT NSArray<NSString *> *WCAtlasPrivateMentionUserNames(id _Nullable richTextView);
 
@@ -253,12 +274,13 @@ FOUNDATION_EXPORT NSString * _Nullable WCAtlasPrivateMentionChatUserName(id _Nul
 FOUNDATION_EXPORT BOOL WCAtlasPrivateEnableMentionClickHandling(id _Nullable richTextView);
 
 /// Binds a text-message cell's official message wrap to its native rich-text view.
-/// @param cell A live `TextMessageCellView` received by the verified `setViewModel:` hook.
-/// @param viewModel The exact object passed to WeChat's original setter; may itself be a message wrap.
+/// @param cell A live `TextMessageCellView` received by a verified cell lifecycle hook.
+/// @param viewModel The exact object passed to WeChat's original setter, or nil to resolve the
+/// cell's current view model/message wrap after layout or `getRichTextViewForDelegate`.
 /// @param refresh Whether to replay the rich view's current styles/content after the original setter.
 /// @return YES when a rich-text view and official message wrap were resolved and associated.
-/// @discussion Main-thread only. Call once before the original setter with refresh=NO, then once
-/// after it with refresh=YES. Message identity comes only from native wrap fields. The refresh path
+/// @discussion Main-thread only. A setter hook may bind before and after original; layout/delegate
+/// hooks pass nil and resolve the current model. Message identity comes only from native wrap fields. The refresh path
 /// invokes `setArrStyles:withContent:` only after verifying its void/object/object ABI. Unsupported
 /// layouts return NO and leave WeChat rendering unchanged; no visible text is used to infer wxids.
 FOUNDATION_EXPORT BOOL WCAtlasPrivateBindMentionContext(id _Nullable cell,

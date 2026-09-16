@@ -17,6 +17,7 @@ static void (*WCAtlasOriginalClickMentionLinkEvent)(id, SEL, id);
 static void (*WCAtlasOriginalClickMentionTextEvent)(id, SEL, id);
 static void (*WCAtlasOriginalSetMentionViewModel)(id, SEL, id);
 static void (*WCAtlasOriginalLayoutMentionCell)(id, SEL);
+static id (*WCAtlasOriginalGetMentionRichTextViewForDelegate)(id, SEL);
 static NSString *WCAtlasLastOpenedMentionUserName;
 static NSTimeInterval WCAtlasLastOpenedMentionTime;
 
@@ -43,6 +44,19 @@ static BOOL WCAtlasMentionMethodHasObjectArguments(Method method, unsigned int c
     method_getReturnType(method, returnType, sizeof(returnType));
     if (!WCAtlasMentionTypeIsVoid(returnType)) return NO;
     for (unsigned int index = 0; index < count; index++) {
+        char argumentType[32] = {0};
+        method_getArgumentType(method, index + 2, argumentType, sizeof(argumentType));
+        if (!WCAtlasMentionTypeIsObject(argumentType)) return NO;
+    }
+    return YES;
+}
+
+static BOOL WCAtlasMentionMethodReturnsObject(Method method, unsigned int argumentCount) {
+    if (!method || method_getNumberOfArguments(method) != argumentCount + 2) return NO;
+    char returnType[32] = {0};
+    method_getReturnType(method, returnType, sizeof(returnType));
+    if (!WCAtlasMentionTypeIsObject(returnType)) return NO;
+    for (unsigned int index = 0; index < argumentCount; index++) {
         char argumentType[32] = {0};
         method_getArgumentType(method, index + 2, argumentType, sizeof(argumentType));
         if (!WCAtlasMentionTypeIsObject(argumentType)) return NO;
@@ -192,7 +206,7 @@ static void WCAtlasSetMentionStyles(id self, SEL _cmd, id styles, id contentObje
     }
 }
 
-static BOOL WCAtlasHandleMentionClick(id event) {
+static BOOL WCAtlasHandleMentionClick(id richTextView, id event) {
     if (!WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) return NO;
     NSString *URLString = WCAtlasMentionStringFromEvent(event);
     NSString *prefix = [WCAtlasMentionURLScheme stringByAppendingString:@"://"];
@@ -205,8 +219,9 @@ static BOOL WCAtlasHandleMentionClick(id event) {
         now - WCAtlasLastOpenedMentionTime < 0.5) return YES;
     WCAtlasLastOpenedMentionUserName = [userName copy];
     WCAtlasLastOpenedMentionTime = now;
+    __weak id weakRichTextView = richTextView;
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIViewController *source = WCAtlasPrivateCurrentChatController();
+        UIViewController *source = WCAtlasPrivateChatControllerForView(weakRichTextView);
         if (source && !WCAtlasPushPrivateContactProfile(source, userName)) {
             WCAtlasLog(@"@ 资料页适配失败：%@", userName);
         }
@@ -215,12 +230,12 @@ static BOOL WCAtlasHandleMentionClick(id event) {
 }
 
 static void WCAtlasClickMentionLinkEvent(id self, SEL _cmd, id event) {
-    if (WCAtlasHandleMentionClick(event)) return;
+    if (WCAtlasHandleMentionClick(self, event)) return;
     if (WCAtlasOriginalClickMentionLinkEvent) WCAtlasOriginalClickMentionLinkEvent(self, _cmd, event);
 }
 
 static void WCAtlasClickMentionTextEvent(id self, SEL _cmd, id event) {
-    if (WCAtlasHandleMentionClick(event)) return;
+    if (WCAtlasHandleMentionClick(self, event)) return;
     if (WCAtlasOriginalClickMentionTextEvent) WCAtlasOriginalClickMentionTextEvent(self, _cmd, event);
 }
 
@@ -236,6 +251,15 @@ static void WCAtlasLayoutMentionCell(id self, SEL _cmd) {
     if (WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) {
         WCAtlasPrivateBindMentionContext(self, nil, YES);
     }
+}
+
+static id WCAtlasGetMentionRichTextViewForDelegate(id self, SEL _cmd) {
+    id richTextView = WCAtlasOriginalGetMentionRichTextViewForDelegate
+        ? WCAtlasOriginalGetMentionRichTextViewForDelegate(self, _cmd) : nil;
+    if (richTextView && WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) {
+        WCAtlasPrivateBindMentionContext(self, nil, YES);
+    }
+    return richTextView;
 }
 
 #pragma mark - Hook Installation
@@ -293,6 +317,18 @@ void WCAtlasMentionHighlightInstallHooks(void) {
             WCAtlasOriginalLayoutMentionCell = (void (*)(id, SEL))original;
         } else {
             WCAtlasLog(@"@ 高亮刷新未安装：TextMessageCellView layoutContentView ABI 不支持");
+        }
+        SEL delegateViewSelector = NSSelectorFromString(@"getRichTextViewForDelegate");
+        Method delegateViewMethod = textCellClass
+            ? class_getInstanceMethod(textCellClass, delegateViewSelector) : NULL;
+        if (WCAtlasMentionMethodReturnsObject(delegateViewMethod, 0)) {
+            original = NULL;
+            MSHookMessageEx(textCellClass, delegateViewSelector,
+                (IMP)WCAtlasGetMentionRichTextViewForDelegate, &original);
+            WCAtlasOriginalGetMentionRichTextViewForDelegate =
+                (id (*)(id, SEL))original;
+        } else {
+            WCAtlasLog(@"@ 高亮富文本入口未安装：getRichTextViewForDelegate ABI 不支持");
         }
     });
 }

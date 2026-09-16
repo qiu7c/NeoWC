@@ -108,6 +108,11 @@ static NSString *WCAtlasHomeConversationTitle(NSString *userName) {
 @interface WCAtlasHomeCategoryBrowserController : UITableViewController
 @property (nonatomic, copy) NSString *categoryID;
 @property (nonatomic, copy, nullable) NSString *folderID;
+@property (nonatomic, copy, nullable) UINavigationBarAppearance *sourceStandardAppearance;
+@property (nonatomic, copy, nullable) UINavigationBarAppearance *sourceCompactAppearance;
+@property (nonatomic, copy, nullable) UINavigationBarAppearance *sourceScrollEdgeAppearance;
+@property (nonatomic, copy, nullable) UINavigationBarAppearance *sourceCompactScrollEdgeAppearance;
+- (void)applySourceNavigationAppearance;
 @end
 
 BOOL WCAtlasHomeCategoriesIsSyntheticUserName(NSString *userName) {
@@ -159,6 +164,27 @@ BOOL WCAtlasHomeCategoriesHandleSelection(id controller, UITableView *tableView,
     browser.hidesBottomBarWhenPushed = YES;
     UINavigationController *navigation = [(UIViewController *)controller navigationController];
     if (!navigation) return NO;
+    UINavigationItem *sourceItem = [(UIViewController *)controller navigationItem];
+    UINavigationBar *navigationBar = navigation.navigationBar;
+    UINavigationBarAppearance *standardAppearance = sourceItem.standardAppearance ?: navigationBar.standardAppearance;
+    UINavigationBarAppearance *compactAppearance = sourceItem.compactAppearance ?:
+        navigationBar.compactAppearance ?: standardAppearance;
+    UINavigationBarAppearance *scrollEdgeAppearance = sourceItem.scrollEdgeAppearance ?:
+        navigationBar.scrollEdgeAppearance ?: standardAppearance;
+    browser.sourceStandardAppearance = [standardAppearance copy];
+    browser.sourceCompactAppearance = [compactAppearance copy];
+    browser.sourceScrollEdgeAppearance = [scrollEdgeAppearance copy];
+    if (@available(iOS 15.0, *)) {
+        UINavigationBarAppearance *compactScrollEdgeAppearance = sourceItem.compactScrollEdgeAppearance ?:
+            navigationBar.compactScrollEdgeAppearance ?: scrollEdgeAppearance;
+        browser.sourceCompactScrollEdgeAppearance = [compactScrollEdgeAppearance copy];
+    }
+    browser.navigationItem.standardAppearance = browser.sourceStandardAppearance;
+    browser.navigationItem.compactAppearance = browser.sourceCompactAppearance;
+    browser.navigationItem.scrollEdgeAppearance = browser.sourceScrollEdgeAppearance;
+    if (@available(iOS 15.0, *)) {
+        browser.navigationItem.compactScrollEdgeAppearance = browser.sourceCompactScrollEdgeAppearance;
+    }
     [navigation pushViewController:browser animated:YES];
     return YES;
 }
@@ -169,6 +195,70 @@ void WCAtlasHomeCategoriesConfigureCellData(id cellData) {
     if (!category) return;
     NSString *avatarUserName = [WCAtlasHomeCategorySessionPrefix stringByAppendingString:category[@"id"] ?: @""];
     WCAtlasPrivateConfigureHomeCategoryCellData(cellData, category[@"title"], @"", avatarUserName);
+}
+
+static const NSInteger WCAtlasHomeUnreadBadgeTag = 0x57434247;
+
+static UIView *WCAtlasHomeFindAvatarView(UIView *root, BOOL imageFallback) {
+    for (UIView *view in root.subviews) {
+        if (view.tag == WCAtlasHomeUnreadBadgeTag || view.hidden || view.alpha <= 0.01) continue;
+        CGSize size = view.bounds.size;
+        BOOL plausibleSize = size.width >= 30.0 && size.width <= 80.0 &&
+                             size.height >= 30.0 && size.height <= 80.0;
+        NSString *className = NSStringFromClass(view.class);
+        if (plausibleSize && [className rangeOfString:@"Head" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+            return view;
+        }
+        UIView *nested = WCAtlasHomeFindAvatarView(view, imageFallback);
+        if (nested) return nested;
+        if (imageFallback && plausibleSize && [view isKindOfClass:UIImageView.class]) return view;
+    }
+    return nil;
+}
+
+void WCAtlasHomeCategoriesLayoutUnreadBadge(UIView *itemView) {
+    if (![itemView isKindOfClass:UIView.class]) return;
+    NSCAssert(NSThread.isMainThread, @"Homepage category unread badges must be laid out on the main thread");
+
+    UILabel *badge = (UILabel *)[itemView viewWithTag:WCAtlasHomeUnreadBadgeTag];
+    NSString *userName = WCAtlasPrivateHomeSessionUserName(itemView);
+    NSUInteger unreadCount = WCAtlasHomeCategoriesIsSyntheticUserName(userName)
+        ? WCAtlasPrivateHomeCategoryUnreadCountForUserName(userName) : 0;
+    if (unreadCount == 0) {
+        badge.hidden = YES;
+        return;
+    }
+
+    UIView *avatar = WCAtlasHomeFindAvatarView(itemView, NO) ?: WCAtlasHomeFindAvatarView(itemView, YES);
+    if (!avatar) {
+        badge.hidden = YES;
+        return;
+    }
+    if (!badge) {
+        badge = [[UILabel alloc] initWithFrame:CGRectZero];
+        badge.tag = WCAtlasHomeUnreadBadgeTag;
+        badge.userInteractionEnabled = NO;
+        badge.textAlignment = NSTextAlignmentCenter;
+        badge.textColor = UIColor.whiteColor;
+        badge.backgroundColor = [UIColor colorWithRed:0.98 green:0.24 blue:0.24 alpha:1.0];
+        badge.font = [UIFont systemFontOfSize:11.0 weight:UIFontWeightSemibold];
+        badge.layer.cornerRadius = 9.0;
+        badge.layer.masksToBounds = YES;
+        badge.accessibilityIdentifier = @"WCAtlasHomeCategoryUnreadBadge";
+        [itemView addSubview:badge];
+    }
+
+    badge.text = unreadCount > 99 ? @"99+" : [NSString stringWithFormat:@"%lu", (unsigned long)unreadCount];
+    CGSize textSize = [badge sizeThatFits:CGSizeMake(CGFLOAT_MAX, 18.0)];
+    CGFloat width = MAX(18.0, ceil(textSize.width) + 8.0);
+    CGRect avatarRect = [avatar convertRect:avatar.bounds toView:itemView];
+    CGFloat x = CGRectGetMaxX(avatarRect) - 5.0;
+    CGFloat y = CGRectGetMinY(avatarRect) - 4.0;
+    x = MIN(MAX(0.0, x), MAX(0.0, CGRectGetWidth(itemView.bounds) - width));
+    y = MIN(MAX(0.0, y), MAX(0.0, CGRectGetHeight(itemView.bounds) - 18.0));
+    badge.frame = CGRectMake(x, y, width, 18.0);
+    badge.hidden = NO;
+    [itemView bringSubviewToFront:badge];
 }
 
 #pragma mark - Management UI
@@ -459,6 +549,16 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
 
 @implementation WCAtlasHomeCategoryBrowserController
 
+- (void)applySourceNavigationAppearance {
+    self.navigationItem.standardAppearance = self.sourceStandardAppearance;
+    self.navigationItem.compactAppearance = self.sourceCompactAppearance ?: self.sourceStandardAppearance;
+    self.navigationItem.scrollEdgeAppearance = self.sourceScrollEdgeAppearance ?: self.sourceStandardAppearance;
+    if (@available(iOS 15.0, *)) {
+        self.navigationItem.compactScrollEdgeAppearance = self.sourceCompactScrollEdgeAppearance ?:
+            self.sourceScrollEdgeAppearance ?: self.sourceStandardAppearance;
+    }
+}
+
 - (NSDictionary *)category {
     for (NSDictionary *category in WCAtlasHomeCategories()) if ([category[@"id"] isEqualToString:self.categoryID]) return category;
     return nil;
@@ -469,10 +569,16 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
 }
 - (void)viewDidLoad {
     [super viewDidLoad];
+    [self applySourceNavigationAppearance];
     self.title = (self.folder ?: self.category)[@"title"] ?: @"分类";
     self.hidesBottomBarWhenPushed = YES;
     self.tableView.rowHeight = WCAtlasHomeCategoryRowHeight;
     self.tableView.estimatedRowHeight = WCAtlasHomeCategoryRowHeight;
+}
+- (void)viewWillAppear:(BOOL)animated {
+    [self applySourceNavigationAppearance];
+    [super viewWillAppear:animated];
+    [self.tableView reloadData];
 }
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { (void)tableView; return 1; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -504,6 +610,11 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
         browser.categoryID = self.categoryID;
         browser.folderID = folder[@"id"];
         browser.hidesBottomBarWhenPushed = YES;
+        browser.sourceStandardAppearance = self.sourceStandardAppearance;
+        browser.sourceCompactAppearance = self.sourceCompactAppearance;
+        browser.sourceScrollEdgeAppearance = self.sourceScrollEdgeAppearance;
+        browser.sourceCompactScrollEdgeAppearance = self.sourceCompactScrollEdgeAppearance;
+        [browser applySourceNavigationAppearance];
         [self.navigationController pushViewController:browser animated:YES];
         return;
     }

@@ -57,6 +57,13 @@ FOUNDATION_EXPORT UIImage *WCAtlasHomeCategoryIconImageForUserName(NSString * _N
 /// field access is delegated to `WCAtlasPrivateAPI` and failure preserves WeChat's original text.
 FOUNDATION_EXPORT void WCAtlasHomeCategoriesConfigureCellData(id _Nullable cellData);
 
+/// Lays out WCAtlas's numeric unread badge over a synthetic category's homepage avatar.
+/// @param itemView Native `MainFrameItemView` after its original layout has completed.
+/// @discussion Main-thread only. Native rows and zero-count categories hide the WCAtlas-owned
+/// badge. The view is reused across scrolling and clamps counts above 99 to `99+`; unsupported
+/// view hierarchies fail closed without changing WeChat's native unread view.
+FOUNDATION_EXPORT void WCAtlasHomeCategoriesLayoutUnreadBadge(UIView * _Nullable itemView);
+
 /// Settings controller for first-level categories, nested folders, and group-chat assignments.
 @interface WCAtlasHomeCategoriesViewController : UITableViewController
 @end
