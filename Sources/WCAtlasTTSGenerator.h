@@ -28,6 +28,26 @@ FOUNDATION_EXPORT NSString *WCAtlasFishAudioReferenceID(void);
 /// Saves the optional Fish Audio voice `reference_id` in WCAtlas preferences.
 FOUNDATION_EXPORT void WCAtlasSetFishAudioReferenceID(NSString * _Nullable referenceID);
 
+/// Returns the shared Fish Audio speech-speed multiplier. The supported range is 0.5 through 2.0
+/// and the default is 1.0.
+FOUNDATION_EXPORT double WCAtlasFishAudioSpeechSpeed(void);
+
+/// Saves the shared Fish Audio speech-speed multiplier after clamping it to 0.5 through 2.0.
+FOUNDATION_EXPORT void WCAtlasSetFishAudioSpeechSpeed(double speed);
+
+/// Returns the selectable S2 tone presets. Each dictionary contains `identifier`, `name`, and the
+/// optional Fish Audio natural-language `instruction` prepended to generated text.
+FOUNDATION_EXPORT NSArray<NSDictionary<NSString *, NSString *> *> *WCAtlasFishAudioTonePresets(void);
+
+/// Returns the selected tone-preset identifier. Defaults to `natural`.
+FOUNDATION_EXPORT NSString *WCAtlasFishAudioToneIdentifier(void);
+
+/// Returns the localized display name of the selected tone preset.
+FOUNDATION_EXPORT NSString *WCAtlasFishAudioToneName(void);
+
+/// Saves a supported tone-preset identifier; unsupported values fall back to `natural`.
+FOUNDATION_EXPORT void WCAtlasSetFishAudioToneIdentifier(NSString * _Nullable identifier);
+
 /// Returns the editable Fish Audio voice presets as dictionaries containing `name` and
 /// `referenceID`. On first use, WCAtlas seeds its bundled presets; subsequent user deletions persist.
 FOUNDATION_EXPORT NSArray<NSDictionary<NSString *, NSString *> *> *WCAtlasFishAudioVoicePresets(void);

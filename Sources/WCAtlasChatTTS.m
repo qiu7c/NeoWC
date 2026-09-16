@@ -4,6 +4,7 @@
 #import "WCAtlasTTSGenerator.h"
 #import "WCAtlasLogging.h"
 #import "WCAtlasEnhancements.h"
+#import <math.h>
 
 static NSMutableSet<NSString *> *WCAtlasChatTTSActiveSessions(void) {
     static NSMutableSet<NSString *> *sessions;
@@ -145,6 +146,52 @@ static void WCAtlasChatTTSPresentModelPicker(UIViewController *presenter, NSStri
                 WCAtlasChatTTSPresentMainPanel(presenter, userName, didSubmit, status);
             });
         }]];
+    sheet.popoverPresentationController.sourceView = presenter.view;
+    sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
+        CGRectGetMidY(presenter.view.bounds), 1, 1);
+    [presenter presentViewController:sheet animated:YES completion:nil];
+}
+
+static void WCAtlasChatTTSPresentSpeedPicker(UIViewController *presenter,
+                                             WCAtlasChatTTSStatusHandler status) {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择 TTS 语速"
+        message:@"Fish Audio 支持 0.5x–2.0x；设置同时用于聊天和通话 TTS。"
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    double selected = WCAtlasFishAudioSpeechSpeed();
+    for (NSNumber *value in @[@0.5, @0.75, @1.0, @1.25, @1.5, @2.0]) {
+        double speed = value.doubleValue;
+        NSString *name = speed == 1.0 ? @"正常（1.0x）" : [NSString stringWithFormat:@"%.2gx", speed];
+        NSString *title = fabs(selected - speed) < 0.001 ? [@"✓  " stringByAppendingString:name] : name;
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *action) {
+                WCAtlasSetFishAudioSpeechSpeed(speed);
+                WCAtlasChatTTSReport(status, [NSString stringWithFormat:@"TTS 语速：%.2gx", speed], YES);
+            }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    sheet.popoverPresentationController.sourceView = presenter.view;
+    sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
+        CGRectGetMidY(presenter.view.bounds), 1, 1);
+    [presenter presentViewController:sheet animated:YES completion:nil];
+}
+
+static void WCAtlasChatTTSPresentTonePicker(UIViewController *presenter,
+                                            WCAtlasChatTTSStatusHandler status) {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择 TTS 语调"
+        message:@"语调通过 Fish Audio S2 的自然语言风格指令实现，实际效果会随音色变化。"
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    NSString *selected = WCAtlasFishAudioToneIdentifier();
+    for (NSDictionary<NSString *, NSString *> *preset in WCAtlasFishAudioTonePresets()) {
+        NSString *identifier = preset[@"identifier"];
+        NSString *name = preset[@"name"];
+        NSString *title = [identifier isEqualToString:selected] ? [@"✓  " stringByAppendingString:name] : name;
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *action) {
+                WCAtlasSetFishAudioToneIdentifier(identifier);
+                WCAtlasChatTTSReport(status, [NSString stringWithFormat:@"TTS 语调：%@", name], YES);
+            }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     sheet.popoverPresentationController.sourceView = presenter.view;
     sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
         CGRectGetMidY(presenter.view.bounds), 1, 1);
@@ -329,8 +376,9 @@ static void WCAtlasChatTTSPresentTextInput(UIViewController *presenter, NSString
                                            dispatch_block_t didSubmit,
                                            WCAtlasChatTTSStatusHandler status) {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"发送 TTS 语音"
-        message:[NSString stringWithFormat:@"%@ · %@ · %@", WCAtlasFishAudioModel(),
-                 WCAtlasChatTTSVoiceName(), WCAtlasFishAudioAPIKey().length ? @"Key 已配置" : @"未配置 Key"]
+        message:[NSString stringWithFormat:@"%@ · %@\n语调：%@ · 语速：%.2gx · %@", WCAtlasFishAudioModel(),
+                 WCAtlasChatTTSVoiceName(), WCAtlasFishAudioToneName(), WCAtlasFishAudioSpeechSpeed(),
+                 WCAtlasFishAudioAPIKey().length ? @"Key 已配置" : @"未配置 Key"]
         preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
         field.placeholder = @"输入要转换并发送的文字";
@@ -354,8 +402,9 @@ static void WCAtlasChatTTSPresentMainPanel(UIViewController *presenter, NSString
     BOOL triggerEnabled = [defaults boolForKey:WCAtlasChatTTSTriggerEnabledKey];
     NSString *prefix = WCAtlasChatTTSTrim([defaults stringForKey:WCAtlasChatTTSTriggerPrefixKey]);
     if (prefix.length == 0) prefix = @"转语音";
-    NSString *message = [NSString stringWithFormat:@"%@ · %@\n文字触发：%@（%@）",
-        WCAtlasFishAudioModel(), WCAtlasChatTTSVoiceName(), prefix, triggerEnabled ? @"已开启" : @"已关闭"];
+    NSString *message = [NSString stringWithFormat:@"%@ · %@\n语调：%@ · 语速：%.2gx\n文字触发：%@（%@）",
+        WCAtlasFishAudioModel(), WCAtlasChatTTSVoiceName(), WCAtlasFishAudioToneName(),
+        WCAtlasFishAudioSpeechSpeed(), prefix, triggerEnabled ? @"已开启" : @"已关闭"];
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"聊天 TTS"
         message:message preferredStyle:UIAlertControllerStyleActionSheet];
     [sheet addAction:[UIAlertAction actionWithTitle:@"输入文字并发送语音" style:UIAlertActionStyleDefault
@@ -373,6 +422,14 @@ static void WCAtlasChatTTSPresentMainPanel(UIViewController *presenter, NSString
             dispatch_async(dispatch_get_main_queue(), ^{
                 WCAtlasChatTTSPresentModelPicker(presenter, userName, didSubmit, status);
             });
+        }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"设置语调" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            dispatch_async(dispatch_get_main_queue(), ^{ WCAtlasChatTTSPresentTonePicker(presenter, status); });
+        }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"设置语速" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            dispatch_async(dispatch_get_main_queue(), ^{ WCAtlasChatTTSPresentSpeedPicker(presenter, status); });
         }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"设置文字触发" style:UIAlertActionStyleDefault
         handler:^(__unused UIAlertAction *action) {

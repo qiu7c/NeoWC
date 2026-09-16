@@ -340,6 +340,8 @@ static OSStatus WCAtlasAudioComponentInstanceDispose(AudioComponentInstance inst
 - (void)pickTTS;
 - (void)presentFishTTSSettings;
 - (void)presentFishTTSModelPicker;
+- (void)presentFishTTSSpeedPicker;
+- (void)presentFishTTSTonePicker;
 - (void)presentFishTTSVoicePicker;
 - (void)presentFishTTSAddVoicePreset;
 - (void)presentFishTTSDeleteVoicePresetPicker;
@@ -858,6 +860,58 @@ static NSData *WCAtlasCallPCMDataAtPath(NSString *path, NSError **error) {
     [presenter presentViewController:sheet animated:YES completion:nil];
 }
 
+- (void)presentFishTTSSpeedPicker {
+    UIViewController *presenter = self.hostController;
+    if (!presenter.viewIfLoaded.window) return;
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择 Fish TTS 语速"
+        message:@"支持 0.5x–2.0x；设置同时用于聊天和通话 TTS。"
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    double selected = WCAtlasFishAudioSpeechSpeed();
+    __weak typeof(self) weakSelf = self;
+    for (NSNumber *value in @[@0.5, @0.75, @1.0, @1.25, @1.5, @2.0]) {
+        double speed = value.doubleValue;
+        NSString *name = speed == 1.0 ? @"正常（1.0x）" : [NSString stringWithFormat:@"%.2gx", speed];
+        NSString *title = fabs(selected - speed) < 0.001 ? [@"✓  " stringByAppendingString:name] : name;
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *action) {
+                WCAtlasSetFishAudioSpeechSpeed(speed);
+                weakSelf.statusLabel.text = [NSString stringWithFormat:@"Fish TTS 语速：%.2gx", speed];
+            }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    popover.sourceView = presenter.view;
+    popover.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
+                                    CGRectGetMidY(presenter.view.bounds), 1.0, 1.0);
+    [presenter presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentFishTTSTonePicker {
+    UIViewController *presenter = self.hostController;
+    if (!presenter.viewIfLoaded.window) return;
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择 Fish TTS 语调"
+        message:@"使用 Fish Audio S2 自然语言风格指令；实际效果会随音色变化。"
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    NSString *selected = WCAtlasFishAudioToneIdentifier();
+    __weak typeof(self) weakSelf = self;
+    for (NSDictionary<NSString *, NSString *> *preset in WCAtlasFishAudioTonePresets()) {
+        NSString *identifier = preset[@"identifier"];
+        NSString *name = preset[@"name"];
+        NSString *title = [identifier isEqualToString:selected] ? [@"✓  " stringByAppendingString:name] : name;
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault
+            handler:^(__unused UIAlertAction *action) {
+                WCAtlasSetFishAudioToneIdentifier(identifier);
+                weakSelf.statusLabel.text = [NSString stringWithFormat:@"Fish TTS 语调：%@", name];
+            }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    popover.sourceView = presenter.view;
+    popover.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
+                                    CGRectGetMidY(presenter.view.bounds), 1.0, 1.0);
+    [presenter presentViewController:sheet animated:YES completion:nil];
+}
+
 static NSString *WCAtlasFishTTSVoicePresetName(NSString *referenceID) {
     if (referenceID.length == 0) return nil;
     for (NSDictionary<NSString *, NSString *> *preset in WCAtlasFishAudioVoicePresets()) {
@@ -990,8 +1044,8 @@ static NSString *WCAtlasFishTTSReferenceIDFromInput(NSString *input) {
     if (!presenter.viewIfLoaded.window) return;
     BOOL hasKey = WCAtlasFishAudioAPIKey().length > 0;
     NSString *message = [NSString stringWithFormat:
-        @"模型：%@\nAPI Key 只保存在本机 Keychain，不会进入配置导出。音色 ID 可从音色详情页网址 /m/ 后复制；留空使用默认音色。",
-        WCAtlasFishAudioModel()];
+        @"模型：%@\n语调：%@ · 语速：%.2gx\nAPI Key 只保存在本机 Keychain，不会进入配置导出。音色 ID 可从音色详情页网址 /m/ 后复制；留空使用默认音色。",
+        WCAtlasFishAudioModel(), WCAtlasFishAudioToneName(), WCAtlasFishAudioSpeechSpeed()];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Fish Audio TTS 设置"
         message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
@@ -1041,6 +1095,16 @@ static NSString *WCAtlasFishTTSReferenceIDFromInput(NSString *input) {
             saveValues(NO);
             dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf presentFishTTSModelPicker]; });
         }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"选择语调" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            saveValues(NO);
+            dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf presentFishTTSTonePicker]; });
+        }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"选择语速" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) {
+            saveValues(NO);
+            dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf presentFishTTSSpeedPicker]; });
+        }]];
     if (hasKey) {
         [alert addAction:[UIAlertAction actionWithTitle:@"删除 Key" style:UIAlertActionStyleDestructive
             handler:^(__unused UIAlertAction *action) {
@@ -1065,8 +1129,9 @@ static NSString *WCAtlasFishTTSReferenceIDFromInput(NSString *input) {
     NSString *referenceID = WCAtlasFishAudioReferenceID();
     NSString *voiceDescription = WCAtlasFishTTSVoicePresetName(referenceID) ?: (referenceID.length > 0 ? @"自定义音色" : @"默认音色");
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"生成通话语音"
-        message:[NSString stringWithFormat:@"Fish Audio · %@ · %@\n完成后自动保存到消息库并播放给对端。",
-                 WCAtlasFishAudioModel(), voiceDescription]
+        message:[NSString stringWithFormat:@"Fish Audio · %@ · %@\n语调：%@ · 语速：%.2gx\n完成后自动保存到消息库并播放给对端。",
+                 WCAtlasFishAudioModel(), voiceDescription, WCAtlasFishAudioToneName(),
+                 WCAtlasFishAudioSpeechSpeed()]
         preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
         field.placeholder = @"输入要说的话";

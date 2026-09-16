@@ -225,6 +225,25 @@ FOUNDATION_EXPORT id _Nullable WCAtlasPrivateHomeCategorySession(NSString * _Nul
 FOUNDATION_EXPORT NSUInteger WCAtlasPrivateHomeCategoryUnreadCountForUserName(
     NSString * _Nullable userName);
 
+/// Returns the unread presentation state for real homepage sessions.
+/// @param userNames Stable wxid/chatroom identifiers to aggregate. Duplicates and synthetic
+/// category identifiers are ignored.
+/// @return A dictionary containing numeric `count` and boolean `dot`. Muted/red-dot sessions do
+/// not contribute to `count`; `dot` is YES when at least one such session has unread messages.
+/// @discussion Main-thread only. Sessions are resolved through service-center `MMNewSessionMgr`
+/// and `GetSessionByUserName:`. Integer/NSNumber getter ABIs and guarded KVC are supported for
+/// `m_uUnReadCount` and `m_bShowUnReadAsRedDot`. Missing services return zero/NO and no database
+/// state is changed.
+FOUNDATION_EXPORT NSDictionary<NSString *, NSNumber *> *
+WCAtlasPrivateHomeUnreadStateForUserNames(NSArray<NSString *> * _Nullable userNames);
+
+/// Returns whether the cached synthetic category should use a red dot instead of a numeric badge.
+/// @param userName Exact WCAtlas synthetic category username.
+/// @return YES only when the category has muted unread messages and no numeric unread messages.
+/// @discussion Main-thread only, read-only, with the same ABI and KVC fallbacks as the unread-count
+/// accessor. Disabled, stale, and unsupported categories return NO.
+FOUNDATION_EXPORT BOOL WCAtlasPrivateHomeCategoryShowsUnreadDot(NSString * _Nullable userName);
+
 /// Applies category title/subtitle text to a native `MainFrameCellData` object.
 /// @param cellData The native cell model after its original formatter has run.
 /// @param title Nonempty first-level category title.
@@ -238,6 +257,21 @@ FOUNDATION_EXPORT BOOL WCAtlasPrivateConfigureHomeCategoryCellData(id _Nullable 
                                                                   NSString *title,
                                                                   NSString *subtitle,
                                                                   NSString * _Nullable avatarUserName);
+
+/// Applies current category text directly to a visible native homepage item view and its cell data.
+/// @param itemView Native `MainFrameItemView` currently being laid out.
+/// @param title Nonempty current category title.
+/// @param subtitle Optional current category subtitle.
+/// @param avatarUserName Synthetic category username used by the native head-image view.
+/// @return YES when compatible cell data or visible labels were updated.
+/// @discussion Main-thread only. The adapter resolves `m_cellData` with bounded object-field
+/// fallbacks, applies the regular cell-data setters, then updates already-created UILabel instances
+/// for name/message/time and requests layout of the existing native head-image view. This makes
+/// reused visible cells reflect edits without invoking private navigation or database APIs.
+/// Unsupported layouts are left unchanged.
+FOUNDATION_EXPORT BOOL WCAtlasPrivateConfigureVisibleHomeCategoryItemView(
+    id _Nullable itemView, NSString *title, NSString *subtitle,
+    NSString * _Nullable avatarUserName);
 
 /// Requests a native homepage-session refresh after WCAtlas category settings change.
 /// @return YES after invoking `updateMainSessionListNotify:` or the older

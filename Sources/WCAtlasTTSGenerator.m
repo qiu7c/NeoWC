@@ -1,11 +1,14 @@
 #import "WCAtlasTTSGenerator.h"
 #import <Security/Security.h>
+#import <math.h>
 
 static NSString *const WCAtlasTTSErrorDomain = @"com.qiu7c.wcatlas.tts";
 static NSString *const WCAtlasFishAudioKeychainService = @"com.qiu7c.wcatlas.fish-audio";
 static NSString *const WCAtlasFishAudioKeychainAccount = @"api-key";
 static NSString *const WCAtlasFishAudioModelKey = @"com.qiu7c.wcatlas.tts.fish.model";
 static NSString *const WCAtlasFishAudioReferenceIDKey = @"com.qiu7c.wcatlas.tts.fish.reference-id";
+static NSString *const WCAtlasFishAudioSpeechSpeedKey = @"com.qiu7c.wcatlas.tts.fish.speech-speed";
+static NSString *const WCAtlasFishAudioToneIdentifierKey = @"com.qiu7c.wcatlas.tts.fish.tone";
 static NSString *const WCAtlasFishAudioVoicePresetsKey = @"com.qiu7c.wcatlas.tts.fish.voice-presets";
 static NSString *const WCAtlasFishAudioVoicePresetsSeededKey = @"com.qiu7c.wcatlas.tts.fish.voice-presets-seeded";
 static NSString *const WCAtlasFishAudioDefaultModel = @"s2.1-pro-free";
@@ -106,6 +109,64 @@ void WCAtlasSetFishAudioReferenceID(NSString *referenceID) {
     } else {
         [NSUserDefaults.standardUserDefaults removeObjectForKey:WCAtlasFishAudioReferenceIDKey];
     }
+}
+
+double WCAtlasFishAudioSpeechSpeed(void) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    double speed = [defaults objectForKey:WCAtlasFishAudioSpeechSpeedKey]
+        ? [defaults doubleForKey:WCAtlasFishAudioSpeechSpeedKey] : 1.0;
+    if (!isfinite(speed)) return 1.0;
+    return MIN(2.0, MAX(0.5, speed));
+}
+
+void WCAtlasSetFishAudioSpeechSpeed(double speed) {
+    double normalized = isfinite(speed) ? MIN(2.0, MAX(0.5, speed)) : 1.0;
+    [NSUserDefaults.standardUserDefaults setDouble:normalized forKey:WCAtlasFishAudioSpeechSpeedKey];
+}
+
+NSArray<NSDictionary<NSString *, NSString *> *> *WCAtlasFishAudioTonePresets(void) {
+    static NSArray<NSDictionary<NSString *, NSString *> *> *presets;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        presets = @[
+            @{@"identifier": @"natural", @"name": @"自然", @"instruction": @""},
+            @{@"identifier": @"gentle", @"name": @"温柔", @"instruction": @"[用温柔、柔和的语调说]"},
+            @{@"identifier": @"cheerful", @"name": @"活泼", @"instruction": @"[用开心、活泼的语调说]"},
+            @{@"identifier": @"calm", @"name": @"沉稳", @"instruction": @"[用沉稳、平静的语调说]"},
+            @{@"identifier": @"serious", @"name": @"坚定", @"instruction": @"[用严肃、坚定的语调说]"},
+            @{@"identifier": @"sad", @"name": @"悲伤", @"instruction": @"[用悲伤、低落的语调说]"},
+            @{@"identifier": @"whisper", @"name": @"耳语", @"instruction": @"[轻声耳语]"}
+        ];
+    });
+    return presets;
+}
+
+static NSDictionary<NSString *, NSString *> *WCAtlasFishAudioTonePreset(NSString *identifier) {
+    for (NSDictionary<NSString *, NSString *> *preset in WCAtlasFishAudioTonePresets()) {
+        if ([preset[@"identifier"] isEqualToString:identifier]) return preset;
+    }
+    return [WCAtlasFishAudioTonePresets() firstObject];
+}
+
+NSString *WCAtlasFishAudioToneIdentifier(void) {
+    NSString *identifier = WCAtlasTTSTrimmedString(
+        [NSUserDefaults.standardUserDefaults stringForKey:WCAtlasFishAudioToneIdentifierKey]);
+    return WCAtlasFishAudioTonePreset(identifier)[@"identifier"] ?: @"natural";
+}
+
+NSString *WCAtlasFishAudioToneName(void) {
+    return WCAtlasFishAudioTonePreset(WCAtlasFishAudioToneIdentifier())[@"name"] ?: @"自然";
+}
+
+void WCAtlasSetFishAudioToneIdentifier(NSString *identifier) {
+    NSString *normalized = WCAtlasFishAudioTonePreset(WCAtlasTTSTrimmedString(identifier))[@"identifier"];
+    [NSUserDefaults.standardUserDefaults setObject:normalized ?: @"natural"
+                                            forKey:WCAtlasFishAudioToneIdentifierKey];
+}
+
+static NSString *WCAtlasFishAudioPreparedText(NSString *text) {
+    NSString *instruction = WCAtlasFishAudioTonePreset(WCAtlasFishAudioToneIdentifier())[@"instruction"];
+    return instruction.length > 0 ? [NSString stringWithFormat:@"%@%@", instruction, text] : text;
 }
 
 static NSArray<NSDictionary<NSString *, NSString *> *> *WCAtlasFishAudioBundledVoicePresets(void) {
@@ -224,14 +285,14 @@ void WCAtlasGenerateFishAudioSpeech(NSString *text,
     [request setValue:@"audio/mpeg" forHTTPHeaderField:@"Accept"];
     [request setValue:WCAtlasFishAudioModel() forHTTPHeaderField:@"model"];
     NSMutableDictionary *body = [@{
-        @"text": trimmed,
+        @"text": WCAtlasFishAudioPreparedText(trimmed),
         @"format": @"mp3",
         @"sample_rate": @44100,
         @"mp3_bitrate": @128,
         @"normalize": @YES,
         @"latency": @"normal",
         @"prosody": @{
-            @"speed": @1.0,
+            @"speed": @(WCAtlasFishAudioSpeechSpeed()),
             @"volume": @0,
             @"normalize_loudness": @YES
         }

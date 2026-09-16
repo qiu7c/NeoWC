@@ -568,14 +568,20 @@ static NSUInteger WCAtlasPrivateHomeUnsignedValue(id object, NSArray<NSString *>
     return 0;
 }
 
-static NSUInteger WCAtlasPrivateHomeCategoryUnreadCount(NSArray *memberUserNames) {
-    if (![memberUserNames isKindOfClass:NSArray.class] || memberUserNames.count == 0) return 0;
+NSDictionary<NSString *, NSNumber *> *WCAtlasPrivateHomeUnreadStateForUserNames(NSArray *memberUserNames) {
+    NSCAssert(NSThread.isMainThread, @"Homepage unread state must be read on the main thread");
+    if (![memberUserNames isKindOfClass:NSArray.class] || memberUserNames.count == 0) {
+        return @{@"count": @0, @"dot": @NO};
+    }
     id manager = WCAtlasPrivateService(@"MMNewSessionMgr");
     SEL selector = NSSelectorFromString(@"GetSessionByUserName:");
     NSMethodSignature *signature = WCAtlasPrivateSignature(manager, selector, 3);
     if (!signature || !WCAtlasPrivateTypeIsObject(signature.methodReturnType) ||
-        !WCAtlasPrivateObjectArguments(signature, NSMakeRange(2, 1))) return 0;
+        !WCAtlasPrivateObjectArguments(signature, NSMakeRange(2, 1))) {
+        return @{@"count": @0, @"dot": @NO};
+    }
     NSUInteger total = 0;
+    BOOL hasDot = NO;
     NSMutableSet<NSString *> *seen = [NSMutableSet set];
     for (id value in memberUserNames) {
         NSString *userName = WCAtlasPrivateNonemptyString(value);
@@ -586,10 +592,19 @@ static NSUInteger WCAtlasPrivateHomeCategoryUnreadCount(NSArray *memberUserNames
             id session = ((id (*)(id, SEL, id))objc_msgSend)(manager, selector, userName);
             NSUInteger unread = WCAtlasPrivateHomeUnsignedValue(
                 session, @[@"m_uUnReadCount", @"unReadCount", @"unreadCount"]);
-            total = unread > NSUIntegerMax - total ? NSUIntegerMax : total + unread;
+            BOOL showAsDot = unread > 0 && WCAtlasPrivateHomeUnsignedValue(
+                session, @[@"m_bShowUnReadAsRedDot", @"showUnReadAsRedDot"]) != 0;
+            if (unread > 0 && !showAsDot) {
+                id contact = WCAtlasPrivateObjectField(session, @[@"m_contact", @"contact"]);
+                if (!contact) contact = WCAtlasPrivateContact(userName);
+                showAsDot = WCAtlasPrivateHomeUnsignedValue(
+                    contact, @[@"isDoNotDisturbMode"]) != 0;
+            }
+            if (showAsDot) hasDot = YES;
+            else total = unread > NSUIntegerMax - total ? NSUIntegerMax : total + unread;
         } @catch (__unused NSException *exception) {}
     }
-    return total;
+    return @{@"count": @(total), @"dot": @(hasDot)};
 }
 
 static id WCAtlasPrivateCreateHomeCategorySession(NSDictionary *entry) {
@@ -612,9 +627,13 @@ static id WCAtlasPrivateCreateHomeCategorySession(NSDictionary *entry) {
             !WCAtlasPrivateInvokeObjectSetter(session, @"setM_contact:", contact)) return nil;
         NSString *subtitle = WCAtlasPrivateNonemptyString(entry[@"subtitle"]);
         WCAtlasPrivateInvokeObjectSetter(session, @"setM_draftMsg:", subtitle ?: @"");
-        NSUInteger unreadCount = WCAtlasPrivateHomeCategoryUnreadCount(entry[@"sessionUserNames"]);
-        WCAtlasPrivateSetHomeScalar(session, @"m_uUnReadCount", @(unreadCount));
-        WCAtlasPrivateSetHomeScalar(session, @"m_bShowUnReadAsRedDot", @NO);
+        NSDictionary<NSString *, NSNumber *> *unreadState =
+            WCAtlasPrivateHomeUnreadStateForUserNames(entry[@"sessionUserNames"]);
+        NSUInteger unreadCount = [unreadState[@"count"] unsignedIntegerValue];
+        BOOL showAsDot = unreadCount == 0 && [unreadState[@"dot"] boolValue];
+        WCAtlasPrivateSetHomeScalar(session, @"m_uUnReadCount",
+                                    @(unreadCount > 0 ? unreadCount : (showAsDot ? 1 : 0)));
+        WCAtlasPrivateSetHomeScalar(session, @"m_bShowUnReadAsRedDot", @(showAsDot));
         WCAtlasPrivateSetHomeScalar(session, @"m_uLastTime", @0);
         WCAtlasPrivateSetHomeScalar(session, @"m_bShouldUpdateTimeField", @NO);
         WCAtlasPrivateSetHomeScalar(session, @"m_bIsTop", @NO);
@@ -651,8 +670,17 @@ id WCAtlasPrivateHomeCategorySession(NSString *userName) {
 NSUInteger WCAtlasPrivateHomeCategoryUnreadCountForUserName(NSString *userName) {
     NSCAssert(NSThread.isMainThread, @"Homepage category unread counts must be read on the main thread");
     id session = WCAtlasPrivateHomeCategorySession(userName);
+    if (WCAtlasPrivateHomeUnsignedValue(
+            session, @[@"m_bShowUnReadAsRedDot", @"showUnReadAsRedDot"]) != 0) return 0;
     return WCAtlasPrivateHomeUnsignedValue(
         session, @[@"m_uUnReadCount", @"unReadCount", @"unreadCount"]);
+}
+
+BOOL WCAtlasPrivateHomeCategoryShowsUnreadDot(NSString *userName) {
+    NSCAssert(NSThread.isMainThread, @"Homepage category unread dots must be read on the main thread");
+    id session = WCAtlasPrivateHomeCategorySession(userName);
+    return WCAtlasPrivateHomeUnsignedValue(
+        session, @[@"m_bShowUnReadAsRedDot", @"showUnReadAsRedDot"]) != 0;
 }
 
 BOOL WCAtlasPrivateConfigureHomeCategoryCellData(id cellData, NSString *title, NSString *subtitle,
@@ -674,6 +702,34 @@ BOOL WCAtlasPrivateConfigureHomeCategoryCellData(id cellData, NSString *title, N
         @catch (__unused NSException *exception) {}
     }
     return YES;
+}
+
+BOOL WCAtlasPrivateConfigureVisibleHomeCategoryItemView(id itemView, NSString *title,
+                                                        NSString *subtitle,
+                                                        NSString *avatarUserName) {
+    NSCAssert(NSThread.isMainThread, @"Visible homepage category views must be updated on the main thread");
+    if (!itemView || title.length == 0) return NO;
+    id cellData = WCAtlasPrivateObjectField(itemView, @[@"m_cellData", @"cellData"]);
+    BOOL updated = WCAtlasPrivateConfigureHomeCategoryCellData(
+        cellData, title, subtitle ?: @"", avatarUserName);
+    NSArray<NSArray *> *labelValues = @[
+        @[@"m_nameLabel", @"nameLabel", title],
+        @[@"m_messageLabel", @"messageLabel", subtitle ?: @""],
+        @[@"m_timeLabel", @"timeLabel", @""]
+    ];
+    for (NSArray *entry in labelValues) {
+        id label = WCAtlasPrivateObjectField(itemView, @[entry[0], entry[1]]);
+        if (![label isKindOfClass:UILabel.class]) continue;
+        ((UILabel *)label).text = entry[2];
+        updated = YES;
+    }
+    id headView = WCAtlasPrivateObjectField(itemView, @[@"m_frameHeadView", @"frameHeadView"]);
+    if ([headView isKindOfClass:UIView.class]) {
+        [(UIView *)headView setNeedsLayout];
+        [(UIView *)headView layoutIfNeeded];
+        updated = YES;
+    }
+    return updated;
 }
 
 BOOL WCAtlasPrivateReplaceHomeCategorySessions(
