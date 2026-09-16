@@ -10787,7 +10787,7 @@ __attribute__((constructor)) static void WCAtlasInstallHomeLeadingSwipe(void) {
 
 - (void)layoutSubviews {
     %orig;
-    WCAtlasHomeCategoriesLayoutUnreadBadge(self);
+    WCAtlasHomeCategoriesLayoutUnreadBadge((UIView *)self);
 }
 
 %end
