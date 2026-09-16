@@ -226,6 +226,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 @interface MMInputToolView : UIView
 - (void)wcatlas_handleQuickReplyPlusLongPress:(UILongPressGestureRecognizer *)recognizer;
 - (void)wcatlas_handleChatTTSLongPress:(UILongPressGestureRecognizer *)recognizer;
+- (id)onTapSendButton;
 - (void)sendMsgWithText:(id)text;
 - (id)text;
 - (void)resetText;
@@ -7259,12 +7260,14 @@ static BOOL WCAtlasConsumeVideoSendConfirmationBypass(NSString *target) {
 }
 
 - (void)sendMsgWithText:(id)text {
-    if (WCAtlasEnhancementEnabled(WCAtlasChatTTSEnabledKey) && [text isKindOfClass:NSString.class]) {
+    NSString *plainText = [text isKindOfClass:NSString.class] ? text :
+        ([text isKindOfClass:NSAttributedString.class] ? [(NSAttributedString *)text string] : nil);
+    if (WCAtlasEnhancementEnabled(WCAtlasChatTTSEnabledKey) && plainText.length > 0) {
         UIViewController *controller = WCAtlasPrivateChatControllerForInputToolView(self);
         NSString *userName = WCAtlasPrivateChatUserNameForInputToolView(self);
         __weak MMInputToolView *weakToolView = self;
-        NSString *triggerCommand = [text copy];
-        BOOL consumed = WCAtlasChatTTSConsumeTriggeredText(controller, userName, text, ^{
+        NSString *triggerCommand = [plainText copy];
+        BOOL consumed = WCAtlasChatTTSConsumeTriggeredText(controller, userName, plainText, ^{
             MMInputToolView *toolView = weakToolView;
             id currentText = [toolView respondsToSelector:@selector(text)] ? [toolView text] : nil;
             if ([currentText isKindOfClass:NSString.class] &&
@@ -7278,6 +7281,31 @@ static BOOL WCAtlasConsumeVideoSendConfirmationBypass(NSString *target) {
         if (consumed) return;
     }
     %orig(text);
+}
+
+- (id)onTapSendButton {
+    id value = [self respondsToSelector:@selector(text)] ? [self text] : nil;
+    NSString *plainText = [value isKindOfClass:NSString.class] ? value :
+        ([value isKindOfClass:NSAttributedString.class] ? [(NSAttributedString *)value string] : nil);
+    if (WCAtlasEnhancementEnabled(WCAtlasChatTTSEnabledKey) && plainText.length > 0) {
+        UIViewController *controller = WCAtlasPrivateChatControllerForInputToolView(self);
+        NSString *userName = WCAtlasPrivateChatUserNameForInputToolView(self);
+        __weak MMInputToolView *weakToolView = self;
+        NSString *triggerCommand = [plainText copy];
+        BOOL consumed = WCAtlasChatTTSConsumeTriggeredText(controller, userName, plainText, ^{
+            MMInputToolView *toolView = weakToolView;
+            id currentText = [toolView respondsToSelector:@selector(text)] ? [toolView text] : nil;
+            if ([currentText isKindOfClass:NSString.class] &&
+                [currentText isEqualToString:triggerCommand] &&
+                [toolView respondsToSelector:@selector(resetText)]) {
+                [toolView resetText];
+            }
+        }, ^(NSString *message, BOOL success) {
+            WCAtlasShowTransientMessage(message, success);
+        });
+        if (consumed) return nil;
+    }
+    return %orig;
 }
 
 %end

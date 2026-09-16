@@ -882,10 +882,10 @@ BOOL WCAtlasPrivateBindMentionContext(id cell, id viewModel, BOOL refresh) {
     if (![styles isKindOfClass:NSArray.class] || ![content isKindOfClass:NSString.class]) return YES;
     SEL selector = NSSelectorFromString(@"setArrStyles:withContent:");
     NSMethodSignature *signature = WCAtlasPrivateSignature(richTextView, selector, 4);
-    if (!signature || !WCAtlasPrivateTypeIsVoid(signature.methodReturnType) ||
+    if (!signature || !WCAtlasPrivateTypeIsInteger(signature.methodReturnType) ||
         !WCAtlasPrivateObjectArguments(signature, NSMakeRange(2, 2))) return YES;
     @try {
-        ((void (*)(id, SEL, id, id))objc_msgSend)(richTextView, selector, styles, content);
+        ((BOOL (*)(id, SEL, id, id))objc_msgSend)(richTextView, selector, styles, content);
         objc_setAssociatedObject(richTextView, &WCAtlasPrivateMentionRefreshedMessageKey,
                                  message, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
@@ -902,6 +902,9 @@ NSArray<NSString *> *WCAtlasPrivateMentionUserNames(id richTextView) {
         for (id value in (NSArray *)raw) {
             if ([value isKindOfClass:NSString.class] && [value length] > 0) [result addObject:value];
         }
+        id atAll = WCAtlasPrivateObjectField(message, @[@"m_nsAtAll", @"m_bAtAll", @"atAll"]);
+        if ([atAll respondsToSelector:@selector(boolValue)] && [atAll boolValue] &&
+            ![result containsObject:@"notify@all"]) [result addObject:@"notify@all"];
         return result;
     }
     if (![raw isKindOfClass:NSString.class] || [raw length] == 0) {
@@ -918,12 +921,16 @@ NSArray<NSString *> *WCAtlasPrivateMentionUserNames(id richTextView) {
             }
         }
     }
-    if (![raw isKindOfClass:NSString.class] || [raw length] == 0) return @[];
-    NSCharacterSet *separators = [NSCharacterSet characterSetWithCharactersInString:@",;| \t\r\n"];
-    for (NSString *part in [raw componentsSeparatedByCharactersInSet:separators]) {
-        NSString *userName = [part stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        if (userName.length > 0) [result addObject:userName];
+    if ([raw isKindOfClass:NSString.class] && [raw length] > 0) {
+        NSCharacterSet *separators = [NSCharacterSet characterSetWithCharactersInString:@",;| \t\r\n"];
+        for (NSString *part in [raw componentsSeparatedByCharactersInSet:separators]) {
+            NSString *userName = [part stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            if (userName.length > 0) [result addObject:userName];
+        }
     }
+    id atAll = WCAtlasPrivateObjectField(message, @[@"m_nsAtAll", @"m_bAtAll", @"atAll"]);
+    if ([atAll respondsToSelector:@selector(boolValue)] && [atAll boolValue] &&
+        ![result containsObject:@"notify@all"]) [result addObject:@"notify@all"];
     return result;
 }
 
@@ -969,7 +976,7 @@ id WCAtlasPrivateMentionLinkStyle(NSRange range, NSString *URLString,
     if (!styleClass || range.location == NSNotFound || range.length == 0 || URLString.length == 0) return nil;
     id style = [[styleClass alloc] init];
     if (!style || !WCAtlasPrivateSetFirstValue(style, [NSValue valueWithRange:range],
-                                               @[@"range", @"displayRange", @"originalRange"]) ||
+                                               @[@"range", @"originalRange"]) ||
         !WCAtlasPrivateSetFirstValue(style, URLString, @[@"nsUrl", @"url", @"URL"])) return nil;
     WCAtlasPrivateSetFirstValue(style, URLString, @[@"nsSourceUrl", @"sourceUrl"]);
     WCAtlasPrivateSetFirstValue(style, @5, @[@"eDataDectorType", @"dataDetectorType"]);
@@ -983,6 +990,15 @@ id WCAtlasPrivateMentionLinkStyle(NSRange range, NSString *URLString,
     WCAtlasPrivateSetFirstValue(style, @YES, @[@"bBackgroundEnabled", @"backgroundEnabled"]);
     WCAtlasPrivateSetFirstValue(style, @NO, @[@"bDrawsUnderLine", @"drawsUnderLine"]);
     return style;
+}
+
+BOOL WCAtlasPrivateConfigureMentionRichTextConfig(id config, UIColor *normalColor,
+                                                  UIColor *highlightedColor) {
+    NSCAssert(NSThread.isMainThread, @"Mention config must be updated on the main thread");
+    if (!config || !normalColor || !highlightedColor) return NO;
+    BOOL normalUpdated = WCAtlasPrivateSetFirstValue(config, normalColor, @[@"linkColor"]);
+    BOOL highlightedUpdated = WCAtlasPrivateSetFirstValue(config, highlightedColor, @[@"linkHLColor"]);
+    return normalUpdated || highlightedUpdated;
 }
 
 static NSString *WCAtlasPrivateMentionLinkURLStringAtDepth(id event, NSUInteger depth) {

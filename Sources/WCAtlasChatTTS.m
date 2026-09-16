@@ -125,8 +125,42 @@ static void WCAtlasChatTTSGenerateAndSend(UIViewController *presenter,
 static void WCAtlasChatTTSPresentMainPanel(UIViewController *, NSString *, dispatch_block_t,
                                            WCAtlasChatTTSStatusHandler);
 
-static void WCAtlasChatTTSPresentModelPicker(UIViewController *presenter, NSString *userName,
-                                             dispatch_block_t didSubmit,
+@interface WCAtlasChatTTSPanelController : UIViewController
+@property (nonatomic, copy) NSString *chatUserName;
+@property (nonatomic, copy) dispatch_block_t didSubmit;
+@property (nonatomic, copy) WCAtlasChatTTSStatusHandler statusHandler;
+@property (nonatomic, strong) UILabel *summaryLabel;
+@property (nonatomic, strong) UILabel *speedValueLabel;
+@property (nonatomic, strong) UISlider *speedSlider;
+@property (nonatomic, strong) UITextView *textView;
+@property (nonatomic, strong) UISwitch *triggerSwitch;
+@property (nonatomic, strong) UITextField *triggerField;
+@property (nonatomic, strong) UIButton *voiceButton;
+@property (nonatomic, strong) UIButton *modelButton;
+@property (nonatomic, strong) UIButton *toneButton;
+- (instancetype)initWithUserName:(NSString *)userName
+                       didSubmit:(dispatch_block_t _Nullable)didSubmit
+                           status:(WCAtlasChatTTSStatusHandler _Nullable)status;
+@end
+
+typedef void (^WCAtlasChatTTSOptionHandler)(NSString *value, NSString *title);
+
+@interface WCAtlasChatTTSOptionPickerController : UIViewController <UITableViewDataSource, UITableViewDelegate>
+@property (nonatomic, copy) NSString *pickerTitle;
+@property (nonatomic, copy) NSArray<NSDictionary<NSString *, NSString *> *> *items;
+@property (nonatomic, copy) NSString *selectedValue;
+@property (nonatomic, copy) WCAtlasChatTTSOptionHandler selectionHandler;
+@property (nonatomic, assign) BOOL destructive;
+- (instancetype)initWithTitle:(NSString *)title
+                         items:(NSArray<NSDictionary<NSString *, NSString *> *> *)items
+                 selectedValue:(NSString *)selectedValue
+                   destructive:(BOOL)destructive
+                       handler:(WCAtlasChatTTSOptionHandler)handler;
+@end
+
+static void __attribute__((unused)) WCAtlasChatTTSPresentModelPicker(UIViewController *presenter,
+                                             NSString * __unused userName,
+                                             dispatch_block_t __unused didSubmit,
                                              WCAtlasChatTTSStatusHandler status) {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Fish Audio 模型"
         message:@"免费模型优先使用免费额度；付费模型需要账户余额。"
@@ -140,19 +174,14 @@ static void WCAtlasChatTTSPresentModelPicker(UIViewController *presenter, NSStri
                 WCAtlasChatTTSReport(status, [NSString stringWithFormat:@"已选择模型：%@", model], YES);
             }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"返回" style:UIAlertActionStyleCancel
-        handler:^(__unused UIAlertAction *action) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                WCAtlasChatTTSPresentMainPanel(presenter, userName, didSubmit, status);
-            });
-        }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     sheet.popoverPresentationController.sourceView = presenter.view;
     sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
         CGRectGetMidY(presenter.view.bounds), 1, 1);
     [presenter presentViewController:sheet animated:YES completion:nil];
 }
 
-static void WCAtlasChatTTSPresentSpeedPicker(UIViewController *presenter,
+static void __attribute__((unused)) WCAtlasChatTTSPresentSpeedPicker(UIViewController *presenter,
                                              WCAtlasChatTTSStatusHandler status) {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择 TTS 语速"
         message:@"Fish Audio 支持 0.5x–2.0x；设置同时用于聊天和通话 TTS。"
@@ -175,7 +204,7 @@ static void WCAtlasChatTTSPresentSpeedPicker(UIViewController *presenter,
     [presenter presentViewController:sheet animated:YES completion:nil];
 }
 
-static void WCAtlasChatTTSPresentTonePicker(UIViewController *presenter,
+static void __attribute__((unused)) WCAtlasChatTTSPresentTonePicker(UIViewController *presenter,
                                             WCAtlasChatTTSStatusHandler status) {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择 TTS 语调"
         message:@"语调通过 Fish Audio S2 的自然语言风格指令实现，实际效果会随音色变化。"
@@ -226,7 +255,7 @@ static void WCAtlasChatTTSPresentAddVoice(UIViewController *presenter,
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
-static void WCAtlasChatTTSPresentDeleteVoice(UIViewController *presenter,
+static void __attribute__((unused)) WCAtlasChatTTSPresentDeleteVoice(UIViewController *presenter,
                                              WCAtlasChatTTSStatusHandler status) {
     NSArray<NSDictionary<NSString *, NSString *> *> *presets = WCAtlasFishAudioVoicePresets();
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"删除音色预设"
@@ -248,7 +277,7 @@ static void WCAtlasChatTTSPresentDeleteVoice(UIViewController *presenter,
     [presenter presentViewController:sheet animated:YES completion:nil];
 }
 
-static void WCAtlasChatTTSPresentVoicePicker(UIViewController *presenter,
+static void __attribute__((unused)) WCAtlasChatTTSPresentVoicePicker(UIViewController *presenter,
                                              WCAtlasChatTTSStatusHandler status) {
     NSString *selected = WCAtlasFishAudioReferenceID();
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择 TTS 音色"
@@ -325,7 +354,7 @@ static void WCAtlasChatTTSPresentAPISettings(UIViewController *presenter,
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
-static void WCAtlasChatTTSPresentTriggerSettings(UIViewController *presenter,
+static void __attribute__((unused)) WCAtlasChatTTSPresentTriggerSettings(UIViewController *presenter,
                                                  WCAtlasChatTTSStatusHandler status) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     BOOL enabled = [defaults boolForKey:WCAtlasChatTTSTriggerEnabledKey];
@@ -372,7 +401,7 @@ static void WCAtlasChatTTSPresentTriggerSettings(UIViewController *presenter,
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
-static void WCAtlasChatTTSPresentTextInput(UIViewController *presenter, NSString *userName,
+static void __attribute__((unused)) WCAtlasChatTTSPresentTextInput(UIViewController *presenter, NSString *userName,
                                            dispatch_block_t didSubmit,
                                            WCAtlasChatTTSStatusHandler status) {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"发送 TTS 语音"
@@ -394,56 +423,502 @@ static void WCAtlasChatTTSPresentTextInput(UIViewController *presenter, NSString
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
+@implementation WCAtlasChatTTSOptionPickerController
+
+- (instancetype)initWithTitle:(NSString *)title
+                         items:(NSArray<NSDictionary<NSString *,NSString *> *> *)items
+                 selectedValue:(NSString *)selectedValue
+                   destructive:(BOOL)destructive
+                       handler:(WCAtlasChatTTSOptionHandler)handler {
+    self = [super initWithNibName:nil bundle:nil];
+    if (self) {
+        _pickerTitle = [title copy];
+        _items = [items copy] ?: @[];
+        _selectedValue = [selectedValue copy] ?: @"";
+        _selectionHandler = [handler copy];
+        _destructive = destructive;
+        self.modalPresentationStyle = UIModalPresentationOverFullScreen;
+        self.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
+    }
+    return self;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.35];
+    UIControl *dismissArea = [UIControl new];
+    dismissArea.translatesAutoresizingMaskIntoConstraints = NO;
+    [dismissArea addTarget:self action:@selector(closePicker) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:dismissArea];
+    [NSLayoutConstraint activateConstraints:@[
+        [dismissArea.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [dismissArea.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [dismissArea.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [dismissArea.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+
+    UIView *card = [UIView new];
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.backgroundColor = UIColor.systemBackgroundColor;
+    card.layer.cornerRadius = 20;
+    card.layer.cornerCurve = kCACornerCurveContinuous;
+    card.clipsToBounds = YES;
+    [self.view addSubview:card];
+
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = self.pickerTitle;
+    title.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
+    title.textColor = UIColor.labelColor;
+    [card addSubview:title];
+    UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
+    close.translatesAutoresizingMaskIntoConstraints = NO;
+    [close setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
+    close.tintColor = UIColor.secondaryLabelColor;
+    [close addTarget:self action:@selector(closePicker) forControlEvents:UIControlEventTouchUpInside];
+    [card addSubview:close];
+    UITableView *table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    table.translatesAutoresizingMaskIntoConstraints = NO;
+    table.dataSource = self;
+    table.delegate = self;
+    table.rowHeight = 52;
+    table.tableFooterView = [UIView new];
+    table.backgroundColor = UIColor.clearColor;
+    [card addSubview:table];
+
+    CGFloat height = MIN(520.0, 66.0 + MAX(1, self.items.count) * 52.0);
+    [NSLayoutConstraint activateConstraints:@[
+        [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
+        [card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [card.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+        [card.heightAnchor constraintEqualToConstant:height],
+        [title.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18],
+        [title.topAnchor constraintEqualToAnchor:card.topAnchor constant:16],
+        [close.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12],
+        [close.centerYAnchor constraintEqualToAnchor:title.centerYAnchor],
+        [close.widthAnchor constraintEqualToConstant:36],
+        [close.heightAnchor constraintEqualToConstant:36],
+        [table.leadingAnchor constraintEqualToAnchor:card.leadingAnchor],
+        [table.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
+        [table.topAnchor constraintEqualToAnchor:card.topAnchor constant:58],
+        [table.bottomAnchor constraintEqualToAnchor:card.bottomAnchor]
+    ]];
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    (void)tableView; (void)section;
+    return (NSInteger)self.items.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    static NSString *identifier = @"WCAtlasChatTTSOption";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
+    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:identifier];
+    NSDictionary<NSString *, NSString *> *item = self.items[(NSUInteger)indexPath.row];
+    cell.textLabel.text = item[@"title"] ?: @"";
+    cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+    cell.textLabel.textColor = self.destructive ? UIColor.systemRedColor : UIColor.labelColor;
+    cell.detailTextLabel.text = item[@"detail"];
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    cell.accessoryType = [item[@"value"] isEqualToString:self.selectedValue]
+        ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
+    cell.tintColor = self.destructive ? UIColor.systemRedColor : UIColor.systemBlueColor;
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    NSDictionary<NSString *, NSString *> *item = self.items[(NSUInteger)indexPath.row];
+    if (self.selectionHandler) self.selectionHandler(item[@"value"] ?: @"", item[@"title"] ?: @"");
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)closePicker { [self dismissViewControllerAnimated:YES completion:nil]; }
+
+@end
+
+@implementation WCAtlasChatTTSPanelController
+
+static UILabel *WCAtlasChatTTSPanelLabel(NSString *text, UIFont *font, UIColor *color) {
+    UILabel *label = [UILabel new];
+    label.text = text;
+    label.font = font;
+    label.textColor = color;
+    label.numberOfLines = 0;
+    return label;
+}
+
+static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL action) {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    [button setTitle:title forState:UIControlStateNormal];
+    button.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+    button.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
+    button.backgroundColor = [UIColor.secondarySystemBackgroundColor colorWithAlphaComponent:0.92];
+    button.layer.cornerRadius = 12;
+    [button.heightAnchor constraintEqualToConstant:46].active = YES;
+    [button addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
+    return button;
+}
+
+- (instancetype)initWithUserName:(NSString *)userName
+                       didSubmit:(dispatch_block_t)didSubmit
+                           status:(WCAtlasChatTTSStatusHandler)status {
+    self = [super initWithNibName:nil bundle:nil];
+    if (self) {
+        _chatUserName = [userName copy];
+        _didSubmit = [didSubmit copy];
+        _statusHandler = [status copy];
+        self.modalPresentationStyle = UIModalPresentationOverFullScreen;
+        self.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
+    }
+    return self;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.42];
+
+    UIControl *dismissArea = [UIControl new];
+    dismissArea.translatesAutoresizingMaskIntoConstraints = NO;
+    [dismissArea addTarget:self action:@selector(closePanel) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:dismissArea];
+    [NSLayoutConstraint activateConstraints:@[
+        [dismissArea.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [dismissArea.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [dismissArea.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [dismissArea.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+
+    UIView *card = [UIView new];
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.backgroundColor = UIColor.systemBackgroundColor;
+    card.layer.cornerRadius = 24;
+    card.layer.cornerCurve = kCACornerCurveContinuous;
+    card.clipsToBounds = YES;
+    [self.view addSubview:card];
+
+    UIScrollView *scrollView = [UIScrollView new];
+    scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    scrollView.alwaysBounceVertical = YES;
+    scrollView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    [card addSubview:scrollView];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = 12;
+    stack.layoutMargins = UIEdgeInsetsMake(18, 18, 20, 18);
+    stack.layoutMarginsRelativeArrangement = YES;
+    [scrollView addSubview:stack];
+
+    UIView *header = [UIView new];
+    UILabel *title = WCAtlasChatTTSPanelLabel(@"发送语音", [UIFont systemFontOfSize:22 weight:UIFontWeightBold],
+                                               UIColor.labelColor);
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
+    close.translatesAutoresizingMaskIntoConstraints = NO;
+    [close setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
+    close.tintColor = UIColor.secondaryLabelColor;
+    close.backgroundColor = UIColor.secondarySystemBackgroundColor;
+    close.layer.cornerRadius = 16;
+    [close addTarget:self action:@selector(closePanel) forControlEvents:UIControlEventTouchUpInside];
+    [header addSubview:title];
+    [header addSubview:close];
+    [NSLayoutConstraint activateConstraints:@[
+        [header.heightAnchor constraintEqualToConstant:38],
+        [title.leadingAnchor constraintEqualToAnchor:header.leadingAnchor],
+        [title.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
+        [close.trailingAnchor constraintEqualToAnchor:header.trailingAnchor],
+        [close.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
+        [close.widthAnchor constraintEqualToConstant:32],
+        [close.heightAnchor constraintEqualToConstant:32]
+    ]];
+    [stack addArrangedSubview:header];
+
+    self.summaryLabel = WCAtlasChatTTSPanelLabel(@"", [UIFont systemFontOfSize:13 weight:UIFontWeightMedium],
+                                                 UIColor.secondaryLabelColor);
+    [stack addArrangedSubview:self.summaryLabel];
+
+    self.textView = [UITextView new];
+    self.textView.font = [UIFont systemFontOfSize:17];
+    self.textView.textContainerInset = UIEdgeInsetsMake(12, 10, 12, 10);
+    self.textView.backgroundColor = UIColor.secondarySystemBackgroundColor;
+    self.textView.layer.cornerRadius = 14;
+    self.textView.accessibilityLabel = @"需要转换为语音的文字";
+    [self.textView.heightAnchor constraintEqualToConstant:96].active = YES;
+    [stack addArrangedSubview:self.textView];
+
+    UILabel *voiceTitle = WCAtlasChatTTSPanelLabel(@"声音", [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold],
+                                                   UIColor.secondaryLabelColor);
+    [stack addArrangedSubview:voiceTitle];
+    UIStackView *choiceRow = [[UIStackView alloc] init];
+    choiceRow.axis = UILayoutConstraintAxisHorizontal;
+    choiceRow.spacing = 8;
+    choiceRow.distribution = UIStackViewDistributionFillEqually;
+    self.voiceButton = WCAtlasChatTTSPanelButton(@"音色", self, @selector(selectVoice));
+    self.modelButton = WCAtlasChatTTSPanelButton(@"模型", self, @selector(selectModel));
+    self.toneButton = WCAtlasChatTTSPanelButton(@"语调", self, @selector(selectTone));
+    for (UIButton *button in @[self.voiceButton, self.modelButton, self.toneButton]) {
+        button.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+        button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
+        [choiceRow addArrangedSubview:button];
+    }
+    [stack addArrangedSubview:choiceRow];
+    UIStackView *voiceManagementRow = [[UIStackView alloc] init];
+    voiceManagementRow.axis = UILayoutConstraintAxisHorizontal;
+    voiceManagementRow.spacing = 8;
+    voiceManagementRow.distribution = UIStackViewDistributionFillEqually;
+    UIButton *addVoice = WCAtlasChatTTSPanelButton(@"＋ 添加音色", self, @selector(addVoice));
+    UIButton *deleteVoice = WCAtlasChatTTSPanelButton(@"删除音色", self, @selector(deleteVoice));
+    addVoice.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
+    deleteVoice.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
+    [deleteVoice setTitleColor:UIColor.systemRedColor forState:UIControlStateNormal];
+    [voiceManagementRow addArrangedSubview:addVoice];
+    [voiceManagementRow addArrangedSubview:deleteVoice];
+    [stack addArrangedSubview:voiceManagementRow];
+
+    UIView *speedHeader = [UIView new];
+    UILabel *speedTitle = WCAtlasChatTTSPanelLabel(@"语速", [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold],
+                                                   UIColor.labelColor);
+    speedTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    self.speedValueLabel = WCAtlasChatTTSPanelLabel(@"1.00×", [UIFont monospacedDigitSystemFontOfSize:14 weight:UIFontWeightSemibold],
+                                                    UIColor.systemBlueColor);
+    self.speedValueLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    [speedHeader addSubview:speedTitle];
+    [speedHeader addSubview:self.speedValueLabel];
+    [NSLayoutConstraint activateConstraints:@[
+        [speedHeader.heightAnchor constraintEqualToConstant:24],
+        [speedTitle.leadingAnchor constraintEqualToAnchor:speedHeader.leadingAnchor],
+        [speedTitle.centerYAnchor constraintEqualToAnchor:speedHeader.centerYAnchor],
+        [self.speedValueLabel.trailingAnchor constraintEqualToAnchor:speedHeader.trailingAnchor],
+        [self.speedValueLabel.centerYAnchor constraintEqualToAnchor:speedHeader.centerYAnchor]
+    ]];
+    [stack addArrangedSubview:speedHeader];
+    self.speedSlider = [UISlider new];
+    self.speedSlider.minimumValue = 0.5f;
+    self.speedSlider.maximumValue = 2.0f;
+    self.speedSlider.continuous = YES;
+    self.speedSlider.minimumTrackTintColor = UIColor.systemBlueColor;
+    [self.speedSlider addTarget:self action:@selector(speedChanged:) forControlEvents:UIControlEventValueChanged];
+    [self.speedSlider addTarget:self action:@selector(speedCommitted:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel];
+    [stack addArrangedSubview:self.speedSlider];
+
+    UIView *triggerRow = [UIView new];
+    UILabel *triggerTitle = WCAtlasChatTTSPanelLabel(@"文字触发", [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold],
+                                                     UIColor.labelColor);
+    triggerTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    self.triggerSwitch = [UISwitch new];
+    self.triggerSwitch.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.triggerSwitch addTarget:self action:@selector(triggerChanged:) forControlEvents:UIControlEventValueChanged];
+    [triggerRow addSubview:triggerTitle];
+    [triggerRow addSubview:self.triggerSwitch];
+    [NSLayoutConstraint activateConstraints:@[
+        [triggerRow.heightAnchor constraintEqualToConstant:34],
+        [triggerTitle.leadingAnchor constraintEqualToAnchor:triggerRow.leadingAnchor],
+        [triggerTitle.centerYAnchor constraintEqualToAnchor:triggerRow.centerYAnchor],
+        [self.triggerSwitch.trailingAnchor constraintEqualToAnchor:triggerRow.trailingAnchor],
+        [self.triggerSwitch.centerYAnchor constraintEqualToAnchor:triggerRow.centerYAnchor]
+    ]];
+    [stack addArrangedSubview:triggerRow];
+    self.triggerField = [UITextField new];
+    self.triggerField.placeholder = @"触发词，例如：转语音";
+    self.triggerField.font = [UIFont systemFontOfSize:15];
+    self.triggerField.backgroundColor = UIColor.secondarySystemBackgroundColor;
+    self.triggerField.layer.cornerRadius = 12;
+    self.triggerField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    self.triggerField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 12, 1)];
+    self.triggerField.leftViewMode = UITextFieldViewModeAlways;
+    [self.triggerField addTarget:self action:@selector(triggerPrefixCommitted:) forControlEvents:UIControlEventEditingDidEnd];
+    [self.triggerField.heightAnchor constraintEqualToConstant:44].active = YES;
+    [stack addArrangedSubview:self.triggerField];
+
+    UIButton *send = [UIButton buttonWithType:UIButtonTypeSystem];
+    [send setTitle:@"生成并发送" forState:UIControlStateNormal];
+    [send setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    send.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
+    send.backgroundColor = UIColor.systemBlueColor;
+    send.layer.cornerRadius = 14;
+    [send.heightAnchor constraintEqualToConstant:50].active = YES;
+    [send addTarget:self action:@selector(sendSpeech) forControlEvents:UIControlEventTouchUpInside];
+    [stack addArrangedSubview:send];
+
+    UIButton *APIButton = WCAtlasChatTTSPanelButton(@"Fish Audio API Key", self, @selector(configureAPI));
+    APIButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
+    [stack addArrangedSubview:APIButton];
+
+    CGFloat maximumHeight = MIN(UIScreen.mainScreen.bounds.size.height - 32.0, 660.0);
+    [NSLayoutConstraint activateConstraints:@[
+        [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [card.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-8],
+        [card.heightAnchor constraintEqualToConstant:maximumHeight],
+        [scrollView.leadingAnchor constraintEqualToAnchor:card.leadingAnchor],
+        [scrollView.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
+        [scrollView.topAnchor constraintEqualToAnchor:card.topAnchor],
+        [scrollView.bottomAnchor constraintEqualToAnchor:card.bottomAnchor],
+        [stack.leadingAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.bottomAnchor],
+        [stack.widthAnchor constraintEqualToAnchor:scrollView.frameLayoutGuide.widthAnchor]
+    ]];
+    [self refreshValues];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self refreshValues];
+}
+
+- (void)refreshValues {
+    self.summaryLabel.text = [NSString stringWithFormat:@"%@ · %@ · %@",
+        WCAtlasFishAudioAPIKey().length ? @"Fish Audio 已连接" : @"尚未配置 API Key",
+        WCAtlasFishAudioModel(), WCAtlasFishAudioToneName()];
+    [self.voiceButton setTitle:WCAtlasChatTTSVoiceName() forState:UIControlStateNormal];
+    [self.modelButton setTitle:WCAtlasFishAudioModel() forState:UIControlStateNormal];
+    [self.toneButton setTitle:WCAtlasFishAudioToneName() forState:UIControlStateNormal];
+    self.speedSlider.value = (float)WCAtlasFishAudioSpeechSpeed();
+    self.speedValueLabel.text = [NSString stringWithFormat:@"%.2f×", self.speedSlider.value];
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    self.triggerSwitch.on = [defaults boolForKey:WCAtlasChatTTSTriggerEnabledKey];
+    NSString *prefix = WCAtlasChatTTSTrim([defaults stringForKey:WCAtlasChatTTSTriggerPrefixKey]);
+    self.triggerField.text = prefix.length ? prefix : @"转语音";
+}
+
+- (void)report:(NSString *)message success:(BOOL)success {
+    [self refreshValues];
+    WCAtlasChatTTSReport(self.statusHandler, message, success);
+}
+
+- (void)closePanel { [self dismissViewControllerAnimated:YES completion:nil]; }
+
+- (void)speedChanged:(UISlider *)slider {
+    self.speedValueLabel.text = [NSString stringWithFormat:@"%.2f×", slider.value];
+}
+
+- (void)speedCommitted:(UISlider *)slider {
+    WCAtlasSetFishAudioSpeechSpeed(slider.value);
+    [self report:[NSString stringWithFormat:@"TTS 语速：%.2f×", slider.value] success:YES];
+}
+
+- (void)triggerChanged:(UISwitch *)sender {
+    NSString *prefix = WCAtlasChatTTSTrim(self.triggerField.text);
+    if (prefix.length == 0) prefix = @"转语音";
+    [NSUserDefaults.standardUserDefaults setObject:prefix forKey:WCAtlasChatTTSTriggerPrefixKey];
+    [NSUserDefaults.standardUserDefaults setBool:sender.isOn forKey:WCAtlasChatTTSTriggerEnabledKey];
+    [self report:[NSString stringWithFormat:@"文字触发已%@：%@", sender.isOn ? @"开启" : @"关闭", prefix]
+           success:YES];
+}
+
+- (void)triggerPrefixCommitted:(UITextField *)field {
+    NSString *prefix = WCAtlasChatTTSTrim(field.text);
+    if (prefix.length == 0) prefix = @"转语音";
+    field.text = prefix;
+    [NSUserDefaults.standardUserDefaults setObject:prefix forKey:WCAtlasChatTTSTriggerPrefixKey];
+}
+
+- (WCAtlasChatTTSStatusHandler)nestedStatus {
+    __weak typeof(self) weakSelf = self;
+    return ^(NSString *message, BOOL success) { [weakSelf report:message success:success]; };
+}
+
+- (void)presentOptionsWithTitle:(NSString *)title
+                           items:(NSArray<NSDictionary<NSString *, NSString *> *> *)items
+                        selected:(NSString *)selected
+                     destructive:(BOOL)destructive
+                         handler:(WCAtlasChatTTSOptionHandler)handler {
+    WCAtlasChatTTSOptionPickerController *picker = [[WCAtlasChatTTSOptionPickerController alloc]
+        initWithTitle:title items:items selectedValue:selected destructive:destructive handler:handler];
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)selectVoice {
+    NSMutableArray<NSDictionary<NSString *, NSString *> *> *items = [NSMutableArray arrayWithObject:
+        @{@"title": @"默认音色", @"value": @"", @"detail": @"使用 Fish Audio 默认声音"}];
+    for (NSDictionary<NSString *, NSString *> *preset in WCAtlasFishAudioVoicePresets()) {
+        [items addObject:@{@"title": preset[@"name"] ?: @"自定义音色",
+                           @"value": preset[@"referenceID"] ?: @""}];
+    }
+    __weak typeof(self) weakSelf = self;
+    [self presentOptionsWithTitle:@"选择音色" items:items selected:WCAtlasFishAudioReferenceID()
+                      destructive:NO handler:^(NSString *value, NSString *title) {
+        WCAtlasSetFishAudioReferenceID(value);
+        [weakSelf report:[NSString stringWithFormat:@"已选择音色：%@", title] success:YES];
+    }];
+}
+
+- (void)selectModel {
+    NSMutableArray *items = [NSMutableArray array];
+    for (NSString *model in @[@"s2.1-pro-free", @"s2.1-pro", @"s2-pro"]) {
+        [items addObject:@{@"title": model, @"value": model,
+                           @"detail": [model hasSuffix:@"free"] ? @"优先使用免费额度" : @"需要账户余额"}];
+    }
+    __weak typeof(self) weakSelf = self;
+    [self presentOptionsWithTitle:@"选择模型" items:items selected:WCAtlasFishAudioModel()
+                      destructive:NO handler:^(NSString *value, NSString *title) {
+        WCAtlasSetFishAudioModel(value);
+        [weakSelf report:[NSString stringWithFormat:@"已选择模型：%@", title] success:YES];
+    }];
+}
+
+- (void)selectTone {
+    NSMutableArray *items = [NSMutableArray array];
+    for (NSDictionary<NSString *, NSString *> *preset in WCAtlasFishAudioTonePresets()) {
+        [items addObject:@{@"title": preset[@"name"] ?: @"自然",
+                           @"value": preset[@"identifier"] ?: @"natural"}];
+    }
+    __weak typeof(self) weakSelf = self;
+    [self presentOptionsWithTitle:@"选择语调" items:items selected:WCAtlasFishAudioToneIdentifier()
+                      destructive:NO handler:^(NSString *value, NSString *title) {
+        WCAtlasSetFishAudioToneIdentifier(value);
+        [weakSelf report:[NSString stringWithFormat:@"TTS 语调：%@", title] success:YES];
+    }];
+}
+
+- (void)addVoice {
+    WCAtlasChatTTSPresentAddVoice(self, [self nestedStatus]);
+}
+
+- (void)deleteVoice {
+    NSMutableArray *items = [NSMutableArray array];
+    for (NSDictionary<NSString *, NSString *> *preset in WCAtlasFishAudioVoicePresets()) {
+        [items addObject:@{@"title": preset[@"name"] ?: @"自定义音色",
+                           @"value": preset[@"referenceID"] ?: @""}];
+    }
+    if (items.count == 0) {
+        [self report:@"当前没有可删除的音色" success:NO];
+        return;
+    }
+    __weak typeof(self) weakSelf = self;
+    [self presentOptionsWithTitle:@"删除音色" items:items selected:@"" destructive:YES
+                          handler:^(NSString *value, NSString *title) {
+        WCAtlasRemoveFishAudioVoicePreset(value);
+        [weakSelf report:[NSString stringWithFormat:@"已删除音色：%@", title] success:YES];
+    }];
+}
+- (void)configureAPI { WCAtlasChatTTSPresentAPISettings(self, [self nestedStatus]); }
+
+- (void)sendSpeech {
+    [self triggerPrefixCommitted:self.triggerField];
+    NSString *text = WCAtlasChatTTSTrim(self.textView.text);
+    __weak typeof(self) weakSelf = self;
+    UIViewController *chatPresenter = self.presentingViewController ?: self;
+    WCAtlasChatTTSGenerateAndSend(chatPresenter, self.chatUserName, text, ^{
+        if (weakSelf.didSubmit) weakSelf.didSubmit();
+        [weakSelf dismissViewControllerAnimated:YES completion:nil];
+    }, [self nestedStatus]);
+}
+
+@end
+
 static void WCAtlasChatTTSPresentMainPanel(UIViewController *presenter, NSString *userName,
                                            dispatch_block_t didSubmit,
                                            WCAtlasChatTTSStatusHandler status) {
     if (!presenter.viewIfLoaded.window) return;
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    BOOL triggerEnabled = [defaults boolForKey:WCAtlasChatTTSTriggerEnabledKey];
-    NSString *prefix = WCAtlasChatTTSTrim([defaults stringForKey:WCAtlasChatTTSTriggerPrefixKey]);
-    if (prefix.length == 0) prefix = @"转语音";
-    NSString *message = [NSString stringWithFormat:@"%@ · %@\n语调：%@ · 语速：%.2gx\n文字触发：%@（%@）",
-        WCAtlasFishAudioModel(), WCAtlasChatTTSVoiceName(), WCAtlasFishAudioToneName(),
-        WCAtlasFishAudioSpeechSpeed(), prefix, triggerEnabled ? @"已开启" : @"已关闭"];
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"聊天 TTS"
-        message:message preferredStyle:UIAlertControllerStyleActionSheet];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"输入文字并发送语音" style:UIAlertActionStyleDefault
-        handler:^(__unused UIAlertAction *action) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                WCAtlasChatTTSPresentTextInput(presenter, userName, didSubmit, status);
-            });
-        }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"选择音色" style:UIAlertActionStyleDefault
-        handler:^(__unused UIAlertAction *action) {
-            dispatch_async(dispatch_get_main_queue(), ^{ WCAtlasChatTTSPresentVoicePicker(presenter, status); });
-        }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"选择模型" style:UIAlertActionStyleDefault
-        handler:^(__unused UIAlertAction *action) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                WCAtlasChatTTSPresentModelPicker(presenter, userName, didSubmit, status);
-            });
-        }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"设置语调" style:UIAlertActionStyleDefault
-        handler:^(__unused UIAlertAction *action) {
-            dispatch_async(dispatch_get_main_queue(), ^{ WCAtlasChatTTSPresentTonePicker(presenter, status); });
-        }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"设置语速" style:UIAlertActionStyleDefault
-        handler:^(__unused UIAlertAction *action) {
-            dispatch_async(dispatch_get_main_queue(), ^{ WCAtlasChatTTSPresentSpeedPicker(presenter, status); });
-        }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"设置文字触发" style:UIAlertActionStyleDefault
-        handler:^(__unused UIAlertAction *action) {
-            dispatch_async(dispatch_get_main_queue(), ^{ WCAtlasChatTTSPresentTriggerSettings(presenter, status); });
-        }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Fish Audio API Key" style:UIAlertActionStyleDefault
-        handler:^(__unused UIAlertAction *action) {
-            dispatch_async(dispatch_get_main_queue(), ^{ WCAtlasChatTTSPresentAPISettings(presenter, status); });
-        }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    sheet.popoverPresentationController.sourceView = presenter.view;
-    sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds),
-        CGRectGetMidY(presenter.view.bounds), 1, 1);
-    [presenter presentViewController:sheet animated:YES completion:nil];
+    WCAtlasChatTTSPanelController *panel = [[WCAtlasChatTTSPanelController alloc]
+        initWithUserName:userName didSubmit:didSubmit status:status];
+    [presenter presentViewController:panel animated:YES completion:nil];
 }
 
 void WCAtlasPresentChatTTSPanel(UIViewController *presenter, NSString *userName,

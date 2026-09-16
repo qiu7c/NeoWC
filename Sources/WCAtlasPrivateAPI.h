@@ -315,7 +315,7 @@ FOUNDATION_EXPORT BOOL WCAtlasPrivateEnableMentionClickHandling(id _Nullable ric
 /// @return YES when a rich-text view and official message wrap were resolved and associated.
 /// @discussion Main-thread only. A setter hook may bind before and after original; layout/delegate
 /// hooks pass nil and resolve the current model. Message identity comes only from native wrap fields. The refresh path
-/// invokes `setArrStyles:withContent:` only after verifying its void/object/object ABI. Unsupported
+/// invokes `setArrStyles:withContent:` only after verifying its integer/object/object ABI. Unsupported
 /// layouts return NO and leave WeChat rendering unchanged; no visible text is used to infer wxids.
 FOUNDATION_EXPORT BOOL WCAtlasPrivateBindMentionContext(id _Nullable cell,
                                                         id _Nullable viewModel,
@@ -333,6 +333,18 @@ FOUNDATION_EXPORT id _Nullable WCAtlasPrivateMentionLinkStyle(NSRange range,
                                                               NSString *URLString,
                                                               UIColor *normalColor,
                                                               UIColor *highlightedColor);
+
+/// Applies mention-link colors to WeChat's native rich-text configuration.
+/// @param config Object returned by `TextMessageViewModel -getRichTextViewConfig`.
+/// @param normalColor Color used for the normal link state.
+/// @param highlightedColor Color used while the link is pressed.
+/// @return YES when at least one evidenced native color field was updated.
+/// @discussion Main-thread only. Uses `linkColor` and `linkHLColor`, matching the native
+/// configuration consumed by `RichTextView`. Missing fields and KVC exceptions fail closed;
+/// callers return WeChat's original configuration unchanged on unsupported versions.
+FOUNDATION_EXPORT BOOL WCAtlasPrivateConfigureMentionRichTextConfig(id _Nullable config,
+                                                                   UIColor *normalColor,
+                                                                   UIColor *highlightedColor);
 
 /// Extracts the native link URL from a WeChat rich-text click event or style object.
 /// @param event String, URL, dictionary, event wrapper, or native link-style object.

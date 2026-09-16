@@ -12,12 +12,15 @@ extern void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 NSString *const WCAtlasMentionHighlightEnabledKey = @"com.qiu7c.wcatlas.chat.mention-highlight";
 
 static NSString *const WCAtlasMentionURLScheme = @"wcatlas-mention";
-static void (*WCAtlasOriginalSetMentionStyles)(id, SEL, id, id);
+static BOOL (*WCAtlasOriginalSetMentionStyles)(id, SEL, id, id);
 static void (*WCAtlasOriginalClickMentionLinkEvent)(id, SEL, id);
 static void (*WCAtlasOriginalClickMentionTextEvent)(id, SEL, id);
+static void (*WCAtlasOriginalMentionCellOnLinkClicked)(id, SEL, id, CGRect);
 static void (*WCAtlasOriginalSetMentionViewModel)(id, SEL, id);
 static void (*WCAtlasOriginalLayoutMentionCell)(id, SEL);
 static id (*WCAtlasOriginalGetMentionRichTextViewForDelegate)(id, SEL);
+static id (*WCAtlasOriginalMentionLinkTextColor)(id, SEL);
+static id (*WCAtlasOriginalMentionRichTextConfig)(id, SEL);
 static NSString *WCAtlasLastOpenedMentionUserName;
 static NSTimeInterval WCAtlasLastOpenedMentionTime;
 
@@ -38,11 +41,30 @@ static BOOL WCAtlasMentionTypeIsVoid(const char *type) {
     return type && *type == 'v';
 }
 
+static BOOL WCAtlasMentionTypeIsInteger(const char *type) {
+    type = WCAtlasMentionSkipTypeQualifiers(type);
+    return type && *type && strchr("cCsSiIlLqQB", *type) != NULL;
+}
+
 static BOOL WCAtlasMentionMethodHasObjectArguments(Method method, unsigned int count) {
     if (!method || method_getNumberOfArguments(method) != count + 2) return NO;
     char returnType[32] = {0};
     method_getReturnType(method, returnType, sizeof(returnType));
     if (!WCAtlasMentionTypeIsVoid(returnType)) return NO;
+    for (unsigned int index = 0; index < count; index++) {
+        char argumentType[32] = {0};
+        method_getArgumentType(method, index + 2, argumentType, sizeof(argumentType));
+        if (!WCAtlasMentionTypeIsObject(argumentType)) return NO;
+    }
+    return YES;
+}
+
+static BOOL WCAtlasMentionMethodHasObjectArgumentsAndIntegerReturn(Method method,
+                                                                  unsigned int count) {
+    if (!method || method_getNumberOfArguments(method) != count + 2) return NO;
+    char returnType[32] = {0};
+    method_getReturnType(method, returnType, sizeof(returnType));
+    if (!WCAtlasMentionTypeIsInteger(returnType)) return NO;
     for (unsigned int index = 0; index < count; index++) {
         char argumentType[32] = {0};
         method_getArgumentType(method, index + 2, argumentType, sizeof(argumentType));
@@ -62,6 +84,18 @@ static BOOL WCAtlasMentionMethodReturnsObject(Method method, unsigned int argume
         if (!WCAtlasMentionTypeIsObject(argumentType)) return NO;
     }
     return YES;
+}
+
+static BOOL WCAtlasMentionMethodHasObjectAndCGRectArguments(Method method) {
+    if (!method || method_getNumberOfArguments(method) != 4) return NO;
+    char returnType[32] = {0};
+    char objectType[32] = {0};
+    char rectType[128] = {0};
+    method_getReturnType(method, returnType, sizeof(returnType));
+    method_getArgumentType(method, 2, objectType, sizeof(objectType));
+    method_getArgumentType(method, 3, rectType, sizeof(rectType));
+    return WCAtlasMentionTypeIsVoid(returnType) && WCAtlasMentionTypeIsObject(objectType) &&
+           strcmp(WCAtlasMentionSkipTypeQualifiers(rectType), @encode(CGRect)) == 0;
 }
 
 static BOOL WCAtlasMentionIsAllUserName(NSString *userName) {
@@ -137,11 +171,20 @@ static NSString *WCAtlasMentionStringFromEvent(id event) {
     return WCAtlasPrivateMentionLinkURLString(event);
 }
 
+static UIColor *WCAtlasMentionNormalColor(void) {
+    return [UIColor colorWithRed:0.12 green:0.47 blue:0.95 alpha:1.0];
+}
+
+static UIColor *WCAtlasMentionHighlightedColor(void) {
+    return [WCAtlasMentionNormalColor() colorWithAlphaComponent:0.55];
+}
+
 static id WCAtlasMentionLinkStyle(NSRange range, NSString *userName) {
     NSString *URLString = WCAtlasMentionURLString(userName);
-    UIColor *normalColor = [UIColor colorWithRed:0.12 green:0.47 blue:0.95 alpha:1.0];
-    UIColor *highlightedColor = [normalColor colorWithAlphaComponent:0.55];
-    return WCAtlasPrivateMentionLinkStyle(range, URLString, normalColor, highlightedColor);
+    // WeChatNeo's verified rendering chain leaves per-style colors transparent
+    // and supplies the visible colors through TextMessageViewModel's config.
+    UIColor *clearColor = UIColor.clearColor;
+    return WCAtlasPrivateMentionLinkStyle(range, URLString, clearColor, clearColor);
 }
 
 static BOOL WCAtlasMentionStylesContainURL(NSArray *styles) {
@@ -152,18 +195,16 @@ static BOOL WCAtlasMentionStylesContainURL(NSArray *styles) {
     return NO;
 }
 
-static void WCAtlasSetMentionStyles(id self, SEL _cmd, id styles, id contentObject) {
+static BOOL WCAtlasSetMentionStyles(id self, SEL _cmd, id styles, id contentObject) {
     NSArray *originalStyles = [styles isKindOfClass:NSArray.class] ? styles : @[];
     NSString *content = [contentObject isKindOfClass:NSString.class] ? contentObject : nil;
     if (!WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey) || content.length == 0 ||
         [content rangeOfString:@"@"].location == NSNotFound || WCAtlasMentionStylesContainURL(originalStyles)) {
-        WCAtlasOriginalSetMentionStyles(self, _cmd, styles, contentObject);
-        return;
+        return WCAtlasOriginalSetMentionStyles(self, _cmd, styles, contentObject);
     }
     NSArray<NSString *> *userNames = WCAtlasPrivateMentionUserNames(self);
     if (userNames.count == 0) {
-        WCAtlasOriginalSetMentionStyles(self, _cmd, styles, contentObject);
-        return;
+        return WCAtlasOriginalSetMentionStyles(self, _cmd, styles, contentObject);
     }
     NSString *chatUserName = WCAtlasPrivateMentionChatUserName(self);
     id groupContact = [chatUserName hasSuffix:@"@chatroom"] ? WCAtlasPrivateContact(chatUserName) : nil;
@@ -195,14 +236,15 @@ static void WCAtlasSetMentionStyles(id self, SEL _cmd, id styles, id contentObje
             }
         }
         if (range.location == NSNotFound || NSMaxRange(range) > content.length) continue;
-        id style = WCAtlasMentionLinkStyle(range, WCAtlasMentionIsAllUserName(userName) ? @"notify@all" : userName);
+        id style = WCAtlasMentionLinkStyle(range,
+            WCAtlasMentionIsAllUserName(userName) ? @"notify@all" : userName);
         if (style) [merged addObject:style];
     }
     if (merged.count > originalStyles.count) {
         WCAtlasPrivateEnableMentionClickHandling(self);
-        WCAtlasOriginalSetMentionStyles(self, _cmd, merged, contentObject);
+        return WCAtlasOriginalSetMentionStyles(self, _cmd, merged, contentObject);
     } else {
-        WCAtlasOriginalSetMentionStyles(self, _cmd, styles, contentObject);
+        return WCAtlasOriginalSetMentionStyles(self, _cmd, styles, contentObject);
     }
 }
 
@@ -239,6 +281,13 @@ static void WCAtlasClickMentionTextEvent(id self, SEL _cmd, id event) {
     if (WCAtlasOriginalClickMentionTextEvent) WCAtlasOriginalClickMentionTextEvent(self, _cmd, event);
 }
 
+static void WCAtlasMentionCellOnLinkClicked(id self, SEL _cmd, id event, CGRect rect) {
+    if (WCAtlasHandleMentionClick(self, event)) return;
+    if (WCAtlasOriginalMentionCellOnLinkClicked) {
+        WCAtlasOriginalMentionCellOnLinkClicked(self, _cmd, event, rect);
+    }
+}
+
 static void WCAtlasSetMentionViewModel(id self, SEL _cmd, id viewModel) {
     BOOL enabled = WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey);
     if (enabled) WCAtlasPrivateBindMentionContext(self, viewModel, NO);
@@ -262,6 +311,23 @@ static id WCAtlasGetMentionRichTextViewForDelegate(id self, SEL _cmd) {
     return richTextView;
 }
 
+static id WCAtlasMentionLinkTextColor(id self, SEL _cmd) {
+    id originalColor = WCAtlasOriginalMentionLinkTextColor
+        ? WCAtlasOriginalMentionLinkTextColor(self, _cmd) : nil;
+    return WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)
+        ? WCAtlasMentionNormalColor() : originalColor;
+}
+
+static id WCAtlasMentionRichTextConfig(id self, SEL _cmd) {
+    id config = WCAtlasOriginalMentionRichTextConfig
+        ? WCAtlasOriginalMentionRichTextConfig(self, _cmd) : nil;
+    if (WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) {
+        WCAtlasPrivateConfigureMentionRichTextConfig(config,
+            WCAtlasMentionNormalColor(), WCAtlasMentionHighlightedColor());
+    }
+    return config;
+}
+
 #pragma mark - Hook Installation
 
 void WCAtlasMentionHighlightInstallHooks(void) {
@@ -270,13 +336,13 @@ void WCAtlasMentionHighlightInstallHooks(void) {
         Class richTextClass = NSClassFromString(@"RichTextView");
         SEL styleSelector = NSSelectorFromString(@"setArrStyles:withContent:");
         Method styleMethod = richTextClass ? class_getInstanceMethod(richTextClass, styleSelector) : NULL;
-        if (!WCAtlasMentionMethodHasObjectArguments(styleMethod, 2)) {
+        if (!WCAtlasMentionMethodHasObjectArgumentsAndIntegerReturn(styleMethod, 2)) {
             WCAtlasLog(@"@ 高亮未安装：RichTextView 样式 ABI 不支持");
             return;
         }
         IMP original = NULL;
         MSHookMessageEx(richTextClass, styleSelector, (IMP)WCAtlasSetMentionStyles, &original);
-        WCAtlasOriginalSetMentionStyles = (void (*)(id, SEL, id, id))original;
+        WCAtlasOriginalSetMentionStyles = (BOOL (*)(id, SEL, id, id))original;
 
         SEL linkSelector = NSSelectorFromString(@"clickOnLinkEvent:");
         Method linkMethod = class_getInstanceMethod(richTextClass, linkSelector);
@@ -300,6 +366,19 @@ void WCAtlasMentionHighlightInstallHooks(void) {
         }
 
         Class textCellClass = NSClassFromString(@"TextMessageCellView");
+        SEL cellLinkSelector = NSSelectorFromString(@"onLinkClicked:withRect:");
+        Method cellLinkMethod = textCellClass
+            ? class_getInstanceMethod(textCellClass, cellLinkSelector) : NULL;
+        if (WCAtlasMentionMethodHasObjectAndCGRectArguments(cellLinkMethod)) {
+            original = NULL;
+            MSHookMessageEx(textCellClass, cellLinkSelector,
+                (IMP)WCAtlasMentionCellOnLinkClicked, &original);
+            WCAtlasOriginalMentionCellOnLinkClicked =
+                (void (*)(id, SEL, id, CGRect))original;
+            installedClickHook = YES;
+        } else {
+            WCAtlasLog(@"@ 高亮 Cell 点击入口未安装：onLinkClicked:withRect: ABI 不支持");
+        }
         SEL viewModelSelector = NSSelectorFromString(@"setViewModel:");
         Method viewModelMethod = textCellClass ? class_getInstanceMethod(textCellClass, viewModelSelector) : NULL;
         if (WCAtlasMentionMethodHasObjectArguments(viewModelMethod, 1)) {
@@ -329,6 +408,30 @@ void WCAtlasMentionHighlightInstallHooks(void) {
                 (id (*)(id, SEL))original;
         } else {
             WCAtlasLog(@"@ 高亮富文本入口未安装：getRichTextViewForDelegate ABI 不支持");
+        }
+
+        Class textViewModelClass = NSClassFromString(@"TextMessageViewModel");
+        SEL linkColorSelector = NSSelectorFromString(@"linkTextColor");
+        Method linkColorMethod = textViewModelClass
+            ? class_getInstanceMethod(textViewModelClass, linkColorSelector) : NULL;
+        if (WCAtlasMentionMethodReturnsObject(linkColorMethod, 0)) {
+            original = NULL;
+            MSHookMessageEx(textViewModelClass, linkColorSelector,
+                (IMP)WCAtlasMentionLinkTextColor, &original);
+            WCAtlasOriginalMentionLinkTextColor = (id (*)(id, SEL))original;
+        } else {
+            WCAtlasLog(@"@ 高亮颜色入口未安装：TextMessageViewModel linkTextColor ABI 不支持");
+        }
+        SEL richConfigSelector = NSSelectorFromString(@"getRichTextViewConfig");
+        Method richConfigMethod = textViewModelClass
+            ? class_getInstanceMethod(textViewModelClass, richConfigSelector) : NULL;
+        if (WCAtlasMentionMethodReturnsObject(richConfigMethod, 0)) {
+            original = NULL;
+            MSHookMessageEx(textViewModelClass, richConfigSelector,
+                (IMP)WCAtlasMentionRichTextConfig, &original);
+            WCAtlasOriginalMentionRichTextConfig = (id (*)(id, SEL))original;
+        } else {
+            WCAtlasLog(@"@ 高亮配置入口未安装：getRichTextViewConfig ABI 不支持");
         }
     });
 }
