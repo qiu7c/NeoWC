@@ -13,6 +13,7 @@
 #import "WCAtlasPluginManager.h"
 #import "WCAtlasMentionHighlight.h"
 #import "WCAtlasHomeCategories.h"
+#import "WCAtlasChatTTS.h"
 #import <stdlib.h>
 
 NSString *const WCAtlasEnabledKey = @"com.qiu7c.wcatlas.enabled";
@@ -231,6 +232,9 @@ void WCAtlasSettingsRegisterDefaults(void) {
         WCAtlasInputSwipeActionsEnabledKey: @NO,
         WCAtlasQuickReplyEnabledKey: @NO,
         WCAtlasQuickReplyInstantSendEnabledKey: @NO,
+        WCAtlasChatTTSEnabledKey: @NO,
+        WCAtlasChatTTSTriggerEnabledKey: @NO,
+        WCAtlasChatTTSTriggerPrefixKey: @"转语音",
         WCAtlasSendConfirmationEnabledKey: @NO,
         WCAtlasSendConfirmationUsersKey: @{},
         WCAtlasSendConfirmationPauseSecondsKey: @60,
@@ -405,6 +409,7 @@ static NSArray<WCAtlasSettingSection *> *WCAtlasMessageSections(NSUserDefaults *
                                 WCAtlasCountText(WCAtlasQuickReplyStore.sharedStore.items.count), WCAtlasSettingActionQuickReplyLibrary)],
                     defaults,
                     collapsed);
+    [interaction addObject:WCAtlasItem(@"聊天 TTS", @"长按输入栏麦克风按钮；支持音色选择和文字前缀触发", @"waveform.and.mic", WCAtlasSettingRowKindSwitch, WCAtlasChatTTSEnabledKey, nil, WCAtlasSettingActionNone)];
     WCAtlasAddFeature(interaction, WCAtlasItem(@"语音自动转文字", @"收到语音后自动转成文字", @"waveform.and.mic", WCAtlasSettingRowKindSwitch, WCAtlasAutoVoiceTranscriptionEnabledKey, nil, WCAtlasSettingActionNone), @[
         WCAtlasItem(@"忽略群聊语音", @"群聊中的语音保持原样", @"person.3", WCAtlasSettingRowKindSwitch, WCAtlasAutoVoiceTranscriptionIgnoreGroupKey, nil, WCAtlasSettingActionNone),
         WCAtlasItem(@"忽略私聊语音", @"私聊中的语音保持原样", @"person", WCAtlasSettingRowKindSwitch, WCAtlasAutoVoiceTranscriptionIgnorePrivateKey, nil, WCAtlasSettingActionNone),

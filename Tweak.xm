@@ -47,6 +47,7 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 #import "Sources/WCAtlasInAppNotification.h"
 #import "Sources/WCAtlasMentionHighlight.h"
 #import "Sources/WCAtlasHomeCategories.h"
+#import "Sources/WCAtlasChatTTS.h"
 
 @interface WCActionSheet : NSObject
 - (void)addButtonWithTitle:(NSString *)title eventAction:(void (^)(void))eventAction;
@@ -224,7 +225,10 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
 @interface MMInputToolView : UIView
 - (void)wcatlas_handleQuickReplyPlusLongPress:(UILongPressGestureRecognizer *)recognizer;
+- (void)wcatlas_handleChatTTSLongPress:(UILongPressGestureRecognizer *)recognizer;
 - (void)sendMsgWithText:(id)text;
+- (id)text;
+- (void)resetText;
 @end
 
 @interface AppFileMessageCellViewV2 : CommonMessageCellView
@@ -378,6 +382,8 @@ static char WCAtlasInputSwipeLeftRecognizerKey;
 static char WCAtlasInputSwipeRightRecognizerKey;
 static char WCAtlasQuickReplyPlusRecognizerKey;
 static char WCAtlasQuickReplyPlusDelegateKey;
+static char WCAtlasChatTTSRecognizerKey;
+static char WCAtlasChatTTSButtonKey;
 static char WCAtlasAutoCombineSendAppliedKey;
 static char WCAtlasWalletGestureRecognizerKey;
 static char WCAtlasReplyPanRecognizerKey;
@@ -2567,6 +2573,34 @@ static void WCAtlasSynchronizeQuickReplyPlusGesture(MMInputToolView *view) {
         [view removeGestureRecognizer:recognizer];
         objc_setAssociatedObject(view, &WCAtlasQuickReplyPlusRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(view, &WCAtlasQuickReplyPlusDelegateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
+static void WCAtlasSynchronizeChatTTSGesture(MMInputToolView *view) {
+    if (!view) return;
+    UIView *oldButton = objc_getAssociatedObject(view, &WCAtlasChatTTSButtonKey);
+    UILongPressGestureRecognizer *recognizer = objc_getAssociatedObject(view, &WCAtlasChatTTSRecognizerKey);
+    BOOL enabled = WCAtlasEnhancementEnabled(WCAtlasChatTTSEnabledKey) && view.window;
+    UIView *button = enabled
+        ? WCAtlasTweakValueForSelectorNames(view, @[@"inputModeChangeButton", @"_inputModeChangeButton"])
+        : nil;
+    if (![button isKindOfClass:UIView.class]) button = nil;
+    if (recognizer && (!enabled || oldButton != button)) {
+        [oldButton removeGestureRecognizer:recognizer];
+        objc_setAssociatedObject(view, &WCAtlasChatTTSRecognizerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, &WCAtlasChatTTSButtonKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        recognizer = nil;
+    }
+    if (enabled && button && !recognizer) {
+        recognizer = [[UILongPressGestureRecognizer alloc]
+            initWithTarget:view action:@selector(wcatlas_handleChatTTSLongPress:)];
+        recognizer.minimumPressDuration = 0.55;
+        recognizer.cancelsTouchesInView = YES;
+        [button addGestureRecognizer:recognizer];
+        objc_setAssociatedObject(view, &WCAtlasChatTTSRecognizerKey, recognizer,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, &WCAtlasChatTTSButtonKey, button,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
@@ -7169,6 +7203,12 @@ static BOOL WCAtlasConsumeVideoSendConfirmationBypass(NSString *target) {
         WCAtlasApplyChatInputRoundingToToolView(self);
     }
     WCAtlasSynchronizeQuickReplyPlusGesture(self);
+    WCAtlasSynchronizeChatTTSGesture(self);
+}
+
+- (void)layoutSubviews {
+    %orig;
+    WCAtlasSynchronizeChatTTSGesture(self);
 }
 
 %new
@@ -7201,6 +7241,43 @@ static BOOL WCAtlasConsumeVideoSendConfirmationBypass(NSString *target) {
     if (quickReplyEnabled) {
         WCAtlasPresentQuickReplyLibrary(controller);
     }
+}
+
+%new
+- (void)wcatlas_handleChatTTSLongPress:(UILongPressGestureRecognizer *)recognizer {
+    if (recognizer.state != UIGestureRecognizerStateBegan ||
+        !WCAtlasEnhancementEnabled(WCAtlasChatTTSEnabledKey)) return;
+    UIViewController *controller = WCAtlasPrivateCurrentChatController();
+    NSString *userName = WCAtlasPrivateChatUserName(controller);
+    if (!controller.viewIfLoaded.window || userName.length == 0) {
+        WCAtlasShowTransientMessage(@"当前页面不是可用的聊天会话", NO);
+        return;
+    }
+    WCAtlasPresentChatTTSPanel(controller, userName, nil, ^(NSString *message, BOOL success) {
+        WCAtlasShowTransientMessage(message, success);
+    });
+}
+
+- (void)sendMsgWithText:(id)text {
+    if (WCAtlasEnhancementEnabled(WCAtlasChatTTSEnabledKey) && [text isKindOfClass:NSString.class]) {
+        UIViewController *controller = WCAtlasPrivateCurrentChatController();
+        NSString *userName = WCAtlasPrivateChatUserName(controller);
+        __weak MMInputToolView *weakToolView = self;
+        NSString *triggerCommand = [text copy];
+        BOOL consumed = WCAtlasChatTTSConsumeTriggeredText(controller, userName, text, ^{
+            MMInputToolView *toolView = weakToolView;
+            id currentText = [toolView respondsToSelector:@selector(text)] ? [toolView text] : nil;
+            if ([currentText isKindOfClass:NSString.class] &&
+                [currentText isEqualToString:triggerCommand] &&
+                [toolView respondsToSelector:@selector(resetText)]) {
+                [toolView resetText];
+            }
+        }, ^(NSString *message, BOOL success) {
+            WCAtlasShowTransientMessage(message, success);
+        });
+        if (consumed) return;
+    }
+    %orig(text);
 }
 
 %end
