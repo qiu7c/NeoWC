@@ -48,15 +48,17 @@ static void WCAtlasChatTTSReport(WCAtlasChatTTSStatusHandler status,
 }
 
 static BOOL WCAtlasChatTTSStillInConversation(UIViewController *presenter, NSString *userName) {
-    if (!presenter.viewIfLoaded.window || userName.length == 0) return NO;
+    if (userName.length == 0) return NO;
+    // A presented settings sheet can temporarily make WeChat's "current chat"
+    // resolver return nil.  Nil is not evidence that the user changed chats;
+    // only reject when a different, non-empty chat identifier is observed.
     NSString *presenterUserName = WCAtlasPrivateChatUserName(presenter);
-    if ([presenterUserName isEqualToString:userName]) return YES;
+    if (presenterUserName.length > 0) return [presenterUserName isEqualToString:userName];
     Class chatControllerClass = NSClassFromString(@"BaseMsgContentViewController");
-    if (presenterUserName.length == 0 && chatControllerClass &&
-        [presenter isKindOfClass:chatControllerClass]) return YES;
+    if (chatControllerClass && [presenter isKindOfClass:chatControllerClass]) return YES;
     UIViewController *current = WCAtlasPrivateCurrentChatController();
-    return current.viewIfLoaded.window &&
-        [WCAtlasPrivateChatUserName(current) isEqualToString:userName];
+    NSString *currentUserName = WCAtlasPrivateChatUserName(current);
+    return currentUserName.length == 0 || [currentUserName isEqualToString:userName];
 }
 
 static void WCAtlasChatTTSGenerateAndSend(UIViewController *presenter,
@@ -448,7 +450,7 @@ static void __attribute__((unused)) WCAtlasChatTTSPresentTextInput(UIViewControl
     self.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.35];
     UIControl *dismissArea = [UIControl new];
     dismissArea.translatesAutoresizingMaskIntoConstraints = NO;
-    [dismissArea addTarget:self action:@selector(closePicker) forControlEvents:UIControlEventTouchUpInside];
+    [dismissArea addTarget:self action:@selector(dismissKeyboard) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:dismissArea];
     [NSLayoutConstraint activateConstraints:@[
         [dismissArea.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -462,6 +464,7 @@ static void __attribute__((unused)) WCAtlasChatTTSPresentTextInput(UIViewControl
     card.backgroundColor = UIColor.systemBackgroundColor;
     card.layer.cornerRadius = 20;
     card.layer.cornerCurve = kCACornerCurveContinuous;
+    card.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
     card.clipsToBounds = YES;
     [self.view addSubview:card];
 
@@ -488,9 +491,9 @@ static void __attribute__((unused)) WCAtlasChatTTSPresentTextInput(UIViewControl
 
     CGFloat height = MIN(520.0, 66.0 + MAX(1, self.items.count) * 52.0);
     [NSLayoutConstraint activateConstraints:@[
-        [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
-        [card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
-        [card.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+        [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [card.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
         [card.heightAnchor constraintEqualToConstant:height],
         [title.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18],
         [title.topAnchor constraintEqualToAnchor:card.topAnchor constant:16],
@@ -534,6 +537,7 @@ static void __attribute__((unused)) WCAtlasChatTTSPresentTextInput(UIViewControl
 }
 
 - (void)closePicker { [self dismissViewControllerAnimated:YES completion:nil]; }
+- (void)dismissKeyboard { [self.view endEditing:YES]; }
 
 @end
 
@@ -581,7 +585,7 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
 
     UIControl *dismissArea = [UIControl new];
     dismissArea.translatesAutoresizingMaskIntoConstraints = NO;
-    [dismissArea addTarget:self action:@selector(closePanel) forControlEvents:UIControlEventTouchUpInside];
+    [dismissArea addTarget:self action:@selector(dismissKeyboard) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:dismissArea];
     [NSLayoutConstraint activateConstraints:@[
         [dismissArea.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -595,6 +599,7 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     card.backgroundColor = UIColor.systemBackgroundColor;
     card.layer.cornerRadius = 24;
     card.layer.cornerCurve = kCACornerCurveContinuous;
+    card.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
     card.clipsToBounds = YES;
     [self.view addSubview:card];
 
@@ -603,6 +608,10 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     scrollView.alwaysBounceVertical = YES;
     scrollView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
     [card addSubview:scrollView];
+    UITapGestureRecognizer *keyboardTap = [[UITapGestureRecognizer alloc]
+        initWithTarget:self action:@selector(dismissKeyboard)];
+    keyboardTap.cancelsTouchesInView = NO;
+    [scrollView addGestureRecognizer:keyboardTap];
 
     UIStackView *stack = [[UIStackView alloc] init];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -749,9 +758,9 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
 
     CGFloat maximumHeight = MIN(UIScreen.mainScreen.bounds.size.height - 32.0, 660.0);
     [NSLayoutConstraint activateConstraints:@[
-        [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
-        [card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
-        [card.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-8],
+        [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [card.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
         [card.heightAnchor constraintEqualToConstant:maximumHeight],
         [scrollView.leadingAnchor constraintEqualToAnchor:card.leadingAnchor],
         [scrollView.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
@@ -792,6 +801,7 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
 }
 
 - (void)closePanel { [self dismissViewControllerAnimated:YES completion:nil]; }
+- (void)dismissKeyboard { [self.view endEditing:YES]; }
 
 - (void)speedChanged:(UISlider *)slider {
     self.speedValueLabel.text = [NSString stringWithFormat:@"%.2f×", slider.value];
@@ -939,8 +949,10 @@ BOOL WCAtlasChatTTSConsumeTriggeredText(UIViewController *presenter, NSString *u
     if (![defaults boolForKey:WCAtlasChatTTSTriggerEnabledKey]) return NO;
     NSString *prefix = WCAtlasChatTTSTrim([defaults stringForKey:WCAtlasChatTTSTriggerPrefixKey]);
     if (prefix.length == 0) prefix = @"转语音";
-    if (![text isKindOfClass:NSString.class] || ![text hasPrefix:prefix]) return NO;
-    NSString *content = [text substringFromIndex:prefix.length];
+    if (![text isKindOfClass:NSString.class]) return NO;
+    NSString *command = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (![command hasPrefix:prefix]) return NO;
+    NSString *content = [command substringFromIndex:prefix.length];
     NSCharacterSet *separators = [NSCharacterSet characterSetWithCharactersInString:@" \t\r\n:：+＋➕"];
     content = [content stringByTrimmingCharactersInSet:separators];
     if (content.length == 0) {

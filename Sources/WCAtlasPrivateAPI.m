@@ -805,24 +805,32 @@ BOOL WCAtlasPrivateRefreshHomeSessionList(void) {
 static char WCAtlasPrivateMentionMessageKey;
 static char WCAtlasPrivateMentionRefreshedMessageKey;
 
+static BOOL WCAtlasPrivateLooksLikeMessageWrap(id value) {
+    if (!value || [value isKindOfClass:NSString.class] ||
+        [value isKindOfClass:NSAttributedString.class]) return NO;
+    Class messageWrapClass = NSClassFromString(@"CMessageWrap");
+    if (messageWrapClass && [value isKindOfClass:messageWrapClass]) return YES;
+    id type = WCAtlasPrivateObjectField(value, @[@"m_uiMessageType", @"messageType"]);
+    id from = WCAtlasPrivateObjectField(value, @[@"m_nsFromUsr", @"fromUser"]);
+    id to = WCAtlasPrivateObjectField(value, @[@"m_nsToUsr", @"toUser"]);
+    id mentions = WCAtlasPrivateObjectField(value,
+        @[@"m_nsAtUserList", @"atUserList", @"m_nsMsgSource", @"msgSource"]);
+    return mentions != nil || (type != nil && (from != nil || to != nil));
+}
+
 static id WCAtlasPrivateMessageWrapFromViewModel(id viewModel) {
     if (!viewModel) return nil;
     id message = WCAtlasPrivateObjectField(viewModel,
         @[@"getCurrentMessageWrap", @"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap", @"message"]);
-    if (message) return message;
+    if (WCAtlasPrivateLooksLikeMessageWrap(message)) return message;
     id parent = WCAtlasPrivateObjectField(viewModel, @[@"parentModel", @"m_parentModel"]);
     message = WCAtlasPrivateObjectField(parent,
         @[@"getCurrentMessageWrap", @"messageWrap", @"m_messageWrap", @"msgWrap", @"wrap", @"message"]);
-    if (message) return message;
+    if (WCAtlasPrivateLooksLikeMessageWrap(message)) return message;
     // Only a real CMessageWrap (or a compatible wrapper exposing message metadata)
     // may be used directly. TextMessageViewModel also exposes text content, so a
     // content-only check incorrectly binds the view model and loses m_nsAtUserList.
-    Class messageWrapClass = NSClassFromString(@"CMessageWrap");
-    if (messageWrapClass && [viewModel isKindOfClass:messageWrapClass]) return viewModel;
-    id messageType = WCAtlasPrivateObjectField(viewModel, @[@"m_uiMessageType"]);
-    id fromUser = WCAtlasPrivateObjectField(viewModel, @[@"m_nsFromUsr"]);
-    id toUser = WCAtlasPrivateObjectField(viewModel, @[@"m_nsToUsr"]);
-    return messageType && (fromUser || toUser) ? viewModel : nil;
+    return WCAtlasPrivateLooksLikeMessageWrap(viewModel) ? viewModel : nil;
 }
 
 static id WCAtlasPrivateMentionMessageWrap(id richTextView) {
@@ -850,11 +858,11 @@ static id WCAtlasPrivateMentionMessageWrap(id richTextView) {
     for (id object in candidates) {
         id wrap = WCAtlasPrivateObjectField(object, @[@"getCurrentMessageWrap", @"currentMessageWrap",
                                                        @"messageWrap", @"m_messageWrap", @"msgWrap"]);
-        if (wrap) return wrap;
+        if (WCAtlasPrivateLooksLikeMessageWrap(wrap)) return wrap;
         id viewModel = WCAtlasPrivateObjectField(object, @[@"viewModel", @"m_viewModel"]);
         wrap = WCAtlasPrivateObjectField(viewModel, @[@"getCurrentMessageWrap", @"messageWrap",
                                                        @"m_messageWrap", @"msgWrap"]);
-        if (wrap) return wrap;
+        if (WCAtlasPrivateLooksLikeMessageWrap(wrap)) return wrap;
     }
     return nil;
 }
@@ -869,8 +877,9 @@ BOOL WCAtlasPrivateBindMentionContext(id cell, id viewModel, BOOL refresh) {
             @[@"viewModel", @"m_viewModel"]));
     }
     if (!message) {
-        message = WCAtlasPrivateObjectField(cell,
+        id candidate = WCAtlasPrivateObjectField(cell,
             @[@"getCurrentMessageWrap", @"currentMessageWrap", @"messageWrap", @"m_messageWrap", @"msgWrap"]);
+        if (WCAtlasPrivateLooksLikeMessageWrap(candidate)) message = candidate;
     }
     if (!richTextView || !message) return NO;
     objc_setAssociatedObject(richTextView, &WCAtlasPrivateMentionMessageKey,
@@ -882,10 +891,17 @@ BOOL WCAtlasPrivateBindMentionContext(id cell, id viewModel, BOOL refresh) {
     if (![styles isKindOfClass:NSArray.class] || ![content isKindOfClass:NSString.class]) return YES;
     SEL selector = NSSelectorFromString(@"setArrStyles:withContent:");
     NSMethodSignature *signature = WCAtlasPrivateSignature(richTextView, selector, 4);
-    if (!signature || !WCAtlasPrivateTypeIsInteger(signature.methodReturnType) ||
-        !WCAtlasPrivateObjectArguments(signature, NSMakeRange(2, 2))) return YES;
+    if (!signature || !WCAtlasPrivateObjectArguments(signature, NSMakeRange(2, 2))) return YES;
     @try {
-        ((BOOL (*)(id, SEL, id, id))objc_msgSend)(richTextView, selector, styles, content);
+        if (WCAtlasPrivateTypeIsInteger(signature.methodReturnType)) {
+            ((BOOL (*)(id, SEL, id, id))objc_msgSend)(richTextView, selector, styles, content);
+        } else if (WCAtlasPrivateTypeIsObject(signature.methodReturnType)) {
+            ((id (*)(id, SEL, id, id))objc_msgSend)(richTextView, selector, styles, content);
+        } else if (WCAtlasPrivateTypeIsVoid(signature.methodReturnType)) {
+            ((void (*)(id, SEL, id, id))objc_msgSend)(richTextView, selector, styles, content);
+        } else {
+            return YES;
+        }
         objc_setAssociatedObject(richTextView, &WCAtlasPrivateMentionRefreshedMessageKey,
                                  message, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
@@ -918,6 +934,8 @@ NSArray<NSString *> *WCAtlasPrivateMentionUserNames(id richTextView) {
                 raw = [source substringWithRange:NSMakeRange(NSMaxRange(open),
                     close.location - NSMaxRange(open))];
                 raw = [(NSString *)raw stringByReplacingOccurrencesOfString:@"&amp;" withString:@"&"];
+                raw = [(NSString *)raw stringByReplacingOccurrencesOfString:@"<![CDATA[" withString:@""];
+                raw = [(NSString *)raw stringByReplacingOccurrencesOfString:@"]]>" withString:@""];
             }
         }
     }

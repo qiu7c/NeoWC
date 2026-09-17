@@ -216,6 +216,39 @@ void WCAtlasHomeCategoriesConfigureCellData(id cellData) {
 }
 
 static const NSInteger WCAtlasHomeUnreadBadgeTag = 0x57434247;
+static char WCAtlasHomeNativeBadgeHiddenKey;
+
+static BOOL WCAtlasHomeLooksLikeNativeUnreadBadge(UIView *view) {
+    if (!view || view.tag == WCAtlasHomeUnreadBadgeTag) return NO;
+    NSString *semantic = [NSString stringWithFormat:@"%@ %@ %@",
+        NSStringFromClass(view.class), view.accessibilityIdentifier ?: @"",
+        view.accessibilityLabel ?: @""];
+    if ([semantic rangeOfString:@"badge" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+        [semantic rangeOfString:@"unread" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+        [semantic rangeOfString:@"reddot" options:NSCaseInsensitiveSearch].location != NSNotFound) return YES;
+    UIColor *color = view.backgroundColor;
+    CGFloat red = 0, green = 0, blue = 0, alpha = 0;
+    if ([color getRed:&red green:&green blue:&blue alpha:&alpha] && alpha > 0.5 &&
+        red > 0.75 && green < 0.5 && blue < 0.5 &&
+        CGRectGetWidth(view.bounds) <= 60.0 && CGRectGetHeight(view.bounds) <= 30.0) return YES;
+    return NO;
+}
+
+static void WCAtlasHomeSetNativeUnreadBadgesHidden(UIView *root, BOOL hidden) {
+    for (UIView *view in root.subviews) {
+        NSNumber *managed = objc_getAssociatedObject(view, &WCAtlasHomeNativeBadgeHiddenKey);
+        if (hidden && WCAtlasHomeLooksLikeNativeUnreadBadge(view)) {
+            if (!managed) objc_setAssociatedObject(view, &WCAtlasHomeNativeBadgeHiddenKey,
+                @(view.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            view.hidden = YES;
+        } else if (!hidden && managed) {
+            view.hidden = managed.boolValue;
+            objc_setAssociatedObject(view, &WCAtlasHomeNativeBadgeHiddenKey, nil,
+                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        WCAtlasHomeSetNativeUnreadBadgesHidden(view, hidden);
+    }
+}
 
 static UIView *WCAtlasHomeFindAvatarView(UIView *root, BOOL imageFallback) {
     for (UIView *view in root.subviews) {
@@ -241,6 +274,7 @@ void WCAtlasHomeCategoriesLayoutUnreadBadge(UIView *itemView) {
     UILabel *badge = (UILabel *)[itemView viewWithTag:WCAtlasHomeUnreadBadgeTag];
     NSString *userName = WCAtlasPrivateHomeSessionUserName(itemView);
     NSDictionary *category = WCAtlasHomeCategoryForSyntheticUserName(userName);
+    WCAtlasHomeSetNativeUnreadBadgesHidden(itemView, category != nil);
     if (category) {
         WCAtlasPrivateConfigureVisibleHomeCategoryItemView(
             itemView, category[@"title"] ?: @"分类", @"", userName);
@@ -615,6 +649,7 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
     UINavigationBarAppearance *appearance = [UINavigationBarAppearance new];
     [appearance configureWithOpaqueBackground];
     appearance.backgroundColor = self.navigationBackgroundColor ?: UIColor.systemBackgroundColor;
+    appearance.shadowColor = UIColor.clearColor;
     appearance.titleTextAttributes = @{NSForegroundColorAttributeName: UIColor.labelColor};
     self.navigationItem.standardAppearance = appearance;
     self.navigationItem.compactAppearance = appearance;
@@ -644,6 +679,7 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
     self.tableView.rowHeight = WCAtlasHomeCategoryRowHeight;
     self.tableView.estimatedRowHeight = WCAtlasHomeCategoryRowHeight;
     self.tableView.backgroundColor = self.navigationBackgroundColor ?: UIColor.systemBackgroundColor;
+    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
 }
 - (void)viewWillAppear:(BOOL)animated {
     [self applyBrowserNavigationAppearance];

@@ -315,8 +315,9 @@ FOUNDATION_EXPORT BOOL WCAtlasPrivateEnableMentionClickHandling(id _Nullable ric
 /// @return YES when a rich-text view and official message wrap were resolved and associated.
 /// @discussion Main-thread only. A setter hook may bind before and after original; layout/delegate
 /// hooks pass nil and resolve the current model. Message identity comes only from native wrap fields. The refresh path
-/// invokes `setArrStyles:withContent:` only after verifying its integer/object/object ABI. Unsupported
-/// layouts return NO and leave WeChat rendering unchanged; no visible text is used to infer wxids.
+/// invokes `setArrStyles:withContent:` only after verifying both object arguments and dispatches
+/// according to that build's integer, object, or void return ABI. Unsupported layouts return NO and
+/// leave WeChat rendering unchanged; no visible text is used to infer wxids.
 FOUNDATION_EXPORT BOOL WCAtlasPrivateBindMentionContext(id _Nullable cell,
                                                         id _Nullable viewModel,
                                                         BOOL refresh);
