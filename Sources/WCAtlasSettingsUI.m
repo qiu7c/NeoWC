@@ -160,8 +160,10 @@ static UIView *WCAtlasSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL e
 @property (nonatomic, strong) UIStackView *identityRow;
 @property (nonatomic, strong) UITapGestureRecognizer *profileTapGesture;
 @property (nonatomic, strong) UILabel *wxidLabel;
+@property (nonatomic, strong) UIView *searchCapsuleView;
 @property (nonatomic, weak) UISearchBar *embeddedSearchBar;
 @property (nonatomic, copy) NSArray<NSLayoutConstraint *> *searchBarConstraints;
+@property (nonatomic, strong) NSLayoutConstraint *capsuleBottomConstraint;
 @property (nonatomic, copy) NSArray<NSLayoutConstraint *> *avatarConstraints;
 @property (nonatomic, copy) NSString *appliedAvatarWXID;
 @property (nonatomic, copy) NSString *appliedHeadURL;
@@ -277,11 +279,12 @@ static void WCAtlasHideSearchBarBackground(UIView *view) {
     _wxidLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
     [_capsuleView addSubview:_wxidLabel];
 
+    _capsuleBottomConstraint = [_capsuleView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-12.0];
     [NSLayoutConstraint activateConstraints:@[
         [_capsuleView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:16.0],
         [_capsuleView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16.0],
         [_capsuleView.topAnchor constraintEqualToAnchor:self.topAnchor constant:12.0],
-        [_capsuleView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-12.0],
+        _capsuleBottomConstraint,
     ]];
 
     // Account values are persisted. Apply them before the header first appears
@@ -300,13 +303,31 @@ static void WCAtlasHideSearchBarBackground(UIView *view) {
     searchBar.backgroundColor = UIColor.clearColor;
     searchBar.barTintColor = UIColor.clearColor;
     searchBar.backgroundImage = [UIImage new];
-    [self.capsuleView addSubview:searchBar];
+    if (@available(iOS 13.0, *)) searchBar.searchTextField.backgroundColor = UIColor.clearColor;
+
+    [self.capsuleBottomConstraint setActive:NO];
+    if (!self.searchCapsuleView) {
+        self.searchCapsuleView = [UIView new];
+        self.searchCapsuleView.translatesAutoresizingMaskIntoConstraints = NO;
+        self.searchCapsuleView.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
+        self.searchCapsuleView.layer.cornerRadius = 18.0;
+        self.searchCapsuleView.layer.cornerCurve = kCACornerCurveContinuous;
+        self.searchCapsuleView.layer.masksToBounds = YES;
+        [self addSubview:self.searchCapsuleView];
+    }
+    [self.searchCapsuleView addSubview:searchBar];
     self.searchBarConstraints = @[
-        [searchBar.centerXAnchor constraintEqualToAnchor:self.capsuleView.centerXAnchor],
-        [searchBar.leadingAnchor constraintEqualToAnchor:self.capsuleView.leadingAnchor constant:12.0],
-        [searchBar.trailingAnchor constraintEqualToAnchor:self.capsuleView.trailingAnchor constant:-12.0],
-        [searchBar.bottomAnchor constraintEqualToAnchor:self.capsuleView.bottomAnchor constant:-8.0],
-        [searchBar.heightAnchor constraintEqualToConstant:44.0],
+        [self.capsuleView.heightAnchor constraintEqualToConstant:80.0],
+        [self.searchCapsuleView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:16.0],
+        [self.searchCapsuleView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16.0],
+        [self.searchCapsuleView.topAnchor constraintEqualToAnchor:self.capsuleView.bottomAnchor constant:8.0],
+        [self.searchCapsuleView.heightAnchor constraintEqualToConstant:48.0],
+        [self.searchCapsuleView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-12.0],
+        [searchBar.centerXAnchor constraintEqualToAnchor:self.searchCapsuleView.centerXAnchor],
+        [searchBar.leadingAnchor constraintEqualToAnchor:self.searchCapsuleView.leadingAnchor constant:8.0],
+        [searchBar.trailingAnchor constraintEqualToAnchor:self.searchCapsuleView.trailingAnchor constant:-8.0],
+        [searchBar.topAnchor constraintEqualToAnchor:self.searchCapsuleView.topAnchor constant:2.0],
+        [searchBar.bottomAnchor constraintEqualToAnchor:self.searchCapsuleView.bottomAnchor constant:-2.0],
     ];
     [NSLayoutConstraint activateConstraints:self.searchBarConstraints];
     WCAtlasHideSearchBarBackground(searchBar);
@@ -461,8 +482,8 @@ static void WCAtlasHideSearchBarBackground(UIView *view) {
 
 - (CGFloat)preferredHeightForWidth:(CGFloat)width scale:(CGFloat)scale {
     (void)width;
-    CGFloat baseHeight = self.embeddedSearchBar ? 154.0 : 104.0;
-    return MAX(baseHeight, baseHeight * scale);
+    (void)scale;
+    return self.embeddedSearchBar ? 160.0 : 104.0;
 }
 
 - (void)showCopyConfirmation {

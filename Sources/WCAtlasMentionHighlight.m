@@ -12,7 +12,7 @@ extern void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
 NSString *const WCAtlasMentionHighlightEnabledKey = @"com.qiu7c.wcatlas.chat.mention-highlight";
 
-static NSString *const WCAtlasMentionURLPrefix = @"https://wcatlas.invalid/profile/";
+static NSString *const WCAtlasMentionURLPrefix = @"twsuperat://";
 static BOOL (*WCAtlasOriginalSetMentionStylesInteger)(id, SEL, id, id);
 static id (*WCAtlasOriginalSetMentionStylesObject)(id, SEL, id, id);
 static void (*WCAtlasOriginalSetMentionStylesVoid)(id, SEL, id, id);
@@ -28,10 +28,14 @@ static void (*WCAtlasOriginalMentionCellOnLinkClicked)(id, SEL, id, CGRect);
 static void (*WCAtlasOriginalSetMentionViewModel)(id, SEL, id);
 static void (*WCAtlasOriginalLayoutMentionCell)(id, SEL);
 static void (*WCAtlasOriginalLayoutMentionCellSubviews)(id, SEL);
+static void (*WCAtlasOriginalUpdateMentionCellStatus)(id, SEL);
 static void (*WCAtlasOriginalBaseSetMentionViewModel)(id, SEL, id);
 static void (*WCAtlasOriginalBaseLayoutMentionCellSubviews)(id, SEL);
 static void (*WCAtlasOriginalBaseLayoutMentionFinished)(id, SEL);
 static void (*WCAtlasOriginalBasePrepareMentionForReuse)(id, SEL);
+static void (*WCAtlasOriginalBaseMessageUpdateStatus)(id, SEL);
+static void (*WCAtlasOriginalBaseMessageLayoutContentView)(id, SEL);
+static void (*WCAtlasOriginalBaseMessageLayoutSubviews)(id, SEL);
 static id (*WCAtlasOriginalGetMentionRichTextViewForDelegate)(id, SEL);
 static id (*WCAtlasOriginalMentionLinkTextColor)(id, SEL);
 static id (*WCAtlasOriginalMentionRichTextConfig)(id, SEL);
@@ -140,62 +144,6 @@ static BOOL WCAtlasMentionIsAllUserName(NSString *userName) {
            [lowercase isEqualToString:@"all"] || [lowercase isEqualToString:@"everyone"];
 }
 
-static NSArray<NSString *> *WCAtlasMentionDisplayCandidates(NSString *userName, id groupContact) {
-    if (WCAtlasMentionIsAllUserName(userName)) return @[@"所有人", @"all", @"everyone"];
-    id contact = WCAtlasPrivateContact(userName);
-    NSMutableOrderedSet<NSString *> *names = [NSMutableOrderedSet orderedSet];
-    NSString *roomName = WCAtlasPrivateGroupMemberDisplayName(groupContact, contact);
-    if (roomName.length > 0) [names addObject:roomName];
-    for (NSString *name in @[WCAtlasPrivateContactRemark(contact) ?: @"",
-                             WCAtlasPrivateContactNickname(contact) ?: @"",
-                             WCAtlasPrivateContactDisplayName(contact, nil) ?: @""]) {
-        if (name.length > 0) [names addObject:name];
-    }
-    return names.array;
-}
-
-static NSRange WCAtlasMentionRange(NSString *content, NSArray<NSString *> *names,
-                                   NSMutableIndexSet *claimedIndexes) {
-    for (NSString *name in names) {
-        for (NSString *token in @[[@"@" stringByAppendingString:name]]) {
-            NSRange searchRange = NSMakeRange(0, content.length);
-            while (searchRange.length > 0) {
-                NSRange range = [content rangeOfString:token options:0 range:searchRange];
-                if (range.location == NSNotFound) break;
-                if (![claimedIndexes intersectsIndexesInRange:range]) {
-                    [claimedIndexes addIndexesInRange:range];
-                    return range;
-                }
-                NSUInteger next = NSMaxRange(range);
-                if (next >= content.length) break;
-                searchRange = NSMakeRange(next, content.length - next);
-            }
-        }
-    }
-    return NSMakeRange(NSNotFound, 0);
-}
-
-static NSArray<NSValue *> *WCAtlasMentionVisibleRanges(NSString *content) {
-    NSMutableArray<NSValue *> *ranges = [NSMutableArray array];
-    NSCharacterSet *hardTerminators = [NSCharacterSet characterSetWithCharactersInString:
-        @"\u2004\u2005\t\r\n,，。！？!?：:；;（）()[]【】<>"];
-    NSUInteger cursor = 0;
-    while (cursor < content.length) {
-        NSRange at = [content rangeOfString:@"@" options:0 range:NSMakeRange(cursor, content.length - cursor)];
-        if (at.location == NSNotFound) break;
-        NSUInteger end = at.location + 1;
-        while (end < content.length) {
-            unichar character = [content characterAtIndex:end];
-            if ([hardTerminators characterIsMember:character]) break;
-            if (character == ' ' && end > at.location + 1) break;
-            end++;
-        }
-        if (end > at.location + 1) [ranges addObject:[NSValue valueWithRange:NSMakeRange(at.location, end - at.location)]];
-        cursor = MAX(end, at.location + 1);
-    }
-    return ranges;
-}
-
 #pragma mark - Link Styles
 
 static NSString *WCAtlasMentionURLString(NSString *userName) {
@@ -217,11 +165,7 @@ static UIColor *WCAtlasMentionHighlightedColor(void) {
 
 static id WCAtlasMentionLinkStyle(NSRange range, NSString *userName) {
     NSString *URLString = WCAtlasMentionURLString(userName);
-    // Keep the view-model config hook, but also put colors on the style itself.
-    // Some WeChat builds copy LinkStyle before applying the config and otherwise
-    // leave newly injected mention ranges visually unchanged.
-    return WCAtlasPrivateMentionLinkStyle(range, URLString,
-        WCAtlasMentionNormalColor(), WCAtlasMentionHighlightedColor());
+    return WCAtlasPrivateMentionLinkStyle(range, URLString);
 }
 
 static BOOL WCAtlasMentionStylesContainURL(NSArray *styles) {
@@ -239,51 +183,18 @@ static id WCAtlasMentionStylesForContent(id self, id styles, id contentObject) {
         [content rangeOfString:@"@"].location == NSNotFound || WCAtlasMentionStylesContainURL(originalStyles)) {
         return styles;
     }
-    NSArray<NSString *> *userNames = WCAtlasPrivateMentionUserNames(self);
-    if (userNames.count == 0) return styles;
-    NSString *chatUserName = WCAtlasPrivateMentionChatUserName(self);
-    id groupContact = [chatUserName hasSuffix:@"@chatroom"] ? WCAtlasPrivateContact(chatUserName) : nil;
+    NSArray<NSDictionary<NSString *, id> *> *links = WCAtlasPrivateMentionLinks(self, content);
+    if (links.count == 0) return styles;
     NSMutableArray *merged = [originalStyles mutableCopy];
-    NSMutableIndexSet *claimed = [NSMutableIndexSet indexSet];
-    NSMutableDictionary<NSString *, NSMutableSet<NSString *> *> *ownersByDisplayName = [NSMutableDictionary dictionary];
-    NSArray<NSValue *> *officialRanges = WCAtlasPrivateMentionRanges(self, content);
-    NSUInteger officialRangeIndex = 0;
-    NSArray<NSValue *> *visibleRanges = WCAtlasMentionVisibleRanges(content);
-    NSUInteger fallbackRangeIndex = 0;
-    for (NSString *userName in userNames) {
-        for (NSString *name in WCAtlasMentionDisplayCandidates(userName, groupContact)) {
-            NSMutableSet *owners = ownersByDisplayName[name];
-            if (!owners) ownersByDisplayName[name] = owners = [NSMutableSet set];
-            [owners addObject:userName];
-        }
-    }
-    for (NSString *userName in userNames) {
-        NSArray<NSString *> *candidates = WCAtlasMentionDisplayCandidates(userName, groupContact);
-        if (!WCAtlasMentionIsAllUserName(userName)) {
-            candidates = [candidates filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSString *name, __unused NSDictionary *bindings) {
-                return ownersByDisplayName[name].count == 1;
-            }]];
-        }
-        NSRange range = NSMakeRange(NSNotFound, 0);
-        while (officialRangeIndex < officialRanges.count) {
-            NSRange officialRange = officialRanges[officialRangeIndex++].rangeValue;
-            if (![claimed intersectsIndexesInRange:officialRange]) {
-                range = officialRange;
-                [claimed addIndexesInRange:officialRange];
-                break;
-            }
-        }
-        if (range.location == NSNotFound) range = WCAtlasMentionRange(content, candidates, claimed);
-        while (range.location == NSNotFound && fallbackRangeIndex < visibleRanges.count) {
-            NSRange fallback = visibleRanges[fallbackRangeIndex++].rangeValue;
-            if (![claimed intersectsIndexesInRange:fallback]) {
-                range = fallback;
-                [claimed addIndexesInRange:fallback];
-            }
-        }
-        if (range.location == NSNotFound || NSMaxRange(range) > content.length) continue;
-        id style = WCAtlasMentionLinkStyle(range,
-            WCAtlasMentionIsAllUserName(userName) ? @"notify@all" : userName);
+    for (NSDictionary<NSString *, id> *link in links) {
+        NSString *token = [link[@"token"] isKindOfClass:NSString.class] ? link[@"token"] : nil;
+        NSString *userName = [link[@"username"] isKindOfClass:NSString.class] ? link[@"username"] : nil;
+        NSValue *rangeValue = [link[@"displayRange"] isKindOfClass:NSValue.class]
+            ? link[@"displayRange"] : nil;
+        NSRange range = rangeValue.rangeValue;
+        if (token.length == 0 || userName.length == 0 || !rangeValue ||
+            range.location == NSNotFound || NSMaxRange(range) > content.length) continue;
+        id style = WCAtlasMentionLinkStyle(range, userName);
         if (style) [merged addObject:style];
     }
     if (merged.count > originalStyles.count) {
@@ -361,6 +272,9 @@ static BOOL WCAtlasHandleMentionClick(id richTextView, id event) {
         now - WCAtlasLastOpenedMentionTime < 0.5) return YES;
     WCAtlasLastOpenedMentionUserName = [userName copy];
     WCAtlasLastOpenedMentionTime = now;
+    id contact = WCAtlasPrivateContact(userName);
+    NSString *displayName = WCAtlasPrivateContactDisplayName(contact, nil);
+    if (WCAtlasPrivateJumpToMentionProfile(richTextView, userName, displayName, 0)) return YES;
     __weak id weakRichTextView = richTextView;
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *source = WCAtlasPrivateChatControllerForView(weakRichTextView);
@@ -409,6 +323,13 @@ static void WCAtlasLayoutMentionCellSubviews(id self, SEL _cmd) {
     }
 }
 
+static void WCAtlasUpdateMentionCellStatus(id self, SEL _cmd) {
+    WCAtlasOriginalUpdateMentionCellStatus(self, _cmd);
+    if (WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) {
+        WCAtlasPrivateBindMentionContext(self, nil, YES);
+    }
+}
+
 static void WCAtlasBaseSetMentionViewModel(id self, SEL _cmd, id viewModel) {
     WCAtlasOriginalBaseSetMentionViewModel(self, _cmd, viewModel);
     if (WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) {
@@ -433,6 +354,27 @@ static void WCAtlasBaseLayoutMentionFinished(id self, SEL _cmd) {
 static void WCAtlasBasePrepareMentionForReuse(id self, SEL _cmd) {
     WCAtlasPrivateClearMentionContext(self);
     WCAtlasOriginalBasePrepareMentionForReuse(self, _cmd);
+}
+
+static void WCAtlasBaseMessageUpdateStatus(id self, SEL _cmd) {
+    WCAtlasOriginalBaseMessageUpdateStatus(self, _cmd);
+    if (WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) {
+        WCAtlasPrivateBindMentionContext(self, nil, YES);
+    }
+}
+
+static void WCAtlasBaseMessageLayoutContentView(id self, SEL _cmd) {
+    WCAtlasOriginalBaseMessageLayoutContentView(self, _cmd);
+    if (WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) {
+        WCAtlasPrivateBindMentionContext(self, nil, YES);
+    }
+}
+
+static void WCAtlasBaseMessageLayoutSubviews(id self, SEL _cmd) {
+    WCAtlasOriginalBaseMessageLayoutSubviews(self, _cmd);
+    if (WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) {
+        WCAtlasPrivateBindMentionContext(self, nil, YES);
+    }
 }
 
 static id WCAtlasGetMentionRichTextViewForDelegate(id self, SEL _cmd) {
@@ -507,6 +449,7 @@ void WCAtlasMentionHighlightInstallHooks(void) {
         Class richTextClass = NSClassFromString(@"RichTextView");
         Class textCellClass = NSClassFromString(@"TextMessageCellView");
         Class baseChatCellClass = NSClassFromString(@"BaseChatCellView");
+        Class baseMessageCellClass = NSClassFromString(@"BaseMessageCellView");
         Class textViewModelClass = NSClassFromString(@"TextMessageViewModel");
         if (!richTextClass || !textCellClass || !textViewModelClass) {
             WCAtlasLog(@"@ 高亮延迟安装：微信聊天类尚未加载");
@@ -660,6 +603,14 @@ void WCAtlasMentionHighlightInstallHooks(void) {
         } else {
             WCAtlasLog(@"@ 高亮刷新未安装：TextMessageCellView layoutSubviews ABI 不支持");
         }
+        SEL updateStatusSelector = NSSelectorFromString(@"updateStatus");
+        Method updateStatusMethod = WCAtlasMentionOwnedInstanceMethod(textCellClass, updateStatusSelector);
+        if (WCAtlasMentionMethodHasObjectArguments(updateStatusMethod, 0)) {
+            original = NULL;
+            MSHookMessageEx(textCellClass, updateStatusSelector,
+                (IMP)WCAtlasUpdateMentionCellStatus, &original);
+            WCAtlasOriginalUpdateMentionCellStatus = (void (*)(id, SEL))original;
+        }
         SEL delegateViewSelector = NSSelectorFromString(@"getRichTextViewForDelegate");
         Method delegateViewMethod = WCAtlasMentionOwnedInstanceMethod(textCellClass, delegateViewSelector);
         if (WCAtlasMentionMethodReturnsObject(delegateViewMethod, 0)) {
@@ -706,6 +657,33 @@ void WCAtlasMentionHighlightInstallHooks(void) {
             }
         } else {
             WCAtlasLog(@"@ 高亮 BaseChatCellView 兼容链未安装：类不存在");
+        }
+
+        if (baseMessageCellClass) {
+            Method baseUpdateMethod = WCAtlasMentionOwnedInstanceMethod(
+                baseMessageCellClass, updateStatusSelector);
+            if (WCAtlasMentionMethodHasObjectArguments(baseUpdateMethod, 0)) {
+                original = NULL;
+                MSHookMessageEx(baseMessageCellClass, updateStatusSelector,
+                    (IMP)WCAtlasBaseMessageUpdateStatus, &original);
+                WCAtlasOriginalBaseMessageUpdateStatus = (void (*)(id, SEL))original;
+            }
+            Method baseContentLayoutMethod = WCAtlasMentionOwnedInstanceMethod(
+                baseMessageCellClass, layoutSelector);
+            if (WCAtlasMentionMethodHasObjectArguments(baseContentLayoutMethod, 0)) {
+                original = NULL;
+                MSHookMessageEx(baseMessageCellClass, layoutSelector,
+                    (IMP)WCAtlasBaseMessageLayoutContentView, &original);
+                WCAtlasOriginalBaseMessageLayoutContentView = (void (*)(id, SEL))original;
+            }
+            Method baseSubviewsMethod = WCAtlasMentionOwnedInstanceMethod(
+                baseMessageCellClass, layoutSubviewsSelector);
+            if (WCAtlasMentionMethodHasObjectArguments(baseSubviewsMethod, 0)) {
+                original = NULL;
+                MSHookMessageEx(baseMessageCellClass, layoutSubviewsSelector,
+                    (IMP)WCAtlasBaseMessageLayoutSubviews, &original);
+                WCAtlasOriginalBaseMessageLayoutSubviews = (void (*)(id, SEL))original;
+            }
         }
 
         SEL contentStylesSelector = NSSelectorFromString(@"contentTextStyles");

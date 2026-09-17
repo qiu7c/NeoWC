@@ -290,17 +290,16 @@ FOUNDATION_EXPORT BOOL WCAtlasPrivateRefreshHomeSessionList(void);
 /// values, and exceptions return an empty array; visible text is never used to guess identities.
 FOUNDATION_EXPORT NSArray<NSString *> *WCAtlasPrivateMentionUserNames(id _Nullable richTextView);
 
-/// Reads the official UTF-16 mention ranges carried by WeChat message-source `<wgm>` nodes.
-/// @param context A native rich-text view, text-message view model, cell, or message wrap.
-/// @param content The exact visible message string whose ranges will be styled.
-/// @return Ordered, bounds-checked `NSRange` values for visible `@` mentions, or an empty array.
-/// @discussion Main-thread only. The adapter resolves the official message wrap and parses only
-/// numeric `start`/`length` attributes from `m_nsMsgSource`; it never derives identity or offsets
-/// from display text. Ranges use NSString's UTF-16 indexing, must begin with `@`, and are discarded
-/// when malformed or outside `content`. Versions without `<wgm>` metadata return an empty array so
-/// callers can retain their documented display-name compatibility fallback.
-FOUNDATION_EXPORT NSArray<NSValue *> *WCAtlasPrivateMentionRanges(id _Nullable context,
-                                                                  NSString *content);
+/// Builds WeChatNeo-compatible mention-link records from the current message and visible text.
+/// @param context Native rich-text view, message view model, cell, or message wrap.
+/// @param content Exact NSString passed to WeChat's rich-text setter.
+/// @return Ordered dictionaries containing `token`, `username`, and UTF-16 `displayRange`.
+/// @discussion Main-thread only. Resolves `getCurrentMessageWrap`, reads `m_nsAtUserList`, scans
+/// visible @ tokens, and associates usernames with group/member display names before the ordered
+/// fallback used by WeChatNeo. Invalid ranges and unresolved records are omitted. No `<wgm>` range
+/// is treated as authoritative. Unsupported versions return an empty array.
+FOUNDATION_EXPORT NSArray<NSDictionary<NSString *, id> *> *
+WCAtlasPrivateMentionLinks(id _Nullable context, NSString *content);
 
 /// Resolves the group conversation that owns a native rich-text message view.
 /// @param richTextView Native `RichTextView` currently receiving message styles.
@@ -357,15 +356,12 @@ FOUNDATION_EXPORT void WCAtlasPrivateClearMentionContext(id _Nullable cell);
 /// Builds a native WeChat `LinkStyle` for one UTF-16 text range.
 /// @param range Range in the exact NSString passed to WeChat's rich-text style method.
 /// @param URLString Opaque URL delivered back through WeChat's native link event.
-/// @param normalColor Normal foreground/link color.
-/// @param highlightedColor Touch-highlight color.
 /// @return A fully initialized native style, or nil when the class/fields are unsupported.
-/// @discussion Main-thread only. Uses KVC-compatible native fields with ordered version fallbacks;
-/// any missing required range/URL field or exception returns nil instead of a partial style.
+/// @discussion Main-thread only. Reproduces WeChatNeo's evidenced field order and keeps the
+/// style's own colors clear; `linkTextColor` and `getRichTextViewConfig` supply visible colors.
+/// Missing required range/URL fields and exceptions return nil instead of a partial style.
 FOUNDATION_EXPORT id _Nullable WCAtlasPrivateMentionLinkStyle(NSRange range,
-                                                              NSString *URLString,
-                                                              UIColor *normalColor,
-                                                              UIColor *highlightedColor);
+                                                              NSString *URLString);
 
 /// Applies mention-link colors to WeChat's native rich-text configuration.
 /// @param config Object returned by `TextMessageViewModel -getRichTextViewConfig`.
@@ -385,6 +381,20 @@ FOUNDATION_EXPORT BOOL WCAtlasPrivateConfigureMentionRichTextConfig(id _Nullable
 /// @discussion Main-thread only. Traversal is cycle-checked and depth-limited. Unsupported event
 /// layouts and exceptions return nil and preserve WeChat's original click handling.
 FOUNDATION_EXPORT NSString * _Nullable WCAtlasPrivateMentionLinkURLString(id _Nullable event);
+
+/// Invokes WeChatNeo's native mention-profile delegate when available.
+/// @param context Rich-text view or message cell that received the link event.
+/// @param userName Decoded identifier carried by the `twsuperat://` link.
+/// @param displayName Optional visible mention name.
+/// @param scene Native scene integer; zero is the compatibility fallback when unavailable.
+/// @return YES only when `jumpToUserProfile:Displayname:Scence:` was ABI-verified and invoked.
+/// @discussion Main-thread only. Searches the live context/delegate/responder chain in that order.
+/// Missing selectors, ABI mismatches, and exceptions return NO so callers can use the normal
+/// `ContactInfoViewController` fallback.
+FOUNDATION_EXPORT BOOL WCAtlasPrivateJumpToMentionProfile(id _Nullable context,
+                                                          NSString *userName,
+                                                          NSString * _Nullable displayName,
+                                                          NSInteger scene);
 
 #pragma mark - Moments Upload Metadata
 
@@ -429,11 +439,11 @@ FOUNDATION_EXPORT void WCAtlasPrivateResignMomentsComposerInput(id _Nullable com
 /// Builds and pushes WeChat's native profile controller.
 /// @param source Visible source controller whose navigation controller performs the push.
 /// @param userName WeChat username to resolve and inject into the native controller.
-/// @return YES only after a controller was constructed, injected, and pushed.
-/// @discussion Must be called on the main thread. Uses `setM_contact:` when its object ABI is
-/// available and falls back to KVC, then best-effort injects `m_chatContact` for group-member
-/// context. Missing contacts/controllers/navigation return NO; unavailable secondary context
-/// does not prevent the normal profile-page fallback.
+/// @return YES only after a controller was constructed, injected, and pushed or presented.
+/// @discussion Must be called on the main thread. Following WeChatNeo, injects `m_contact` then
+/// `m_chatContact` through KVC; verified `setM_contact:` is the older-version fallback. Pushes on
+/// the source navigation controller or presents when no navigation stack exists. Missing contacts,
+/// controller classes, and failed primary injection return NO.
 FOUNDATION_EXPORT BOOL WCAtlasPushPrivateContactProfile(UIViewController *source,
                                                       NSString *userName);
 

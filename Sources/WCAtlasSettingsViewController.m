@@ -11,11 +11,11 @@
 #import "WCAtlasReleaseNotes.h"
 #import <math.h>
 
-@interface WCAtlasSettingsViewController () <UISearchResultsUpdating, UISearchBarDelegate>
+@interface WCAtlasSettingsViewController () <UISearchBarDelegate>
 @property (nonatomic, assign) WCAtlasSettingsCategory category;
 @property (nonatomic, copy) NSArray<WCAtlasSettingSection *> *sections;
 @property (nonatomic, copy) NSArray<WCAtlasSettingSection *> *searchSections;
-@property (nonatomic, strong) UISearchController *functionSearchController;
+@property (nonatomic, strong) UISearchBar *functionSearchBar;
 @property (nonatomic, strong) NSMutableSet<NSString *> *collapsedFeatureKeys;
 @property (nonatomic, strong) WCAtlasSettingsActions *actions;
 @property (nonatomic, strong) WCAtlasSettingsProfileHeaderView *profileHeader;
@@ -97,13 +97,12 @@
         self.navigationItem.standardAppearance = appearance;
         self.navigationItem.scrollEdgeAppearance = appearance;
         self.navigationItem.compactAppearance = appearance;
-        self.functionSearchController = [[UISearchController alloc] initWithSearchResultsController:nil];
-        self.functionSearchController.searchResultsUpdater = self;
-        self.functionSearchController.searchBar.delegate = self;
-        self.functionSearchController.searchBar.placeholder = @"搜索功能开关";
-        self.functionSearchController.obscuresBackgroundDuringPresentation = NO;
-        [self.profileHeader embedSearchBar:self.functionSearchController.searchBar];
-        self.definesPresentationContext = YES;
+        self.functionSearchBar = [[UISearchBar alloc] initWithFrame:CGRectZero];
+        self.functionSearchBar.delegate = self;
+        self.functionSearchBar.placeholder = @"搜索功能开关";
+        self.functionSearchBar.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        self.functionSearchBar.autocorrectionType = UITextAutocorrectionTypeNo;
+        [self.profileHeader embedSearchBar:self.functionSearchBar];
     }
     [self applySettingsPageScale];
     [self rebuildSections];
@@ -161,13 +160,13 @@
 
 - (void)rebuildSections {
     self.sections = WCAtlasSettingsBuildSections(self.category, self.collapsedFeatureKeys);
-    if (self.functionSearchController.searchBar.text.length > 0) {
-        [self rebuildFunctionSearchResults:self.functionSearchController.searchBar.text ?: @""];
+    if (self.functionSearchBar.text.length > 0) {
+        [self rebuildFunctionSearchResults:self.functionSearchBar.text ?: @""];
     }
 }
 
 - (NSArray<WCAtlasSettingSection *> *)visibleSections {
-    NSString *query = [self.functionSearchController.searchBar.text
+    NSString *query = [self.functionSearchBar.text
         stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     return query.length > 0
         ? (self.searchSections ?: @[]) : self.sections;
@@ -210,15 +209,14 @@
     self.searchSections = results;
 }
 
-- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
-    [self rebuildFunctionSearchResults:searchController.searchBar.text ?: @""];
+- (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
+    (void)searchBar;
+    [self rebuildFunctionSearchResults:searchText ?: @""];
     [self.tableView reloadData];
 }
 
-- (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar {
-    (void)searchBar;
-    self.searchSections = @[];
-    [self.tableView reloadData];
+- (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
+    [searchBar resignFirstResponder];
 }
 
 - (void)reloadSettingsPreservingPositionApplyScale:(BOOL)applyScale {
