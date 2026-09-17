@@ -728,7 +728,7 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     UIPopoverPresentationController *popover = sheet.popoverPresentationController;
-    if (popover) popover.barButtonItem = self.navigationItem.leftBarButtonItems.lastObject;
+    if (popover) popover.barButtonItem = self.navigationItem.rightBarButtonItem;
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
@@ -757,7 +757,8 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
                                          target:self action:@selector(showCategorySettings)]
         : [[UIBarButtonItem alloc] initWithTitle:@"设置" style:UIBarButtonItemStylePlain
                                           target:self action:@selector(showCategorySettings)];
-    self.navigationItem.leftBarButtonItems = @[back, settings];
+    self.navigationItem.leftBarButtonItem = back;
+    self.navigationItem.rightBarButtonItem = settings;
 }
 - (void)viewWillAppear:(BOOL)animated {
     [self applyBrowserNavigationAppearance];
@@ -789,8 +790,10 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
     return cell;
 }
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    NSDictionary *item = WCAtlasHomeCombinedItems(self.category, self.folder)[indexPath.row];
+    [tableView deselectRowAtIndexPath:indexPath animated:NO];
+    NSArray<NSDictionary *> *items = WCAtlasHomeCombinedItems(self.category, self.folder);
+    if (indexPath.row >= items.count) return;
+    NSDictionary *item = items[indexPath.row];
     if ([item[@"kind"] isEqualToString:@"folder"]) {
         NSDictionary *folder = item[@"value"];
         WCAtlasHomeCategoryBrowserController *browser = [WCAtlasHomeCategoryBrowserController new];

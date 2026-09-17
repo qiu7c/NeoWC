@@ -335,6 +335,25 @@ FOUNDATION_EXPORT BOOL WCAtlasPrivateBindMentionContext(id _Nullable cell,
                                                         id _Nullable viewModel,
                                                         BOOL refresh);
 
+/// Replays a native rich-text view's current style array after WeChat changes its content.
+/// @param richTextView A live native `RichTextView` received by a verified content setter hook.
+/// @param content The exact NSString passed to WeChat's original content setter, or nil to read
+/// the view's current official content after the setter returns.
+/// @return YES when the current styles/content and `setArrStyles:withContent:` ABI were verified
+/// and replayed; NO when the build does not expose a compatible path.
+/// @discussion Main-thread only. This is the WeChatNeo-compatible fallback for builds which create
+/// styles inside `setContent:` or `setContent:TargetParserString:` instead of the view-model sizing
+/// path. The adapter only replays WeChat's current objects; mention creation remains in the public
+/// WCAtlas mention module. Integer, object, and void return ABIs are handled explicitly.
+FOUNDATION_EXPORT BOOL WCAtlasPrivateReplayMentionStyles(id _Nullable richTextView,
+                                                         NSString * _Nullable content);
+
+/// Clears message associations from a reusable native text-message cell.
+/// @param cell A live `BaseChatCellView`/`TextMessageCellView` entering `prepareForReuse`.
+/// @discussion Main-thread only. This prevents a reused rich-text view from retaining the previous
+/// message's mention identity. Missing rich-view fields are a no-op for version compatibility.
+FOUNDATION_EXPORT void WCAtlasPrivateClearMentionContext(id _Nullable cell);
+
 /// Builds a native WeChat `LinkStyle` for one UTF-16 text range.
 /// @param range Range in the exact NSString passed to WeChat's rich-text style method.
 /// @param URLString Opaque URL delivered back through WeChat's native link event.
@@ -435,11 +454,13 @@ FOUNDATION_EXPORT BOOL WCAtlasPushPrivateGroupProfile(UIViewController *source,
 /// trimming, suffix checks, or display-name inference.
 /// @param animated Whether WeChat should animate the native transition.
 /// @return YES when already in the target chat or after the native push selector is invoked.
-/// @discussion Must be called on the main thread. Resolves the contact before calling the
-/// object/object/BOOL `PushOtherBaseMsgControllerByContact:navigationController:animated:` ABI;
-/// an older username variant is the only fallback. Missing/mismatched selectors, services,
-/// contacts, navigation, exceptions, and empty usernames return NO. Nonempty content is not
-/// format-validated so diagnostic callers can test WeChat's own acceptance behavior.
+/// @discussion Must be called on the main thread. Calls the object/object/BOOL
+/// `PushOtherBaseMsgControllerByUserName:navigationController:animated:` ABI first so a stable
+/// wxid/`@chatroom` identifier does not require a synchronous contact lookup before transition.
+/// Versions without that selector resolve the contact and fall back to the equivalent Contact
+/// selector. Missing/mismatched selectors, services, contacts, navigation, exceptions, and empty
+/// usernames return NO. Nonempty content is not format-validated so diagnostic callers can test
+/// WeChat's own acceptance behavior.
 FOUNDATION_EXPORT BOOL WCAtlasPushPrivateChat(UIViewController * _Nullable source,
                                             NSString *userName,
                                             BOOL animated);

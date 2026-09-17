@@ -806,6 +806,11 @@ BOOL WCAtlasPrivateRefreshHomeSessionList(void) {
 static char WCAtlasPrivateMentionMessageKey;
 static char WCAtlasPrivateMentionRefreshedMessageKey;
 
+static id WCAtlasPrivateMentionRichTextView(id cell) {
+    return WCAtlasPrivateObjectField(cell,
+        @[@"getRichTextView", @"richTextView", @"m_richTextView"]);
+}
+
 static BOOL WCAtlasPrivateLooksLikeMessageWrap(id value) {
     if (!value || [value isKindOfClass:NSString.class] ||
         [value isKindOfClass:NSAttributedString.class]) return NO;
@@ -872,7 +877,7 @@ static id WCAtlasPrivateMentionMessageWrap(id richTextView) {
 BOOL WCAtlasPrivateBindMentionContext(id cell, id viewModel, BOOL refresh) {
     NSCAssert(NSThread.isMainThread, @"Mention context must be bound on the main thread");
     if (!cell) return NO;
-    id richTextView = WCAtlasPrivateObjectField(cell, @[@"getRichTextView", @"richTextView", @"m_richTextView"]);
+    id richTextView = WCAtlasPrivateMentionRichTextView(cell);
     id message = WCAtlasPrivateMessageWrapFromViewModel(viewModel);
     if (!message) {
         message = WCAtlasPrivateMessageWrapFromViewModel(WCAtlasPrivateObjectField(cell,
@@ -910,6 +915,45 @@ BOOL WCAtlasPrivateBindMentionContext(id cell, id viewModel, BOOL refresh) {
     }
     @catch (__unused NSException *exception) {}
     return YES;
+}
+
+BOOL WCAtlasPrivateReplayMentionStyles(id richTextView, NSString *content) {
+    NSCAssert(NSThread.isMainThread, @"Mention styles must be replayed on the main thread");
+    if (!richTextView) return NO;
+    id styles = WCAtlasPrivateObjectField(richTextView, @[@"arrStyles"]);
+    NSString *resolvedContent = [content isKindOfClass:NSString.class] ? content : nil;
+    if (!resolvedContent) {
+        id current = WCAtlasPrivateObjectField(richTextView, @[@"getContent", @"content", @"nsContent"]);
+        if ([current isKindOfClass:NSString.class]) resolvedContent = current;
+    }
+    if (![styles isKindOfClass:NSArray.class] || resolvedContent.length == 0) return NO;
+    SEL selector = NSSelectorFromString(@"setArrStyles:withContent:");
+    NSMethodSignature *signature = WCAtlasPrivateSignature(richTextView, selector, 4);
+    if (!signature || !WCAtlasPrivateObjectArguments(signature, NSMakeRange(2, 2))) return NO;
+    @try {
+        if (WCAtlasPrivateTypeIsInteger(signature.methodReturnType)) {
+            ((BOOL (*)(id, SEL, id, id))objc_msgSend)(richTextView, selector, styles, resolvedContent);
+        } else if (WCAtlasPrivateTypeIsObject(signature.methodReturnType)) {
+            ((id (*)(id, SEL, id, id))objc_msgSend)(richTextView, selector, styles, resolvedContent);
+        } else if (WCAtlasPrivateTypeIsVoid(signature.methodReturnType)) {
+            ((void (*)(id, SEL, id, id))objc_msgSend)(richTextView, selector, styles, resolvedContent);
+        } else {
+            return NO;
+        }
+        return YES;
+    } @catch (__unused NSException *exception) {
+        return NO;
+    }
+}
+
+void WCAtlasPrivateClearMentionContext(id cell) {
+    NSCAssert(NSThread.isMainThread, @"Mention context must be cleared on the main thread");
+    id richTextView = WCAtlasPrivateMentionRichTextView(cell);
+    if (!richTextView) return;
+    objc_setAssociatedObject(richTextView, &WCAtlasPrivateMentionMessageKey,
+                             nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(richTextView, &WCAtlasPrivateMentionRefreshedMessageKey,
+                             nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 NSArray<NSString *> *WCAtlasPrivateMentionUserNames(id richTextView) {
@@ -1076,12 +1120,14 @@ static NSString *WCAtlasPrivateMentionLinkURLStringAtDepth(id event, NSUInteger 
     if ([event isKindOfClass:NSString.class]) return event;
     if ([event isKindOfClass:NSURL.class]) return [event absoluteString];
     if ([event isKindOfClass:NSDictionary.class]) {
-        for (NSString *key in @[@"url", @"URL", @"nsUrl", @"link", @"style"]) {
+        for (NSString *key in @[@"url", @"URL", @"nsUrl", @"link", @"style",
+                                @"LinkStyle", @"mention"]) {
             NSString *candidate = WCAtlasPrivateMentionLinkURLStringAtDepth(event[key], depth + 1);
             if (candidate.length > 0) return candidate;
         }
     }
-    id nested = WCAtlasPrivateObjectField(event, @[@"nsUrl", @"url", @"URL", @"linkStyle", @"style"]);
+    id nested = WCAtlasPrivateObjectField(event,
+        @[@"nsUrl", @"url", @"URL", @"linkStyle", @"LinkStyle", @"style", @"mention"]);
     return nested == event ? nil : WCAtlasPrivateMentionLinkURLStringAtDepth(nested, depth + 1);
 }
 
@@ -1351,13 +1397,13 @@ BOOL WCAtlasPushPrivateChat(UIViewController *source, NSString *userName, BOOL a
     }
 
     id messageLogic = WCAtlasPrivateService(@"MMMsgLogicManager");
+    if (WCAtlasPrivatePushChatSelector(messageLogic,
+            @"PushOtherBaseMsgControllerByUserName:navigationController:animated:",
+            resolvedUserName, navigationController, animated)) return YES;
     id contact = WCAtlasPrivateContact(resolvedUserName);
-    if (contact && WCAtlasPrivatePushChatSelector(messageLogic,
+    return contact && WCAtlasPrivatePushChatSelector(messageLogic,
             @"PushOtherBaseMsgControllerByContact:navigationController:animated:",
-            contact, navigationController, animated)) return YES;
-    return WCAtlasPrivatePushChatSelector(messageLogic,
-        @"PushOtherBaseMsgControllerByUserName:navigationController:animated:",
-        resolvedUserName, navigationController, animated);
+            contact, navigationController, animated);
 }
 
 #pragma mark - Message Submission
