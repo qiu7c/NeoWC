@@ -251,6 +251,7 @@ static NSString *WCAtlasFishAudioErrorMessage(NSHTTPURLResponse *response, NSDat
     switch (status) {
         case 401: return @"Fish Audio API Key 无效或已失效";
         case 402: return @"Fish Audio 免费额度或账户余额不足";
+        case 403: return @"Fish Audio 拒绝了本次请求，请检查文本或账户权限";
         case 422: return @"Fish Audio 参数或音色 ID 不受支持";
         case 429: return @"Fish Audio 请求过于频繁，请稍后重试";
         default: return [NSString stringWithFormat:@"Fish Audio 请求失败（HTTP %ld）", (long)status];

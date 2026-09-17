@@ -118,7 +118,8 @@ static void WCAtlasChatTTSGenerateAndSend(UIViewController *presenter,
                     return;
                 }
                 if (didSubmit) didSubmit();
-                WCAtlasChatTTSReport(status, @"已提交 TTS 语音发送", YES);
+                // Successful submission is visible as a native voice bubble;
+                // avoid an additional completion toast over the conversation.
             });
         });
     });
@@ -447,7 +448,7 @@ static void __attribute__((unused)) WCAtlasChatTTSPresentTextInput(UIViewControl
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.35];
+    self.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.18];
     UIControl *dismissArea = [UIControl new];
     dismissArea.translatesAutoresizingMaskIntoConstraints = NO;
     [dismissArea addTarget:self action:@selector(dismissKeyboard) forControlEvents:UIControlEventTouchUpInside];
@@ -459,52 +460,55 @@ static void __attribute__((unused)) WCAtlasChatTTSPresentTextInput(UIViewControl
         [dismissArea.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
     ]];
 
-    UIView *card = [UIView new];
+    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial];
+    UIVisualEffectView *card = [[UIVisualEffectView alloc] initWithEffect:blur];
     card.translatesAutoresizingMaskIntoConstraints = NO;
-    card.backgroundColor = UIColor.systemBackgroundColor;
     card.layer.cornerRadius = 20;
     card.layer.cornerCurve = kCACornerCurveContinuous;
     card.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
     card.clipsToBounds = YES;
     [self.view addSubview:card];
+    UIView *cardContent = card.contentView;
+    cardContent.backgroundColor = [UIColor.systemBackgroundColor colorWithAlphaComponent:0.12];
 
     UILabel *title = [UILabel new];
     title.translatesAutoresizingMaskIntoConstraints = NO;
     title.text = self.pickerTitle;
-    title.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
+    title.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     title.textColor = UIColor.labelColor;
-    [card addSubview:title];
+    [cardContent addSubview:title];
     UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
     close.translatesAutoresizingMaskIntoConstraints = NO;
     [close setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
     close.tintColor = UIColor.secondaryLabelColor;
     [close addTarget:self action:@selector(closePicker) forControlEvents:UIControlEventTouchUpInside];
-    [card addSubview:close];
+    [cardContent addSubview:close];
     UITableView *table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     table.translatesAutoresizingMaskIntoConstraints = NO;
     table.dataSource = self;
     table.delegate = self;
-    table.rowHeight = 52;
+    table.rowHeight = 46;
     table.tableFooterView = [UIView new];
     table.backgroundColor = UIColor.clearColor;
-    [card addSubview:table];
+    table.separatorColor = [UIColor.separatorColor colorWithAlphaComponent:0.28];
+    [cardContent addSubview:table];
 
-    CGFloat height = MIN(520.0, 66.0 + MAX(1, self.items.count) * 52.0);
+    CGFloat height = MIN(470.0, 58.0 + MAX(1, self.items.count) * 46.0);
     [NSLayoutConstraint activateConstraints:@[
         [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [card.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
         [card.heightAnchor constraintEqualToConstant:height],
-        [title.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18],
-        [title.topAnchor constraintEqualToAnchor:card.topAnchor constant:16],
-        [close.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12],
+        [title.leadingAnchor constraintEqualToAnchor:cardContent.leadingAnchor constant:16],
+        [title.topAnchor constraintEqualToAnchor:cardContent.topAnchor constant:14],
+        [close.trailingAnchor constraintEqualToAnchor:cardContent.trailingAnchor constant:-10],
         [close.centerYAnchor constraintEqualToAnchor:title.centerYAnchor],
         [close.widthAnchor constraintEqualToConstant:36],
         [close.heightAnchor constraintEqualToConstant:36],
-        [table.leadingAnchor constraintEqualToAnchor:card.leadingAnchor],
-        [table.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
-        [table.topAnchor constraintEqualToAnchor:card.topAnchor constant:58],
-        [table.bottomAnchor constraintEqualToAnchor:card.bottomAnchor]
+        [table.leadingAnchor constraintEqualToAnchor:cardContent.leadingAnchor],
+        [table.trailingAnchor constraintEqualToAnchor:cardContent.trailingAnchor],
+        [table.topAnchor constraintEqualToAnchor:cardContent.topAnchor constant:52],
+        [table.bottomAnchor constraintEqualToAnchor:cardContent.bottomAnchor]
     ]];
 }
 
@@ -519,13 +523,14 @@ static void __attribute__((unused)) WCAtlasChatTTSPresentTextInput(UIViewControl
     if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:identifier];
     NSDictionary<NSString *, NSString *> *item = self.items[(NSUInteger)indexPath.row];
     cell.textLabel.text = item[@"title"] ?: @"";
-    cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+    cell.textLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
     cell.textLabel.textColor = self.destructive ? UIColor.systemRedColor : UIColor.labelColor;
     cell.detailTextLabel.text = item[@"detail"];
     cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
     cell.accessoryType = [item[@"value"] isEqualToString:self.selectedValue]
         ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
     cell.tintColor = self.destructive ? UIColor.systemRedColor : UIColor.systemBlueColor;
+    cell.backgroundColor = UIColor.clearColor;
     return cell;
 }
 
@@ -555,12 +560,12 @@ static UILabel *WCAtlasChatTTSPanelLabel(NSString *text, UIFont *font, UIColor *
 static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL action) {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     [button setTitle:title forState:UIControlStateNormal];
-    button.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    button.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
     button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-    button.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
-    button.backgroundColor = [UIColor.secondarySystemBackgroundColor colorWithAlphaComponent:0.92];
-    button.layer.cornerRadius = 12;
-    [button.heightAnchor constraintEqualToConstant:46].active = YES;
+    button.contentEdgeInsets = UIEdgeInsetsMake(0, 11, 0, 11);
+    button.backgroundColor = [UIColor.secondarySystemBackgroundColor colorWithAlphaComponent:0.58];
+    button.layer.cornerRadius = 10;
+    [button.heightAnchor constraintEqualToConstant:40].active = YES;
     [button addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
     return button;
 }
@@ -581,7 +586,7 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.42];
+    self.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.18];
 
     UIControl *dismissArea = [UIControl new];
     dismissArea.translatesAutoresizingMaskIntoConstraints = NO;
@@ -594,20 +599,22 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
         [dismissArea.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
     ]];
 
-    UIView *card = [UIView new];
+    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial];
+    UIVisualEffectView *card = [[UIVisualEffectView alloc] initWithEffect:blur];
     card.translatesAutoresizingMaskIntoConstraints = NO;
-    card.backgroundColor = UIColor.systemBackgroundColor;
     card.layer.cornerRadius = 24;
     card.layer.cornerCurve = kCACornerCurveContinuous;
     card.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
     card.clipsToBounds = YES;
     [self.view addSubview:card];
+    UIView *cardContent = card.contentView;
+    cardContent.backgroundColor = [UIColor.systemBackgroundColor colorWithAlphaComponent:0.10];
 
     UIScrollView *scrollView = [UIScrollView new];
     scrollView.translatesAutoresizingMaskIntoConstraints = NO;
     scrollView.alwaysBounceVertical = YES;
     scrollView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
-    [card addSubview:scrollView];
+    [cardContent addSubview:scrollView];
     UITapGestureRecognizer *keyboardTap = [[UITapGestureRecognizer alloc]
         initWithTarget:self action:@selector(dismissKeyboard)];
     keyboardTap.cancelsTouchesInView = NO;
@@ -616,51 +623,59 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     UIStackView *stack = [[UIStackView alloc] init];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 12;
-    stack.layoutMargins = UIEdgeInsetsMake(18, 18, 20, 18);
+    stack.spacing = 8;
+    stack.layoutMargins = UIEdgeInsetsMake(14, 16, 34, 16);
     stack.layoutMarginsRelativeArrangement = YES;
     [scrollView addSubview:stack];
 
     UIView *header = [UIView new];
-    UILabel *title = WCAtlasChatTTSPanelLabel(@"发送语音", [UIFont systemFontOfSize:22 weight:UIFontWeightBold],
+    UILabel *title = WCAtlasChatTTSPanelLabel(@"TTS 语音", [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold],
                                                UIColor.labelColor);
     title.translatesAutoresizingMaskIntoConstraints = NO;
     UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
     close.translatesAutoresizingMaskIntoConstraints = NO;
     [close setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
     close.tintColor = UIColor.secondaryLabelColor;
-    close.backgroundColor = UIColor.secondarySystemBackgroundColor;
-    close.layer.cornerRadius = 16;
+    close.backgroundColor = [UIColor.secondarySystemBackgroundColor colorWithAlphaComponent:0.55];
+    close.layer.cornerRadius = 14;
     [close addTarget:self action:@selector(closePanel) forControlEvents:UIControlEventTouchUpInside];
+    UIButton *APIButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    APIButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [APIButton setImage:[UIImage systemImageNamed:@"key.fill"] forState:UIControlStateNormal];
+    APIButton.tintColor = UIColor.secondaryLabelColor;
+    APIButton.accessibilityLabel = @"Fish Audio API Key";
+    [APIButton addTarget:self action:@selector(configureAPI) forControlEvents:UIControlEventTouchUpInside];
     [header addSubview:title];
+    [header addSubview:APIButton];
     [header addSubview:close];
     [NSLayoutConstraint activateConstraints:@[
-        [header.heightAnchor constraintEqualToConstant:38],
+        [header.heightAnchor constraintEqualToConstant:32],
         [title.leadingAnchor constraintEqualToAnchor:header.leadingAnchor],
         [title.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
+        [APIButton.trailingAnchor constraintEqualToAnchor:close.leadingAnchor constant:-8],
+        [APIButton.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
+        [APIButton.widthAnchor constraintEqualToConstant:28],
+        [APIButton.heightAnchor constraintEqualToConstant:28],
         [close.trailingAnchor constraintEqualToAnchor:header.trailingAnchor],
         [close.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
-        [close.widthAnchor constraintEqualToConstant:32],
-        [close.heightAnchor constraintEqualToConstant:32]
+        [close.widthAnchor constraintEqualToConstant:28],
+        [close.heightAnchor constraintEqualToConstant:28]
     ]];
     [stack addArrangedSubview:header];
 
-    self.summaryLabel = WCAtlasChatTTSPanelLabel(@"", [UIFont systemFontOfSize:13 weight:UIFontWeightMedium],
+    self.summaryLabel = WCAtlasChatTTSPanelLabel(@"", [UIFont systemFontOfSize:11 weight:UIFontWeightMedium],
                                                  UIColor.secondaryLabelColor);
     [stack addArrangedSubview:self.summaryLabel];
 
     self.textView = [UITextView new];
-    self.textView.font = [UIFont systemFontOfSize:17];
-    self.textView.textContainerInset = UIEdgeInsetsMake(12, 10, 12, 10);
-    self.textView.backgroundColor = UIColor.secondarySystemBackgroundColor;
-    self.textView.layer.cornerRadius = 14;
+    self.textView.font = [UIFont systemFontOfSize:15];
+    self.textView.textContainerInset = UIEdgeInsetsMake(10, 9, 10, 9);
+    self.textView.backgroundColor = [UIColor.secondarySystemBackgroundColor colorWithAlphaComponent:0.58];
+    self.textView.layer.cornerRadius = 11;
     self.textView.accessibilityLabel = @"需要转换为语音的文字";
-    [self.textView.heightAnchor constraintEqualToConstant:96].active = YES;
+    [self.textView.heightAnchor constraintEqualToConstant:76].active = YES;
     [stack addArrangedSubview:self.textView];
 
-    UILabel *voiceTitle = WCAtlasChatTTSPanelLabel(@"声音", [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold],
-                                                   UIColor.secondaryLabelColor);
-    [stack addArrangedSubview:voiceTitle];
     UIStackView *choiceRow = [[UIStackView alloc] init];
     choiceRow.axis = UILayoutConstraintAxisHorizontal;
     choiceRow.spacing = 8;
@@ -669,7 +684,7 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     self.modelButton = WCAtlasChatTTSPanelButton(@"模型", self, @selector(selectModel));
     self.toneButton = WCAtlasChatTTSPanelButton(@"语调", self, @selector(selectTone));
     for (UIButton *button in @[self.voiceButton, self.modelButton, self.toneButton]) {
-        button.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+        button.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
         button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
         [choiceRow addArrangedSubview:button];
     }
@@ -678,8 +693,8 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     voiceManagementRow.axis = UILayoutConstraintAxisHorizontal;
     voiceManagementRow.spacing = 8;
     voiceManagementRow.distribution = UIStackViewDistributionFillEqually;
-    UIButton *addVoice = WCAtlasChatTTSPanelButton(@"＋ 添加音色", self, @selector(addVoice));
-    UIButton *deleteVoice = WCAtlasChatTTSPanelButton(@"删除音色", self, @selector(deleteVoice));
+    UIButton *addVoice = WCAtlasChatTTSPanelButton(@"＋ 音色", self, @selector(addVoice));
+    UIButton *deleteVoice = WCAtlasChatTTSPanelButton(@"删除", self, @selector(deleteVoice));
     addVoice.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
     deleteVoice.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
     [deleteVoice setTitleColor:UIColor.systemRedColor forState:UIControlStateNormal];
@@ -688,16 +703,16 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     [stack addArrangedSubview:voiceManagementRow];
 
     UIView *speedHeader = [UIView new];
-    UILabel *speedTitle = WCAtlasChatTTSPanelLabel(@"语速", [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold],
+    UILabel *speedTitle = WCAtlasChatTTSPanelLabel(@"语速", [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold],
                                                    UIColor.labelColor);
     speedTitle.translatesAutoresizingMaskIntoConstraints = NO;
-    self.speedValueLabel = WCAtlasChatTTSPanelLabel(@"1.00×", [UIFont monospacedDigitSystemFontOfSize:14 weight:UIFontWeightSemibold],
+    self.speedValueLabel = WCAtlasChatTTSPanelLabel(@"1.00×", [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightSemibold],
                                                     UIColor.systemBlueColor);
     self.speedValueLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [speedHeader addSubview:speedTitle];
     [speedHeader addSubview:self.speedValueLabel];
     [NSLayoutConstraint activateConstraints:@[
-        [speedHeader.heightAnchor constraintEqualToConstant:24],
+        [speedHeader.heightAnchor constraintEqualToConstant:20],
         [speedTitle.leadingAnchor constraintEqualToAnchor:speedHeader.leadingAnchor],
         [speedTitle.centerYAnchor constraintEqualToAnchor:speedHeader.centerYAnchor],
         [self.speedValueLabel.trailingAnchor constraintEqualToAnchor:speedHeader.trailingAnchor],
@@ -714,16 +729,17 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     [stack addArrangedSubview:self.speedSlider];
 
     UIView *triggerRow = [UIView new];
-    UILabel *triggerTitle = WCAtlasChatTTSPanelLabel(@"文字触发", [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold],
+    UILabel *triggerTitle = WCAtlasChatTTSPanelLabel(@"文字触发", [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold],
                                                      UIColor.labelColor);
     triggerTitle.translatesAutoresizingMaskIntoConstraints = NO;
     self.triggerSwitch = [UISwitch new];
     self.triggerSwitch.translatesAutoresizingMaskIntoConstraints = NO;
+    self.triggerSwitch.transform = CGAffineTransformMakeScale(0.84, 0.84);
     [self.triggerSwitch addTarget:self action:@selector(triggerChanged:) forControlEvents:UIControlEventValueChanged];
     [triggerRow addSubview:triggerTitle];
     [triggerRow addSubview:self.triggerSwitch];
     [NSLayoutConstraint activateConstraints:@[
-        [triggerRow.heightAnchor constraintEqualToConstant:34],
+        [triggerRow.heightAnchor constraintEqualToConstant:30],
         [triggerTitle.leadingAnchor constraintEqualToAnchor:triggerRow.leadingAnchor],
         [triggerTitle.centerYAnchor constraintEqualToAnchor:triggerRow.centerYAnchor],
         [self.triggerSwitch.trailingAnchor constraintEqualToAnchor:triggerRow.trailingAnchor],
@@ -732,40 +748,36 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     [stack addArrangedSubview:triggerRow];
     self.triggerField = [UITextField new];
     self.triggerField.placeholder = @"触发词，例如：转语音";
-    self.triggerField.font = [UIFont systemFontOfSize:15];
-    self.triggerField.backgroundColor = UIColor.secondarySystemBackgroundColor;
-    self.triggerField.layer.cornerRadius = 12;
+    self.triggerField.font = [UIFont systemFontOfSize:13];
+    self.triggerField.backgroundColor = [UIColor.secondarySystemBackgroundColor colorWithAlphaComponent:0.58];
+    self.triggerField.layer.cornerRadius = 10;
     self.triggerField.clearButtonMode = UITextFieldViewModeWhileEditing;
     self.triggerField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 12, 1)];
     self.triggerField.leftViewMode = UITextFieldViewModeAlways;
     [self.triggerField addTarget:self action:@selector(triggerPrefixCommitted:) forControlEvents:UIControlEventEditingDidEnd];
-    [self.triggerField.heightAnchor constraintEqualToConstant:44].active = YES;
+    [self.triggerField.heightAnchor constraintEqualToConstant:38].active = YES;
     [stack addArrangedSubview:self.triggerField];
 
     UIButton *send = [UIButton buttonWithType:UIButtonTypeSystem];
-    [send setTitle:@"生成并发送" forState:UIControlStateNormal];
+    [send setTitle:@"发送语音" forState:UIControlStateNormal];
     [send setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    send.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
+    send.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     send.backgroundColor = UIColor.systemBlueColor;
-    send.layer.cornerRadius = 14;
-    [send.heightAnchor constraintEqualToConstant:50].active = YES;
+    send.layer.cornerRadius = 11;
+    [send.heightAnchor constraintEqualToConstant:44].active = YES;
     [send addTarget:self action:@selector(sendSpeech) forControlEvents:UIControlEventTouchUpInside];
     [stack addArrangedSubview:send];
 
-    UIButton *APIButton = WCAtlasChatTTSPanelButton(@"Fish Audio API Key", self, @selector(configureAPI));
-    APIButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
-    [stack addArrangedSubview:APIButton];
-
-    CGFloat maximumHeight = MIN(UIScreen.mainScreen.bounds.size.height - 32.0, 660.0);
+    CGFloat maximumHeight = MIN(UIScreen.mainScreen.bounds.size.height - 32.0, 548.0);
     [NSLayoutConstraint activateConstraints:@[
         [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [card.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
         [card.heightAnchor constraintEqualToConstant:maximumHeight],
-        [scrollView.leadingAnchor constraintEqualToAnchor:card.leadingAnchor],
-        [scrollView.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
-        [scrollView.topAnchor constraintEqualToAnchor:card.topAnchor],
-        [scrollView.bottomAnchor constraintEqualToAnchor:card.bottomAnchor],
+        [scrollView.leadingAnchor constraintEqualToAnchor:cardContent.leadingAnchor],
+        [scrollView.trailingAnchor constraintEqualToAnchor:cardContent.trailingAnchor],
+        [scrollView.topAnchor constraintEqualToAnchor:cardContent.topAnchor],
+        [scrollView.bottomAnchor constraintEqualToAnchor:cardContent.bottomAnchor],
         [stack.leadingAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.leadingAnchor],
         [stack.trailingAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.trailingAnchor],
         [stack.topAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.topAnchor],
@@ -781,9 +793,7 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
 }
 
 - (void)refreshValues {
-    self.summaryLabel.text = [NSString stringWithFormat:@"%@ · %@ · %@",
-        WCAtlasFishAudioAPIKey().length ? @"Fish Audio 已连接" : @"尚未配置 API Key",
-        WCAtlasFishAudioModel(), WCAtlasFishAudioToneName()];
+    self.summaryLabel.text = WCAtlasFishAudioAPIKey().length ? @"● Fish Audio 已连接" : @"○ 未配置 API Key";
     [self.voiceButton setTitle:WCAtlasChatTTSVoiceName() forState:UIControlStateNormal];
     [self.modelButton setTitle:WCAtlasFishAudioModel() forState:UIControlStateNormal];
     [self.toneButton setTitle:WCAtlasFishAudioToneName() forState:UIControlStateNormal];

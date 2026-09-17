@@ -884,6 +884,7 @@ BOOL WCAtlasPrivateBindMentionContext(id cell, id viewModel, BOOL refresh) {
     if (!richTextView || !message) return NO;
     objc_setAssociatedObject(richTextView, &WCAtlasPrivateMentionMessageKey,
                              message, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    WCAtlasPrivateEnableMentionClickHandling(richTextView);
     if (!refresh) return YES;
     if (objc_getAssociatedObject(richTextView, &WCAtlasPrivateMentionRefreshedMessageKey) == message) return YES;
     id styles = WCAtlasPrivateObjectField(richTextView, @[@"arrStyles"]);

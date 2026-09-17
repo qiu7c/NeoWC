@@ -492,6 +492,7 @@ static BaseMsgContentViewController *WCAtlasResolveVisibleChatController(void);
 static void WCAtlasPresentQuickReplyLibrary(BaseMsgContentViewController *controller);
 static NSString *WCAtlasChatUserName(id controller);
 static void WCAtlasShowTransientMessage(NSString *message, BOOL success);
+static void WCAtlasShowChatTTSHint(UIView *inputToolView, NSString *message, BOOL success);
 static BOOL WCAtlasMethodReturnsVoid(Method method);
 static BOOL WCAtlasMethodReturnsObject(Method method);
 static BOOL WCAtlasMethodReturnsInteger(Method method);
@@ -3298,6 +3299,55 @@ static void WCAtlasShowTransientMessage(NSString *message, BOOL success) {
     [UIView animateWithDuration:0.18 animations:^{ label.alpha = 1.0; } completion:^(__unused BOOL finished) {
         [UIView animateWithDuration:0.20 delay:2.0 options:UIViewAnimationOptionCurveEaseInOut animations:^{ label.alpha = 0.0; } completion:^(__unused BOOL done) { [label removeFromSuperview]; }];
     }];
+}
+
+static void WCAtlasShowChatTTSHint(UIView *inputToolView, NSString *message, BOOL success) {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            WCAtlasShowChatTTSHint(inputToolView, message, success);
+        });
+        return;
+    }
+    UIWindow *window = inputToolView.window ?: WCAtlasActiveWindow();
+    if (!window || message.length == 0) return;
+    static const NSInteger hintTag = 0x57435454;
+    [[window viewWithTag:hintTag] removeFromSuperview];
+
+    NSString *displayText = message;
+    if ([message containsString:@"正在请求 Fish Audio"]) displayText = @"正在生成语音…";
+    else if ([message containsString:@"已有一条 TTS 正在生成"]) displayText = @"语音生成中";
+
+    UILabel *label = [UILabel new];
+    label.tag = hintTag;
+    label.text = displayText;
+    label.textColor = UIColor.whiteColor;
+    label.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.64];
+    label.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightMedium];
+    label.textAlignment = NSTextAlignmentCenter;
+    label.numberOfLines = 2;
+    label.layer.cornerRadius = 9.0;
+    label.layer.masksToBounds = YES;
+    label.alpha = 0.0;
+    CGFloat maximumWidth = MIN(CGRectGetWidth(window.bounds) - 64.0, 286.0);
+    CGSize fitted = [label sizeThatFits:CGSizeMake(maximumWidth - 24.0, 44.0)];
+    CGFloat width = MIN(maximumWidth, MAX(104.0, ceil(fitted.width) + 24.0));
+    CGFloat height = MIN(44.0, MAX(30.0, ceil(fitted.height) + 12.0));
+    CGFloat anchorY = CGRectGetHeight(window.bounds) - window.safeAreaInsets.bottom - 84.0;
+    if (inputToolView.window) {
+        CGRect inputRect = [inputToolView convertRect:inputToolView.bounds toView:window];
+        if (!CGRectIsEmpty(inputRect)) anchorY = CGRectGetMinY(inputRect) - 8.0;
+    }
+    CGFloat y = MAX(window.safeAreaInsets.top + 12.0, anchorY - height);
+    label.frame = CGRectMake((CGRectGetWidth(window.bounds) - width) * 0.5, y, width, height);
+    [window addSubview:label];
+    [window bringSubviewToFront:label];
+    NSTimeInterval delay = success ? 1.0 : 1.6;
+    [UIView animateWithDuration:0.14 animations:^{ label.alpha = 1.0; }
+        completion:^(__unused BOOL finished) {
+            [UIView animateWithDuration:0.18 delay:delay options:UIViewAnimationOptionCurveEaseInOut
+                animations:^{ label.alpha = 0.0; }
+                completion:^(__unused BOOL done) { [label removeFromSuperview]; }];
+        }];
 }
 
 static UIViewController *WCAtlasEditPresenterController(id logic) {
@@ -7226,7 +7276,7 @@ static BOOL WCAtlasTryConsumeChatTTSText(MMInputToolView *toolView, id value) {
             [strongToolView resetText];
         }
     }, ^(NSString *message, BOOL success) {
-        WCAtlasShowTransientMessage(message, success);
+        WCAtlasShowChatTTSHint(weakToolView, message, success);
     });
 }
 
@@ -11221,6 +11271,7 @@ __attribute__((constructor)) static void WCAtlasInstallHomeLeadingSwipe(void) {
 
 - (void)viewWillAppear:(BOOL)animated {
     %orig(animated);
+    WCAtlasMentionHighlightInstallHooks();
     WCAtlasCleanupOfficialChatSearch(self);
     objc_setAssociatedObject(self, &WCAtlasChatSearchTransitionKey, nil,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);

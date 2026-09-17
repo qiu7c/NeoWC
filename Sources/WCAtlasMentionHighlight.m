@@ -11,7 +11,7 @@ extern void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 
 NSString *const WCAtlasMentionHighlightEnabledKey = @"com.qiu7c.wcatlas.chat.mention-highlight";
 
-static NSString *const WCAtlasMentionURLScheme = @"wcatlas-mention";
+static NSString *const WCAtlasMentionURLPrefix = @"https://wcatlas.invalid/profile/";
 static BOOL (*WCAtlasOriginalSetMentionStylesInteger)(id, SEL, id, id);
 static id (*WCAtlasOriginalSetMentionStylesObject)(id, SEL, id, id);
 static void (*WCAtlasOriginalSetMentionStylesVoid)(id, SEL, id, id);
@@ -24,6 +24,9 @@ static void (*WCAtlasOriginalLayoutMentionCellSubviews)(id, SEL);
 static id (*WCAtlasOriginalGetMentionRichTextViewForDelegate)(id, SEL);
 static id (*WCAtlasOriginalMentionLinkTextColor)(id, SEL);
 static id (*WCAtlasOriginalMentionRichTextConfig)(id, SEL);
+static id (*WCAtlasOriginalMentionContentTextStyles)(id, SEL);
+static id (*WCAtlasOriginalMentionOriginContentTextStyles)(id, SEL);
+static CGSize (*WCAtlasOriginalMentionSizeForContent)(id, SEL, id, id, BOOL, id __autoreleasing *);
 static NSString *WCAtlasLastOpenedMentionUserName;
 static NSTimeInterval WCAtlasLastOpenedMentionTime;
 
@@ -85,6 +88,24 @@ static BOOL WCAtlasMentionMethodHasObjectAndCGRectArguments(Method method) {
     method_getArgumentType(method, 3, rectType, sizeof(rectType));
     return WCAtlasMentionTypeIsVoid(returnType) && WCAtlasMentionTypeIsObject(objectType) &&
            strcmp(WCAtlasMentionSkipTypeQualifiers(rectType), @encode(CGRect)) == 0;
+}
+
+static BOOL WCAtlasMentionMethodHasSizeOutputStylesABI(Method method) {
+    if (!method || method_getNumberOfArguments(method) != 6) return NO;
+    char returnType[128] = {0};
+    char contentType[32] = {0};
+    char delegateType[32] = {0};
+    char spacingType[32] = {0};
+    char outputType[32] = {0};
+    method_getReturnType(method, returnType, sizeof(returnType));
+    method_getArgumentType(method, 2, contentType, sizeof(contentType));
+    method_getArgumentType(method, 3, delegateType, sizeof(delegateType));
+    method_getArgumentType(method, 4, spacingType, sizeof(spacingType));
+    method_getArgumentType(method, 5, outputType, sizeof(outputType));
+    const char *output = WCAtlasMentionSkipTypeQualifiers(outputType);
+    return strcmp(WCAtlasMentionSkipTypeQualifiers(returnType), @encode(CGSize)) == 0 &&
+           WCAtlasMentionTypeIsObject(contentType) && WCAtlasMentionTypeIsObject(delegateType) &&
+           WCAtlasMentionTypeIsInteger(spacingType) && output && output[0] == '^' && output[1] == '@';
 }
 
 static BOOL WCAtlasMentionIsAllUserName(NSString *userName) {
@@ -153,7 +174,7 @@ static NSArray<NSValue *> *WCAtlasMentionVisibleRanges(NSString *content) {
 
 static NSString *WCAtlasMentionURLString(NSString *userName) {
     NSString *encoded = [userName stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLPathAllowedCharacterSet];
-    return encoded.length > 0 ? [NSString stringWithFormat:@"%@://%@", WCAtlasMentionURLScheme, encoded] : nil;
+    return encoded.length > 0 ? [WCAtlasMentionURLPrefix stringByAppendingString:encoded] : nil;
 }
 
 static NSString *WCAtlasMentionStringFromEvent(id event) {
@@ -180,7 +201,7 @@ static id WCAtlasMentionLinkStyle(NSRange range, NSString *userName) {
 static BOOL WCAtlasMentionStylesContainURL(NSArray *styles) {
     for (id style in styles) {
         NSString *URLString = WCAtlasMentionStringFromEvent(style);
-        if ([URLString hasPrefix:[WCAtlasMentionURLScheme stringByAppendingString:@"://"]]) return YES;
+        if ([URLString hasPrefix:WCAtlasMentionURLPrefix]) return YES;
     }
     return NO;
 }
@@ -253,9 +274,8 @@ static void WCAtlasSetMentionStylesVoid(id self, SEL _cmd, id styles, id content
 static BOOL WCAtlasHandleMentionClick(id richTextView, id event) {
     if (!WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) return NO;
     NSString *URLString = WCAtlasMentionStringFromEvent(event);
-    NSString *prefix = [WCAtlasMentionURLScheme stringByAppendingString:@"://"];
-    if (![URLString hasPrefix:prefix]) return NO;
-    NSString *encoded = [URLString substringFromIndex:prefix.length];
+    if (![URLString hasPrefix:WCAtlasMentionURLPrefix]) return NO;
+    NSString *encoded = [URLString substringFromIndex:WCAtlasMentionURLPrefix.length];
     NSString *userName = encoded.stringByRemovingPercentEncoding ?: encoded;
     if (userName.length == 0 || WCAtlasMentionIsAllUserName(userName)) return YES;
     NSTimeInterval now = NSDate.timeIntervalSinceReferenceDate;
@@ -337,12 +357,56 @@ static id WCAtlasMentionRichTextConfig(id self, SEL _cmd) {
     return config;
 }
 
+static id WCAtlasMentionContentObject(id viewModel) {
+    for (NSString *selectorName in @[@"contentText", @"originContentText"]) {
+        SEL selector = NSSelectorFromString(selectorName);
+        Method method = class_getInstanceMethod(object_getClass(viewModel), selector);
+        if (!WCAtlasMentionMethodReturnsObject(method, 0)) continue;
+        @try {
+            id value = ((id (*)(id, SEL))objc_msgSend)(viewModel, selector);
+            if ([value isKindOfClass:NSString.class]) return value;
+        } @catch (__unused NSException *exception) {}
+    }
+    return nil;
+}
+
+static id WCAtlasMentionContentTextStyles(id self, SEL _cmd) {
+    id styles = WCAtlasOriginalMentionContentTextStyles
+        ? WCAtlasOriginalMentionContentTextStyles(self, _cmd) : nil;
+    return WCAtlasMentionStylesForContent(self, styles, WCAtlasMentionContentObject(self));
+}
+
+static id WCAtlasMentionOriginContentTextStyles(id self, SEL _cmd) {
+    id styles = WCAtlasOriginalMentionOriginContentTextStyles
+        ? WCAtlasOriginalMentionOriginContentTextStyles(self, _cmd) : nil;
+    return WCAtlasMentionStylesForContent(self, styles, WCAtlasMentionContentObject(self));
+}
+
+static CGSize WCAtlasMentionSizeForContent(id self, SEL _cmd, id content,
+                                           id layoutDelegate, BOOL autoLineSpacing,
+                                           id __autoreleasing *outStyles) {
+    CGSize size = WCAtlasOriginalMentionSizeForContent(
+        self, _cmd, content, layoutDelegate, autoLineSpacing, outStyles);
+    if (!WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey) || !outStyles) return size;
+    id styles = *outStyles;
+    id merged = WCAtlasMentionStylesForContent(self, styles, content);
+    if (merged != styles) *outStyles = merged;
+    return size;
+}
+
 #pragma mark - Hook Installation
 
 void WCAtlasMentionHighlightInstallHooks(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
+    static BOOL installed = NO;
+    @synchronized (WCAtlasMentionHighlightEnabledKey) {
+        if (installed) return;
         Class richTextClass = NSClassFromString(@"RichTextView");
+        Class textCellClass = NSClassFromString(@"TextMessageCellView");
+        Class textViewModelClass = NSClassFromString(@"TextMessageViewModel");
+        if (!richTextClass || !textCellClass || !textViewModelClass) {
+            WCAtlasLog(@"@ 高亮延迟安装：微信聊天类尚未加载");
+            return;
+        }
         SEL styleSelector = NSSelectorFromString(@"setArrStyles:withContent:");
         Method styleMethod = richTextClass ? class_getInstanceMethod(richTextClass, styleSelector) : NULL;
         if (!styleMethod || method_getNumberOfArguments(styleMethod) != 4) {
@@ -395,7 +459,6 @@ void WCAtlasMentionHighlightInstallHooks(void) {
             WCAtlasLog(@"@ 高亮只启用显示：点击事件 ABI 不支持");
         }
 
-        Class textCellClass = NSClassFromString(@"TextMessageCellView");
         SEL cellLinkSelector = NSSelectorFromString(@"onLinkClicked:withRect:");
         Method cellLinkMethod = textCellClass
             ? class_getInstanceMethod(textCellClass, cellLinkSelector) : NULL;
@@ -451,7 +514,36 @@ void WCAtlasMentionHighlightInstallHooks(void) {
             WCAtlasLog(@"@ 高亮富文本入口未安装：getRichTextViewForDelegate ABI 不支持");
         }
 
-        Class textViewModelClass = NSClassFromString(@"TextMessageViewModel");
+        SEL contentStylesSelector = NSSelectorFromString(@"contentTextStyles");
+        Method contentStylesMethod = class_getInstanceMethod(textViewModelClass, contentStylesSelector);
+        if (WCAtlasMentionMethodReturnsObject(contentStylesMethod, 0)) {
+            original = NULL;
+            MSHookMessageEx(textViewModelClass, contentStylesSelector,
+                (IMP)WCAtlasMentionContentTextStyles, &original);
+            WCAtlasOriginalMentionContentTextStyles = (id (*)(id, SEL))original;
+        } else {
+            WCAtlasLog(@"@ 高亮样式源未安装：TextMessageViewModel contentTextStyles ABI 不支持");
+        }
+        SEL originStylesSelector = NSSelectorFromString(@"originContentTextStyles");
+        Method originStylesMethod = class_getInstanceMethod(textViewModelClass, originStylesSelector);
+        if (WCAtlasMentionMethodReturnsObject(originStylesMethod, 0)) {
+            original = NULL;
+            MSHookMessageEx(textViewModelClass, originStylesSelector,
+                (IMP)WCAtlasMentionOriginContentTextStyles, &original);
+            WCAtlasOriginalMentionOriginContentTextStyles = (id (*)(id, SEL))original;
+        }
+        SEL sizeSelector = NSSelectorFromString(
+            @"sizeForContent:layoutDelegate:autoLineSpacing:outArrStyles:");
+        Method sizeMethod = class_getInstanceMethod(textViewModelClass, sizeSelector);
+        if (WCAtlasMentionMethodHasSizeOutputStylesABI(sizeMethod)) {
+            original = NULL;
+            MSHookMessageEx(textViewModelClass, sizeSelector,
+                (IMP)WCAtlasMentionSizeForContent, &original);
+            WCAtlasOriginalMentionSizeForContent =
+                (CGSize (*)(id, SEL, id, id, BOOL, id __autoreleasing *))original;
+        } else {
+            WCAtlasLog(@"@ 高亮样式生产入口未安装：sizeForContent ABI 不支持");
+        }
         SEL linkColorSelector = NSSelectorFromString(@"linkTextColor");
         Method linkColorMethod = textViewModelClass
             ? class_getInstanceMethod(textViewModelClass, linkColorSelector) : NULL;
@@ -474,5 +566,7 @@ void WCAtlasMentionHighlightInstallHooks(void) {
         } else {
             WCAtlasLog(@"@ 高亮配置入口未安装：getRichTextViewConfig ABI 不支持");
         }
-    });
+        installed = YES;
+        WCAtlasLog(@"@ 高亮 Hook 已安装");
+    }
 }
