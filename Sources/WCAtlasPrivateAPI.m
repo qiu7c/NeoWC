@@ -842,6 +842,11 @@ static id WCAtlasPrivateMessageWrapFromViewModel(id viewModel) {
 static id WCAtlasPrivateMentionMessageWrap(id richTextView) {
     id associated = objc_getAssociatedObject(richTextView, &WCAtlasPrivateMentionMessageKey);
     if (associated) return associated;
+    // TextMessageViewModel style getters call the mention adapter before a live cell/rich view is
+    // available. Resolve BaseMessageViewModel.messageWrap directly in that path; otherwise the
+    // official m_nsAtUserList is invisible and no mention styles can be produced.
+    id directMessage = WCAtlasPrivateMessageWrapFromViewModel(richTextView);
+    if (directMessage) return directMessage;
     if (WCAtlasPrivateLooksLikeMessageWrap(richTextView)) return richTextView;
     NSMutableArray *candidates = [NSMutableArray array];
     for (NSString *field in @[@"linkDelegate", @"layoutDelegate", @"delegate", @"m_delegate"]) {

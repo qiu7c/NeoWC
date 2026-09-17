@@ -15,6 +15,7 @@ typedef void (^WCAtlasSettingsSwitchHandler)(WCAtlasSettingItem *item, BOOL enab
 
 @interface WCAtlasSettingsProfileHeaderView : UIControl
 @property (nonatomic, copy, readonly, nullable) NSString *wxid;
+- (void)embedSearchBar:(UISearchBar *)searchBar;
 - (void)refreshProfile;
 - (void)showCopyConfirmation;
 - (CGFloat)preferredHeightForWidth:(CGFloat)width scale:(CGFloat)scale;

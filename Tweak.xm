@@ -6357,10 +6357,10 @@ static void WCAtlasRegisterPlugin(void) {
                                      version:WCAtlasDisplayVersion
                                   controller:NSStringFromClass([WCAtlasSettingsViewController class])];
     } else if (useBuiltInManager) {
-        WCAtlasInstallPluginRegistryBridge();
-        [WCAtlasPluginsMgr.sharedInstance registerControllerWithTitle:@"WCAtlas"
-                                                               version:WCAtlasDisplayVersion
-                                                            controller:NSStringFromClass([WCAtlasSettingsViewController class])];
+        if (!WCAtlasInstallPluginRegistry()) return;
+        [[WCPluginsMgr sharedInstance] registerControllerWithTitle:@"WCAtlas"
+                                                           version:WCAtlasDisplayVersion
+                                                        controller:NSStringFromClass([WCAtlasSettingsViewController class])];
     }
     WCAtlasPluginManagerRegisterSavedQuickSwitches();
     WCAtlasDidRegister = YES;
@@ -6385,10 +6385,10 @@ static BOOL WCAtlasShouldUseHighRefreshRate(void) {
 @implementation WCAtlasEntryLoader
 
 + (void)load {
-    // Install the optional WCPluginsMgr compatibility class synchronously. Delaying this to the
+    // Install the optional WCPluginsMgr registry class synchronously. Delaying this to the
     // main queue causes plugins that register from +load/constructors to miss the registry.
     WCAtlasSettingsRegisterDefaults();
-    WCAtlasInstallPluginRegistryBridge();
+    WCAtlasInstallPluginRegistry();
     WCAtlasRegisterPlugin();
     dispatch_async(dispatch_get_main_queue(), ^{
         WCAtlasRegisterPlugin();
@@ -14136,7 +14136,7 @@ static void WCAtlasInstallExclusiveRedEnvelopeHooks(void) {
 %end
 
 %ctor {
-    WCAtlasInstallPluginRegistryBridge();
+    WCAtlasInstallPluginRegistry();
     %init;
     WCAtlasAutomationStart();
     WCAtlasMomentsCommentAntiDeleteInstallHooks();

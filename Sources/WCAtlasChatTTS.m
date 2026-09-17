@@ -4,6 +4,7 @@
 #import "WCAtlasTTSGenerator.h"
 #import "WCAtlasLogging.h"
 #import "WCAtlasEnhancements.h"
+#import <AVFoundation/AVFoundation.h>
 #import <math.h>
 
 static NSMutableSet<NSString *> *WCAtlasChatTTSActiveSessions(void) {
@@ -61,6 +62,43 @@ static BOOL WCAtlasChatTTSStillInConversation(UIViewController *presenter, NSStr
     return currentUserName.length == 0 || [currentUserName isEqualToString:userName];
 }
 
+static void WCAtlasChatTTSConvertAndSend(UIViewController *presenter,
+                                         NSString *target,
+                                         NSURL *outputURL,
+                                         dispatch_block_t didSubmit,
+                                         WCAtlasChatTTSStatusHandler status) {
+    __weak UIViewController *weakPresenter = presenter;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSString *silkPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
+            [NSString stringWithFormat:@"WCAtlas-chat-tts-%@.silk", NSUUID.UUID.UUIDString]];
+        NSUInteger duration = 0;
+        NSError *conversionError = nil;
+        BOOL converted = WCAtlasEncodeAudioFileToSilk(outputURL.path, silkPath, &duration, &conversionError);
+        [NSFileManager.defaultManager removeItemAtURL:outputURL error:nil];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [WCAtlasChatTTSActiveSessions() removeObject:target];
+            UIViewController *strongPresenter = weakPresenter;
+            if (!converted) {
+                [NSFileManager.defaultManager removeItemAtPath:silkPath error:nil];
+                WCAtlasChatTTSReport(status, conversionError.localizedDescription ?: @"TTS 音频转码失败", NO);
+                return;
+            }
+            if (!WCAtlasChatTTSStillInConversation(strongPresenter, target)) {
+                [NSFileManager.defaultManager removeItemAtPath:silkPath error:nil];
+                WCAtlasChatTTSReport(status, @"生成完成，但当前聊天已经变化，未发送", NO);
+                return;
+            }
+            BOOL submitted = WCAtlasPrivateSendVoiceMessage(target, silkPath, duration, 4);
+            [NSFileManager.defaultManager removeItemAtPath:silkPath error:nil];
+            if (!submitted) {
+                WCAtlasChatTTSReport(status, @"微信语音上传接口不可用，未发送", NO);
+                return;
+            }
+            if (didSubmit) didSubmit();
+        });
+    });
+}
+
 static void WCAtlasChatTTSGenerateAndSend(UIViewController *presenter,
                                          NSString *userName,
                                          NSString *text,
@@ -91,44 +129,14 @@ static void WCAtlasChatTTSGenerateAndSend(UIViewController *presenter,
             WCAtlasChatTTSReport(status, generationError.localizedDescription ?: @"TTS 生成失败", NO);
             return;
         }
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            NSString *silkPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
-                [NSString stringWithFormat:@"WCAtlas-chat-tts-%@.silk", NSUUID.UUID.UUIDString]];
-            NSUInteger duration = 0;
-            NSError *conversionError = nil;
-            BOOL converted = WCAtlasEncodeAudioFileToSilk(outputURL.path, silkPath, &duration, &conversionError);
-            [NSFileManager.defaultManager removeItemAtURL:outputURL error:nil];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [active removeObject:target];
-                UIViewController *strongPresenter = weakPresenter;
-                if (!converted) {
-                    [NSFileManager.defaultManager removeItemAtPath:silkPath error:nil];
-                    WCAtlasChatTTSReport(status, conversionError.localizedDescription ?: @"TTS 音频转码失败", NO);
-                    return;
-                }
-                if (!WCAtlasChatTTSStillInConversation(strongPresenter, target)) {
-                    [NSFileManager.defaultManager removeItemAtPath:silkPath error:nil];
-                    WCAtlasChatTTSReport(status, @"生成完成，但当前聊天已经变化，未发送", NO);
-                    return;
-                }
-                BOOL submitted = WCAtlasPrivateSendVoiceMessage(target, silkPath, duration, 4);
-                [NSFileManager.defaultManager removeItemAtPath:silkPath error:nil];
-                if (!submitted) {
-                    WCAtlasChatTTSReport(status, @"微信语音上传接口不可用，未发送", NO);
-                    return;
-                }
-                if (didSubmit) didSubmit();
-                // Successful submission is visible as a native voice bubble;
-                // avoid an additional completion toast over the conversation.
-            });
-        });
+        WCAtlasChatTTSConvertAndSend(weakPresenter, target, outputURL, didSubmit, status);
     });
 }
 
 static void WCAtlasChatTTSPresentMainPanel(UIViewController *, NSString *, dispatch_block_t,
                                            WCAtlasChatTTSStatusHandler);
 
-@interface WCAtlasChatTTSPanelController : UIViewController
+@interface WCAtlasChatTTSPanelController : UIViewController <UITextViewDelegate, AVAudioPlayerDelegate>
 @property (nonatomic, copy) NSString *chatUserName;
 @property (nonatomic, copy) dispatch_block_t didSubmit;
 @property (nonatomic, copy) WCAtlasChatTTSStatusHandler statusHandler;
@@ -141,6 +149,12 @@ static void WCAtlasChatTTSPresentMainPanel(UIViewController *, NSString *, dispa
 @property (nonatomic, strong) UIButton *voiceButton;
 @property (nonatomic, strong) UIButton *modelButton;
 @property (nonatomic, strong) UIButton *toneButton;
+@property (nonatomic, strong) UIButton *previewButton;
+@property (nonatomic, strong) UIButton *sendButton;
+@property (nonatomic, strong, nullable) AVAudioPlayer *previewPlayer;
+@property (nonatomic, strong, nullable) NSURL *previewURL;
+@property (nonatomic, copy, nullable) NSString *previewText;
+@property (nonatomic, assign) BOOL previewGenerating;
 - (instancetype)initWithUserName:(NSString *)userName
                        didSubmit:(dispatch_block_t _Nullable)didSubmit
                            status:(WCAtlasChatTTSStatusHandler _Nullable)status;
@@ -673,6 +687,7 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     self.textView.backgroundColor = [UIColor.secondarySystemBackgroundColor colorWithAlphaComponent:0.58];
     self.textView.layer.cornerRadius = 11;
     self.textView.accessibilityLabel = @"需要转换为语音的文字";
+    self.textView.delegate = self;
     [self.textView.heightAnchor constraintEqualToConstant:76].active = YES;
     [stack addArrangedSubview:self.textView];
 
@@ -758,15 +773,28 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     [self.triggerField.heightAnchor constraintEqualToConstant:38].active = YES;
     [stack addArrangedSubview:self.triggerField];
 
-    UIButton *send = [UIButton buttonWithType:UIButtonTypeSystem];
-    [send setTitle:@"发送语音" forState:UIControlStateNormal];
-    [send setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    send.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
-    send.backgroundColor = UIColor.systemBlueColor;
-    send.layer.cornerRadius = 11;
-    [send.heightAnchor constraintEqualToConstant:44].active = YES;
-    [send addTarget:self action:@selector(sendSpeech) forControlEvents:UIControlEventTouchUpInside];
-    [stack addArrangedSubview:send];
+    UIStackView *speechActions = [[UIStackView alloc] init];
+    speechActions.axis = UILayoutConstraintAxisHorizontal;
+    speechActions.spacing = 8;
+    speechActions.distribution = UIStackViewDistributionFillEqually;
+    self.previewButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.previewButton setTitle:@"生成预览" forState:UIControlStateNormal];
+    self.previewButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    self.previewButton.backgroundColor = [UIColor.secondarySystemBackgroundColor colorWithAlphaComponent:0.68];
+    self.previewButton.layer.cornerRadius = 11;
+    [self.previewButton.heightAnchor constraintEqualToConstant:44].active = YES;
+    [self.previewButton addTarget:self action:@selector(previewSpeech) forControlEvents:UIControlEventTouchUpInside];
+    self.sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.sendButton setTitle:@"发送" forState:UIControlStateNormal];
+    [self.sendButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    self.sendButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    self.sendButton.backgroundColor = UIColor.systemBlueColor;
+    self.sendButton.layer.cornerRadius = 11;
+    [self.sendButton.heightAnchor constraintEqualToConstant:44].active = YES;
+    [self.sendButton addTarget:self action:@selector(sendSpeech) forControlEvents:UIControlEventTouchUpInside];
+    [speechActions addArrangedSubview:self.previewButton];
+    [speechActions addArrangedSubview:self.sendButton];
+    [stack addArrangedSubview:speechActions];
 
     CGFloat maximumHeight = MIN(UIScreen.mainScreen.bounds.size.height - 32.0, 548.0);
     [NSLayoutConstraint activateConstraints:@[
@@ -810,14 +838,37 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     WCAtlasChatTTSReport(self.statusHandler, message, success);
 }
 
-- (void)closePanel { [self dismissViewControllerAnimated:YES completion:nil]; }
+- (void)clearPreview {
+    [self.previewPlayer stop];
+    self.previewPlayer.delegate = nil;
+    self.previewPlayer = nil;
+    if (self.previewURL) [NSFileManager.defaultManager removeItemAtURL:self.previewURL error:nil];
+    self.previewURL = nil;
+    self.previewText = nil;
+    if (!self.previewGenerating) [self.previewButton setTitle:@"生成预览" forState:UIControlStateNormal];
+}
+
+- (void)closePanel {
+    [self clearPreview];
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
 - (void)dismissKeyboard { [self.view endEditing:YES]; }
+
+- (void)textViewDidChange:(__unused UITextView *)textView {
+    if (self.previewURL) [self clearPreview];
+}
+
+- (void)audioPlayerDidFinishPlaying:(__unused AVAudioPlayer *)player
+                       successfully:(__unused BOOL)flag {
+    [self.previewButton setTitle:@"再次播放" forState:UIControlStateNormal];
+}
 
 - (void)speedChanged:(UISlider *)slider {
     self.speedValueLabel.text = [NSString stringWithFormat:@"%.2f×", slider.value];
 }
 
 - (void)speedCommitted:(UISlider *)slider {
+    [self clearPreview];
     WCAtlasSetFishAudioSpeechSpeed(slider.value);
     [self report:[NSString stringWithFormat:@"TTS 语速：%.2f×", slider.value] success:YES];
 }
@@ -863,6 +914,7 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     __weak typeof(self) weakSelf = self;
     [self presentOptionsWithTitle:@"选择音色" items:items selected:WCAtlasFishAudioReferenceID()
                       destructive:NO handler:^(NSString *value, NSString *title) {
+        [weakSelf clearPreview];
         WCAtlasSetFishAudioReferenceID(value);
         [weakSelf report:[NSString stringWithFormat:@"已选择音色：%@", title] success:YES];
     }];
@@ -877,6 +929,7 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     __weak typeof(self) weakSelf = self;
     [self presentOptionsWithTitle:@"选择模型" items:items selected:WCAtlasFishAudioModel()
                       destructive:NO handler:^(NSString *value, NSString *title) {
+        [weakSelf clearPreview];
         WCAtlasSetFishAudioModel(value);
         [weakSelf report:[NSString stringWithFormat:@"已选择模型：%@", title] success:YES];
     }];
@@ -891,12 +944,14 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
     __weak typeof(self) weakSelf = self;
     [self presentOptionsWithTitle:@"选择语调" items:items selected:WCAtlasFishAudioToneIdentifier()
                       destructive:NO handler:^(NSString *value, NSString *title) {
+        [weakSelf clearPreview];
         WCAtlasSetFishAudioToneIdentifier(value);
         [weakSelf report:[NSString stringWithFormat:@"TTS 语调：%@", title] success:YES];
     }];
 }
 
 - (void)addVoice {
+    [self clearPreview];
     WCAtlasChatTTSPresentAddVoice(self, [self nestedStatus]);
 }
 
@@ -919,15 +974,114 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
 }
 - (void)configureAPI { WCAtlasChatTTSPresentAPISettings(self, [self nestedStatus]); }
 
+- (void)dealloc {
+    [self.previewPlayer stop];
+    self.previewPlayer.delegate = nil;
+    if (self.previewURL) [NSFileManager.defaultManager removeItemAtURL:self.previewURL error:nil];
+}
+
+- (void)previewSpeech {
+    [self triggerPrefixCommitted:self.triggerField];
+    NSString *text = WCAtlasChatTTSTrim(self.textView.text);
+    if (text.length == 0) {
+        [self report:@"请输入需要转成语音的内容" success:NO];
+        return;
+    }
+    if (self.previewURL && [self.previewText isEqualToString:text] && self.previewPlayer) {
+        if (self.previewPlayer.isPlaying) {
+            [self.previewPlayer pause];
+            [self.previewButton setTitle:@"继续播放" forState:UIControlStateNormal];
+        } else {
+            if (self.previewPlayer.currentTime >= self.previewPlayer.duration) self.previewPlayer.currentTime = 0;
+            [self.previewPlayer play];
+            [self.previewButton setTitle:@"暂停" forState:UIControlStateNormal];
+        }
+        return;
+    }
+    if (self.previewGenerating) return;
+    NSMutableSet<NSString *> *active = WCAtlasChatTTSActiveSessions();
+    if ([active containsObject:self.chatUserName]) {
+        [self report:@"当前聊天已有一条 TTS 正在生成" success:NO];
+        return;
+    }
+    [self clearPreview];
+    self.previewGenerating = YES;
+    self.previewButton.enabled = NO;
+    self.sendButton.enabled = NO;
+    [self.previewButton setTitle:@"生成中…" forState:UIControlStateNormal];
+    NSString *target = [self.chatUserName copy];
+    [active addObject:target];
+    __weak typeof(self) weakSelf = self;
+    WCAtlasGenerateFishAudioSpeech(text, ^(NSURL *outputURL, NSError *error) {
+        typeof(self) strongSelf = weakSelf;
+        [active removeObject:target];
+        if (!strongSelf) {
+            if (outputURL) [NSFileManager.defaultManager removeItemAtURL:outputURL error:nil];
+            return;
+        }
+        strongSelf.previewGenerating = NO;
+        strongSelf.previewButton.enabled = YES;
+        strongSelf.sendButton.enabled = YES;
+        if (error || !outputURL) {
+            [strongSelf.previewButton setTitle:@"重新生成" forState:UIControlStateNormal];
+            [strongSelf report:error.localizedDescription ?: @"TTS 生成失败" success:NO];
+            return;
+        }
+        NSError *playerError = nil;
+        AVAudioPlayer *player = [[AVAudioPlayer alloc] initWithContentsOfURL:outputURL error:&playerError];
+        if (!player || playerError) {
+            [NSFileManager.defaultManager removeItemAtURL:outputURL error:nil];
+            [strongSelf.previewButton setTitle:@"重新生成" forState:UIControlStateNormal];
+            [strongSelf report:playerError.localizedDescription ?: @"无法预览生成的音频" success:NO];
+            return;
+        }
+        strongSelf.previewURL = outputURL;
+        strongSelf.previewText = text;
+        strongSelf.previewPlayer = player;
+        player.delegate = strongSelf;
+        [player prepareToPlay];
+        [player play];
+        [strongSelf.previewButton setTitle:@"暂停" forState:UIControlStateNormal];
+    });
+}
+
 - (void)sendSpeech {
     [self triggerPrefixCommitted:self.triggerField];
     NSString *text = WCAtlasChatTTSTrim(self.textView.text);
+    if (!self.previewURL || ![self.previewText isEqualToString:text]) {
+        [self report:@"请先生成并预览当前文字" success:NO];
+        return;
+    }
+    if (!WCAtlasChatTTSStillInConversation(self.presentingViewController, self.chatUserName)) {
+        [self report:@"当前聊天已经变化，未发送" success:NO];
+        return;
+    }
+    NSMutableSet<NSString *> *active = WCAtlasChatTTSActiveSessions();
+    if ([active containsObject:self.chatUserName]) return;
+    [active addObject:self.chatUserName];
+    [self.previewPlayer stop];
+    self.previewPlayer.delegate = nil;
+    self.previewPlayer = nil;
+    NSURL *outputURL = self.previewURL;
+    self.previewURL = nil;
+    self.previewText = nil;
+    self.previewButton.enabled = NO;
+    self.sendButton.enabled = NO;
     __weak typeof(self) weakSelf = self;
     UIViewController *chatPresenter = self.presentingViewController ?: self;
-    WCAtlasChatTTSGenerateAndSend(chatPresenter, self.chatUserName, text, ^{
+    WCAtlasChatTTSStatusHandler sendStatus = ^(NSString *message, BOOL success) {
+        typeof(self) strongSelf = weakSelf;
+        if (!success) {
+            strongSelf.previewButton.enabled = YES;
+            strongSelf.sendButton.enabled = YES;
+            [strongSelf.previewButton setTitle:@"重新生成" forState:UIControlStateNormal];
+        }
+        [strongSelf report:message success:success];
+    };
+    WCAtlasChatTTSConvertAndSend(chatPresenter, self.chatUserName, outputURL, ^{
         if (weakSelf.didSubmit) weakSelf.didSubmit();
         [weakSelf dismissViewControllerAnimated:YES completion:nil];
-    }, [self nestedStatus]);
+    }, sendStatus);
 }
 
 @end

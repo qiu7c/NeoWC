@@ -102,8 +102,7 @@
         self.functionSearchController.searchBar.delegate = self;
         self.functionSearchController.searchBar.placeholder = @"搜索功能开关";
         self.functionSearchController.obscuresBackgroundDuringPresentation = NO;
-        self.navigationItem.searchController = self.functionSearchController;
-        self.navigationItem.hidesSearchBarWhenScrolling = NO;
+        [self.profileHeader embedSearchBar:self.functionSearchController.searchBar];
         self.definesPresentationContext = YES;
     }
     [self applySettingsPageScale];
@@ -162,7 +161,7 @@
 
 - (void)rebuildSections {
     self.sections = WCAtlasSettingsBuildSections(self.category, self.collapsedFeatureKeys);
-    if (self.functionSearchController.isActive) {
+    if (self.functionSearchController.searchBar.text.length > 0) {
         [self rebuildFunctionSearchResults:self.functionSearchController.searchBar.text ?: @""];
     }
 }
@@ -170,7 +169,7 @@
 - (NSArray<WCAtlasSettingSection *> *)visibleSections {
     NSString *query = [self.functionSearchController.searchBar.text
         stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    return self.functionSearchController.isActive && query.length > 0
+    return query.length > 0
         ? (self.searchSections ?: @[]) : self.sections;
 }
 

@@ -160,6 +160,8 @@ static UIView *WCAtlasSettingsExpandableSwitchAccessory(UISwitch *toggle, BOOL e
 @property (nonatomic, strong) UIStackView *identityRow;
 @property (nonatomic, strong) UITapGestureRecognizer *profileTapGesture;
 @property (nonatomic, strong) UILabel *wxidLabel;
+@property (nonatomic, weak) UISearchBar *embeddedSearchBar;
+@property (nonatomic, copy) NSArray<NSLayoutConstraint *> *searchBarConstraints;
 @property (nonatomic, copy) NSArray<NSLayoutConstraint *> *avatarConstraints;
 @property (nonatomic, copy) NSString *appliedAvatarWXID;
 @property (nonatomic, copy) NSString *appliedHeadURL;
@@ -207,6 +209,14 @@ static UIColor *WCAtlasIdentityBadgeColor(NSString *code) {
 }
 
 @implementation WCAtlasSettingsProfileHeaderView
+
+static void WCAtlasHideSearchBarBackground(UIView *view) {
+    if ([NSStringFromClass(view.class) isEqualToString:@"UISearchBarBackground"]) {
+        view.hidden = YES;
+        view.alpha = 0.0;
+    }
+    for (UIView *subview in view.subviews) WCAtlasHideSearchBarBackground(subview);
+}
 
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
@@ -278,6 +288,34 @@ static UIColor *WCAtlasIdentityBadgeColor(NSString *code) {
     // so it never renders an empty placeholder frame.
     [self refreshProfile];
     return self;
+}
+
+- (void)embedSearchBar:(UISearchBar *)searchBar {
+    if (!searchBar || self.embeddedSearchBar == searchBar) return;
+    [NSLayoutConstraint deactivateConstraints:self.searchBarConstraints ?: @[]];
+    [self.embeddedSearchBar removeFromSuperview];
+    self.embeddedSearchBar = searchBar;
+    searchBar.translatesAutoresizingMaskIntoConstraints = NO;
+    searchBar.searchBarStyle = UISearchBarStyleMinimal;
+    searchBar.backgroundColor = UIColor.clearColor;
+    searchBar.barTintColor = UIColor.clearColor;
+    searchBar.backgroundImage = [UIImage new];
+    [self.capsuleView addSubview:searchBar];
+    self.searchBarConstraints = @[
+        [searchBar.centerXAnchor constraintEqualToAnchor:self.capsuleView.centerXAnchor],
+        [searchBar.leadingAnchor constraintEqualToAnchor:self.capsuleView.leadingAnchor constant:12.0],
+        [searchBar.trailingAnchor constraintEqualToAnchor:self.capsuleView.trailingAnchor constant:-12.0],
+        [searchBar.bottomAnchor constraintEqualToAnchor:self.capsuleView.bottomAnchor constant:-8.0],
+        [searchBar.heightAnchor constraintEqualToConstant:44.0],
+    ];
+    [NSLayoutConstraint activateConstraints:self.searchBarConstraints];
+    WCAtlasHideSearchBarBackground(searchBar);
+    [self setNeedsLayout];
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    if (self.embeddedSearchBar) WCAtlasHideSearchBarBackground(self.embeddedSearchBar);
 }
 
 - (UIView *)makeAvatarViewWithWXID:(NSString *)wxid headURL:(NSString *)headURL {
@@ -362,7 +400,7 @@ static UIColor *WCAtlasIdentityBadgeColor(NSString *code) {
     [self.capsuleView addSubview:self.avatarView];
     self.avatarConstraints = @[
         [self.avatarView.leadingAnchor constraintEqualToAnchor:self.capsuleView.leadingAnchor constant:16.0],
-        [self.avatarView.centerYAnchor constraintEqualToAnchor:self.capsuleView.centerYAnchor],
+        [self.avatarView.topAnchor constraintEqualToAnchor:self.capsuleView.topAnchor constant:14.0],
         [self.avatarView.widthAnchor constraintEqualToConstant:64.0],
         [self.avatarView.heightAnchor constraintEqualToConstant:64.0],
         [avatarContent.leadingAnchor constraintEqualToAnchor:self.avatarView.leadingAnchor],
@@ -415,7 +453,7 @@ static UIColor *WCAtlasIdentityBadgeColor(NSString *code) {
     if (gestureRecognizer != self.profileTapGesture) return YES;
     UIView *view = touch.view;
     while (view && view != self.capsuleView) {
-        if (view == self.badgeLabel) return NO;
+        if (view == self.badgeLabel || view == self.embeddedSearchBar) return NO;
         view = view.superview;
     }
     return YES;
@@ -423,7 +461,8 @@ static UIColor *WCAtlasIdentityBadgeColor(NSString *code) {
 
 - (CGFloat)preferredHeightForWidth:(CGFloat)width scale:(CGFloat)scale {
     (void)width;
-    return MAX(104.0, 104.0 * scale);
+    CGFloat baseHeight = self.embeddedSearchBar ? 154.0 : 104.0;
+    return MAX(baseHeight, baseHeight * scale);
 }
 
 - (void)showCopyConfirmation {
