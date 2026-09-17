@@ -24,7 +24,7 @@ static NSString *const WCPEntryIconStyleKey = @"com.qiu7c.wcatlas.plugin-manager
 static NSString *const WCPDidChangeNotification = @"WCAtlasPluginsMgr.RegistryDidChange";
 static NSString *const WCPWCAtlasQuickSwitchesKey = @"com.qiu7c.wcatlas.plugin-manager.quick-switches";
 static Class WCPRuntimeRegistryClass;
-static WCPluginsMgr *WCPRuntimeRegistryInstance;
+static WCAtlasPluginsMgr *WCPRuntimeRegistryInstance;
 
 static NSArray<NSString *> *WCPPluginIconStyleNames(void) {
     return @[@"微信原生", @"灯泡", @"拼图", @"印章", @"宫格"];
@@ -187,7 +187,7 @@ BOOL WCAtlasInstallPluginRegistry(void) {
     return YES;
 }
 
-static WCPluginsMgr *WCPExternalManager(void) {
+static WCAtlasPluginsMgr *WCPExternalManager(void) {
     Class managerClass = NSClassFromString(@"WCPluginsMgr");
     if (!managerClass || managerClass == WCPRuntimeRegistryClass ||
         managerClass == WCAtlasPluginsMgr.class ||
@@ -196,13 +196,13 @@ static WCPluginsMgr *WCPExternalManager(void) {
 }
 
 BOOL WCAtlasExternalPluginManagerAvailable(void) {
-    WCPluginsMgr *manager = WCPExternalManager();
+    WCAtlasPluginsMgr *manager = WCPExternalManager();
     return manager && [manager respondsToSelector:
         @selector(registerControllerWithTitle:version:controller:)];
 }
 
 static id WCPRegistrationManager(void) {
-    WCPluginsMgr *external = WCPExternalManager();
+    WCAtlasPluginsMgr *external = WCPExternalManager();
     if (external) return external;
     if (![NSUserDefaults.standardUserDefaults boolForKey:WCAtlasPluginManagerEnabledKey] ||
         !WCAtlasInstallPluginRegistry()) return nil;

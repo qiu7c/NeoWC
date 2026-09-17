@@ -95,9 +95,15 @@ void WCAtlasSettingsHandleSwitchChange(NSString *key, BOOL enabled) {
             [defaults setBool:NO forKey:WCAtlasPluginManagerEnabledKey];
             return;
         }
-        [[WCPluginsMgr sharedInstance] registerControllerWithTitle:@"WCAtlas"
-                                                           version:WCAtlasDisplayVersion
-                                                        controller:@"WCAtlasSettingsViewController"];
+        Class managerClass = NSClassFromString(@"WCPluginsMgr");
+        WCAtlasPluginsMgr *manager = managerClass ? [managerClass sharedInstance] : nil;
+        if (!manager) {
+            [defaults setBool:NO forKey:WCAtlasPluginManagerEnabledKey];
+            return;
+        }
+        [manager registerControllerWithTitle:@"WCAtlas"
+                                      version:WCAtlasDisplayVersion
+                                   controller:@"WCAtlasSettingsViewController"];
         WCAtlasPluginManagerRegisterSavedQuickSwitches();
     }
     if ([key isEqualToString:WCAtlasStepOverrideEnabledKey] && enabled) {

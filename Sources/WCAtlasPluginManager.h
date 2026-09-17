@@ -20,12 +20,6 @@ FOUNDATION_EXPORT NSString *const WCAtlasPluginManagerEnabledKey;
 - (void)removeSwitchWithKey:(NSString *)key;
 @end
 
-/// Common plugin-registration ABI used by LazyCat/OldCat-compatible plugins. When WCAtlas's
-/// built-in manager is enabled and no external owner exists, the runtime class is a real
-/// WCAtlasPluginsMgr subclass and `sharedInstance` returns an actual WCPluginsMgr instance.
-@interface WCPluginsMgr : WCAtlasPluginsMgr
-@end
-
 @interface WCAtlasPluginsViewController : UITableViewController
 @end
 
@@ -37,7 +31,7 @@ FOUNDATION_EXPORT void WCAtlasInstallPluginManagerEntry(id moreViewController);
 FOUNDATION_EXPORT void WCAtlasPushPluginManager(id sender);
 /// Returns YES only when the external LazyCat WCPluginsMgr service is available.
 FOUNDATION_EXPORT BOOL WCAtlasExternalPluginManagerAvailable(void);
-/// Installs the shared `WCPluginsMgr` registration class for the built-in manager.
+/// Installs the shared `WCPluginsMgr` registration class for the built-in manager at runtime.
 /// Returns YES when WCAtlas owns the runtime class. It is never installed while an external
 /// manager owns the class name, and only installs when the built-in manager is enabled.
 FOUNDATION_EXPORT BOOL WCAtlasInstallPluginRegistry(void);

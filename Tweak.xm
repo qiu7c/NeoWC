@@ -6345,7 +6345,7 @@ static void WCAtlasRegisterPlugin(void) {
 
     BOOL hasExternalManager = WCAtlasExternalPluginManagerAvailable();
     Class managerClass = hasExternalManager ? NSClassFromString(@"WCPluginsMgr") : Nil;
-    WCPluginsMgr *manager = managerClass ? [managerClass sharedInstance] : nil;
+    WCAtlasPluginsMgr *manager = managerClass ? [managerClass sharedInstance] : nil;
     BOOL useBuiltInManager = WCAtlasEnhancementEnabled(WCAtlasPluginManagerEnabledKey);
     if (manager && useBuiltInManager) {
         [NSUserDefaults.standardUserDefaults setBool:NO forKey:WCAtlasPluginManagerEnabledKey];
@@ -6358,9 +6358,13 @@ static void WCAtlasRegisterPlugin(void) {
                                   controller:NSStringFromClass([WCAtlasSettingsViewController class])];
     } else if (useBuiltInManager) {
         if (!WCAtlasInstallPluginRegistry()) return;
-        [[WCPluginsMgr sharedInstance] registerControllerWithTitle:@"WCAtlas"
-                                                           version:WCAtlasDisplayVersion
-                                                        controller:NSStringFromClass([WCAtlasSettingsViewController class])];
+        Class builtInManagerClass = NSClassFromString(@"WCPluginsMgr");
+        WCAtlasPluginsMgr *builtInManager = builtInManagerClass
+            ? [builtInManagerClass sharedInstance] : nil;
+        if (!builtInManager) return;
+        [builtInManager registerControllerWithTitle:@"WCAtlas"
+                                            version:WCAtlasDisplayVersion
+                                         controller:NSStringFromClass([WCAtlasSettingsViewController class])];
     }
     WCAtlasPluginManagerRegisterSavedQuickSwitches();
     WCAtlasDidRegister = YES;
