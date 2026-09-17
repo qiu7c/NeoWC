@@ -7,6 +7,11 @@ typedef BOOL (^WCAtlasSendConfirmationValidator)(void);
 FOUNDATION_EXPORT NSArray<NSString *> *WCAtlasSendConfirmationProtectedConversations(void);
 FOUNDATION_EXPORT BOOL WCAtlasSendConfirmationIsProtectedConversation(NSString *username);
 FOUNDATION_EXPORT void WCAtlasSendConfirmationSetProtected(NSString *username, BOOL protectedConversation);
+/// Adds or removes several conversations in one account-scoped defaults update.
+/// @return Number of valid, unique usernames processed; zero when the account or input is unavailable.
+/// @discussion Enabling at least one conversation also enables the global send-confirmation switch.
+FOUNDATION_EXPORT NSUInteger WCAtlasSendConfirmationSetProtectedConversations(
+    NSArray<NSString *> *usernames, BOOL protectedConversation);
 FOUNDATION_EXPORT NSString *WCAtlasSendConfirmationDisplayName(NSString *username);
 
 /// Returns YES when the original action is being held for confirmation. The

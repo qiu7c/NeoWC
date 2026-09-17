@@ -41,8 +41,9 @@ FOUNDATION_EXPORT BOOL WCAtlasExternalPluginManagerAvailable(void);
 /// Returns YES when the bridge is available. It is never installed while an external
 /// manager owns the class name, and only installs when the built-in manager is enabled.
 FOUNDATION_EXPORT BOOL WCAtlasInstallPluginRegistryBridge(void);
-/// Adds a direct WCAtlas row to WeChat's settings page when LazyCat is unavailable.
-/// Must be called on the main thread after NewSettingViewController has appeared.
+/// Adds a direct WCAtlas row only when neither the external nor built-in plugin registry owns it.
+/// Call after WeChat has built `NewSettingViewController`'s table model. The adapter does not reload
+/// the visible table, allowing first-load hooks to inject the row before the initial presentation.
 FOUNDATION_EXPORT void WCAtlasInstallSettingsFallbackEntry(id settingsController);
 /// Pushes the WCAtlas settings controller from the native WeChat settings page.
 /// Must be called on the main thread.

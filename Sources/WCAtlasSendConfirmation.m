@@ -104,13 +104,24 @@ BOOL WCAtlasSendConfirmationIsProtectedConversation(NSString *username) {
 }
 
 void WCAtlasSendConfirmationSetProtected(NSString *username, BOOL protectedConversation) {
+    if (![username isKindOfClass:NSString.class]) return;
+    WCAtlasSendConfirmationSetProtectedConversations(@[username], protectedConversation);
+}
+
+NSUInteger WCAtlasSendConfirmationSetProtectedConversations(NSArray<NSString *> *usernames,
+                                                              BOOL protectedConversation) {
     NSString *account = WCAtlasSendConfirmationAccountKey();
-    NSString *normalized = WCAtlasSendConfirmationTrimmed(username);
-    if (account.length == 0 || normalized.length == 0) return;
+    if (account.length == 0 || ![usernames isKindOfClass:NSArray.class]) return 0;
+    NSMutableOrderedSet<NSString *> *normalizedUserNames = [NSMutableOrderedSet orderedSet];
+    for (id candidate in usernames) {
+        NSString *normalized = WCAtlasSendConfirmationTrimmed(candidate);
+        if (normalized.length > 0) [normalizedUserNames addObject:normalized];
+    }
+    if (normalizedUserNames.count == 0) return 0;
     NSMutableDictionary *map = [WCAtlasSendConfirmationStoredMap() mutableCopy];
     NSMutableOrderedSet<NSString *> *users = [NSMutableOrderedSet orderedSetWithArray:WCAtlasSendConfirmationProtectedConversations()];
-    if (protectedConversation) [users addObject:normalized];
-    else [users removeObject:normalized];
+    if (protectedConversation) [users addObjectsFromArray:normalizedUserNames.array];
+    else [users removeObjectsInArray:normalizedUserNames.array];
     map[account] = users.array;
     [NSUserDefaults.standardUserDefaults setObject:map forKey:WCAtlasSendConfirmationUsersKey];
     if (protectedConversation) {
@@ -118,6 +129,7 @@ void WCAtlasSendConfirmationSetProtected(NSString *username, BOOL protectedConve
     }
     [NSNotificationCenter.defaultCenter postNotificationName:WCAtlasEnhancementDidChangeNotification
                                                        object:WCAtlasSendConfirmationUsersKey];
+    return normalizedUserNames.count;
 }
 
 @implementation WCAtlasSendConfirmationAlertController {

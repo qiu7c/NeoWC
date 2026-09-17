@@ -290,6 +290,18 @@ FOUNDATION_EXPORT BOOL WCAtlasPrivateRefreshHomeSessionList(void);
 /// values, and exceptions return an empty array; visible text is never used to guess identities.
 FOUNDATION_EXPORT NSArray<NSString *> *WCAtlasPrivateMentionUserNames(id _Nullable richTextView);
 
+/// Reads the official UTF-16 mention ranges carried by WeChat message-source `<wgm>` nodes.
+/// @param context A native rich-text view, text-message view model, cell, or message wrap.
+/// @param content The exact visible message string whose ranges will be styled.
+/// @return Ordered, bounds-checked `NSRange` values for visible `@` mentions, or an empty array.
+/// @discussion Main-thread only. The adapter resolves the official message wrap and parses only
+/// numeric `start`/`length` attributes from `m_nsMsgSource`; it never derives identity or offsets
+/// from display text. Ranges use NSString's UTF-16 indexing, must begin with `@`, and are discarded
+/// when malformed or outside `content`. Versions without `<wgm>` metadata return an empty array so
+/// callers can retain their documented display-name compatibility fallback.
+FOUNDATION_EXPORT NSArray<NSValue *> *WCAtlasPrivateMentionRanges(id _Nullable context,
+                                                                  NSString *content);
+
 /// Resolves the group conversation that owns a native rich-text message view.
 /// @param richTextView Native `RichTextView` currently receiving message styles.
 /// @return The official chatroom username from the message wrap's from/to/real-chat fields, or nil.
@@ -301,10 +313,11 @@ FOUNDATION_EXPORT NSString * _Nullable WCAtlasPrivateMentionChatUserName(id _Nul
 
 /// Enables native rich-text click dispatch for an injected mention link.
 /// @param richTextView Native `RichTextView` receiving the injected `LinkStyle`.
-/// @return YES when WeChat's BOOL/integer `setBHandleTextClick:` ABI was verified and invoked.
+/// @return YES when WeChat's `setBHandleTextClick:` argument ABI was verified and invoked.
 /// @discussion Main-thread only. This is applied after a valid mention style is created. Missing
-/// selectors, non-void return ABI, non-integer argument ABI, or exceptions return NO; visual
-/// highlighting may still work while click navigation remains unavailable on that version.
+/// selectors, unsupported return ABI, non-integer argument ABI, or exceptions return NO. Void,
+/// object, and integer return encodings are accepted for version compatibility; visual highlighting
+/// may still work while click navigation remains unavailable on an unsupported version.
 FOUNDATION_EXPORT BOOL WCAtlasPrivateEnableMentionClickHandling(id _Nullable richTextView);
 
 /// Binds a text-message cell's official message wrap to its native rich-text view.

@@ -105,7 +105,7 @@ static BOOL WCAtlasMentionMethodHasSizeOutputStylesABI(Method method) {
     const char *output = WCAtlasMentionSkipTypeQualifiers(outputType);
     return strcmp(WCAtlasMentionSkipTypeQualifiers(returnType), @encode(CGSize)) == 0 &&
            WCAtlasMentionTypeIsObject(contentType) && WCAtlasMentionTypeIsObject(delegateType) &&
-           WCAtlasMentionTypeIsInteger(spacingType) && output && output[0] == '^' && output[1] == '@';
+           WCAtlasMentionTypeIsInteger(spacingType) && output && output[0] == '^';
 }
 
 static BOOL WCAtlasMentionIsAllUserName(NSString *userName) {
@@ -220,6 +220,8 @@ static id WCAtlasMentionStylesForContent(id self, id styles, id contentObject) {
     NSMutableArray *merged = [originalStyles mutableCopy];
     NSMutableIndexSet *claimed = [NSMutableIndexSet indexSet];
     NSMutableDictionary<NSString *, NSMutableSet<NSString *> *> *ownersByDisplayName = [NSMutableDictionary dictionary];
+    NSArray<NSValue *> *officialRanges = WCAtlasPrivateMentionRanges(self, content);
+    NSUInteger officialRangeIndex = 0;
     NSArray<NSValue *> *visibleRanges = WCAtlasMentionVisibleRanges(content);
     NSUInteger fallbackRangeIndex = 0;
     for (NSString *userName in userNames) {
@@ -236,7 +238,16 @@ static id WCAtlasMentionStylesForContent(id self, id styles, id contentObject) {
                 return ownersByDisplayName[name].count == 1;
             }]];
         }
-        NSRange range = WCAtlasMentionRange(content, candidates, claimed);
+        NSRange range = NSMakeRange(NSNotFound, 0);
+        while (officialRangeIndex < officialRanges.count) {
+            NSRange officialRange = officialRanges[officialRangeIndex++].rangeValue;
+            if (![claimed intersectsIndexesInRange:officialRange]) {
+                range = officialRange;
+                [claimed addIndexesInRange:officialRange];
+                break;
+            }
+        }
+        if (range.location == NSNotFound) range = WCAtlasMentionRange(content, candidates, claimed);
         while (range.location == NSNotFound && fallbackRangeIndex < visibleRanges.count) {
             NSRange fallback = visibleRanges[fallbackRangeIndex++].rangeValue;
             if (![claimed intersectsIndexesInRange:fallback]) {

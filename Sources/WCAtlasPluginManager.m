@@ -909,7 +909,7 @@ static id WCPSettingsTableManager(id controller) {
 
 void WCAtlasInstallSettingsFallbackEntry(id settingsController) {
     if (!settingsController || WCAtlasExternalPluginManagerAvailable() ||
-        objc_getAssociatedObject(settingsController, &WCPSettingsFallbackAddedKey)) return;
+        WCAtlasInstallPluginRegistryBridge()) return;
 
     id tableManager = WCPSettingsTableManager(settingsController);
     SEL sectionSelector = NSSelectorFromString(@"getSectionAt:");
@@ -917,6 +917,9 @@ void WCAtlasInstallSettingsFallbackEntry(id settingsController) {
     id section = ((id (*)(id, SEL, NSInteger))objc_msgSend)(tableManager, sectionSelector, 0);
     SEL addSelector = NSSelectorFromString(@"addCell:");
     if (!section || ![section respondsToSelector:addSelector]) return;
+    // Native reloads normally rebuild their section objects. Remember that exact generation so
+    // repeated lifecycle callbacks do not duplicate the row, while a rebuilt model is injectable.
+    if (objc_getAssociatedObject(settingsController, &WCPSettingsFallbackAddedKey) == section) return;
 
     Class cellClass = NSClassFromString(@"WCTableViewNormalCellManager");
     if (!cellClass) cellClass = NSClassFromString(@"WCTableViewCellManager");
@@ -930,17 +933,8 @@ void WCAtlasInstallSettingsFallbackEntry(id settingsController) {
     if (!cell) return;
 
     ((void (*)(id, SEL, id))objc_msgSend)(section, addSelector, cell);
-    SEL reloadSelector = NSSelectorFromString(@"reloadTableView");
-    if ([tableManager respondsToSelector:reloadSelector]) {
-        ((void (*)(id, SEL))objc_msgSend)(tableManager, reloadSelector);
-    } else {
-        SEL tableSelector = NSSelectorFromString(@"getTableView");
-        id tableView = [tableManager respondsToSelector:tableSelector]
-            ? ((id (*)(id, SEL))objc_msgSend)(tableManager, tableSelector) : nil;
-        if ([tableView respondsToSelector:@selector(reloadData)]) [tableView reloadData];
-    }
     objc_setAssociatedObject(settingsController, &WCPSettingsFallbackAddedKey,
-                             @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                             section, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     WCAtlasLog(@"懒猫插件管理不可用，已注入微信设置页备用入口");
 }
 

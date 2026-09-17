@@ -5,6 +5,7 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 #include <string.h>
+#include <stdlib.h>
 #include <stdatomic.h>
 
 #pragma mark - Runtime ABI Helpers
@@ -836,6 +837,7 @@ static id WCAtlasPrivateMessageWrapFromViewModel(id viewModel) {
 static id WCAtlasPrivateMentionMessageWrap(id richTextView) {
     id associated = objc_getAssociatedObject(richTextView, &WCAtlasPrivateMentionMessageKey);
     if (associated) return associated;
+    if (WCAtlasPrivateLooksLikeMessageWrap(richTextView)) return richTextView;
     NSMutableArray *candidates = [NSMutableArray array];
     for (NSString *field in @[@"linkDelegate", @"layoutDelegate", @"delegate", @"m_delegate"]) {
         id delegate = WCAtlasPrivateObjectField(richTextView, @[field]);
@@ -953,6 +955,48 @@ NSArray<NSString *> *WCAtlasPrivateMentionUserNames(id richTextView) {
     return result;
 }
 
+static NSNumber *WCAtlasPrivateMentionIntegerAttribute(NSString *tag, NSString *name) {
+    if (tag.length == 0 || name.length == 0) return nil;
+    NSString *pattern = [NSString stringWithFormat:@"\\b%@\\s*=\\s*[\\\"']?(\\d+)",
+                         [NSRegularExpression escapedPatternForString:name]];
+    NSRegularExpression *expression = [NSRegularExpression
+        regularExpressionWithPattern:pattern options:NSRegularExpressionCaseInsensitive error:nil];
+    NSTextCheckingResult *match = [expression firstMatchInString:tag options:0
+        range:NSMakeRange(0, tag.length)];
+    if (!match || match.numberOfRanges < 2) return nil;
+    NSString *value = [tag substringWithRange:[match rangeAtIndex:1]];
+    unsigned long long parsed = strtoull(value.UTF8String, NULL, 10);
+    if (parsed > NSUIntegerMax) return nil;
+    return @((NSUInteger)parsed);
+}
+
+NSArray<NSValue *> *WCAtlasPrivateMentionRanges(id context, NSString *content) {
+    NSCAssert(NSThread.isMainThread, @"Mention ranges must be read on the main thread");
+    if (![content isKindOfClass:NSString.class] || content.length == 0) return @[];
+    id message = WCAtlasPrivateMentionMessageWrap(context);
+    NSString *source = WCAtlasPrivateNonemptyString(
+        WCAtlasPrivateObjectField(message, @[@"m_nsMsgSource", @"msgSource"]));
+    if (source.length == 0) return @[];
+    NSRegularExpression *tags = [NSRegularExpression
+        regularExpressionWithPattern:@"<wgm\\b[^>]*>"
+        options:NSRegularExpressionCaseInsensitive error:nil];
+    NSMutableArray<NSValue *> *ranges = [NSMutableArray array];
+    for (NSTextCheckingResult *match in [tags matchesInString:source options:0
+             range:NSMakeRange(0, source.length)]) {
+        NSString *tag = [source substringWithRange:match.range];
+        NSNumber *startValue = WCAtlasPrivateMentionIntegerAttribute(tag, @"start");
+        NSNumber *lengthValue = WCAtlasPrivateMentionIntegerAttribute(tag, @"length");
+        if (!startValue || !lengthValue) continue;
+        NSUInteger start = startValue.unsignedIntegerValue;
+        NSUInteger length = lengthValue.unsignedIntegerValue;
+        if (length == 0 || start > content.length || length > content.length - start) continue;
+        NSRange range = NSMakeRange(start, length);
+        if (![[content substringWithRange:range] hasPrefix:@"@"]) continue;
+        [ranges addObject:[NSValue valueWithRange:range]];
+    }
+    return ranges;
+}
+
 NSString *WCAtlasPrivateMentionChatUserName(id richTextView) {
     NSCAssert(NSThread.isMainThread, @"Mention chat metadata must be read on the main thread");
     id message = WCAtlasPrivateMentionMessageWrap(richTextView);
@@ -968,10 +1012,17 @@ BOOL WCAtlasPrivateEnableMentionClickHandling(id richTextView) {
     NSCAssert(NSThread.isMainThread, @"Mention click handling must be enabled on the main thread");
     SEL selector = NSSelectorFromString(@"setBHandleTextClick:");
     NSMethodSignature *signature = WCAtlasPrivateSignature(richTextView, selector, 3);
-    if (!signature || !WCAtlasPrivateTypeIsVoid(signature.methodReturnType) ||
-        !WCAtlasPrivateTypeIsInteger([signature getArgumentTypeAtIndex:2])) return NO;
+    if (!signature || !WCAtlasPrivateTypeIsInteger([signature getArgumentTypeAtIndex:2])) return NO;
     @try {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(richTextView, selector, YES);
+        if (WCAtlasPrivateTypeIsInteger(signature.methodReturnType)) {
+            ((BOOL (*)(id, SEL, BOOL))objc_msgSend)(richTextView, selector, YES);
+        } else if (WCAtlasPrivateTypeIsObject(signature.methodReturnType)) {
+            ((id (*)(id, SEL, BOOL))objc_msgSend)(richTextView, selector, YES);
+        } else if (WCAtlasPrivateTypeIsVoid(signature.methodReturnType)) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(richTextView, selector, YES);
+        } else {
+            return NO;
+        }
         return YES;
     } @catch (__unused NSException *exception) {
         return NO;

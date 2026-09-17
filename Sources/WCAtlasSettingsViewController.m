@@ -11,9 +11,11 @@
 #import "WCAtlasReleaseNotes.h"
 #import <math.h>
 
-@interface WCAtlasSettingsViewController ()
+@interface WCAtlasSettingsViewController () <UISearchResultsUpdating, UISearchBarDelegate>
 @property (nonatomic, assign) WCAtlasSettingsCategory category;
 @property (nonatomic, copy) NSArray<WCAtlasSettingSection *> *sections;
+@property (nonatomic, copy) NSArray<WCAtlasSettingSection *> *searchSections;
+@property (nonatomic, strong) UISearchController *functionSearchController;
 @property (nonatomic, strong) NSMutableSet<NSString *> *collapsedFeatureKeys;
 @property (nonatomic, strong) WCAtlasSettingsActions *actions;
 @property (nonatomic, strong) WCAtlasSettingsProfileHeaderView *profileHeader;
@@ -22,6 +24,8 @@
 - (void)presentReleaseNotesIfNeeded;
 - (void)quickSwitchLongPressed:(UILongPressGestureRecognizer *)gesture;
 - (void)showQuickSwitchToast:(NSString *)message;
+- (NSArray<WCAtlasSettingSection *> *)visibleSections;
+- (void)rebuildFunctionSearchResults:(NSString *)query;
 @end
 
 @implementation WCAtlasSettingsViewController
@@ -93,6 +97,14 @@
         self.navigationItem.standardAppearance = appearance;
         self.navigationItem.scrollEdgeAppearance = appearance;
         self.navigationItem.compactAppearance = appearance;
+        self.functionSearchController = [[UISearchController alloc] initWithSearchResultsController:nil];
+        self.functionSearchController.searchResultsUpdater = self;
+        self.functionSearchController.searchBar.delegate = self;
+        self.functionSearchController.searchBar.placeholder = @"搜索功能开关";
+        self.functionSearchController.obscuresBackgroundDuringPresentation = NO;
+        self.navigationItem.searchController = self.functionSearchController;
+        self.navigationItem.hidesSearchBarWhenScrolling = NO;
+        self.definesPresentationContext = YES;
     }
     [self applySettingsPageScale];
     [self rebuildSections];
@@ -150,6 +162,64 @@
 
 - (void)rebuildSections {
     self.sections = WCAtlasSettingsBuildSections(self.category, self.collapsedFeatureKeys);
+    if (self.functionSearchController.isActive) {
+        [self rebuildFunctionSearchResults:self.functionSearchController.searchBar.text ?: @""];
+    }
+}
+
+- (NSArray<WCAtlasSettingSection *> *)visibleSections {
+    NSString *query = [self.functionSearchController.searchBar.text
+        stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    return self.functionSearchController.isActive && query.length > 0
+        ? (self.searchSections ?: @[]) : self.sections;
+}
+
+- (void)rebuildFunctionSearchResults:(NSString *)query {
+    NSString *needle = [[query stringByTrimmingCharactersInSet:
+        NSCharacterSet.whitespaceAndNewlineCharacterSet] lowercaseString];
+    if (needle.length == 0) {
+        self.searchSections = @[];
+        return;
+    }
+    NSMutableArray<WCAtlasSettingSection *> *results = [NSMutableArray array];
+    NSArray<NSNumber *> *categories = @[
+        @(WCAtlasSettingsCategoryMessages), @(WCAtlasSettingsCategoryMoments),
+        @(WCAtlasSettingsCategoryInterfaceDisabled), @(WCAtlasSettingsCategoryEnhancements),
+        @(WCAtlasSettingsCategoryInterface), @(WCAtlasSettingsCategoryPlugin)
+    ];
+    for (NSNumber *categoryValue in categories) {
+        WCAtlasSettingsCategory category = (WCAtlasSettingsCategory)categoryValue.integerValue;
+        NSMutableArray<WCAtlasSettingItem *> *matches = [NSMutableArray array];
+        for (WCAtlasSettingSection *section in WCAtlasSettingsBuildSections(category, [NSSet set])) {
+            for (WCAtlasSettingItem *item in section.items) {
+                // Search is intentionally limited to top-level feature switches.
+                // Child/detail/value rows remain available only in their normal pages.
+                if (item.kind != WCAtlasSettingRowKindSwitch || item.child ||
+                    item.defaultsKey.length == 0 ||
+                    [item.defaultsKey isEqualToString:WCAtlasEnabledKey]) continue;
+                NSString *haystack = [[NSString stringWithFormat:@"%@ %@",
+                    item.title ?: @"", item.subtitle ?: @""] lowercaseString];
+                if ([haystack containsString:needle]) [matches addObject:item];
+            }
+        }
+        if (matches.count > 0) {
+            [results addObject:[WCAtlasSettingSection
+                sectionWithIdentifier:[NSString stringWithFormat:@"search-%ld", (long)category]
+                title:[self titleForCategory:category] footer:nil items:matches]];
+        }
+    }
+    self.searchSections = results;
+}
+
+- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
+    [self rebuildFunctionSearchResults:searchController.searchBar.text ?: @""];
+    [self.tableView reloadData];
+}
+
+- (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar {
+    (void)searchBar;
+    self.searchSections = @[];
+    [self.tableView reloadData];
 }
 
 - (void)reloadSettingsPreservingPositionApplyScale:(BOOL)applyScale {
@@ -180,8 +250,9 @@
 }
 
 - (WCAtlasSettingItem *)itemAtIndexPath:(NSIndexPath *)indexPath {
-    if (indexPath.section < 0 || indexPath.section >= self.sections.count) return nil;
-    NSArray *items = self.sections[indexPath.section].items;
+    NSArray<WCAtlasSettingSection *> *sections = [self visibleSections];
+    if (indexPath.section < 0 || indexPath.section >= sections.count) return nil;
+    NSArray *items = sections[indexPath.section].items;
     return indexPath.row >= 0 && indexPath.row < items.count ? items[indexPath.row] : nil;
 }
 
@@ -324,19 +395,19 @@
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return self.sections.count;
+    return [self visibleSections].count;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.sections[section].items.count;
+    return [self visibleSections][section].items.count;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    return self.sections[section].title;
+    return [self visibleSections][section].title;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    return self.sections[section].footer;
+    return [self visibleSections][section].footer;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {

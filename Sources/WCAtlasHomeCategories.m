@@ -1,6 +1,7 @@
 #import "WCAtlasHomeCategories.h"
 #import "WCAtlasEnhancements.h"
 #import "WCAtlasPrivateAPI.h"
+#import "WCAtlasSendConfirmation.h"
 #import "WCAtlasSendConfirmationViewController.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -134,6 +135,8 @@ static NSString *WCAtlasHomeConversationTitle(NSString *userName) {
 @property (nonatomic, strong, nullable) UIColor *navigationBackgroundColor;
 - (void)applyBrowserNavigationAppearance;
 - (void)closeCategoryBrowser;
+- (void)leaveCategoryBrowser;
+- (void)showCategorySettings;
 @end
 
 BOOL WCAtlasHomeCategoriesIsSyntheticUserName(NSString *userName) {
@@ -663,6 +666,72 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
     [self.navigationController dismissViewControllerAnimated:YES completion:nil];
 }
 
+- (void)leaveCategoryBrowser {
+    if (self.folderID.length > 0 && self.navigationController.viewControllers.firstObject != self) {
+        [self.navigationController popViewControllerAnimated:YES];
+    } else {
+        [self closeCategoryBrowser];
+    }
+}
+
+- (NSArray<NSString *> *)sendConfirmationSessions {
+    NSArray<NSString *> *sessions = self.folder
+        ? WCAtlasHomeStringArray(self.folder[@"sessions"])
+        : WCAtlasOrderedSessionsInCategory(self.category);
+    NSMutableArray<NSString *> *groups = [NSMutableArray array];
+    for (NSString *userName in sessions) {
+        if ([userName hasSuffix:@"@chatroom"]) [groups addObject:userName];
+    }
+    return groups;
+}
+
+- (void)showCategorySettings {
+    NSArray<NSString *> *groups = [self sendConfirmationSessions];
+    NSString *scopeTitle = (self.folder ?: self.category)[@"title"] ?: @"当前归纳";
+    if (groups.count == 0) {
+        UIAlertController *empty = [UIAlertController alertControllerWithTitle:@"归纳群设置"
+            message:@"当前归纳中没有可设置的群聊。" preferredStyle:UIAlertControllerStyleAlert];
+        [empty addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentViewController:empty animated:YES completion:nil];
+        return;
+    }
+    NSUInteger protectedCount = 0;
+    NSSet<NSString *> *protectedGroups = [NSSet setWithArray:WCAtlasSendConfirmationProtectedConversations()];
+    for (NSString *userName in groups) if ([protectedGroups containsObject:userName]) protectedCount++;
+    NSString *message = [NSString stringWithFormat:
+        @"“%@”包含 %lu 个群聊，其中 %lu 个已开启。开启后，向这些群聊发送消息前都需要确认。",
+        scopeTitle, (unsigned long)groups.count, (unsigned long)protectedCount];
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"归纳群设置"
+        message:message preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    [sheet addAction:[UIAlertAction actionWithTitle:@"开启发送确认"
+        style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSUInteger count = WCAtlasSendConfirmationSetProtectedConversations(groups, YES);
+        NSString *result = count > 0
+            ? [NSString stringWithFormat:@"已为 %lu 个群聊开启发送确认", (unsigned long)count]
+            : @"当前账号暂不可用，请稍后重试";
+        UIAlertController *done = [UIAlertController alertControllerWithTitle:@"归纳群设置"
+            message:result preferredStyle:UIAlertControllerStyleAlert];
+        [done addAction:[UIAlertAction actionWithTitle:@"完成" style:UIAlertActionStyleCancel handler:nil]];
+        [weakSelf presentViewController:done animated:YES completion:nil];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"关闭发送确认"
+        style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        NSUInteger count = WCAtlasSendConfirmationSetProtectedConversations(groups, NO);
+        NSString *result = count > 0
+            ? [NSString stringWithFormat:@"已为 %lu 个群聊关闭发送确认", (unsigned long)count]
+            : @"当前账号暂不可用，请稍后重试";
+        UIAlertController *done = [UIAlertController alertControllerWithTitle:@"归纳群设置"
+            message:result preferredStyle:UIAlertControllerStyleAlert];
+        [done addAction:[UIAlertAction actionWithTitle:@"完成" style:UIAlertActionStyleCancel handler:nil]];
+        [weakSelf presentViewController:done animated:YES completion:nil];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) popover.barButtonItem = self.navigationItem.leftBarButtonItems.lastObject;
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
 - (NSDictionary *)category {
     for (NSDictionary *category in WCAtlasHomeCategories()) if ([category[@"id"] isEqualToString:self.categoryID]) return category;
     return nil;
@@ -680,6 +749,15 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
     self.tableView.estimatedRowHeight = WCAtlasHomeCategoryRowHeight;
     self.tableView.backgroundColor = self.navigationBackgroundColor ?: UIColor.systemBackgroundColor;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    UIBarButtonItem *back = self.navigationItem.leftBarButtonItem ?: [[UIBarButtonItem alloc]
+        initWithTitle:@"返回" style:UIBarButtonItemStylePlain target:self action:@selector(leaveCategoryBrowser)];
+    UIImage *settingsImage = [UIImage systemImageNamed:@"gearshape"];
+    UIBarButtonItem *settings = settingsImage
+        ? [[UIBarButtonItem alloc] initWithImage:settingsImage style:UIBarButtonItemStylePlain
+                                         target:self action:@selector(showCategorySettings)]
+        : [[UIBarButtonItem alloc] initWithTitle:@"设置" style:UIBarButtonItemStylePlain
+                                          target:self action:@selector(showCategorySettings)];
+    self.navigationItem.leftBarButtonItems = @[back, settings];
 }
 - (void)viewWillAppear:(BOOL)animated {
     [self applyBrowserNavigationAppearance];

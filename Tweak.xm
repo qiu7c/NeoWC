@@ -6385,6 +6385,11 @@ static BOOL WCAtlasShouldUseHighRefreshRate(void) {
 @implementation WCAtlasEntryLoader
 
 + (void)load {
+    // Install the optional WCPluginsMgr compatibility class synchronously. Delaying this to the
+    // main queue causes plugins that register from +load/constructors to miss the registry.
+    WCAtlasSettingsRegisterDefaults();
+    WCAtlasInstallPluginRegistryBridge();
+    WCAtlasRegisterPlugin();
     dispatch_async(dispatch_get_main_queue(), ^{
         WCAtlasRegisterPlugin();
         WCAtlasRefreshDailyStepOverride();
@@ -6620,6 +6625,13 @@ static BOOL WCAtlasViewLooksLikeGlobalSeparator(UIView *view) {
 - (void)viewDidLoad {
     %orig;
     WCAtlasRegisterPlugin();
+    WCAtlasInstallSettingsFallbackEntry(self);
+}
+
+- (void)reloadTableData {
+    %orig;
+    WCAtlasRegisterPlugin();
+    WCAtlasInstallSettingsFallbackEntry(self);
 }
 
 - (void)viewDidAppear:(BOOL)animated {
