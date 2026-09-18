@@ -334,6 +334,22 @@ FOUNDATION_EXPORT BOOL WCAtlasPrivateBindMentionContext(id _Nullable cell,
                                                         id _Nullable viewModel,
                                                         BOOL refresh);
 
+/// Binds the exact rich-text view returned by WeChat's text-cell delegate accessor.
+/// @param cell A live `TextMessageCellView` received by the verified
+/// `getRichTextViewForDelegate` hook.
+/// @param richTextView The exact native `RichTextView` returned by WeChat's original method.
+/// @param viewModel The setter's native view model when available, or nil to resolve it from cell.
+/// @param refresh Whether to replay the current native styles/content after association.
+/// @return YES when the supplied rich-text view and an official message wrap were associated.
+/// @discussion Main-thread only. This entry avoids calling the hooked delegate accessor again and
+/// therefore cannot recurse. It also caches the exact view on the cell for later layout/status
+/// callbacks. Missing message metadata, incompatible objects, and exceptions return NO. The cache
+/// is cleared from `prepareForReuse`; older WeChat versions continue through field-based fallback.
+FOUNDATION_EXPORT BOOL WCAtlasPrivateBindMentionRichTextView(id _Nullable cell,
+                                                             id _Nullable richTextView,
+                                                             id _Nullable viewModel,
+                                                             BOOL refresh);
+
 /// Replays a native rich-text view's current style array after WeChat changes its content.
 /// @param richTextView A live native `RichTextView` received by a verified content setter hook.
 /// @param content The exact NSString passed to WeChat's original content setter, or nil to read

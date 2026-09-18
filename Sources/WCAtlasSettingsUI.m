@@ -213,9 +213,13 @@ static UIColor *WCAtlasIdentityBadgeColor(NSString *code) {
 @implementation WCAtlasSettingsProfileHeaderView
 
 static void WCAtlasHideSearchBarBackground(UIView *view) {
-    if ([NSStringFromClass(view.class) isEqualToString:@"UISearchBarBackground"]) {
+    NSString *className = NSStringFromClass(view.class);
+    if ([className isEqualToString:@"UISearchBarBackground"] ||
+        [className isEqualToString:@"_UISearchBarBackground"] ||
+        [className isEqualToString:@"_UITextFieldImageBackgroundView"]) {
         view.hidden = YES;
         view.alpha = 0.0;
+        view.backgroundColor = UIColor.clearColor;
     }
     for (UIView *subview in view.subviews) WCAtlasHideSearchBarBackground(subview);
 }
@@ -303,14 +307,20 @@ static void WCAtlasHideSearchBarBackground(UIView *view) {
     searchBar.backgroundColor = UIColor.clearColor;
     searchBar.barTintColor = UIColor.clearColor;
     searchBar.backgroundImage = [UIImage new];
-    if (@available(iOS 13.0, *)) searchBar.searchTextField.backgroundColor = UIColor.clearColor;
+    if (@available(iOS 13.0, *)) {
+        UITextField *textField = searchBar.searchTextField;
+        textField.background = nil;
+        textField.backgroundColor = UIColor.clearColor;
+        textField.borderStyle = UITextBorderStyleNone;
+        textField.layer.backgroundColor = UIColor.clearColor.CGColor;
+    }
 
     [self.capsuleBottomConstraint setActive:NO];
     if (!self.searchCapsuleView) {
         self.searchCapsuleView = [UIView new];
         self.searchCapsuleView.translatesAutoresizingMaskIntoConstraints = NO;
         self.searchCapsuleView.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
-        self.searchCapsuleView.layer.cornerRadius = 18.0;
+        self.searchCapsuleView.layer.cornerRadius = 17.0;
         self.searchCapsuleView.layer.cornerCurve = kCACornerCurveContinuous;
         self.searchCapsuleView.layer.masksToBounds = YES;
         [self addSubview:self.searchCapsuleView];
@@ -320,9 +330,9 @@ static void WCAtlasHideSearchBarBackground(UIView *view) {
         [self.capsuleView.heightAnchor constraintEqualToConstant:80.0],
         [self.searchCapsuleView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:16.0],
         [self.searchCapsuleView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16.0],
-        [self.searchCapsuleView.topAnchor constraintEqualToAnchor:self.capsuleView.bottomAnchor constant:8.0],
-        [self.searchCapsuleView.heightAnchor constraintEqualToConstant:48.0],
-        [self.searchCapsuleView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-12.0],
+        [self.searchCapsuleView.topAnchor constraintEqualToAnchor:self.capsuleView.bottomAnchor constant:6.0],
+        [self.searchCapsuleView.heightAnchor constraintEqualToConstant:46.0],
+        [self.searchCapsuleView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-4.0],
         [searchBar.centerXAnchor constraintEqualToAnchor:self.searchCapsuleView.centerXAnchor],
         [searchBar.leadingAnchor constraintEqualToAnchor:self.searchCapsuleView.leadingAnchor constant:8.0],
         [searchBar.trailingAnchor constraintEqualToAnchor:self.searchCapsuleView.trailingAnchor constant:-8.0],
@@ -336,7 +346,15 @@ static void WCAtlasHideSearchBarBackground(UIView *view) {
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    if (self.embeddedSearchBar) WCAtlasHideSearchBarBackground(self.embeddedSearchBar);
+    if (self.embeddedSearchBar) {
+        if (@available(iOS 13.0, *)) {
+            UITextField *textField = self.embeddedSearchBar.searchTextField;
+            textField.background = nil;
+            textField.backgroundColor = UIColor.clearColor;
+            textField.borderStyle = UITextBorderStyleNone;
+        }
+        WCAtlasHideSearchBarBackground(self.embeddedSearchBar);
+    }
 }
 
 - (UIView *)makeAvatarViewWithWXID:(NSString *)wxid headURL:(NSString *)headURL {
@@ -483,7 +501,7 @@ static void WCAtlasHideSearchBarBackground(UIView *view) {
 - (CGFloat)preferredHeightForWidth:(CGFloat)width scale:(CGFloat)scale {
     (void)width;
     (void)scale;
-    return self.embeddedSearchBar ? 160.0 : 104.0;
+    return self.embeddedSearchBar ? 148.0 : 104.0;
 }
 
 - (void)showCopyConfirmation {

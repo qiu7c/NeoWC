@@ -805,8 +805,11 @@ BOOL WCAtlasPrivateRefreshHomeSessionList(void) {
 
 static char WCAtlasPrivateMentionMessageKey;
 static char WCAtlasPrivateMentionRefreshedMessageKey;
+static char WCAtlasPrivateMentionRichTextViewKey;
 
 static id WCAtlasPrivateMentionRichTextView(id cell) {
+    id associated = objc_getAssociatedObject(cell, &WCAtlasPrivateMentionRichTextViewKey);
+    if (associated) return associated;
     return WCAtlasPrivateObjectField(cell,
         @[@"getRichTextView", @"richTextView", @"m_richTextView"]);
 }
@@ -879,10 +882,13 @@ static id WCAtlasPrivateMentionMessageWrap(id richTextView) {
     return nil;
 }
 
-BOOL WCAtlasPrivateBindMentionContext(id cell, id viewModel, BOOL refresh) {
-    NSCAssert(NSThread.isMainThread, @"Mention context must be bound on the main thread");
-    if (!cell) return NO;
-    id richTextView = WCAtlasPrivateMentionRichTextView(cell);
+static BOOL WCAtlasPrivateBindResolvedMentionContext(id cell, id richTextView,
+                                                       id viewModel, BOOL refresh) {
+    if (!cell || !richTextView) return NO;
+    // Preserve the exact delegate-returned view even if WeChat has not attached the
+    // view model yet; the following setter/layout callback can then complete binding.
+    objc_setAssociatedObject(cell, &WCAtlasPrivateMentionRichTextViewKey,
+                             richTextView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     id message = WCAtlasPrivateMessageWrapFromViewModel(viewModel);
     if (!message) {
         message = WCAtlasPrivateMessageWrapFromViewModel(WCAtlasPrivateObjectField(cell,
@@ -893,7 +899,7 @@ BOOL WCAtlasPrivateBindMentionContext(id cell, id viewModel, BOOL refresh) {
             @[@"getCurrentMessageWrap", @"currentMessageWrap", @"messageWrap", @"m_messageWrap", @"msgWrap"]);
         if (WCAtlasPrivateLooksLikeMessageWrap(candidate)) message = candidate;
     }
-    if (!richTextView || !message) return NO;
+    if (!message) return NO;
     objc_setAssociatedObject(richTextView, &WCAtlasPrivateMentionMessageKey,
                              message, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     WCAtlasPrivateEnableMentionClickHandling(richTextView);
@@ -920,6 +926,19 @@ BOOL WCAtlasPrivateBindMentionContext(id cell, id viewModel, BOOL refresh) {
     }
     @catch (__unused NSException *exception) {}
     return YES;
+}
+
+BOOL WCAtlasPrivateBindMentionContext(id cell, id viewModel, BOOL refresh) {
+    NSCAssert(NSThread.isMainThread, @"Mention context must be bound on the main thread");
+    if (!cell) return NO;
+    return WCAtlasPrivateBindResolvedMentionContext(cell,
+        WCAtlasPrivateMentionRichTextView(cell), viewModel, refresh);
+}
+
+BOOL WCAtlasPrivateBindMentionRichTextView(id cell, id richTextView,
+                                            id viewModel, BOOL refresh) {
+    NSCAssert(NSThread.isMainThread, @"Mention rich-text view must be bound on the main thread");
+    return WCAtlasPrivateBindResolvedMentionContext(cell, richTextView, viewModel, refresh);
 }
 
 BOOL WCAtlasPrivateReplayMentionStyles(id richTextView, NSString *content) {
@@ -958,6 +977,8 @@ void WCAtlasPrivateClearMentionContext(id cell) {
     objc_setAssociatedObject(richTextView, &WCAtlasPrivateMentionMessageKey,
                              nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(richTextView, &WCAtlasPrivateMentionRefreshedMessageKey,
+                             nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(cell, &WCAtlasPrivateMentionRichTextViewKey,
                              nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 

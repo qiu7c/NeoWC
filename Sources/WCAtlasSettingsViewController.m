@@ -77,6 +77,7 @@
     self.tableView.estimatedRowHeight = 56.0;
     self.tableView.sectionHeaderHeight = UITableViewAutomaticDimension;
     self.tableView.sectionFooterHeight = UITableViewAutomaticDimension;
+    if (@available(iOS 15.0, *)) self.tableView.sectionHeaderTopPadding = 0.0;
     self.tableView.cellLayoutMarginsFollowReadableWidth = NO;
     [self.tableView registerClass:WCAtlasSettingsCell.class forCellReuseIdentifier:@"WCAtlasSettingsCell"];
     UILongPressGestureRecognizer *quickSwitchGesture = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(quickSwitchLongPressed:)];
@@ -401,6 +402,14 @@
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     return [self visibleSections][section].title;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
+    (void)tableView;
+    NSArray<WCAtlasSettingSection *> *sections = [self visibleSections];
+    if (self.category == WCAtlasSettingsCategoryRoot && section == 0 &&
+        section < sections.count && sections[section].title.length == 0) return 8.0;
+    return UITableViewAutomaticDimension;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {

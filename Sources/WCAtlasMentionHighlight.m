@@ -381,7 +381,7 @@ static id WCAtlasGetMentionRichTextViewForDelegate(id self, SEL _cmd) {
     id richTextView = WCAtlasOriginalGetMentionRichTextViewForDelegate
         ? WCAtlasOriginalGetMentionRichTextViewForDelegate(self, _cmd) : nil;
     if (richTextView && WCAtlasEnhancementEnabled(WCAtlasMentionHighlightEnabledKey)) {
-        WCAtlasPrivateBindMentionContext(self, nil, YES);
+        WCAtlasPrivateBindMentionRichTextView(self, richTextView, nil, YES);
     }
     return richTextView;
 }

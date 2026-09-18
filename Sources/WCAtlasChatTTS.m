@@ -1048,25 +1048,17 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
 - (void)sendSpeech {
     [self triggerPrefixCommitted:self.triggerField];
     NSString *text = WCAtlasChatTTSTrim(self.textView.text);
-    if (!self.previewURL || ![self.previewText isEqualToString:text]) {
-        [self report:@"请先生成并预览当前文字" success:NO];
+    if (text.length == 0) {
+        [self report:@"请输入需要转成语音的内容" success:NO];
         return;
     }
     if (!WCAtlasChatTTSStillInConversation(self.presentingViewController, self.chatUserName)) {
         [self report:@"当前聊天已经变化，未发送" success:NO];
         return;
     }
-    NSMutableSet<NSString *> *active = WCAtlasChatTTSActiveSessions();
-    if ([active containsObject:self.chatUserName]) return;
-    [active addObject:self.chatUserName];
-    [self.previewPlayer stop];
-    self.previewPlayer.delegate = nil;
-    self.previewPlayer = nil;
-    NSURL *outputURL = self.previewURL;
-    self.previewURL = nil;
-    self.previewText = nil;
     self.previewButton.enabled = NO;
     self.sendButton.enabled = NO;
+    [self.sendButton setTitle:@"发送中…" forState:UIControlStateNormal];
     __weak typeof(self) weakSelf = self;
     UIViewController *chatPresenter = self.presentingViewController ?: self;
     WCAtlasChatTTSStatusHandler sendStatus = ^(NSString *message, BOOL success) {
@@ -1074,14 +1066,36 @@ static UIButton *WCAtlasChatTTSPanelButton(NSString *title, id target, SEL actio
         if (!success) {
             strongSelf.previewButton.enabled = YES;
             strongSelf.sendButton.enabled = YES;
-            [strongSelf.previewButton setTitle:@"重新生成" forState:UIControlStateNormal];
+            [strongSelf.sendButton setTitle:@"发送" forState:UIControlStateNormal];
         }
         [strongSelf report:message success:success];
     };
-    WCAtlasChatTTSConvertAndSend(chatPresenter, self.chatUserName, outputURL, ^{
+
+    dispatch_block_t submitted = ^{
         if (weakSelf.didSubmit) weakSelf.didSubmit();
         [weakSelf dismissViewControllerAnimated:YES completion:nil];
-    }, sendStatus);
+    };
+    if (self.previewURL && [self.previewText isEqualToString:text]) {
+        NSMutableSet<NSString *> *active = WCAtlasChatTTSActiveSessions();
+        if ([active containsObject:self.chatUserName]) {
+            self.previewButton.enabled = YES;
+            self.sendButton.enabled = YES;
+            [self.sendButton setTitle:@"发送" forState:UIControlStateNormal];
+            return;
+        }
+        [active addObject:self.chatUserName];
+        [self.previewPlayer stop];
+        self.previewPlayer.delegate = nil;
+        self.previewPlayer = nil;
+        NSURL *outputURL = self.previewURL;
+        self.previewURL = nil;
+        self.previewText = nil;
+        WCAtlasChatTTSConvertAndSend(chatPresenter, self.chatUserName, outputURL,
+                                     submitted, sendStatus);
+        return;
+    }
+    WCAtlasChatTTSGenerateAndSend(chatPresenter, self.chatUserName, text,
+                                  submitted, sendStatus);
 }
 
 @end
