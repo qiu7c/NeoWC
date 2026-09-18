@@ -330,7 +330,7 @@ static void WCAtlasHideSearchBarBackground(UIView *view) {
         [self.capsuleView.heightAnchor constraintEqualToConstant:80.0],
         [self.searchCapsuleView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:16.0],
         [self.searchCapsuleView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16.0],
-        [self.searchCapsuleView.topAnchor constraintEqualToAnchor:self.capsuleView.bottomAnchor constant:6.0],
+        [self.searchCapsuleView.topAnchor constraintEqualToAnchor:self.capsuleView.bottomAnchor constant:12.0],
         [self.searchCapsuleView.heightAnchor constraintEqualToConstant:46.0],
         [self.searchCapsuleView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-4.0],
         [searchBar.centerXAnchor constraintEqualToAnchor:self.searchCapsuleView.centerXAnchor],
@@ -501,7 +501,7 @@ static void WCAtlasHideSearchBarBackground(UIView *view) {
 - (CGFloat)preferredHeightForWidth:(CGFloat)width scale:(CGFloat)scale {
     (void)width;
     (void)scale;
-    return self.embeddedSearchBar ? 148.0 : 104.0;
+    return self.embeddedSearchBar ? 154.0 : 104.0;
 }
 
 - (void)showCopyConfirmation {

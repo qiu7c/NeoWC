@@ -406,7 +406,9 @@ static id WCAtlasMentionRichTextConfig(id self, SEL _cmd) {
 static id WCAtlasMentionContentObject(id viewModel) {
     for (NSString *selectorName in @[@"contentText", @"originContentText"]) {
         SEL selector = NSSelectorFromString(selectorName);
-        Method method = class_getInstanceMethod(object_getClass(viewModel), selector);
+        // `object_getClass(instance)` is the metaclass and therefore cannot describe
+        // TextMessageViewModel instance accessors. Query the instance's real class.
+        Method method = class_getInstanceMethod([viewModel class], selector);
         if (!WCAtlasMentionMethodReturnsObject(method, 0)) continue;
         @try {
             id value = ((id (*)(id, SEL))objc_msgSend)(viewModel, selector);

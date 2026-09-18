@@ -206,6 +206,12 @@ extern "C" void MSHookMessageEx(Class _class, SEL message, IMP hook, IMP *old);
 - (BOOL)onShouldFilterContact:(id)contact;
 @end
 
+@interface SessionSelectView : UIView
+- (BOOL)filterContact:(id)contact;
+- (BOOL)onFilterContactCandidate:(id)contact;
+- (void)setRecentForwardContacts:(id)contacts;
+@end
+
 @interface ShortVideoToolbar : UIView
 @end
 
@@ -11190,9 +11196,26 @@ __attribute__((constructor)) static void WCAtlasInstallHomeLeadingSwipe(void) {
     // Homepage categories are transient virtual sessions. They must never be
     // exposed as forwarding targets, even when the native selector reuses the
     // main-session snapshot for its recent-conversation section or search.
-    NSString *userName = WCAtlasPrivateHomeSessionUserName(contact);
-    if (WCAtlasHomeCategoriesIsSyntheticUserName(userName)) return YES;
+    if (WCAtlasHomeCategoriesShouldFilterSelectionObject(contact)) return YES;
     return %orig;
+}
+
+%end
+
+%hook SessionSelectView
+
+- (BOOL)filterContact:(id)contact {
+    if (WCAtlasHomeCategoriesShouldFilterSelectionObject(contact)) return YES;
+    return %orig;
+}
+
+- (BOOL)onFilterContactCandidate:(id)contact {
+    if (WCAtlasHomeCategoriesShouldFilterSelectionObject(contact)) return YES;
+    return %orig;
+}
+
+- (void)setRecentForwardContacts:(id)contacts {
+    %orig(WCAtlasHomeCategoriesFilterSelectionObjects(contacts));
 }
 
 %end

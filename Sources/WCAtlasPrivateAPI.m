@@ -807,11 +807,25 @@ static char WCAtlasPrivateMentionMessageKey;
 static char WCAtlasPrivateMentionRefreshedMessageKey;
 static char WCAtlasPrivateMentionRichTextViewKey;
 
+static id WCAtlasPrivateFindMentionRichTextSubview(id root, NSUInteger depth) {
+    if (!root || depth > 12) return nil;
+    Class richTextClass = NSClassFromString(@"RichTextView");
+    if ((richTextClass && [root isKindOfClass:richTextClass]) ||
+        [NSStringFromClass([root class]) isEqualToString:@"RichTextView"]) return root;
+    if (![root isKindOfClass:UIView.class]) return nil;
+    for (UIView *subview in [(UIView *)root subviews]) {
+        id match = WCAtlasPrivateFindMentionRichTextSubview(subview, depth + 1);
+        if (match) return match;
+    }
+    return nil;
+}
+
 static id WCAtlasPrivateMentionRichTextView(id cell) {
     id associated = objc_getAssociatedObject(cell, &WCAtlasPrivateMentionRichTextViewKey);
     if (associated) return associated;
-    return WCAtlasPrivateObjectField(cell,
+    id richTextView = WCAtlasPrivateObjectField(cell,
         @[@"getRichTextView", @"richTextView", @"m_richTextView"]);
+    return richTextView ?: WCAtlasPrivateFindMentionRichTextSubview(cell, 0);
 }
 
 static BOOL WCAtlasPrivateLooksLikeMessageWrap(id value) {

@@ -713,8 +713,8 @@ static NSArray<WCAtlasSettingSection *> *WCAtlasInterfaceSections(NSUserDefaults
     [display addObject:WCAtlasItem(@"开启强制高刷", @"前台锁定为设备支持的最高刷新率", @"speedometer", WCAtlasSettingRowKindSwitch, WCAtlasScrollHighRefreshRateEnabledKey, nil, WCAtlasSettingActionNone)];
     [display addObject:WCAtlasItem(@"主页右滑扩展", @"增加备注、朋友圈、折叠群聊、勿扰与置顶操作", @"rectangle.and.hand.point.up.left", WCAtlasSettingRowKindSwitch, WCAtlasHomeSwipeActionsEnabledKey, nil, WCAtlasSettingActionNone)];
     WCAtlasAddFeature(display,
-                     WCAtlasItem(@"首页群聊归类", @"在微信首页创建多个分类 Cell，并在分类内继续建立文件夹", @"rectangle.3.group", WCAtlasSettingRowKindSwitch, WCAtlasHomeCategoriesEnabledKey, nil, WCAtlasSettingActionNone),
-                     @[WCAtlasItem(@"管理分类与文件夹", @"添加分类、文件夹并选择群聊", @"folder.badge.gearshape", WCAtlasSettingRowKindDetail, nil, @"管理", WCAtlasSettingActionHomeCategories)],
+                     WCAtlasItem(@"首页会话归类", @"将好友或群聊归入首页分类，并可在分类内继续建立文件夹", @"rectangle.3.group", WCAtlasSettingRowKindSwitch, WCAtlasHomeCategoriesEnabledKey, nil, WCAtlasSettingActionNone),
+                     @[WCAtlasItem(@"管理分类与文件夹", @"添加分类、文件夹并选择好友或群聊", @"folder.badge.gearshape", WCAtlasSettingRowKindDetail, nil, @"管理", WCAtlasSettingActionHomeCategories)],
                      defaults,
                      collapsed);
     NSMutableArray *chatCapsules = [NSMutableArray array];

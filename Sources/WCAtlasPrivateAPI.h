@@ -326,7 +326,9 @@ FOUNDATION_EXPORT BOOL WCAtlasPrivateEnableMentionClickHandling(id _Nullable ric
 /// @param refresh Whether to replay the rich view's current styles/content after the original setter.
 /// @return YES when a rich-text view and official message wrap were resolved and associated.
 /// @discussion Main-thread only. A setter hook may bind before and after original; layout/delegate
-/// hooks pass nil and resolve the current model. Message identity comes only from native wrap fields. The refresh path
+/// hooks pass nil and resolve the current model. The rich view is resolved from verified accessors first,
+/// then by locating a `RichTextView` descendant in the native cell hierarchy. Message identity comes only
+/// from native wrap fields. The refresh path
 /// invokes `setArrStyles:withContent:` only after verifying both object arguments and dispatches
 /// according to that build's integer, object, or void return ABI. Unsupported layouts return NO and
 /// leave WeChat rendering unchanged; no visible text is used to infer wxids.

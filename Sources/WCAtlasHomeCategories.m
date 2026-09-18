@@ -143,6 +143,26 @@ BOOL WCAtlasHomeCategoriesIsSyntheticUserName(NSString *userName) {
     return [userName hasPrefix:WCAtlasHomeCategorySessionPrefix];
 }
 
+BOOL WCAtlasHomeCategoriesShouldFilterSelectionObject(id object) {
+    NSString *userName = [object isKindOfClass:NSString.class]
+        ? (NSString *)object : WCAtlasPrivateHomeSessionUserName(object);
+    return WCAtlasHomeCategoriesIsSyntheticUserName(userName);
+}
+
+id WCAtlasHomeCategoriesFilterSelectionObjects(id objects) {
+    if (![objects isKindOfClass:NSArray.class]) return objects;
+    NSMutableArray *filtered = [NSMutableArray arrayWithCapacity:[objects count]];
+    BOOL removed = NO;
+    for (id object in (NSArray *)objects) {
+        if (WCAtlasHomeCategoriesShouldFilterSelectionObject(object)) {
+            removed = YES;
+            continue;
+        }
+        [filtered addObject:object];
+    }
+    return removed ? filtered : objects;
+}
+
 static NSDictionary *WCAtlasHomeCategoryForSyntheticUserName(NSString *userName) {
     if (!WCAtlasHomeCategoriesIsSyntheticUserName(userName)) return nil;
     NSString *identifier = [userName substringFromIndex:WCAtlasHomeCategorySessionPrefix.length];
@@ -174,7 +194,11 @@ void WCAtlasHomeCategoriesApplyToSessionManager(id sessionManager) {
         for (NSDictionary *category in categories) {
             NSArray<NSString *> *orderedSessions = WCAtlasOrderedSessionsInCategory(category);
             NSSet<NSString *> *sessions = [NSSet setWithArray:orderedSessions];
-            for (NSString *userName in sessions) if ([userName hasSuffix:@"@chatroom"]) [hidden addObject:userName];
+            for (NSString *userName in sessions) {
+                if (userName.length > 0 && !WCAtlasHomeCategoriesIsSyntheticUserName(userName)) {
+                    [hidden addObject:userName];
+                }
+            }
             NSString *identifier = category[@"id"];
             NSString *title = category[@"title"];
             if (identifier.length == 0 || title.length == 0) continue;
@@ -815,7 +839,7 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"首页群聊归类";
+    self.title = @"首页会话归类";
     self.tableView.rowHeight = WCAtlasHomeCategoryRowHeight;
     self.tableView.estimatedRowHeight = WCAtlasHomeCategoryRowHeight;
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(addCategory)];
@@ -847,7 +871,7 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
 }
 - (void)addCategory {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建首页分类" message:nil preferredStyle:UIAlertControllerStyleAlert];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"例如：工作群"; }];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"例如：工作或家人"; }];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"创建" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         NSString *title = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]; if (!title.length) return;
@@ -901,7 +925,7 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
 - (void)addItem {
     if (self.folderID) { [self chooseSessions]; return; }
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"添加内容" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"选择群聊" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self chooseSessions]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"选择会话" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self chooseSessions]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"新建文件夹" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) { [self addFolder]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     UIPopoverPresentationController *popover = sheet.popoverPresentationController; if (popover) { popover.barButtonItem = self.navigationItem.rightBarButtonItem; }
@@ -909,7 +933,7 @@ UISwipeActionsConfiguration *WCAtlasHomeCategoriesLeadingSwipeActions(id control
 }
 - (void)chooseSessions {
     NSMutableOrderedSet *selected = [NSMutableOrderedSet orderedSetWithArray:self.sessions]; __weak typeof(self) weakSelf = self;
-    __block UIViewController *picker = WCAtlasCreateGroupPicker(@"选择归类群聊", @"仅显示群聊；每个群聊只保留一个一级分类或文件夹位置。", ^BOOL(NSString *userName) { return [selected containsObject:userName]; }, ^(NSString *userName) { if ([selected containsObject:userName]) [selected removeObject:userName]; else if (userName.length) [selected addObject:userName]; });
+    __block UIViewController *picker = WCAtlasCreateConversationPicker(@"选择归类会话", @"好友和群聊均可归类；每个会话只保留一个一级分类或文件夹位置。", ^BOOL(NSString *userName) { return [selected containsObject:userName]; }, ^(NSString *userName) { if ([selected containsObject:userName]) [selected removeObject:userName]; else if (userName.length) [selected addObject:userName]; });
     WCAtlasConfigureConversationPickerCompletion(picker, ^{ [weakSelf saveSessions:selected.array]; [picker.navigationController popViewControllerAnimated:YES]; });
     [self.navigationController pushViewController:picker animated:YES];
 }

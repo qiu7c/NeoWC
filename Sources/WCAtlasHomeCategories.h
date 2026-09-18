@@ -8,7 +8,7 @@ FOUNDATION_EXPORT NSString *const WCAtlasHomeCategoriesDataKey;
 /// Rebuilds WCAtlas category entries inside WeChat's native homepage session array.
 /// @param sessionManager The live `MainSessionMgr` instance currently rebuilding its sessions.
 /// @discussion Main-thread only. Each first-level category becomes one synthetic native session;
-/// assigned group sessions are removed from the root list. Unsupported native models are ignored.
+/// assigned conversations are removed from the root list. Unsupported native models are ignored.
 FOUNDATION_EXPORT void WCAtlasHomeCategoriesApplyToSessionManager(id _Nullable sessionManager);
 
 /// Handles a tap on a WCAtlas synthetic category session.
@@ -40,6 +40,21 @@ WCAtlasHomeCategoriesLeadingSwipeActions(id _Nullable controller,
 /// @discussion Thread-safe and pure. This performs no native call and has no version fallback.
 FOUNDATION_EXPORT BOOL WCAtlasHomeCategoriesIsSyntheticUserName(NSString * _Nullable userName);
 
+/// Returns whether a native selection-list object represents a WCAtlas synthetic category.
+/// @param object A contact, session, cell-data wrapper, or nil supplied by WeChat's selection UI.
+/// @return YES only when the object's resolved username uses WCAtlas's reserved category prefix.
+/// @discussion Main-thread only. Username extraction is delegated to `WCAtlasPrivateAPI`; unresolved and
+/// native objects return NO, so unsupported WeChat versions preserve their original list contents.
+FOUNDATION_EXPORT BOOL WCAtlasHomeCategoriesShouldFilterSelectionObject(id _Nullable object);
+
+/// Removes WCAtlas synthetic categories from a native selection-list array.
+/// @param objects Native contacts or session wrappers, or nil.
+/// @return The original value when it is not an array or contains no synthetic item; otherwise a
+/// filtered array preserving order and object identity for every native entry.
+/// @discussion Main-thread only. Intended for forwarding/recent-target lists only; it does not mutate
+/// WeChat's source array and falls back to the original value when models cannot be resolved.
+FOUNDATION_EXPORT id _Nullable WCAtlasHomeCategoriesFilterSelectionObjects(id _Nullable objects);
+
 /// Returns the locally generated folder image used by synthetic homepage avatar views.
 /// @discussion Main-thread UI helper. The image contains no account or conversation data.
 FOUNDATION_EXPORT UIImage *WCAtlasHomeCategoryIconImage(void);
@@ -64,7 +79,7 @@ FOUNDATION_EXPORT void WCAtlasHomeCategoriesConfigureCellData(id _Nullable cellD
 /// view hierarchies fail closed without changing WeChat's native unread view.
 FOUNDATION_EXPORT void WCAtlasHomeCategoriesLayoutUnreadBadge(UIView * _Nullable itemView);
 
-/// Settings controller for first-level categories, nested folders, and group-chat assignments.
+/// Settings controller for first-level categories, nested folders, and conversation assignments.
 @interface WCAtlasHomeCategoriesViewController : UITableViewController
 @end
 
